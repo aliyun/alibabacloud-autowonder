@@ -25,8 +25,8 @@ personal Agent client connected through AutoWonder MCP.
 
 | Digital workers | Recommended model | Context |
 | --- | --- | --- |
-| Development, Testing, Code Review / 开发、测试、CR | `Qwen3.8-Max` | 1M |
-| DBA, Conflict Resolution, Requirement Clarification / DBA、冲突解决、需求澄清 | `GLM-5.2`, `DeepSeek-V4 Pro`, or `Qwen3.7-Max` | 400K |
+| Development, Testing, Code Review / 开发、测试、CR | `DeepSeek-V4.1-Flash` | 1M |
+| DBA, Conflict Resolution, Requirement Clarification / DBA、冲突解决、需求澄清 | `DeepSeek-V4.1-Flash` | 1M |
 
 Use the equivalent model name provided by the selected executor.
 
@@ -37,9 +37,3 @@ Use the equivalent model name provided by the selected executor.
 Deployment details are in the
 [community runtime guide](docs/community/README.md) and the
 [Alibaba Cloud deployment Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md).
-
-## Roadmap / 路线图
-
-![AutoWonder Community roadmap: September–November 2026 / 2026 年 9—11 月路线图](docs/images/autowonder-community-roadmap.png)
-
-[View editable SVG / 查看可编辑矢量图](docs/images/autowonder-community-roadmap.svg)
