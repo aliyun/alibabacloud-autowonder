@@ -1,0 +1,114 @@
+{
+  "title": "Workbench",
+  "newWorkitem": "New work item",
+  "todo": {
+    "title": "My queue",
+    "count": "{{total}} total",
+    "empty": "Nothing needs your attention right now",
+    "handle": "Handle",
+    "reason": {
+      "assigned": "Waiting for you",
+      "pendingDecision": "Waiting for your decision"
+    },
+    "columns": {
+      "status": "Status",
+      "title": "Work item",
+      "id": "ID",
+      "reason": "Reason",
+      "updated": "Updated"
+    }
+  },
+  "following": {
+    "title": "Following",
+    "tabs": {
+      "all": "All",
+      "created": "Created by me",
+      "watched": "Watched",
+      "commented": "Commented"
+    },
+    "searchPlaceholder": "Search title, external or platform ID",
+    "status": {
+      "all": "All statuses",
+      "unfinished": "Unfinished",
+      "new": "New",
+      "inProgress": "In progress",
+      "pendingDecision": "Pending decision",
+      "done": "Done",
+      "canceled": "Canceled"
+    },
+    "assignee": {
+      "all": "All assignees",
+      "unassigned": "Unassigned"
+    },
+    "columns": {
+      "workitem": "Work item",
+      "status": "Status",
+      "assignee": "Assignee",
+      "duration": "Duration",
+      "updated": "Last updated"
+    },
+    "changeStatus": {
+      "action": "Change status",
+      "stale": "This work item was updated. Please try again.",
+      "noWorkflow": "This work item has no status workflow, so its status cannot be changed here.",
+      "noTarget": "This template has no other status node to transition to.",
+      "loadFailed": "Could not load available statuses. Please try again."
+    },
+    "empty": "No work items match these filters",
+    "loadFailed": "Failed to load, please retry",
+    "retry": "Retry"
+  },
+  "activity": {
+    "title": "Activity",
+    "empty": "No recent activity",
+    "viewAll": "View all notifications",
+    "unread": "Unread"
+  },
+  "duration": {
+    "none": "—",
+    "notStarted": "Not started",
+    "ended": "Ended",
+    "lessThanMinute": "Less than 1 minute",
+    "minutes": "{{value}} min",
+    "hours": "{{value}} h",
+    "days": "{{value}} d"
+  },
+  "create": {
+    "title": "New work item",
+    "tabs": {
+      "default": "Default",
+      "smart": "Smart create"
+    },
+    "smart": {
+      "description": "Describe the goal in one sentence; Chief will search, draft, and create after your confirmation.",
+      "draftLabel": "Goal and context",
+      "draftPlaceholder": "e.g. Add an assignee filter to the work item list with backend and frontend tests",
+      "open": "Continue in Chief",
+      "checking": "Checking Chief availability…",
+      "unavailable": "Chief is unavailable; use default create",
+      "prefillRejected": "Chief already has a draft. Your input is kept; send the current draft first."
+    },
+    "delivery": {
+      "mode": "Delivery",
+      "later": "Do not assign",
+      "now": "Start now",
+      "scheduled": "Schedule",
+      "timeRequired": "Choose a future start time",
+      "timezone": "Times use Asia/Shanghai"
+    },
+    "submitCreate": "Create",
+    "submitStart": "Create and start",
+    "submitSchedule": "Create and schedule",
+    "success": "Work item created",
+    "successStarted": "Work item created and started"
+  },
+  "fields": {
+    "externalSource": "{{provider}} {{id}}",
+    "externalIdMissing": "External ID missing",
+    "externalSeparator": " · ",
+    "externalWithSeparator": " · {{provider}} {{id}}",
+    "idWithHash": "#{{id}}",
+    "emptyValue": "-",
+    "unassigned": "Unassigned"
+  }
+}

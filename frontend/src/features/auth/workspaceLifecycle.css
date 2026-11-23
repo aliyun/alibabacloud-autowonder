@@ -1,0 +1,118 @@
+/*
+  Workspace lifecycle controls (F1/F2/F4/F7).
+
+  These need real CSS pseudo-classes: :hover/:active/:focus-visible cannot be expressed with
+  inline styles, and F7 explicitly requires a visible keyboard focus state.
+
+  Shared semantic colors preserve the same interaction states in both appearances.
+*/
+
+.aw-apply-access-button {
+  margin-top: 18px;
+  align-self: flex-end;
+  border: 1px solid var(--aw-accent-text);
+  background: var(--aw-panel);
+  color: var(--aw-accent-text);
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.aw-apply-access-button:hover {
+  background: var(--aw-button-hover);
+  border-color: var(--aw-accent-text);
+}
+
+.aw-apply-access-button:active {
+  background: var(--aw-button-active);
+  border-color: var(--aw-accent-text);
+  box-shadow: none;
+}
+
+.aw-apply-access-button:focus-visible {
+  outline: 2px solid var(--aw-accent-text);
+  outline-offset: 2px;
+}
+
+.aw-apply-access-button:disabled {
+  border-color: var(--aw-border);
+  background: var(--aw-panel);
+  color: var(--aw-muted);
+  cursor: not-allowed;
+}
+
+/* The management area is a sibling of the enter button (F1.2), never nested inside it, so it
+   carries its own focus ring rather than inheriting the card's border highlight. */
+.aw-card-manage-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-panel);
+  color: var(--aw-muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.aw-card-manage-button:hover {
+  border-color: var(--aw-accent-text);
+  background: var(--aw-button-hover);
+  color: var(--aw-accent-text);
+}
+
+.aw-card-manage-button:active {
+  background: var(--aw-button-active);
+}
+
+.aw-card-manage-button:focus-visible {
+  outline: 2px solid var(--aw-accent-text);
+  outline-offset: 2px;
+}
+
+.aw-card-manage-button--danger:hover {
+  border-color: var(--aw-error);
+  background: var(--aw-button-hover);
+  color: var(--aw-error);
+}
+
+.aw-card-manage-button--danger:focus-visible {
+  outline-color: var(--aw-error);
+}
+
+/* F4.1: the recycle bin entry sits on the right of the workspace tab bar. It is an
+   icon-plus-text button, not a decorative element, so it needs the same focus affordance. */
+.aw-recycle-bin-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--aw-border);
+  border-radius: 999px;
+  background: var(--aw-panel);
+  color: var(--aw-accent-text);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.aw-recycle-bin-entry:hover {
+  background: var(--aw-button-hover);
+  border-color: var(--aw-accent-text);
+}
+
+.aw-recycle-bin-entry:active {
+  background: var(--aw-button-active);
+}
+
+.aw-recycle-bin-entry:focus-visible {
+  outline: 2px solid var(--aw-accent-text);
+  outline-offset: 2px;
+}

@@ -1,0 +1,114 @@
+{
+  "title": "工作台",
+  "newWorkitem": "新建工单",
+  "todo": {
+    "title": "待我处理",
+    "count": "共 {{total}} 条",
+    "empty": "当前没有需要你处理的工单",
+    "handle": "去处理",
+    "reason": {
+      "assigned": "等待你处理",
+      "pendingDecision": "等待你的决定"
+    },
+    "columns": {
+      "status": "状态",
+      "title": "工单",
+      "id": "工单号",
+      "reason": "原因",
+      "updated": "更新时间"
+    }
+  },
+  "following": {
+    "title": "我在跟进",
+    "tabs": {
+      "all": "全部",
+      "created": "我发起的",
+      "watched": "我关注的",
+      "commented": "我参与的"
+    },
+    "searchPlaceholder": "搜索标题、外部或平台工单号",
+    "status": {
+      "all": "全部状态",
+      "unfinished": "未结束",
+      "new": "待处理",
+      "inProgress": "执行中",
+      "pendingDecision": "待决策",
+      "done": "已完成",
+      "canceled": "已取消"
+    },
+    "assignee": {
+      "all": "全部负责人",
+      "unassigned": "未指派"
+    },
+    "columns": {
+      "workitem": "工单",
+      "status": "状态",
+      "assignee": "当前负责人",
+      "duration": "耗时",
+      "updated": "最近更新"
+    },
+    "changeStatus": {
+      "action": "改状态",
+      "stale": "工单已被更新，请重试",
+      "noWorkflow": "该工单未配置状态流程，无法直接改状态",
+      "noTarget": "当前模板没有其他可流转的状态节点",
+      "loadFailed": "读取可变更状态失败，请重试"
+    },
+    "empty": "没有符合条件的工单",
+    "loadFailed": "加载失败，请重试",
+    "retry": "重试"
+  },
+  "activity": {
+    "title": "协作动态",
+    "empty": "暂无协作动态",
+    "viewAll": "查看全部通知",
+    "unread": "未读"
+  },
+  "duration": {
+    "none": "—",
+    "notStarted": "尚未开始",
+    "ended": "已结束",
+    "lessThanMinute": "不足 1 分钟",
+    "minutes": "{{value}} 分钟",
+    "hours": "{{value}} 小时",
+    "days": "{{value}} 天"
+  },
+  "create": {
+    "title": "新建工单",
+    "tabs": {
+      "default": "默认创建",
+      "smart": "智能创建"
+    },
+    "smart": {
+      "description": "用一句话描述目标，由 Chief 检索、整理草稿，并在你确认后创建。",
+      "draftLabel": "目标与背景",
+      "draftPlaceholder": "例如：为工单列表增加按负责人筛选，并补齐前后端测试",
+      "open": "在 Chief 中继续",
+      "checking": "正在检查 Chief 可用性…",
+      "unavailable": "Chief 暂不可用，请使用默认创建",
+      "prefillRejected": "Chief 当前已有草稿，已保留你的输入，请先发送当前内容后再试"
+    },
+    "delivery": {
+      "mode": "交付安排",
+      "later": "暂不指派",
+      "now": "立即启动",
+      "scheduled": "定时启动",
+      "timeRequired": "请选择未来的启动时间",
+      "timezone": "时间按北京时间（Asia/Shanghai）"
+    },
+    "submitCreate": "创建工单",
+    "submitStart": "创建并启动",
+    "submitSchedule": "创建并定时启动",
+    "success": "工单已创建",
+    "successStarted": "工单已创建并启动"
+  },
+  "fields": {
+    "externalSource": "{{provider}} {{id}}",
+    "externalIdMissing": "外部工单号缺失",
+    "externalSeparator": " · ",
+    "externalWithSeparator": " · {{provider}} {{id}}",
+    "idWithHash": "#{{id}}",
+    "emptyValue": "-",
+    "unassigned": "未指派"
+  }
+}

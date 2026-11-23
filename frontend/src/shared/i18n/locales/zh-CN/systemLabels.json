@@ -1,0 +1,35 @@
+{
+  "statusTemplate": {
+    "REQ": "需求默认流程",
+    "TASK": "任务默认流程",
+    "BUG": "缺陷默认流程"
+  },
+  "statusNode": {
+    "REQ": {
+      "new": "新建",
+      "developing": "开发中",
+      "verifying": "验证中",
+      "released": "已发布",
+      "canceled": "已取消"
+    },
+    "TASK": {
+      "todo": "待办",
+      "doing": "进行中",
+      "done": "已完成"
+    },
+    "BUG": {
+      "open": "待修复",
+      "fixing": "修复中",
+      "verifying": "验证中",
+      "closed": "已关闭"
+    }
+  },
+  "statusTransition": {
+    "forward": "前进",
+    "cancel": "取消"
+  },
+  "envPreset": {
+    "qoder": "Qoder 密钥 PAT，用于执行器启动时直接认证，无需在机器上打开浏览器登录",
+    "qodercn": "Qoder 国内版密钥 PAT，用于执行器启动时直接认证，无需在机器上打开浏览器登录"
+  }
+}

@@ -1,0 +1,36 @@
+package com.aliyun.autowonder.storage;
+
+/**
+ * Abstraction over object storage (OSS). ossRef is the storage-internal reference
+ * "{bucket}/{key}" and is what callers persist (e.g. dispatch.package_oss_ref, artifact.oss_ref).
+ */
+public interface ObjectStorage {
+
+    /** Store bytes at bucket/key. Returns the ossRef plus computed md5 (hex) and size. */
+    StoredObject put(String bucket, String key, byte[] data);
+
+    /** Policy bound for file uploads; deliberately below cloud single-PUT limits. */
+    default long maxPutFileBytes() {
+        return 1L << 30;
+    }
+
+    /** Store a verified large file without loading it into heap memory. */
+    default StoredObject putFile(String bucket, String key, java.nio.file.Path file) {
+        throw new UnsupportedOperationException("file upload is not supported by this storage backend");
+    }
+
+    /** Fetch bytes by ossRef, or null if absent. */
+    byte[] get(String ossRef);
+
+    /** Short-lived, externally reachable presigned download URL for the ossRef. */
+    String presignGet(String ossRef, int ttlSeconds);
+
+    /** Short-lived, externally reachable presigned upload (PUT) URL for bucket/key. */
+    String presignPut(String bucket, String key, java.time.Duration ttl);
+
+    /** Return whether the referenced object currently exists. */
+    boolean exists(String ossRef);
+
+    /** Delete by ossRef; no-op if absent. */
+    void delete(String ossRef);
+}

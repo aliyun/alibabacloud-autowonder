@@ -1,0 +1,377 @@
+package com.aliyun.autowonder.taskpackage;
+
+import com.aliyun.autowonder.json.JSON;
+import com.aliyun.autowonder.json.JSONArray;
+import com.aliyun.autowonder.json.JSONObject;
+import com.aliyun.autowonder.storage.InMemoryObjectStorage;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class TaskPackagerCapabilityTest {
+
+    @Test
+    void packagesOfficialChiefSkillsWithoutDatabaseSkillRows() throws Exception {
+        var catalog = new com.aliyun.autowonder.mcp.PlatformSkillCatalog();
+        var resolver = new com.aliyun.autowonder.agent.ChiefEffectiveConfigResolver("agent", "soul", catalog.list());
+        PackageContext ctx = baseContext();
+        ctx.setSkills(resolver.resolve(List.of(Map.of("id", 71L, "type", "MCP", "name", "space-tools",
+                "config", Map.of("transport", "http", "url", "https://space.example.test/mcp")))).capabilities());
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        var result = new TaskPackager(storage, "task-packages", "https://new-platform.example.test").build(ctx);
+        var entries = unzip(storage.get(result.getOssRef()));
+        var doc = JSON.parseObject(new String(entries.get("skills.json"), StandardCharsets.UTF_8));
+        assertEquals(catalog.list().size(), doc.getJSONArray("skills").size());
+        for (var skill : catalog.list()) {
+            assertTrue(entries.containsKey("capabilities/skills/" + skill.getId() + "/SKILL.md"));
+        }
+        String onboarding = new String(entries.get("capabilities/skills/initialize-autowonder-workspace/SKILL.md"),
+                StandardCharsets.UTF_8);
+        for (String path : List.of("SKILL.md", "var.md", "references/repository-intake.md",
+                "references/platform-contract.md")) {
+            try (var input = getClass().getResourceAsStream("/harness/skill/" + path)) {
+                assertNotNull(input);
+                assertTrue(onboarding.contains(new String(input.readAllBytes(), StandardCharsets.UTF_8)), path);
+            }
+        }
+        assertTrue(onboarding.contains("数据库、部署和合并目标不得生成弹窗"));
+        assertTrue(onboarding.contains("不得询问项目形态、MR/PR、覆盖率或独立冒烟信息"));
+        assertEquals(2, doc.getJSONArray("mcpServers").size());
+        var builtin = doc.getJSONArray("mcpServers").stream().map(JSONObject.class::cast)
+                .filter(s -> "autowonder".equals(s.getString("name"))).findFirst().orElseThrow();
+        assertEquals("https://new-platform.example.test/api/mcp", builtin.getString("url"));
+        assertTrue(doc.getJSONArray("skills").getJSONObject(0).getString("id").startsWith("official:"));
+    }
+
+    @Test
+    void onboardingInstructionChangesInvalidateChiefIdentityAndPackageCache() throws Exception {
+        var catalog = new com.aliyun.autowonder.mcp.PlatformSkillCatalog();
+        var skills = new java.util.ArrayList<>(catalog.list());
+        var before = new com.aliyun.autowonder.agent.ChiefEffectiveConfigResolver("agent", "soul", skills)
+                .resolve(List.of());
+        var original = catalog.get(com.aliyun.autowonder.mcp.PlatformSkillCatalog.ONBOARDING_SKILL_ID);
+        var config = JSON.parseObject(original.getInstallSpec());
+        config.put("instructions", config.getString("instructions") + "\nUpdated onboarding rule");
+        skills.set(skills.indexOf(original), new com.aliyun.autowonder.mcp.dto.PlatformSkillVO(
+                original.getId(), original.getType(), original.getName(), original.getDescription(),
+                JSON.toJSONString(config)));
+        var after = new com.aliyun.autowonder.agent.ChiefEffectiveConfigResolver("agent", "soul", skills)
+                .resolve(List.of());
+        assertNotEquals(before.officialFingerprint(), after.officialFingerprint());
+        assertNotEquals(before.systemPrompt(), after.systemPrompt());
+        var packager = new TaskPackager(new InMemoryObjectStorage(), "task-packages", "https://platform.example.test");
+        var context = baseContext();
+        context.setSkills(before.capabilities());
+        String originalHash = packager.build(context).getContentHash();
+        context.setSkills(after.capabilities());
+        assertNotEquals(originalHash, packager.build(context).getContentHash());
+    }
+
+    @Test
+    void packages_bound_capabilities_and_builtin_autowonder_mcp() throws Exception {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        var skillStored = storage.put("capability", "review.zip", zip(Map.of(
+                "SKILL.md", "---\nname: review\ndescription: review code\n---\nUse it.",
+                "references/rules.md", "rules")));
+        var pluginStored = storage.put("capability", "team-tools.zip", zip(Map.of(
+                ".codex-plugin/plugin.json", "{\"name\":\"team-tools\"}",
+                "README.md", "plugin")));
+
+        PackageContext ctx = baseContext();
+        ctx.setSkills(List.of(
+                capability(41L, "SKILL", "review", 7, skillStored.getOssRef(), skillStored.getMd5(), null),
+                capability(42L, "MCP", "repo-tools", 3, null, null, Map.of(
+                        "transport", "http", "url", "https://mcp.example.test/api", "authType", "none")),
+                capability(43L, "PLUGIN", "team-tools", 2, pluginStored.getOssRef(), pluginStored.getMd5(), Map.of(
+                        "providers", List.of("codex", "qoder")))));
+
+        TaskPackager packager = new TaskPackager(storage, "task-packages", "https://daily.auto-wonder.example.com");
+        TaskPackageResult result = packager.build(ctx);
+        Map<String, byte[]> entries = unzip(storage.get(result.getOssRef()));
+
+        JSONObject doc = JSON.parseObject(new String(entries.get("skills.json"), StandardCharsets.UTF_8));
+        assertEquals("autowonder.capabilities.v1", doc.getString("schemaVersion"));
+        assertEquals("capabilities/skills/review", doc.getJSONArray("skills").getJSONObject(0).getString("path"));
+        assertEquals("capabilities/plugins/team-tools", doc.getJSONArray("plugins").getJSONObject(0).getString("path"));
+
+        JSONArray mcpServers = doc.getJSONArray("mcpServers");
+        assertEquals(2, mcpServers.size());
+        JSONObject autowonder = mcpServers.stream().map(JSONObject.class::cast)
+                .filter(item -> "autowonder".equals(item.getString("name"))).findFirst().orElseThrow();
+        assertEquals("autowonder-dispatch", autowonder.getString("authType"));
+        assertEquals("https://daily.auto-wonder.example.com/api/mcp", autowonder.getString("url"));
+
+        assertEquals("rules", new String(entries.get("capabilities/skills/review/references/rules.md"), StandardCharsets.UTF_8));
+        assertEquals("plugin", new String(entries.get("capabilities/plugins/team-tools/README.md"), StandardCharsets.UTF_8));
+        assertFalse(new String(entries.get("skills.json"), StandardCharsets.UTF_8).contains("packageOssRef"));
+    }
+
+    @Test
+    void marks_only_tool_hooks_as_requiring_tool_hook_protocol() throws Exception {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        var lifecycle = storage.put("capability", "lifecycle.zip", zip(Map.of(
+                "hook.yaml", "schemaVersion: autowonder.hook.v1\nname: lifecycle\nversion: 1\ntrigger: beforeStep\ncommand: scripts/run.sh\n",
+                "scripts/run.sh", "exit 0\n")));
+        var tool = storage.put("capability", "tool.zip", zip(Map.of(
+                "hook.yaml", "schemaVersion: autowonder.hook.v1\nname: tool\nversion: 1\ntrigger: beforeTool\ncommand: scripts/run.sh\n",
+                "scripts/run.sh", "exit 0\n")));
+        TaskPackager packager = new TaskPackager(
+                storage, "task-packages", "https://daily.auto-wonder.example.com");
+
+        PackageContext lifecycleContext = baseContext();
+        lifecycleContext.setSkills(List.of(capability(60L, "HOOK", "lifecycle", 1,
+                lifecycle.getOssRef(), lifecycle.getMd5(), null)));
+        TaskPackageResult lifecycleResult = packager.build(lifecycleContext);
+        assertTrue(lifecycleResult.isRequiresHookProtocol());
+        assertFalse(lifecycleResult.isRequiresToolHookProtocol());
+
+        PackageContext toolContext = baseContext();
+        toolContext.setSkills(List.of(capability(61L, "HOOK", "tool", 1,
+                tool.getOssRef(), tool.getMd5(), null)));
+        TaskPackageResult toolResult = packager.build(toolContext);
+        assertTrue(toolResult.isRequiresHookProtocol());
+        assertTrue(toolResult.isRequiresToolHookProtocol());
+    }
+
+    @Test
+    void skips_skill_when_its_uploaded_package_has_been_deleted() throws Exception {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        PackageContext ctx = baseContext();
+        ctx.setSkills(List.of(capability(49L, "SKILL", "deleted-skill", 1,
+                "capability/deleted-skill.zip", "missing", null)));
+
+        TaskPackageResult result = new TaskPackager(
+                storage, "task-packages", "https://community.example").build(ctx);
+        Map<String, byte[]> entries = unzip(storage.get(result.getOssRef()));
+        JSONObject doc = JSON.parseObject(new String(entries.get("skills.json"), StandardCharsets.UTF_8));
+
+        assertTrue(doc.getJSONArray("skills").isEmpty());
+        assertFalse(entries.containsKey("capabilities/skills/deleted-skill/SKILL.md"));
+    }
+
+    @Test
+    void does_not_hide_skill_storage_read_failure_when_object_still_exists() {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage() {
+            @Override
+            public byte[] get(String ossRef) {
+                return null;
+            }
+
+            @Override
+            public boolean exists(String ossRef) {
+                return true;
+            }
+        };
+        PackageContext ctx = baseContext();
+        ctx.setSkills(List.of(capability(50L, "SKILL", "unreadable-skill", 1,
+                "capability/unreadable-skill.zip", "unreadable", null)));
+
+        assertThrows(com.aliyun.autowonder.common.error.BizException.class,
+                () -> new TaskPackager(storage, "task-packages", "https://community.example").build(ctx));
+    }
+
+    @Test
+    void names_the_capability_when_skill_package_lacks_root_skill_md() throws Exception {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        storage.put("capability", "bad-shape.zip", zip(Map.of("bad-shape/docs.md", "doc")));
+        PackageContext ctx = baseContext();
+        ctx.setSkills(List.of(capability(52L, "SKILL", "bad-shape-skill", 1,
+                "capability/bad-shape.zip", "bad", null)));
+
+        com.aliyun.autowonder.common.error.BizException ex = assertThrows(
+                com.aliyun.autowonder.common.error.BizException.class,
+                () -> new TaskPackager(storage, "task-packages", "https://community.example").build(ctx));
+
+        assertNotNull(ex.getCause());
+        String detail = ex.getCause().getMessage();
+        assertTrue(detail.contains("bad-shape-skill"), detail);
+        assertTrue(detail.contains("SKILL.md"), detail);
+    }
+
+    @Test
+    void builtin_autowonder_mcp_wins_over_explicit_binding() throws Exception {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        PackageContext ctx = baseContext();
+        ctx.setSkills(List.of(capability(48L, "MCP", "autowonder", 1,
+                null, null, Map.of(
+                        "transport", "http",
+                        "url", "https://wrong.example.test/mcp",
+                        "authType", "none"))));
+
+        TaskPackageResult result = new TaskPackager(
+                storage, "task-packages", "https://community.example").build(ctx);
+        Map<String, byte[]> entries = unzip(storage.get(result.getOssRef()));
+        JSONObject doc = JSON.parseObject(new String(entries.get("skills.json"), StandardCharsets.UTF_8));
+        JSONArray mcpServers = doc.getJSONArray("mcpServers");
+
+        assertEquals(1, mcpServers.size());
+        JSONObject autowonder = mcpServers.getJSONObject(0);
+        assertEquals("autowonder", autowonder.getString("name"));
+        assertEquals("autowonder-dispatch", autowonder.getString("authType"));
+        assertEquals("https://community.example/api/mcp", autowonder.getString("url"));
+    }
+
+    @Test
+    void converts_legacy_manual_skill_into_a_real_skill_package() throws Exception {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        PackageContext ctx = baseContext();
+        Map<String, Object> manual = capability(44L, "SKILL", "review-rules", 1, null, null,
+                Map.of("instructions", "Always run the focused tests.", "tools", List.of("autowonder.get_workitem")));
+        manual.put("description", "Team review rules");
+        ctx.setSkills(List.of(manual));
+
+        TaskPackageResult result = new TaskPackager(
+                storage, "task-packages", "https://daily.auto-wonder.example.com").build(ctx);
+        Map<String, byte[]> entries = unzip(storage.get(result.getOssRef()));
+
+        String markdown = new String(entries.get("capabilities/skills/review-rules/SKILL.md"), StandardCharsets.UTF_8);
+        assertTrue(markdown.contains("autowonder.get_workitem"));
+        assertTrue(markdown.contains("authenticated autowonder MCP"));
+        assertTrue(markdown.contains("Team review rules"));
+        assertTrue(markdown.contains("Always run the focused tests."));
+    }
+
+    @Test
+    void gives_legacy_display_names_safe_package_names_and_yaml() throws Exception {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        PackageContext ctx = baseContext();
+        Map<String, Object> manual = capability(45L, "SKILL", "代码 评审", 1, null, null,
+                Map.of("instructions", "Follow the policy."));
+        manual.put("description", "规则: #1 \"strict\"");
+        ctx.setSkills(List.of(manual));
+
+        TaskPackageResult result = new TaskPackager(
+                storage, "task-packages", "https://daily.auto-wonder.example.com").build(ctx);
+        Map<String, byte[]> entries = unzip(storage.get(result.getOssRef()));
+
+        String markdown = new String(entries.get("capabilities/skills/capability-45/SKILL.md"), StandardCharsets.UTF_8);
+        assertTrue(markdown.contains("name: \"capability-45\""));
+        assertTrue(markdown.contains("description: \"规则: #1 \\\"strict\\\"\""));
+        JSONObject doc = JSON.parseObject(new String(entries.get("skills.json"), StandardCharsets.UTF_8));
+        assertEquals("capability-45", doc.getJSONArray("skills").getJSONObject(0).getString("name"));
+    }
+
+    @Test
+    void builds_conversation_bundle_with_same_capability_contract() throws Exception {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        Map<String, Object> skill = capability(46L, "SKILL", "conversation-review", 2,
+                null, null, Map.of("instructions", "Review the conversation request."));
+        Map<String, Object> mcp = capability(47L, "MCP", "coop", 1,
+                null, null, Map.of("transport", "http", "url", "https://mcp.example.test/coop",
+                        "headers", Map.of("Authorization", Map.of("kind", "secretRef", "ref", "kc:v1:test"))));
+
+        TaskPackageResult result = new TaskPackager(
+                storage, "task-packages", "https://community.example")
+                .buildConversationCapabilities(100L, 7L, 42L, 5L, 55L, List.of(skill, mcp),
+                        List.of(Map.of("repoId", 10L, "name", "auto-wonder")),
+                        Map.of("boundRepoIds", List.of(10L), "relations", List.of(
+                                Map.of("fromRepoId", 10L, "toRepoId", 11L,
+                                        "relationType", "DEPENDS_ON"))));
+        Map<String, byte[]> entries = unzip(storage.get(result.getOssRef()));
+
+        JSONObject manifest = JSON.parseObject(new String(entries.get("manifest.json"), StandardCharsets.UTF_8));
+        assertEquals("conversation:7", manifest.getString("workitemId"));
+        assertEquals("conversation-turn:42", manifest.getString("dispatchId"));
+        assertEquals("55", manifest.getString("agentVersionId"));
+        JSONObject capabilities = JSON.parseObject(new String(entries.get("skills.json"), StandardCharsets.UTF_8));
+        assertEquals("conversation-review", capabilities.getJSONArray("skills").getJSONObject(0).getString("name"));
+        assertTrue(capabilities.getJSONArray("mcpServers").stream().map(JSONObject.class::cast)
+                .anyMatch(item -> "autowonder".equals(item.getString("name"))));
+        assertEquals(Map.of("kc:v1:test", "kc:v1:test"), result.getMcpSecretRefs());
+        assertNotNull(entries.get("capabilities/skills/conversation-review/SKILL.md"));
+        assertEquals("auto-wonder", JSON.parseArray(
+                new String(entries.get("repos.json"), StandardCharsets.UTF_8))
+                .getJSONObject(0).getString("name"));
+        assertEquals("DEPENDS_ON", JSON.parseObject(
+                new String(entries.get("repo-map.json"), StandardCharsets.UTF_8))
+                .getJSONArray("relations").getJSONObject(0).getString("relationType"));
+    }
+
+    @Test
+    void conversation_capability_hash_ignores_turn_metadata_but_changes_with_content() {
+        InMemoryObjectStorage storage = new InMemoryObjectStorage();
+        TaskPackager packager = new TaskPackager(
+                storage, "task-packages", "https://community.example");
+        Map<String, Object> skill = capability(46L, "SKILL", "conversation-review", 2,
+                null, null, Map.of("instructions", "Review the conversation request."));
+
+        TaskPackageResult first = packager.buildConversationCapabilities(
+                100L, 7L, 42L, 5L, 55L, List.of(skill));
+        TaskPackageResult second = packager.buildConversationCapabilities(
+                100L, 7L, 43L, 5L, 55L, List.of(skill));
+
+        assertNotEquals(first.getSha256(), second.getSha256(),
+                "per-turn ZIP checksum must still cover volatile manifest metadata");
+        assertEquals(first.getContentHash(), second.getContentHash(),
+                "unchanged capabilities must retain one stable process-reuse hash");
+
+        Map<String, Object> changed = capability(46L, "SKILL", "conversation-review", 3,
+                null, null, Map.of("instructions", "Apply the updated review rules."));
+        TaskPackageResult third = packager.buildConversationCapabilities(
+                100L, 7L, 44L, 5L, 55L, List.of(changed));
+        assertNotEquals(second.getContentHash(), third.getContentHash(),
+                "real capability changes must invalidate the process-reuse hash");
+    }
+
+    private static PackageContext baseContext() {
+        PackageContext ctx = new PackageContext();
+        ctx.setTenantId(100L);
+        ctx.setDispatchId(9001L);
+        ctx.setWorkitemId(3L);
+        ctx.setAgentId(5L);
+        ctx.setSdlcStepId(2L);
+        ctx.setWorkitemTitle("Capability task");
+        ctx.setWorkitemContentMd("content");
+        ctx.setIdentity(Map.of("name", "worker"));
+        ctx.setSdlc(Map.of());
+        return ctx;
+    }
+
+    private static Map<String, Object> capability(long id, String type, String name, int version,
+                                                   String packageOssRef, String packageMd5,
+                                                   Map<String, Object> config) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("id", id);
+        value.put("type", type);
+        value.put("name", name);
+        value.put("version", version);
+        value.put("required", true);
+        if (packageOssRef != null) value.put("packageOssRef", packageOssRef);
+        if (packageMd5 != null) value.put("packageMd5", packageMd5);
+        if (config != null) value.put("config", config);
+        return value;
+    }
+
+    private static byte[] zip(Map<String, String> files) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(out)) {
+            for (var file : files.entrySet()) {
+                zip.putNextEntry(new ZipEntry(file.getKey()));
+                zip.write(file.getValue().getBytes(StandardCharsets.UTF_8));
+                zip.closeEntry();
+            }
+        }
+        return out.toByteArray();
+    }
+
+    private static Map<String, byte[]> unzip(byte[] raw) throws Exception {
+        Map<String, byte[]> files = new LinkedHashMap<>();
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(raw))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                files.put(entry.getName(), zip.readAllBytes());
+            }
+        }
+        return files;
+    }
+}

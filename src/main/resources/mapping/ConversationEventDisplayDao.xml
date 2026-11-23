@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aliyun.autowonder.conversation.ConversationEventDisplayDao">
+
+    <resultMap id="BaseResultMap" type="com.aliyun.autowonder.conversation.ConversationEventDisplayDO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="conversation_id" property="conversationId"/>
+        <result column="turn_id" property="turnId"/>
+        <result column="dispatch_attempt" property="dispatchAttempt"/>
+        <result column="event_seq" property="eventSeq"/>
+        <result column="event_type" property="eventType"/>
+        <result column="status" property="status"/>
+        <result column="queue_class" property="queueClass"/>
+        <result column="projection_version" property="projectionVersion"/>
+        <result column="publication_seq" property="publicationSeq"/>
+        <result column="summary" property="summary"/>
+        <result column="content_length" property="contentLength"/>
+        <result column="total_segments" property="totalSegments"/>
+        <result column="truncated" property="truncated"/>
+        <result column="detail_available" property="detailAvailable"/>
+        <result column="attempt_count" property="attemptCount"/>
+        <result column="next_retry_at" property="nextRetryAt"/>
+        <result column="lease_owner" property="leaseOwner"/>
+        <result column="lease_until" property="leaseUntil"/>
+        <result column="failure_reason" property="failureReason"/>
+        <result column="source_removed" property="sourceRemoved"/>
+        <result column="gmt_create" property="gmtCreate"/>
+        <result column="gmt_modified" property="gmtModified"/>
+    </resultMap>
+
+    <insert id="insertTask" parameterType="com.aliyun.autowonder.conversation.ConversationEventDisplayDO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT IGNORE INTO conversation_event_display
+        (tenant_id, conversation_id, turn_id, dispatch_attempt, event_seq, event_type, status,
+         queue_class, projection_version, attempt_count, gmt_create, gmt_modified)
+        VALUES
+        (#{tenantId}, #{conversationId}, #{turnId}, #{dispatchAttempt}, #{eventSeq}, #{eventType},
+         'PREPARING', #{queueClass}, #{projectionVersion}, 0, #{gmtCreate}, #{gmtCreate})
+    </insert>
+
+    <update id="rearmFailed">
+        UPDATE conversation_event_display
+        SET status = 'PREPARING', attempt_count = 0,
+            next_retry_at = NULL, failure_reason = NULL, lease_owner = NULL, lease_until = NULL,
+            summary = NULL, content_length = NULL, total_segments = NULL,
+            truncated = 0, detail_available = 0, gmt_modified = #{now}
+        WHERE tenant_id = #{tenantId}
+          AND conversation_id = #{conversationId}
+          AND turn_id = #{turnId}
+          AND dispatch_attempt = #{dispatchAttempt}
+          AND event_seq = #{eventSeq}
+          AND status = 'FAILED'
+          AND source_removed = 0
+    </update>
+
+    <update id="wakePending">
+        <!-- Negative counters are changing wake generations while an old scan owns the lease. -->
+        UPDATE conversation_event_display
+        SET next_retry_at = NULL,
+            attempt_count = CASE WHEN lease_until IS NOT NULL AND lease_until >= #{now}
+                THEN LEAST(attempt_count, 0) - 1 ELSE 0 END,
+            failure_reason = NULL,
+            queue_class = #{queueClass}, gmt_modified = #{now}
+        WHERE tenant_id = #{tenantId} AND conversation_id = #{conversationId}
+          AND turn_id = #{turnId} AND dispatch_attempt = #{dispatchAttempt} AND event_seq = #{eventSeq}
+          AND status = 'PREPARING' AND source_removed = 0
+    </update>
+
+    <insert id="insertFromFirstRawChunk">
+        INSERT IGNORE INTO conversation_event_display
+        (tenant_id, conversation_id, turn_id, dispatch_attempt, event_seq, event_type, status,
+         queue_class, projection_version, attempt_count, gmt_create, gmt_modified)
+        SELECT e.tenant_id, e.conversation_id, e.turn_id, e.dispatch_attempt, e.event_seq, e.event_type,
+               'PREPARING', CASE WHEN e.chunk_count > 1 OR OCTET_LENGTH(e.payload_fragment) > 16384
+                   THEN 'LARGE' ELSE #{queueClass} END,
+               #{projectionVersion}, 0, e.gmt_create, e.gmt_create
+        FROM agent_conversation_turn_event e
+        WHERE e.tenant_id = #{tenantId}
+          AND e.conversation_id = #{conversationId}
+          AND e.turn_id = #{turnId}
+          AND e.dispatch_attempt = #{dispatchAttempt}
+          AND e.event_seq = #{eventSeq}
+        ORDER BY e.chunk_index ASC
+        LIMIT 1
+    </insert>
+
+    <update id="requeueLarge">
+        UPDATE conversation_event_display
+        SET queue_class = 'LARGE', lease_owner = NULL, lease_until = NULL,
+            next_retry_at = NULL, attempt_count = 0, gmt_modified = #{now}
+        WHERE id = #{id} AND lease_owner = #{owner} AND status = 'PREPARING'
+    </update>
+
+    <select id="listClaimablePage" resultMap="BaseResultMap" timeout="5">
+        SELECT id, turn_id FROM conversation_event_display
+        WHERE status = 'PREPARING' AND queue_class = #{queueClass}
+          AND (turn_id > #{afterTurnId} OR (turn_id = #{afterTurnId} AND id > #{afterId}))
+          AND (next_retry_at IS NULL OR next_retry_at &lt;= #{now})
+          AND (lease_until IS NULL OR lease_until &lt;= #{now})
+        ORDER BY turn_id ASC, id ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="markFailedIfCurrent">
+        UPDATE conversation_event_display
+        SET status = 'FAILED', publication_seq = #{publicationSeq}, failure_reason = #{failureReason},
+            lease_owner = NULL, lease_until = NULL, next_retry_at = NULL, gmt_modified = #{now}
+        WHERE id = #{id} AND status = 'PREPARING' AND attempt_count = #{expectedAttempt}
+          AND lease_owner = #{owner} AND lease_until >= #{now}
+    </update>
+
+    <select id="listMissingLogicalKeys" resultMap="BaseResultMap">
+        SELECT e.dispatch_attempt, e.event_seq
+        FROM agent_conversation_turn_event e
+        LEFT JOIN conversation_event_display d
+               ON d.tenant_id = e.tenant_id
+              AND d.conversation_id = e.conversation_id
+              AND d.turn_id = e.turn_id
+              AND d.dispatch_attempt = e.dispatch_attempt
+              AND d.event_seq = e.event_seq
+        WHERE e.tenant_id = #{tenantId}
+          AND e.conversation_id = #{conversationId}
+          AND e.turn_id = #{turnId}
+          AND d.id IS NULL
+          AND (e.dispatch_attempt > #{afterAttempt}
+               OR (e.dispatch_attempt = #{afterAttempt} AND e.event_seq > #{afterEventSeq}))
+        GROUP BY e.dispatch_attempt, e.event_seq
+        ORDER BY e.dispatch_attempt ASC, e.event_seq ASC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 只按队列类别认领：实时/交互不会被历史积压挡住；同类别内新轮次优先。 -->
+    <select id="listClaimableIdsByClass" resultType="java.lang.Long">
+        <foreach collection="classes" item="queueClass" separator=" UNION ALL ">
+        (SELECT id FROM conversation_event_display
+        WHERE status = 'PREPARING'
+          AND queue_class = #{queueClass}
+          AND (next_retry_at IS NULL OR next_retry_at &lt; #{now})
+          AND (lease_until IS NULL OR lease_until &lt; #{now})
+        ORDER BY turn_id DESC, id ASC
+        LIMIT #{limit})
+        </foreach>
+    </select>
+
+    <update id="promoteTurn">
+        UPDATE conversation_event_display
+        SET queue_class = #{toClass}, gmt_modified = #{now}
+        WHERE tenant_id = #{tenantId}
+          AND conversation_id = #{conversationId}
+          AND turn_id = #{turnId}
+          AND status = 'PREPARING'
+          AND queue_class = #{fromClass}
+    </update>
+
+    <select id="countByQueueClass" resultType="int">
+        SELECT COUNT(*) FROM conversation_event_display
+        WHERE status = 'PREPARING' AND queue_class = #{queueClass}
+    </select>
+
+    <update id="claim">
+        UPDATE conversation_event_display
+        SET lease_owner = #{owner}, lease_until = #{leaseUntil},
+            attempt_count = CASE WHEN attempt_count &lt; 0 THEN 1 ELSE attempt_count + 1 END,
+            gmt_modified = #{now}
+        WHERE id = #{id}
+          AND status = 'PREPARING'
+          AND (lease_until IS NULL OR lease_until &lt; #{now})
+    </update>
+
+    <update id="releaseLease">
+        UPDATE conversation_event_display
+        SET lease_owner = NULL, lease_until = NULL
+        WHERE id = #{id} AND lease_owner = #{owner}
+    </update>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT * FROM conversation_event_display WHERE id = #{id}
+    </select>
+
+    <select id="findByLogicalKey" resultMap="BaseResultMap">
+        SELECT * FROM conversation_event_display
+        WHERE tenant_id = #{tenantId}
+          AND conversation_id = #{conversationId}
+          AND turn_id = #{turnId}
+          AND dispatch_attempt = #{dispatchAttempt}
+          AND event_seq = #{eventSeq}
+    </select>
+
+    <select id="selectMaxPublicationSeq" resultType="java.lang.Long">
+        SELECT MAX(publication_seq) FROM conversation_event_display
+        WHERE tenant_id = #{tenantId}
+          AND conversation_id = #{conversationId}
+          AND turn_id = #{turnId}
+    </select>
+
+    <update id="markReady">
+        UPDATE conversation_event_display
+        SET status = 'READY', publication_seq = #{publicationSeq}, summary = #{summary},
+            content_length = #{contentLength}, total_segments = #{totalSegments},
+            truncated = #{truncated}, detail_available = #{detailAvailable},
+            projection_version = #{projectionVersion}, lease_owner = NULL, lease_until = NULL,
+            next_retry_at = NULL, failure_reason = NULL, gmt_modified = #{now}
+        WHERE id = #{id}
+    </update>
+
+    <update id="markFailed">
+        UPDATE conversation_event_display
+        SET status = 'FAILED', publication_seq = #{publicationSeq}, summary = NULL,
+            total_segments = 0, truncated = 0, detail_available = 0,
+            failure_reason = #{failureReason}, lease_owner = NULL, lease_until = NULL,
+            next_retry_at = NULL, gmt_modified = #{now}
+        WHERE id = #{id}
+    </update>
+
+    <update id="scheduleRetry">
+        UPDATE conversation_event_display
+        SET next_retry_at = #{nextRetryAt}, failure_reason = #{failureReason},
+            lease_owner = NULL, lease_until = NULL, gmt_modified = #{now}
+        WHERE id = #{id} AND status = 'PREPARING' AND attempt_count > 0
+    </update>
+
+    <update id="markSourceRemoved">
+        UPDATE conversation_event_display
+        SET source_removed = 1, status = 'FAILED', lease_owner = NULL, lease_until = NULL,
+            next_retry_at = NULL
+        WHERE id = #{id}
+    </update>
+
+    <select id="listPublishedAfter" resultMap="BaseResultMap">
+        SELECT * FROM conversation_event_display
+        WHERE tenant_id = #{tenantId}
+          AND conversation_id = #{conversationId}
+          AND turn_id = #{turnId}
+          AND status IN ('READY', 'FAILED')
+          AND publication_seq IS NOT NULL
+          AND publication_seq &gt; #{afterSeq}
+        ORDER BY publication_seq ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="countByStatus" resultType="int">
+        SELECT COUNT(*) FROM conversation_event_display
+        WHERE tenant_id = #{tenantId}
+          AND conversation_id = #{conversationId}
+          AND turn_id = #{turnId}
+          AND status = #{status}
+    </select>
+
+    <select id="maxPublishedSeq" resultType="java.lang.Long">
+        SELECT MAX(publication_seq) FROM conversation_event_display
+        WHERE tenant_id = #{tenantId}
+          AND conversation_id = #{conversationId}
+          AND turn_id = #{turnId}
+          AND publication_seq IS NOT NULL
+    </select>
+
+    <select id="listExpiredIds" resultType="java.lang.Long">
+        SELECT d.id FROM conversation_event_display d
+        WHERE d.gmt_create &lt; #{cutoff}
+          AND NOT EXISTS (
+              SELECT 1 FROM agent_conversation_turn t
+              WHERE t.id = d.turn_id AND t.tenant_id = d.tenant_id)
+        ORDER BY d.id ASC
+        LIMIT #{limit}
+    </select>
+
+    <delete id="deleteByIds">
+        DELETE FROM conversation_event_display WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </delete>
+
+    <select id="highWaterRawId" resultType="java.lang.Long">
+        SELECT high_water_raw_id FROM conversation_event_display_scan WHERE scan_key = 'RAW'
+    </select>
+
+    <!-- 走 idx_turn_event_page(tenant_id,conversation_id,turn_id,id) 的单轮最大值。 -->
+    <select id="maxRawIdForTurn" resultType="java.lang.Long">
+        SELECT MAX(id) FROM agent_conversation_turn_event
+        WHERE tenant_id = #{tenantId} AND conversation_id = #{conversationId} AND turn_id = #{turnId}
+    </select>
+
+    <!-- 单轮发现完备性：该轮还有原始事件没有对应 display 行时返回任意一行主键。 -->
+    <select id="findMissingLogicalKey" resultType="java.lang.Long">
+        SELECT e.id
+        FROM agent_conversation_turn_event e
+        LEFT JOIN conversation_event_display d
+               ON d.tenant_id = e.tenant_id
+              AND d.conversation_id = e.conversation_id
+              AND d.turn_id = e.turn_id
+              AND d.dispatch_attempt = e.dispatch_attempt
+              AND d.event_seq = e.event_seq
+        WHERE e.tenant_id = #{tenantId}
+          AND e.conversation_id = #{conversationId}
+          AND e.turn_id = #{turnId}
+          AND d.id IS NULL
+        LIMIT 1
+    </select>
+
+    <resultMap id="ScanResultMap" type="com.aliyun.autowonder.conversation.ConversationEventDisplayScanDO">
+        <id column="scan_key" property="scanKey"/>
+        <result column="last_raw_id" property="lastRawId"/>
+        <result column="high_water_raw_id" property="highWaterRawId"/>
+        <result column="generation" property="generation"/>
+        <result column="quiet_until" property="quietUntil"/>
+    </resultMap>
+
+    <select id="findScan" resultMap="ScanResultMap">
+        SELECT scan_key, last_raw_id, high_water_raw_id, generation, quiet_until
+        FROM conversation_event_display_scan WHERE scan_key = #{scanKey}
+    </select>
+
+    <insert id="insertScanIfAbsent">
+        INSERT IGNORE INTO conversation_event_display_scan
+        (scan_key, last_raw_id, high_water_raw_id, generation, gmt_modified)
+        VALUES (#{scanKey}, 0, 0, 0, #{now})
+    </insert>
+
+    <update id="advanceScan">
+        UPDATE conversation_event_display_scan
+        SET last_raw_id = #{lastRawId}, high_water_raw_id = #{highWaterRawId},
+            generation = #{generation}, quiet_until = #{quietUntil}, gmt_modified = #{now}
+        WHERE scan_key = #{scanKey}
+    </update>
+
+</mapper>

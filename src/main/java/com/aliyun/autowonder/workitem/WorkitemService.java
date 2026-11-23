@@ -1,0 +1,3932 @@
+package com.aliyun.autowonder.workitem;
+
+import com.aliyun.autowonder.common.i18n.SystemMessages;
+import com.aliyun.autowonder.json.JSON;
+import com.aliyun.autowonder.json.JSONArray;
+import com.aliyun.autowonder.json.JSONObject;
+import com.aliyun.autowonder.agent.AgentDO;
+import com.aliyun.autowonder.agent.AgentDao;
+import com.aliyun.autowonder.common.error.BizException;
+import com.aliyun.autowonder.common.error.ErrorCode;
+import com.aliyun.autowonder.common.error.KeyedIllegalArgumentException;
+import com.aliyun.autowonder.common.result.PageResult;
+import com.aliyun.autowonder.dispatch.AgentSdlcResolver;
+import com.aliyun.autowonder.dispatch.DispatchDO;
+import com.aliyun.autowonder.dispatch.DispatchDao;
+import com.aliyun.autowonder.dispatch.DispatchRuntimeEventDO;
+import com.aliyun.autowonder.dispatch.DispatchRuntimeEventDao;
+import com.aliyun.autowonder.dispatch.DispatchRuntimeFailure;
+import com.aliyun.autowonder.dispatch.DispatchService;
+import com.aliyun.autowonder.dispatch.DispatchStatus;
+import com.aliyun.autowonder.dispatch.ExecutionAvailabilityService;
+import com.aliyun.autowonder.dispatch.WorkitemAssignedEvent;
+import com.aliyun.autowonder.executor.ExecutorDO;
+import com.aliyun.autowonder.executor.ExecutorDao;
+import com.aliyun.autowonder.context.AutoWonderContext;
+import com.aliyun.autowonder.filter.BizLoggerFilter;
+import com.aliyun.autowonder.guidance.GuidanceDO;
+import com.aliyun.autowonder.guidance.GuidanceDao;
+import com.aliyun.autowonder.im.notification.WorkitemCommentMentionedEvent;
+import com.aliyun.autowonder.im.notification.WorkitemHumanAssignedEvent;
+import com.aliyun.autowonder.integration.ExternalWorkitemViewService;
+import com.aliyun.autowonder.workitem.dto.ExternalCollaborationVO;
+import com.aliyun.autowonder.integration.common.ExternalWorkitemLinkDao;
+import com.aliyun.autowonder.integration.common.ExternalWorkitemLinkDO;
+import com.aliyun.autowonder.integration.event.WorkitemCommentCreatedEvent;
+import com.aliyun.autowonder.integration.event.WorkitemContentUpdatedEvent;
+import com.aliyun.autowonder.integration.event.WorkitemStatusChangedEvent;
+import com.aliyun.autowonder.workspace.WorkspaceMemberDO;
+import com.aliyun.autowonder.workspace.WorkspaceMemberDao;
+import com.aliyun.autowonder.sdlc.SdlcDO;
+import com.aliyun.autowonder.sdlc.SdlcDao;
+import com.aliyun.autowonder.sdlc.SdlcStepDO;
+import com.aliyun.autowonder.sdlc.SdlcStepDao;
+import com.aliyun.autowonder.squad.SquadMemberDO;
+import com.aliyun.autowonder.squad.SquadMemberDao;
+import com.aliyun.autowonder.squad.SquadNameResolver;
+import com.aliyun.autowonder.statemachine.StatusNodeDO;
+import com.aliyun.autowonder.statemachine.StatusNodeDao;
+import com.aliyun.autowonder.statemachine.StatusTemplateDO;
+import com.aliyun.autowonder.statemachine.StatusTemplateDao;
+import com.aliyun.autowonder.statemachine.StatusTransitionDao;
+import com.aliyun.autowonder.user.UserAccountStates;
+import com.aliyun.autowonder.user.UserDO;
+import com.aliyun.autowonder.user.UserDao;
+import com.aliyun.autowonder.util.MojibakeDetector;
+import com.aliyun.autowonder.websocket.PresenceManager;
+import com.aliyun.autowonder.workitem.dto.CommentVO;
+import com.aliyun.autowonder.workitem.dto.AgentDeliveryProgressVO;
+import com.aliyun.autowonder.workitem.dto.CreateWorkitemRequest;
+import com.aliyun.autowonder.workitem.dto.DeliveryProgressVO;
+import com.aliyun.autowonder.workitem.dto.DeliveryStepVO;
+import com.aliyun.autowonder.workitem.dto.ControlActionCapabilityVO;
+import com.aliyun.autowonder.workitem.dto.DeliveryControlVO;
+import com.aliyun.autowonder.workitem.dto.DispatchAttemptVO;
+import com.aliyun.autowonder.workitem.dto.DispatchControlCapabilitiesVO;
+import com.aliyun.autowonder.workitem.dto.EventVO;
+import com.aliyun.autowonder.workitem.dto.ExecutionControlVO;
+import com.aliyun.autowonder.workitem.dto.ExternalPrincipalVO;
+import com.aliyun.autowonder.workitem.dto.ParticipantVO;
+import com.aliyun.autowonder.workitem.dto.ProcessGraphEdgeVO;
+import com.aliyun.autowonder.workitem.dto.ProcessGraphNodeVO;
+import com.aliyun.autowonder.workitem.dto.ProcessGraphVO;
+import com.aliyun.autowonder.workitem.dto.SubStepVO;
+import com.aliyun.autowonder.workitem.dto.TimelineItemVO;
+import com.aliyun.autowonder.workitem.dto.WorkitemVO;
+import com.aliyun.autowonder.workitem.dto.WorkitemOriginVO;
+import com.aliyun.autowonder.scheduledtask.ScheduledTaskRunDao;
+import com.aliyun.autowonder.scheduledtask.ScheduledTaskDao;
+import com.aliyun.autowonder.scheduledtask.ScheduledTaskRunDO;
+import com.aliyun.autowonder.scheduledtask.ScheduledTaskDO;
+import com.aliyun.autowonder.scheduledtask.ScheduledTaskNotificationService;
+import com.aliyun.autowonder.workitem.dto.WorkflowPlanStepVO;
+import com.aliyun.autowonder.workitem.dto.WorkflowPlanVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Service
+public class WorkitemService {
+
+    private static final Logger log = LoggerFactory.getLogger(WorkitemService.class);
+    private static final int MAX_TAGS_PER_WORKITEM = 50;
+    private static final int MAX_TAG_LENGTH = 64;
+    private static final int MAX_TAG_OPTIONS = 200;
+    /** 标签逻辑条件上限与序列化长度上限（工单 #56796）：与前端保持一致，防止 GET URL 超长。 */
+    private static final int MAX_TAG_CONDITIONS = 30;
+    private static final int MAX_TAG_CONDITIONS_LENGTH = 4000;
+    private static final Set<String> TAG_CONDITION_OPS = Set.of("AND", "OR", "IN", "NOT");
+    /** 时间线每个方向最多展示的标签数，完整 diff 保存在 detail_json。 */
+    private static final int TAG_EVENT_DETAIL_LIMIT = 5;
+    private static final int TAG_EVENT_VALUE_MAX_LENGTH = 256;
+
+
+    private static final Set<String> WORK_TYPES = Set.of("REQ", "TASK", "BUG");
+    private static final Set<String> ACTIVE_DISPATCH_STATUSES = Set.of(
+            DispatchStatus.PACKAGING, DispatchStatus.DISPATCHED, DispatchStatus.ACKED, DispatchStatus.RUNNING);
+    private static final String SOURCE_TYPE_NATIVE = "NATIVE";
+    private static final String SOURCE_TYPE_EXTERNAL = "EXTERNAL";
+    private static final long SYSTEM_USER_ID = 0L;
+
+    /** 越界流转放行后的页面提示文案（规格 3.3）。 */
+    public static final String OUT_OF_TEMPLATE_TRANSITION_WARNING = "该流转不在模板推荐范围内";
+    private static final String TRANSITION_SOURCE_HUMAN = "HUMAN";
+    private static final String TRANSITION_SOURCE_AGENT = "AGENT";
+    private static final String TRANSITION_SOURCE_DELIVERY_START = "SYSTEM_DELIVERY_START";
+
+    private final WorkitemDao workitemDao;
+    private final WorkitemCommentDao commentDao;
+    private final WorkitemCommentMentionDao commentMentionDao;
+    private final WorkitemEventDao eventDao;
+    private final StatusTemplateDao templateDao;
+    private final StatusNodeDao nodeDao;
+    private final StatusTransitionDao transitionDao;
+    private final SdlcDao sdlcDao;
+    private final SdlcStepDao stepDao;
+    private final DispatchDao dispatchDao;
+    private final DispatchRuntimeEventDao runtimeEventDao;
+    private final AgentDao agentDao;
+    private final AgentSdlcResolver sdlcResolver;
+    private final SquadMemberDao squadMemberDao;
+    @Autowired(required = false)
+    private SquadNameResolver squadNameResolver;
+    private final ExecutorDao executorDao;
+    private final UserDao userDao;
+    private final WorkspaceMemberDao workspaceMemberDao;
+    private final GuidanceDao guidanceDao;
+    private final PresenceManager presenceManager;
+    private final ExternalWorkitemLinkDao externalWorkitemLinkDao;
+    private final ExternalWorkitemViewService externalWorkitemViewService;
+    private final ApplicationEventPublisher eventPublisher;
+    @Autowired(required = false)
+    private com.aliyun.autowonder.aiusage.DispatchAiUsageDao dispatchAiUsageDao;
+    @Autowired(required = false)
+    private com.aliyun.autowonder.aiusage.AgentConversationUsageService agentConversationUsageService;
+    @Autowired(required = false)
+    private ScheduledTaskRunDao scheduledTaskRunDao;
+    @Autowired(required = false)
+    private ScheduledTaskDao scheduledTaskDao;
+    @Autowired(required = false)
+    private ScheduledTaskNotificationService scheduledTaskNotificationService;
+    @Autowired(required = false)
+    private WorkitemServiceRestartHandler restartHandler;
+    private ExecutionAvailabilityService executionAvailabilityService;
+
+    @Autowired(required = false)
+    public void setExecutionAvailabilityService(ExecutionAvailabilityService service) {
+        this.executionAvailabilityService = service;
+    }
+
+    @Autowired(required = false)
+    public void setSquadNameResolver(SquadNameResolver squadNameResolver) {
+        this.squadNameResolver = squadNameResolver;
+    }
+
+    /** A non-terminal (running) dispatch idle longer than this is treated as stalled. Default 60m. */
+    @Value("${autowonder.workitem.stuck-threshold-ms:3600000}")
+    private long stuckThresholdMs = 3600000L;
+
+    @Autowired
+    public WorkitemService(WorkitemDao workitemDao, WorkitemCommentDao commentDao,
+                           WorkitemCommentMentionDao commentMentionDao,
+                           WorkitemEventDao eventDao, StatusTemplateDao templateDao,
+                           StatusNodeDao nodeDao, StatusTransitionDao transitionDao,
+                           SdlcDao sdlcDao, SdlcStepDao stepDao,
+                           DispatchDao dispatchDao, DispatchRuntimeEventDao runtimeEventDao, AgentDao agentDao,
+                           AgentSdlcResolver sdlcResolver,
+                           SquadMemberDao squadMemberDao,
+                           ExecutorDao executorDao,
+                           UserDao userDao,
+                           WorkspaceMemberDao workspaceMemberDao,
+                           GuidanceDao guidanceDao,
+                           PresenceManager presenceManager,
+                           ExternalWorkitemLinkDao externalWorkitemLinkDao,
+                           ExternalWorkitemViewService externalWorkitemViewService,
+                           ApplicationEventPublisher eventPublisher) {
+        this.workitemDao = workitemDao;
+        this.commentDao = commentDao;
+        this.commentMentionDao = commentMentionDao;
+        this.eventDao = eventDao;
+        this.templateDao = templateDao;
+        this.nodeDao = nodeDao;
+        this.transitionDao = transitionDao;
+        this.sdlcDao = sdlcDao;
+        this.stepDao = stepDao;
+        this.dispatchDao = dispatchDao;
+        this.runtimeEventDao = runtimeEventDao;
+        this.agentDao = agentDao;
+        this.sdlcResolver = sdlcResolver;
+        this.squadMemberDao = squadMemberDao;
+        this.executorDao = executorDao;
+        this.userDao = userDao;
+        this.workspaceMemberDao = workspaceMemberDao;
+        this.guidanceDao = guidanceDao;
+        this.presenceManager = presenceManager;
+        this.externalWorkitemLinkDao = externalWorkitemLinkDao;
+        this.externalWorkitemViewService = externalWorkitemViewService;
+        this.eventPublisher = eventPublisher;
+    }
+
+    void bindRestartHandler(WorkitemServiceRestartHandler handler) {
+        this.restartHandler = handler;
+    }
+
+    WorkitemService(WorkitemDao workitemDao, WorkitemCommentDao commentDao,
+                    WorkitemCommentMentionDao commentMentionDao,
+                    WorkitemEventDao eventDao, StatusTemplateDao templateDao,
+                    StatusNodeDao nodeDao, StatusTransitionDao transitionDao,
+                    SdlcDao sdlcDao, SdlcStepDao stepDao,
+                    DispatchDao dispatchDao, DispatchRuntimeEventDao runtimeEventDao, AgentDao agentDao,
+                    AgentSdlcResolver sdlcResolver,
+                    SquadMemberDao squadMemberDao,
+                    ExecutorDao executorDao,
+                    UserDao userDao,
+                    WorkspaceMemberDao workspaceMemberDao,
+                    GuidanceDao guidanceDao,
+                    PresenceManager presenceManager,
+                    ExternalWorkitemLinkDao externalWorkitemLinkDao,
+                    ApplicationEventPublisher eventPublisher) {
+        this(workitemDao, commentDao, commentMentionDao, eventDao, templateDao, nodeDao, transitionDao,
+                sdlcDao, stepDao, dispatchDao, runtimeEventDao, agentDao, sdlcResolver,
+                squadMemberDao, executorDao, userDao, workspaceMemberDao, guidanceDao, presenceManager,
+                externalWorkitemLinkDao, null, eventPublisher);
+    }
+
+    WorkitemService(WorkitemDao workitemDao, WorkitemCommentDao commentDao,
+                    WorkitemEventDao eventDao, StatusTemplateDao templateDao,
+                    StatusNodeDao nodeDao, StatusTransitionDao transitionDao,
+                    SdlcDao sdlcDao, SdlcStepDao stepDao,
+                    DispatchDao dispatchDao, DispatchRuntimeEventDao runtimeEventDao, AgentDao agentDao,
+                    AgentSdlcResolver sdlcResolver,
+                    SquadMemberDao squadMemberDao,
+                    ExecutorDao executorDao,
+                    UserDao userDao,
+                    GuidanceDao guidanceDao,
+                    PresenceManager presenceManager,
+                    ExternalWorkitemLinkDao externalWorkitemLinkDao,
+                    ApplicationEventPublisher eventPublisher) {
+        this(workitemDao, commentDao, null, eventDao, templateDao, nodeDao, transitionDao,
+                sdlcDao, stepDao, dispatchDao, runtimeEventDao, agentDao, sdlcResolver,
+                squadMemberDao, executorDao, userDao, null, guidanceDao, presenceManager,
+                externalWorkitemLinkDao, null, eventPublisher);
+    }
+
+    @Transactional
+    public WorkitemVO create(CreateWorkitemRequest req, long tenantId, long userId) {
+        return createWithOrigin(req, tenantId, userId, null, null);
+    }
+
+    /** Origin is accepted only by trusted server callers, never request JSON. */
+    @Transactional
+    public WorkitemVO createWithOrigin(CreateWorkitemRequest req, long workspaceId, long userId,
+                                       String originType, Long originId) {
+        if (req.getWorkType() == null || !WORK_TYPES.contains(req.getWorkType())) {
+            throw new BizException(ErrorCode.WORK_TYPE_INVALID);
+        }
+        StatusTemplateDO template = templateDao.findDefaultByType(req.getWorkType());
+        if (template == null) {
+            throw new BizException(ErrorCode.STATUS_TEMPLATE_NOT_FOUND);
+        }
+        StatusNodeDO init = nodeDao.findInitNode(template.getId());
+        if (init == null) {
+            throw new BizException(ErrorCode.STATUS_TEMPLATE_NOT_FOUND);
+        }
+        WorkitemDO w = new WorkitemDO();
+        w.setTenantId(workspaceId);
+        w.setWorkType(req.getWorkType());
+        w.setTitle(req.getTitle());
+        w.setContentMd(req.getContentMd());
+        w.setTemplateId(template.getId());
+        w.setStatusNodeId(init.getId());
+        // Default the assignee to the creator; an explicit assignee on the request is
+        // applied below via assign(...) so delivery start (squad validation, SDLC
+        // binding, assign-operator, ASSIGN event, WorkitemAssignedEvent) matches a
+        // separate post-create assignment exactly.
+        w.setAssigneeType("HUMAN");
+        w.setAssigneeRef(userId);
+        w.setPriority(req.getPriority() == null ? 2 : req.getPriority());
+        w.setCreatorId(userId);
+        w.setOriginType(originType);
+        w.setOriginId(originId);
+        w.setVersion(0);
+        workitemDao.insert(w);
+        if ("SCHEDULED_TASK_RUN".equals(originType) && originId != null && scheduledTaskNotificationService != null
+                && scheduledTaskRunDao != null) {
+            scheduledTaskNotificationService.derivedWorkitem(scheduledTaskRunDao.findById(workspaceId, originId));
+        }
+
+        writeEvent(workspaceId, w.getId(), WorkitemEventType.CREATE.code(), null, init.getCode(), "HUMAN", userId);
+        // 可选的重复检测在事务提交后由监听器尽力触发，不参与创建结果。
+        eventPublisher.publishEvent(new WorkitemCreatedEvent(workspaceId, w.getId(), w.getTitle(), userId));
+        if (req.getAssigneeType() != null) {
+            return assign(w.getId(), req.getAssigneeType(), req.getAssigneeRef(),
+                    req.getSdlcId(), req.getSquadId(), req.getScheduledStartAt(), workspaceId, userId);
+        }
+        return toVO(w);
+    }
+
+    public WorkitemVO get(long id) {
+        WorkitemDO w = workitemDao.findById(id);
+        if (w == null) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        WorkitemVO vo = toVO(w);
+        if (externalWorkitemViewService != null && w.getTenantId() != null && w.getId() != null) {
+            vo.setExternalCollaboration(externalWorkitemViewService.find(w.getTenantId(), w.getId()));
+        }
+        return vo;
+    }
+
+    /** Source-aware backlink query; never reads another workspace's derived workitems. */
+    public List<WorkitemVO> listByOrigin(long workspaceId, String originType, long originId) {
+        if (workspaceId <= 0 || originType == null || originType.isBlank() || originId <= 0) {
+            throw new BizException(ErrorCode.PARAM_INVALID);
+        }
+        return workitemDao.listByOrigin(workspaceId, originType, originId).stream()
+                .filter(workitem -> Long.valueOf(workspaceId).equals(workitem.getTenantId()))
+                .map(this::toVO).collect(Collectors.toList());
+    }
+
+    public PageResult<WorkitemVO> list(String workType, Long statusNodeId, String statusCategory,
+                                      String assigneeType, Long assigneeRef, boolean pendingDecisionOnly,
+                                      String mineScope,
+                                      long tenantId, long currentUserId, String keyword, String tag,
+                                      String scheduledStart, String createdFrom, String createdTo,
+                                      List<Long> creatorIds, String tagConditions,
+                                      String squadIds, boolean unassignedSquad,
+                                      int page, int size) {
+        return list(workType, statusNodeId, statusCategory, assigneeType, assigneeRef, pendingDecisionOnly,
+                mineScope, tenantId, currentUserId, keyword, tag, scheduledStart, createdFrom, createdTo,
+                creatorIds, tagConditions, squadIds, unassignedSquad, null, null, null, page, size);
+    }
+
+    /**
+     * 工作台扩展查询：在既有列表条件之上增加多分类过滤、个人关系并集与最近更新排序，
+     * 并在本页批量投影本轮计时字段。三个扩展参数缺省时与原查询完全等价（复用原 DAO 语句）。
+     */
+    public PageResult<WorkitemVO> list(String workType, Long statusNodeId, String statusCategory,
+                                      String assigneeType, Long assigneeRef, boolean pendingDecisionOnly,
+                                      String mineScope,
+                                      long tenantId, long currentUserId, String keyword, String tag,
+                                      String scheduledStart, String createdFrom, String createdTo,
+                                      List<Long> creatorIds, String tagConditions,
+                                      String squadIds, boolean unassignedSquad,
+                                      String statusCategories, String mineScopes, String sortBy,
+                                      int page, int size) {
+        int p = page < 1 ? 1 : page;
+        int s = size < 1 ? 20 : Math.min(size, 200);
+        int offset = (p - 1) * s;
+        String trimmed = keyword == null ? null : keyword.trim();
+        String effectiveKeyword = (trimmed != null && !trimmed.isEmpty()) ? trimmed : null;
+        String trimmedTag = tag == null ? null : tag.trim();
+        String effectiveTag = (trimmedTag != null && !trimmedTag.isEmpty()) ? trimmedTag : null;
+        String effectiveStatusCategory = normalizeStatusCategory(statusCategory);
+        List<String> effectiveStatusCategories = normalizeStatusCategories(statusCategories);
+        List<String> effectiveMineScopes = normalizeMineScopes(mineScopes);
+        String effectiveSortBy = normalizeSortBy(sortBy);
+        boolean extendedQuery = !effectiveStatusCategories.isEmpty() || !effectiveMineScopes.isEmpty()
+                || "UPDATED".equals(effectiveSortBy);
+        String effectiveScheduledStart = normalizeScheduledStart(scheduledStart);
+        Date effectiveCreatedFrom = normalizeCreatedBound(createdFrom);
+        Date effectiveCreatedTo = normalizeCreatedBound(createdTo);
+        List<WorkitemTagCondition> effectiveTagConditions = parseTagConditions(tagConditions);
+        List<Long> effectiveSquadIds = parseSquadIds(squadIds);
+        if (unassignedSquad && effectiveSquadIds != null) {
+            throw BizException.keyed(ErrorCode.PARAM_INVALID, "workitem.list.squad_filter.exclusive", null,
+                    "unassignedSquad cannot combine with squadIds " + effectiveSquadIds);
+        }
+        Long keywordId = null;
+        if (effectiveKeyword != null && effectiveKeyword.matches("\\d+")) {
+            try {
+                keywordId = Long.parseLong(effectiveKeyword);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        long total = extendedQuery
+                ? workitemDao.countExtended(tenantId, workType, statusNodeId, effectiveStatusCategory,
+                        effectiveStatusCategories, assigneeType, assigneeRef, pendingDecisionOnly, mineScope,
+                        effectiveMineScopes, currentUserId, effectiveKeyword, keywordId, effectiveTag,
+                        effectiveScheduledStart, effectiveCreatedFrom, effectiveCreatedTo, creatorIds,
+                        effectiveTagConditions, effectiveSquadIds, unassignedSquad, effectiveSortBy)
+                : workitemDao.count(tenantId, workType, statusNodeId, effectiveStatusCategory,
+                        assigneeType, assigneeRef,
+                        pendingDecisionOnly, mineScope, currentUserId, effectiveKeyword, keywordId, effectiveTag,
+                        effectiveScheduledStart, effectiveCreatedFrom, effectiveCreatedTo, creatorIds,
+                        effectiveTagConditions, effectiveSquadIds, unassignedSquad);
+        List<WorkitemDO> rows = extendedQuery
+                ? workitemDao.listExtended(tenantId, workType, statusNodeId, effectiveStatusCategory,
+                        effectiveStatusCategories, assigneeType, assigneeRef, pendingDecisionOnly, mineScope,
+                        effectiveMineScopes, currentUserId, effectiveKeyword, keywordId, effectiveTag,
+                        effectiveScheduledStart, effectiveCreatedFrom, effectiveCreatedTo, creatorIds,
+                        effectiveTagConditions, effectiveSquadIds, unassignedSquad, effectiveSortBy, offset, s)
+                : workitemDao.list(tenantId, workType, statusNodeId, effectiveStatusCategory,
+                        assigneeType, assigneeRef,
+                        pendingDecisionOnly, mineScope, currentUserId, effectiveKeyword, keywordId, effectiveTag,
+                        effectiveScheduledStart, effectiveCreatedFrom, effectiveCreatedTo, creatorIds,
+                        effectiveTagConditions, effectiveSquadIds, unassignedSquad, offset, s);
+        Map<Long, DispatchDO> latestByWorkitem = loadLatestDispatches(tenantId, rows);
+
+        Set<Long> humanIds = new HashSet<>();
+        Set<Long> agentIds = new HashSet<>();
+        Set<Long> nodeIds = new HashSet<>();
+        Set<Long> sdlcIds = new HashSet<>();
+        List<Long> workitemIds = new ArrayList<>();
+        Long tenantIdObj = null;
+        for (WorkitemDO w : rows) {
+            if (w.getId() != null) {
+                workitemIds.add(w.getId());
+            }
+            if (tenantIdObj == null && w.getTenantId() != null) {
+                tenantIdObj = w.getTenantId();
+            }
+            if ("HUMAN".equals(w.getAssigneeType()) && w.getAssigneeRef() != null) {
+                humanIds.add(w.getAssigneeRef());
+            } else if ("AGENT".equals(w.getAssigneeType()) && w.getAssigneeRef() != null) {
+                agentIds.add(w.getAssigneeRef());
+            }
+            if (w.getCreatorId() != null) {
+                humanIds.add(w.getCreatorId());
+            }
+            if (w.getStatusNodeId() != null) {
+                nodeIds.add(w.getStatusNodeId());
+            }
+            if (w.getSdlcId() != null) {
+                sdlcIds.add(w.getSdlcId());
+            }
+        }
+
+        Map<Long, UserDO> userMap = humanIds.isEmpty() ? Map.of()
+                : safeList(userDao.listByIdsIncludingDeleted(humanIds)).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(UserDO::getId, u -> u, (a, b) -> a));
+        Map<Long, AgentDO> agentMap = agentIds.isEmpty() || tenantIdObj == null ? Map.of()
+                : safeList(agentDao.listByIds(tenantIdObj, agentIds)).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(AgentDO::getId, a -> a, (a, b) -> a));
+        Map<Long, StatusNodeDO> nodeMap = nodeIds.isEmpty() ? Map.of()
+                : safeList(nodeDao.listByIds(nodeIds)).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(StatusNodeDO::getId, n -> n, (a, b) -> a));
+        Map<Long, SdlcDO> sdlcMap = sdlcIds.isEmpty() ? Map.of()
+                : safeList(sdlcDao.listByIds(sdlcIds)).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(SdlcDO::getId, s2 -> s2, (a, b) -> a));
+        Map<Long, List<ExternalWorkitemLinkDO>> extLinksMap = workitemIds.isEmpty() || tenantIdObj == null
+                ? Map.of()
+                : safeList(externalWorkitemLinkDao.listByWorkitemIds(tenantIdObj, workitemIds)).stream()
+                    .filter(Objects::nonNull)
+                    .filter(link -> link.getWorkitemId() != null)
+                    .collect(Collectors.groupingBy(ExternalWorkitemLinkDO::getWorkitemId));
+        Map<Long, List<DispatchDO>> allDispatchesByWorkitem = loadAllDispatches(tenantId, workitemIds);
+        Map<Long, Date> myLastCommentByWorkitem = loadMyLastCommentTimes(mineScope, tenantId, currentUserId, workitemIds);
+        Map<Long, Date> humanAssigneeSince = extendedQuery ? loadHumanAssigneeSince(tenantId, rows) : Map.of();
+        Map<Long, SquadNameResolver.SquadLabel> squadLabels = Map.of();
+        if (extendedQuery && squadNameResolver != null && tenantIdObj != null && !agentIds.isEmpty()) {
+            Map<Long, SquadNameResolver.SquadLabel> resolved = squadNameResolver.resolve(tenantIdObj, agentIds, null);
+            if (resolved != null) {
+                squadLabels = resolved;
+            }
+        }
+        Set<Long> pendingHumanRequests = workitemIds.isEmpty() ? Set.of()
+                : new HashSet<>(safeList(workitemDao.listPendingHumanRequestWorkitemIds(tenantId, workitemIds)));
+        Map<Long, ExternalPrincipalVO> sourceCreators = externalWorkitemViewService == null
+                ? Map.of()
+                : externalWorkitemViewService.reportersByWorkitem(
+                        extLinksMap.values().stream().flatMap(List::stream).toList());
+
+        long now = System.currentTimeMillis();
+        List<WorkitemVO> result = new ArrayList<>();
+        for (WorkitemDO w : rows) {
+            WorkitemVO vo = toVO(w, userMap, agentMap, nodeMap, sdlcMap);
+            DispatchDO latest = latestByWorkitem.get(w.getId());
+            vo.setExecutionStatus(latest == null ? null : latest.getStatus());
+            applyClassification(vo, w, allDispatchesByWorkitem.get(w.getId()), nodeMap, pendingHumanRequests.contains(w.getId()));
+            applyHealth(vo, w, latest, now, nodeMap);
+            applyScheduledPhase(vo, w, latest, now, nodeMap);
+            if (extendedQuery) {
+                applyRoundTiming(vo, w, allDispatchesByWorkitem.get(w.getId()), humanAssigneeSince, squadLabels);
+            }
+            applyDeleteEligibility(vo, w, extLinksMap, allDispatchesByWorkitem);
+            vo.setMyLastCommentAt(myLastCommentByWorkitem.get(w.getId()));
+            if (SOURCE_TYPE_EXTERNAL.equals(vo.getSourceType())) {
+                applyExternalSource(vo, extLinksMap.getOrDefault(w.getId(), List.of()));
+                vo.setSourceCreator(sourceCreators.get(w.getId()));
+            }
+            result.add(vo);
+        }
+        return new PageResult<>(result, total, p, s);
+    }
+
+    private static final Set<String> STATUS_CATEGORIES =
+            Set.of("NEW", "IN_PROGRESS", "PENDING_DECISION", "DONE", "CANCELED");
+
+    /** 看板状态列筛选值归一化，非法值视为不过滤。CANCELED 仅在显式筛选「已取消」时可见。 */
+    private String normalizeStatusCategory(String statusCategory) {
+        if (statusCategory == null || statusCategory.isBlank()) {
+            return null;
+        }
+        String v = statusCategory.trim().toUpperCase();
+        return STATUS_CATEGORIES.contains(v) ? v : null;
+    }
+
+    /** 工作台多分类过滤：逗号分隔、去重、仅保留合法分类；空或全非法时视为不过滤。 */
+    private List<String> normalizeStatusCategories(String statusCategories) {
+        if (statusCategories == null || statusCategories.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(statusCategories.split(","))
+                .map(String::trim)
+                .filter(v -> !v.isEmpty())
+                .map(v -> v.toUpperCase(java.util.Locale.ROOT))
+                .filter(STATUS_CATEGORIES::contains)
+                .distinct()
+                .toList();
+    }
+
+    /** 工作台个人关系并集：仅接受既有 mineScope 口径，未知值忽略，避免扩大可见范围。 */
+    private List<String> normalizeMineScopes(String mineScopes) {
+        if (mineScopes == null || mineScopes.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(mineScopes.split(","))
+                .map(String::trim)
+                .filter(v -> !v.isEmpty())
+                .map(v -> v.toUpperCase(java.util.Locale.ROOT))
+                .filter(Set.of("CREATED", "ASSIGNED", "WATCHED", "COMMENTED")::contains)
+                .distinct()
+                .toList();
+    }
+
+    /** 工作台排序扩展：仅支持 UPDATED；其他值回落到既有创建时间排序。 */
+    private String normalizeSortBy(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return null;
+        }
+        return "UPDATED".equalsIgnoreCase(sortBy.trim()) ? "UPDATED" : null;
+    }
+
+    /** 本页真人负责工单的最近一次指派给当前负责人的时间；无可靠记录时不填，交由调用方如实兜底。 */
+    private Map<Long, Date> loadHumanAssigneeSince(long tenantId, List<WorkitemDO> rows) {
+        List<Long> ids = rows.stream()
+                .filter(w -> "HUMAN".equals(w.getAssigneeType()) && w.getAssigneeRef() != null)
+                .map(WorkitemDO::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Long> assigneeByWorkitem = new HashMap<>();
+        for (WorkitemDO w : rows) {
+            if ("HUMAN".equals(w.getAssigneeType()) && w.getAssigneeRef() != null && w.getId() != null) {
+                assigneeByWorkitem.put(w.getId(), w.getAssigneeRef());
+            }
+        }
+        Map<Long, Date> byWorkitem = new HashMap<>();
+        // 按 id 升序返回，同一工单后出现的指派事件覆盖前者即为最近一次。
+        for (WorkitemEventDO event : safeList(eventDao.listAssignEventsByWorkitemIds(tenantId, ids))) {
+            if (event == null || event.getWorkitemId() == null || event.getGmtCreate() == null
+                    || event.getDetailJson() == null || event.getToVal() == null) {
+                continue;
+            }
+            if (!isHumanAssignmentDetail(event.getDetailJson())) {
+                continue;
+            }
+            Long currentAssignee = assigneeByWorkitem.get(event.getWorkitemId());
+            if (currentAssignee == null || !String.valueOf(currentAssignee).equals(event.getToVal())) {
+                continue;
+            }
+            byWorkitem.put(event.getWorkitemId(), event.getGmtCreate());
+        }
+        return byWorkitem;
+    }
+
+    /**
+     * 事件详情按 JSON 解析 toType 判定是否指派给真人。
+     * MySQL json 列取回文本会插入空格（{"toType": "HUMAN", ...}），不能依赖序列化文本字面量匹配。
+     */
+    private static boolean isHumanAssignmentDetail(String detailJson) {
+        try {
+            JSONObject detail = JSON.parseObject(detailJson);
+            return detail != null && "HUMAN".equals(detail.getString("toType"));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    /** 暂停相关状态沿用派发语义：停止累计本轮耗时，避免暂停期间继续增长。 */
+    private static final Set<String> ROUND_PAUSED_DISPATCH_STATUSES = Set.of(
+            DispatchStatus.PAUSING, DispatchStatus.PAUSED,
+            DispatchStatus.PAUSE_FAILED, DispatchStatus.WAITING_FOR_PAUSE);
+
+    /** 本轮计时：数字员工取同一员工最近一次派发，真人取最近一次指派时间；缺失保持 null。 */
+    private void applyRoundTiming(WorkitemVO vo, WorkitemDO w, List<DispatchDO> dispatches,
+                                  Map<Long, Date> humanAssigneeSince,
+                                  Map<Long, SquadNameResolver.SquadLabel> squadLabels) {
+        if ("AGENT".equals(w.getAssigneeType()) && w.getAssigneeRef() != null) {
+            DispatchDO current = null;
+            for (DispatchDO dispatch : safeList(dispatches)) {
+                if (dispatch == null || !Objects.equals(dispatch.getAgentId(), w.getAssigneeRef())) {
+                    continue;
+                }
+                if (current == null || compareDispatchId(dispatch, current) > 0) {
+                    current = dispatch;
+                }
+            }
+            if (current != null) {
+                vo.setRoundStartedAt(current.getGmtCreate());
+                boolean stopped = DispatchStatus.isTerminal(current.getStatus())
+                        || ROUND_PAUSED_DISPATCH_STATUSES.contains(current.getStatus());
+                vo.setRoundEndedAt(stopped ? current.getGmtModified() : null);
+            }
+            SquadNameResolver.SquadLabel label = squadLabels.get(w.getAssigneeRef());
+            if (label != null) {
+                vo.setAssigneeSquadName(label.squadName());
+            }
+        } else if ("HUMAN".equals(w.getAssigneeType())) {
+            vo.setRoundStartedAt(humanAssigneeSince.get(w.getId()));
+        }
+    }
+
+    private int compareDispatchId(DispatchDO left, DispatchDO right) {
+        if (left.getId() == null || right.getId() == null) {
+            return 0;
+        }
+        return Long.compare(left.getId(), right.getId());
+    }
+
+    /** 定时工单筛选值归一化，非法值视为不过滤，保证不传参数时列表行为与现状一致。 */
+    private String normalizeScheduledStart(String scheduledStart) {
+        if (scheduledStart == null || scheduledStart.isBlank()) {
+            return null;
+        }
+        String v = scheduledStart.trim().toUpperCase();
+        return WorkitemScheduledPhase.isFilter(v) ? v : null;
+    }
+
+    /**
+     * 创建时间高级筛选边界归一化（工单 #55696）。页面按自身时区把所选日期换算成 ISO-8601 瞬间：
+     * createdFrom 为含下界，createdTo 为「结束日次日 00:00」的排他上界。
+     * 空白或不可解析的值视为不过滤，保证不传该参数时列表行为与现状完全一致。
+     */
+    private Date normalizeCreatedBound(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Date.from(OffsetDateTime.parse(raw.trim()).toInstant());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 交付小队高级筛选（工单 #57510）：入参为逗号分隔的正整数 id，缺省、空白或只有逗号时表示不过滤。
+     * 去重后保留顺序；非数字、非正数一律按 keyed 参数错误返回，避免静默命中错误小队。
+     */
+    private List<Long> parseSquadIds(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        LinkedHashSet<Long> ids = new LinkedHashSet<>();
+        for (String part : raw.split(",", -1)) {
+            String token = part.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            long id;
+            try {
+                id = Long.parseLong(token);
+            } catch (NumberFormatException ex) {
+                throw invalidSquadFilter("squadIds contains a non-numeric value: " + token, ex);
+            }
+            if (id <= 0) {
+                throw invalidSquadFilter("squadIds contains a non-positive value: " + token, null);
+            }
+            ids.add(id);
+        }
+        return ids.isEmpty() ? null : new ArrayList<>(ids);
+    }
+
+    private BizException invalidSquadFilter(String diagnostic, Throwable cause) {
+        return BizException.keyed(ErrorCode.PARAM_INVALID, "workitem.list.squad_filter.invalid", null,
+                diagnostic, cause);
+    }
+
+    /**
+     * 解析标签逻辑条件（工单 #56796）：缺省、空白或空数组返回 null，表示不过滤。
+     * 结构错误与未知运算符统一按 invalid 处理，条数、序列化长度与单标签长度各有独立 keyed 错误，
+     * 由响应边界渲染成 400 + 双语文案；同一条件内 trim 后去重，跨条件允许重复。
+     */
+    private List<WorkitemTagCondition> parseTagConditions(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        if (raw.length() > MAX_TAG_CONDITIONS_LENGTH) {
+            throw new KeyedIllegalArgumentException("workitem.list.tag_conditions.too_long",
+                    new Object[]{MAX_TAG_CONDITIONS_LENGTH},
+                    "tagConditions length " + raw.length() + " exceeds " + MAX_TAG_CONDITIONS_LENGTH);
+        }
+        JSONArray parsed;
+        try {
+            parsed = JSON.parseArray(raw);
+        } catch (RuntimeException ex) {
+            throw invalidTagConditions("tagConditions is not a valid JSON array", ex);
+        }
+        if (parsed == null || parsed.isEmpty()) {
+            return null;
+        }
+        if (parsed.size() > MAX_TAG_CONDITIONS) {
+            throw new KeyedIllegalArgumentException("workitem.list.tag_conditions.too_many",
+                    new Object[]{MAX_TAG_CONDITIONS},
+                    "tagConditions count " + parsed.size() + " exceeds " + MAX_TAG_CONDITIONS);
+        }
+        List<WorkitemTagCondition> conditions = new ArrayList<>(parsed.size());
+        for (Object element : parsed) {
+            if (!(element instanceof JSONObject object)) {
+                throw invalidTagConditions("tagConditions element is not an object", null);
+            }
+            String rawOp = object.getString("op");
+            String op = rawOp == null ? "" : rawOp.trim().toUpperCase(Locale.ROOT);
+            if (!TAG_CONDITION_OPS.contains(op)) {
+                throw invalidTagConditions("unknown tag condition operator", null);
+            }
+            JSONArray rawTags;
+            try {
+                rawTags = object.getJSONArray("tags");
+            } catch (RuntimeException ex) {
+                throw invalidTagConditions("tag condition tags is not an array", ex);
+            }
+            if (rawTags == null) {
+                throw invalidTagConditions("tag condition tags is missing", null);
+            }
+            Set<String> tags = new LinkedHashSet<>();
+            for (Object item : rawTags) {
+                if (!(item instanceof String text)) {
+                    throw invalidTagConditions("tag condition tag is not a string", null);
+                }
+                String trimmedTagValue = text.trim();
+                if (trimmedTagValue.isEmpty()) {
+                    continue;
+                }
+                if (trimmedTagValue.length() > MAX_TAG_LENGTH) {
+                    throw new KeyedIllegalArgumentException("workitem.list.tag_conditions.tag_too_long",
+                            new Object[]{MAX_TAG_LENGTH},
+                            "tag length " + trimmedTagValue.length() + " exceeds " + MAX_TAG_LENGTH);
+                }
+                tags.add(trimmedTagValue);
+            }
+            if (tags.isEmpty()) {
+                throw new KeyedIllegalArgumentException("workitem.list.tag_conditions.empty", new Object[0],
+                        "tag condition " + op + " has no tags");
+            }
+            conditions.add(new WorkitemTagCondition(op, new ArrayList<>(tags)));
+        }
+        return List.copyOf(conditions);
+    }
+
+    private static KeyedIllegalArgumentException invalidTagConditions(String diagnostic, Throwable cause) {
+        return new KeyedIllegalArgumentException("workitem.list.tag_conditions.invalid", new Object[0],
+                diagnostic, cause);
+    }
+
+    private Map<Long, DispatchDO> loadLatestDispatches(long tenantId, List<WorkitemDO> rows) {
+        List<Long> ids = rows.stream()
+                .map(WorkitemDO::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, DispatchDO> byWorkitem = new HashMap<>();
+        for (DispatchDO d : safeList(dispatchDao.listLatestByWorkitemIds(tenantId, ids))) {
+            if (d != null && d.getWorkitemId() != null) {
+                byWorkitem.put(d.getWorkitemId(), d);
+            }
+        }
+        return byWorkitem;
+    }
+
+    private Map<Long, List<DispatchDO>> loadAllDispatches(long tenantId, List<Long> workitemIds) {
+        if (workitemIds.isEmpty()) {
+            return Map.of();
+        }
+        return safeList(dispatchDao.listByWorkitemIds(tenantId, workitemIds)).stream()
+                .filter(Objects::nonNull)
+                .filter(d -> d.getWorkitemId() != null)
+                .collect(Collectors.groupingBy(DispatchDO::getWorkitemId));
+    }
+
+    /** 「我评论过的」口径下本页工单的本人最近评论时间；其他口径不查询，保持零额外开销。 */
+    private Map<Long, Date> loadMyLastCommentTimes(String mineScope, long tenantId, long currentUserId,
+                                                   List<Long> workitemIds) {
+        if (!"COMMENTED".equals(mineScope) || workitemIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Date> byWorkitem = new HashMap<>();
+        for (WorkitemCommentDO c : safeList(commentDao.listMyLastCommentTimes(tenantId, workitemIds, currentUserId))) {
+            if (c != null && c.getWorkitemId() != null && c.getGmtCreate() != null) {
+                byWorkitem.put(c.getWorkitemId(), c.getGmtCreate());
+            }
+        }
+        return byWorkitem;
+    }
+
+    private void applyHealth(WorkitemVO vo, WorkitemDO w, DispatchDO latest, long now) {
+        // No dispatch => nothing could have stalled/failed; treat as healthy without an extra status lookup.
+        if (latest == null || w.getStatusNodeId() == null) {
+            vo.setHealth(WorkitemHealthEvaluator.OK);
+            return;
+        }
+        StatusNodeDO node = nodeDao.findById(w.getStatusNodeId());
+        String category = node == null ? null : node.getCategory();
+        WorkitemHealthEvaluator.Result r =
+                WorkitemHealthEvaluator.evaluate(category, latest, now, stuckThresholdMs);
+        vo.setHealth(r.health());
+        vo.setHealthStalledMinutes(r.stalledMinutes());
+        String key = !WorkitemHealthEvaluator.STUCK.equals(r.health()) ? null : r.stalledMinutes() != null ? "workitem.health.stalled"
+                : Set.of(DispatchStatus.FAILED, DispatchStatus.TIMEOUT, DispatchStatus.CANCELED).contains(latest.getStatus())
+                    ? "workitem.health." + latest.getStatus().toLowerCase(java.util.Locale.ROOT) : null;
+        vo.setHealthReason(key == null ? r.reason() : SystemMessages.render(key, new Object[]{r.stalledMinutes()}, r.reason()));
+    }
+
+    private void applyHealth(WorkitemVO vo, WorkitemDO w, DispatchDO latest, long now,
+                             Map<Long, StatusNodeDO> nodeMap) {
+        if (latest == null || w.getStatusNodeId() == null) {
+            vo.setHealth(WorkitemHealthEvaluator.OK);
+            return;
+        }
+        StatusNodeDO node = nodeMap.get(w.getStatusNodeId());
+        String category = node == null ? null : node.getCategory();
+        WorkitemHealthEvaluator.Result r =
+                WorkitemHealthEvaluator.evaluate(category, latest, now, stuckThresholdMs);
+        vo.setHealth(r.health());
+        vo.setHealthStalledMinutes(r.stalledMinutes());
+        String key = !WorkitemHealthEvaluator.STUCK.equals(r.health()) ? null : r.stalledMinutes() != null ? "workitem.health.stalled"
+                : Set.of(DispatchStatus.FAILED, DispatchStatus.TIMEOUT, DispatchStatus.CANCELED).contains(latest.getStatus())
+                    ? "workitem.health." + latest.getStatus().toLowerCase(java.util.Locale.ROOT) : null;
+        vo.setHealthReason(key == null ? r.reason() : SystemMessages.render(key, new Object[]{r.stalledMinutes()}, r.reason()));
+    }
+
+    /**
+     * 定时工单的阶段派生。判定顺序按操作语义排列：未到点的定时仍可改期/取消/立即启动，
+     * 因此待触发先于完成态；其后依次是完成态状态节点、最新 dispatch 非终态、待处理。
+     * 从未设置过定时的工单保持 null，普通工单列表不受影响。
+     */
+    private void applyScheduledPhase(WorkitemVO vo, WorkitemDO w, DispatchDO latest, long now,
+                                     Map<Long, StatusNodeDO> nodeMap) {
+        Date scheduledStartAt = w.getScheduledStartAt();
+        if (scheduledStartAt == null && w.getScheduledStartTriggeredAt() == null) {
+            return;
+        }
+        if (scheduledStartAt != null && scheduledStartAt.getTime() > now) {
+            vo.setScheduledPhase(WorkitemScheduledPhase.PENDING);
+            return;
+        }
+        if (isFinishedNode(w.getStatusNodeId(), nodeMap)) {
+            vo.setScheduledPhase(WorkitemScheduledPhase.DONE);
+            return;
+        }
+        if (latest != null && !DispatchStatus.isTerminal(latest.getStatus())) {
+            vo.setScheduledPhase(WorkitemScheduledPhase.RUNNING);
+            return;
+        }
+        vo.setScheduledPhase(WorkitemScheduledPhase.READY);
+    }
+
+    /** 已结束 = 节点类别 DONE/CANCELED（统一口径），状态名称不参与判断。 */
+    private boolean isFinishedNode(Long statusNodeId, Map<Long, StatusNodeDO> nodeMap) {
+        StatusNodeDO node = statusNodeId == null ? null : nodeMap.get(statusNodeId);
+        return node != null
+                && WorkitemClassificationEvaluator.isFinishedCategory(node.getCategory());
+    }
+
+    /**
+     * 统一分类落 VO：statusCategory 为看板/筛选/统计唯一口径，pendingDecision 与「待决策」列
+     * （及「需人工」标签）完全同条件。状态名称不参与判断。
+     */
+    private void applyClassification(WorkitemVO vo, WorkitemDO w, List<DispatchDO> dispatches,
+                                     Map<Long, StatusNodeDO> nodeMap, boolean pendingHumanRequest) {
+        StatusNodeDO node = w.getStatusNodeId() == null ? null
+                : (nodeMap != null ? nodeMap.get(w.getStatusNodeId()) : nodeDao.findById(w.getStatusNodeId()));
+        String category = node == null ? null : node.getCategory();
+        String classification = WorkitemClassificationEvaluator.classify(
+                category, w.getAssigneeType(), w.getAssigneeRef(), dispatches, pendingHumanRequest);
+        vo.setStatusCategory(classification);
+        vo.setPendingDecision(WorkitemClassificationEvaluator.CATEGORY_PENDING_DECISION.equals(classification));
+    }
+
+    @Transactional
+    public WorkitemVO transition(long id, long toNodeId, long tenantId, long userId) {
+        return transition(id, toNodeId, tenantId, userId, null, null);
+    }
+
+    @Transactional
+    public WorkitemVO transition(long id, long toNodeId, long tenantId, long userId,
+                                 Long expectedFromNodeId, Integer expectedVersion) {
+        WorkitemDO w = workitemDao.findById(id);
+        if (w == null || !Long.valueOf(tenantId).equals(w.getTenantId())) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        // The board may have changed since the user started dragging or selected a target.
+        if ((expectedFromNodeId != null && !expectedFromNodeId.equals(w.getStatusNodeId()))
+                || (expectedVersion != null && !expectedVersion.equals(w.getVersion()))) {
+            throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+        }
+        if (w.getTemplateId() == null || w.getStatusNodeId() == null) {
+            throw new BizException(ErrorCode.ILLEGAL_TRANSITION);
+        }
+        return applyTransition(w, toNodeId, "HUMAN", userId, TRANSITION_SOURCE_HUMAN, null);
+    }
+
+    @Transactional
+    public WorkitemVO agentTransition(long id, String toStatusCode, long tenantId, long agentId) {
+        WorkitemDO w = workitemDao.findById(id);
+        if (w == null || !Long.valueOf(tenantId).equals(w.getTenantId())) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        StatusNodeDO toNode = nodeDao.findByTemplateAndCode(w.getTemplateId(), toStatusCode);
+        if (toNode == null) {
+            throw new BizException(ErrorCode.ILLEGAL_TRANSITION);
+        }
+        return applyTransition(w, toNode.getId(), "AGENT", agentId, TRANSITION_SOURCE_AGENT, null);
+    }
+
+    /**
+     * 流转统一入口（规格 3.3）：真人/数字人/系统共用同一实现，保证审计口径一致。
+     * 模板 transitions 只是推荐集；越界流转放行 + 警告日志 + 审计 + 页面提示，不拦截。
+     */
+    private WorkitemVO applyTransition(WorkitemDO w, long toNodeId, String actorType, Long actorRef,
+                                       String source, String reason) {
+        long id = w.getId();
+        long tenantId = w.getTenantId();
+        long fromNodeId = w.getStatusNodeId();
+        // 越界流转放行只针对模板内的非推荐节点；目标节点必须存在且属于当前工单的模板，
+        // 否则状态机会写入悬空/跨租户的 status_node_id。
+        StatusNodeDO toNode = nodeDao.findById(toNodeId);
+        if (toNode == null || !Long.valueOf(tenantId).equals(toNode.getTenantId())
+                || !Objects.equals(w.getTemplateId(), toNode.getTemplateId())) {
+            throw new BizException(ErrorCode.ILLEGAL_TRANSITION);
+        }
+        boolean inTemplate = w.getTemplateId() != null
+                && transitionDao.findByTemplateFromTo(w.getTemplateId(), fromNodeId, toNodeId) != null;
+        if (!inTemplate) {
+            log.warn("out-of-template workitem transition allowed workitemId={} templateId={} "
+                            + "fromNodeId={} toNodeId={} actorType={} source={}",
+                    id, w.getTemplateId(), fromNodeId, toNodeId, actorType, source);
+        }
+        StatusNodeDO fromNode = nodeDao.findById(fromNodeId);
+        int rows = workitemDao.updateStatus(id, tenantId, toNodeId, w.getVersion(), actorRef);
+        if (rows == 0) {
+            throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+        }
+        writeEvent(tenantId, id, WorkitemEventType.STATUS_CHANGE.code(),
+                fromNode == null ? null : fromNode.getCode(),
+                toNode == null ? null : toNode.getCode(), actorType, actorRef,
+                transitionDetailJson(source, reason, !inTemplate));
+        eventPublisher.publishEvent(new WorkitemStatusChangedEvent(actorType, tenantId, id, toNodeId,
+                actorRef == null ? SYSTEM_USER_ID : actorRef));
+        WorkitemVO vo = toVO(workitemDao.findById(id));
+        if (!inTemplate) {
+            vo.setTransitionWarningCode("OUT_OF_TEMPLATE");
+            vo.setTransitionWarning(SystemMessages.render("workitem.transition.outside_template", new Object[0], OUT_OF_TEMPLATE_TRANSITION_WARNING));
+        }
+        return vo;
+    }
+
+    /**
+     * 启动交付自动推进（规格 3.3 唯一自动流转）：派发开始执行时，仍处于 INIT 类别节点的
+     * 工单推进到模板首个 IN_PROGRESS 节点；重开回初始态后再次启动交付会再次推进。
+     * 执行成功/失败均不改业务状态（单次执行成功不等于工单完成）。
+     *
+     * @return 是否实际发生了推进
+     */
+    @Transactional
+    public boolean autoAdvanceOnDeliveryStart(long tenantId, long workitemId) {
+        WorkitemDO w = workitemDao.findById(workitemId);
+        if (w == null || tenantId != w.getTenantId()
+                || w.getTemplateId() == null || w.getStatusNodeId() == null) {
+            return false;
+        }
+        StatusNodeDO current = nodeDao.findById(w.getStatusNodeId());
+        if (current == null || !WorkitemClassificationEvaluator.isInitCategory(current.getCategory())) {
+            return false;
+        }
+        StatusNodeDO target = firstNodeOfCategory(w.getTemplateId(),
+                WorkitemClassificationEvaluator.NODE_CATEGORY_IN_PROGRESS);
+        if (target == null || target.getId().equals(w.getStatusNodeId())) {
+            return false;
+        }
+        applyTransition(w, target.getId(), WorkitemStatusChangedEvent.ACTOR_SYSTEM, null,
+                TRANSITION_SOURCE_DELIVERY_START, "派发开始执行，自动推进到模板首个执行中节点");
+        return true;
+    }
+
+    private StatusNodeDO firstNodeOfCategory(Long templateId, String category) {
+        return safeList(nodeDao.listByTemplateId(templateId)).stream()
+                .filter(Objects::nonNull)
+                .filter(n -> category.equalsIgnoreCase(
+                        n.getCategory() == null ? "" : n.getCategory().trim()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    static String transitionDetailJson(String source, String reason, boolean outOfTemplate) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        if (source != null) {
+            detail.put("source", source);
+        }
+        if (reason != null) {
+            detail.put("reason", reason);
+        }
+        if (outOfTemplate) {
+            detail.put("outOfTemplate", true);
+        }
+        return detail.isEmpty() ? null : JSON.toJSONString(detail);
+    }
+
+    @Transactional
+    public WorkitemVO assign(long id, String assigneeType, Long assigneeRef, Long sdlcId, Long squadId,
+                             long tenantId, long userId) {
+        return assign(id, assigneeType, assigneeRef, sdlcId, squadId, null, tenantId, userId);
+    }
+
+    @Transactional
+    public WorkitemVO assign(long id, String assigneeType, Long assigneeRef, Long sdlcId, Long squadId,
+                             Date scheduledStartAt, long tenantId, long userId) {
+        return assign(id, assigneeType, assigneeRef, sdlcId, squadId, scheduledStartAt, null, tenantId, userId);
+    }
+
+    @Transactional
+    public WorkitemVO assign(long id, String assigneeType, Long assigneeRef, Long sdlcId, Long squadId,
+                             Date scheduledStartAt, String restartToken, long tenantId, long userId) {
+        return assignAs(id, assigneeType, assigneeRef, sdlcId, squadId, scheduledStartAt, restartToken,
+                tenantId, userId, resolveHumanActor(userId));
+    }
+
+    @Transactional
+    public WorkitemVO assignAs(long id, String assigneeType, Long assigneeRef, Long sdlcId, Long squadId,
+                               long tenantId, long modifierUserId, AssignmentActor actor) {
+        return assignAs(id, assigneeType, assigneeRef, sdlcId, squadId, null, null, tenantId, modifierUserId, actor);
+    }
+
+    @Transactional
+    public WorkitemVO assignAs(long id, String assigneeType, Long assigneeRef, Long sdlcId, Long squadId,
+                               Date scheduledStartAt, long tenantId, long modifierUserId, AssignmentActor actor) {
+        return assignAs(id, assigneeType, assigneeRef, sdlcId, squadId, scheduledStartAt, null,
+                tenantId, modifierUserId, actor);
+    }
+
+    @Transactional
+    public WorkitemVO assignAs(long id, String assigneeType, Long assigneeRef, Long sdlcId, Long squadId,
+                               Date scheduledStartAt, String restartToken,
+                               long tenantId, long modifierUserId, AssignmentActor actor) {
+        WorkitemDO w = workitemDao.findById(id);
+        if (w == null || !Long.valueOf(tenantId).equals(w.getTenantId())) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        // The DB column is VARCHAR(64); reject overlong tokens here instead of surfacing
+        // a database error from the restart-round insert.
+        if (restartToken != null && restartToken.length() > 64) {
+            throw BizException.keyed(ErrorCode.PARAM_INVALID, "workitem.restart_token_limit", new Object[]{64}, "restartToken 长度不能超过 64 个字符");
+        }
+        boolean sameAssignee = Objects.equals(w.getAssigneeType(), assigneeType)
+                && Objects.equals(w.getAssigneeRef(), assigneeRef);
+        boolean agentAssign = "AGENT".equals(assigneeType) && assigneeRef != null;
+        if (agentAssign && restartHandler != null
+                && restartHandler.replay(tenantId, id, restartToken, assigneeRef, sdlcId, scheduledStartAt)) return toVO(w);
+        // A reassignment to an AGENT whose delivery already started is an explicit
+        // delivery restart: stop old formal executions, then start a new formal round
+        // from the SDLC entry. First-time delivery (no SDLC bound) keeps the plain
+        // assignment path — there is no old execution to stop.
+        boolean restartDelivery = agentAssign && w.getSdlcId() != null && w.getCurrentStepId() != null;
+        boolean explicitBinding = agentAssign && sdlcId != null
+                && (!sdlcId.equals(w.getSdlcId()) || w.getCurrentStepId() == null);
+        if (sameAssignee && !restartDelivery && !explicitBinding && scheduledStartAt == null) {
+            return toVO(w);
+        }
+        Long targetSdlcId = sdlcId != null ? sdlcId : w.getSdlcId();
+        if (agentAssign && sdlcId == null) {
+            targetSdlcId = resolveAgentSdlcId(assigneeRef, tenantId, w.getWorkType());
+        }
+        // Reject before any assignment write so an unavailable target never leaves a partial
+        // assignee/binding behind. Applies to first delivery, restart and deferred starts.
+        if (agentAssign && executionAvailabilityService != null) {
+            executionAvailabilityService.requireStartable(tenantId, assigneeRef, targetSdlcId);
+        }
+        AssignmentActor effectiveActor = actor == null
+                ? AssignmentActor.systemFallback()
+                : actor;
+        WorkitemDO reloaded = w;
+        WorkitemEventDO assignEvent = null;
+        if (!sameAssignee) {
+            validateSquadMember(assigneeType, assigneeRef, squadId, tenantId);
+            int rows = workitemDao.updateAssignee(id, tenantId, assigneeType, assigneeRef,
+                    w.getVersion(), modifierUserId);
+            if (rows == 0) {
+                throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+            }
+            String fromVal = w.getAssigneeRef() == null ? null : String.valueOf(w.getAssigneeRef());
+            String toVal = assigneeRef == null ? null : String.valueOf(assigneeRef);
+            assignEvent = new WorkitemEventDO();
+            assignEvent.setTenantId(tenantId);
+            assignEvent.setWorkitemId(id);
+            assignEvent.setEventType(WorkitemEventType.ASSIGN.code());
+            assignEvent.setFromVal(fromVal);
+            assignEvent.setToVal(toVal);
+            assignEvent.setActorType(effectiveActor.type());
+            assignEvent.setActorRef(effectiveActor.ref());
+            assignEvent.setDetailJson(assignDetailJson(w.getAssigneeType(), assigneeType));
+            eventDao.insert(assignEvent);
+
+        }
+
+        boolean restart = restartDelivery && restartHandler != null;
+        boolean selectEntry = agentAssign && (explicitBinding || restart
+                || (w.getSdlcId() == null && w.getCurrentStepId() == null));
+        boolean routeChanged = selectEntry && bindAssignmentEntry(w, targetSdlcId,
+                sameAssignee ? w.getVersion() : w.getVersion() + 1, modifierUserId);
+        if (!sameAssignee || routeChanged) {
+            reloaded = workitemDao.findById(id);
+
+            // Record the real human who triggered the assignment (assign-operator) so a later
+            // handoff with no resolvable next-hop can fall back to them. SYSTEM-initiated assigns
+            // (agent->agent handoffs) must not overwrite the human operator.
+            if (!sameAssignee && effectiveActor.isHuman() && modifierUserId != SYSTEM_USER_ID && reloaded != null
+                    && !java.util.Objects.equals(reloaded.getAssignOperatorId(), modifierUserId)) {
+                workitemDao.updateAssignOperator(id, tenantId, modifierUserId, reloaded.getVersion(), modifierUserId);
+                // updateAssignOperator bumps the version when it matches; reload so the
+                // scheduled-start CAS below does not fail against the stale version.
+                reloaded = workitemDao.findById(id);
+            }
+        }
+
+        if (scheduledStartAt != null && "AGENT".equals(assigneeType) && assigneeRef != null && reloaded != null) {
+            if (scheduledStartAt.after(new Date())) {
+                int scheduledRows = workitemDao.updateScheduledStartAt(id, tenantId, scheduledStartAt,
+                        reloaded.getVersion(), modifierUserId);
+                if (scheduledRows == 0) {
+                    throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+                }
+                reloaded = workitemDao.findById(id);
+            } else if (reloaded.getScheduledStartAt() != null) {
+                // A past planned time (picking "now" drifts into the past before submit) means
+                // deliver immediately; drop any existing schedule so the scheduled-start scanner
+                // cannot fire a second dispatch.
+                int clearedRows = workitemDao.clearScheduledStartAt(id, tenantId, reloaded.getVersion());
+                if (clearedRows == 0) {
+                    throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+                }
+                reloaded = workitemDao.findById(id);
+            }
+        }
+
+        if ("AGENT".equals(assigneeType) && assigneeRef != null && reloaded != null) {
+            if (restart) {
+                // An immediate restart supersedes any leftover delayed-restart schedule:
+                // without this CAS clear the scheduled-start scanner would fire the stale
+                // deferred round once its planned time arrives, stopping this restart's
+                // running dispatch and starting an extra round from a middle step.
+                if (scheduledStartAt == null && reloaded.getScheduledStartAt() != null) {
+                    int clearedRows = workitemDao.clearScheduledStartAt(id, tenantId, reloaded.getVersion());
+                    if (clearedRows == 0) {
+                        throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+                    }
+                    reloaded = workitemDao.findById(id);
+                }
+                // Explicit restart: reopen a closed delivery, allocate the idempotent restart
+                // round and publish the restart event that stops old formal executions before
+                // the new round runs. WorkitemAssignedEvent must NOT also fire — that would
+                // enqueue a second, uncontrolled dispatch for the same reassignment.
+                restartHandler.restartAgentDelivery(id, tenantId, assigneeRef, reloaded.getCurrentStepId(),
+                        restartToken, scheduledStartAt, modifierUserId, effectiveActor);
+            } else {
+                boolean deferred = reloaded.getScheduledStartAt() != null
+                        && reloaded.getScheduledStartAt().after(new Date());
+                if (deferred) {
+                    // Delayed delivery: the scheduled-start scanner publishes the assign event
+                    // once the planned time arrives.
+                    log.info("Workitem {} agent delivery deferred until {}", id, reloaded.getScheduledStartAt());
+                } else {
+                    eventPublisher.publishEvent(new WorkitemAssignedEvent(
+                            tenantId, id, reloaded.getCurrentStepId(), assigneeRef,
+                            reloaded.getVersion(), modifierUserId, effectiveActor));
+                }
+            }
+        }
+        if ("HUMAN".equals(assigneeType) && assigneeRef != null
+                && assignEvent != null && assignEvent.getId() != null
+                && !(effectiveActor.isHuman() && effectiveActor.ref() == assigneeRef)) {
+            eventPublisher.publishEvent(new WorkitemHumanAssignedEvent(
+                    tenantId,
+                    id,
+                    reloaded == null ? w.getTitle() : reloaded.getTitle(),
+                    assignEvent.getId(),
+                    assigneeRef,
+                    effectiveActor.type(),
+                    effectiveActor.ref(),
+                    effectiveActor.displayName(),
+                    currentRequestId(),
+                    effectiveActor.actorNameKind()));
+        }
+        return toVO(reloaded);
+    }
+
+    /**
+     * Edit, clear, or immediately execute a workitem's planned agent start time.
+     * {@code executeNow} wins over {@code scheduledStartAt}: it CAS-clears the schedule and,
+     * only when this call actually cleared it, publishes the assign event that the deferred
+     * assignment skipped.
+     */
+    @Transactional
+    public WorkitemVO updateScheduledStart(long id, Date scheduledStartAt, boolean executeNow,
+                                           long tenantId, long userId) {
+        WorkitemDO w = workitemDao.findById(id);
+        if (w == null || !Long.valueOf(tenantId).equals(w.getTenantId())) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        if (executeNow || scheduledStartAt == null) {
+            // executeNow stamps scheduled_start_triggered_at (fireScheduledStartAt) so the UI
+            // keeps the scheduled badge after triggering; plain cancellation must not stamp.
+            int rows = executeNow
+                    ? workitemDao.fireScheduledStartAt(id, tenantId, w.getVersion())
+                    : workitemDao.clearScheduledStartAt(id, tenantId, w.getVersion());
+            if (rows == 0) {
+                WorkitemDO fresh = workitemDao.findById(id);
+                if (fresh != null && fresh.getScheduledStartAt() != null) {
+                    throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+                }
+                // Nothing to clear: either never scheduled or the scanner already fired.
+                return toVO(fresh);
+            }
+            WorkitemDO fresh = workitemDao.findById(id);
+            if (executeNow && fresh != null
+                    && "AGENT".equals(fresh.getAssigneeType()) && fresh.getAssigneeRef() != null) {
+                boolean restartFired = restartHandler != null && restartHandler.firePendingRestartNow(
+                        tenantId, id, fresh.getAssigneeRef(), fresh.getCurrentStepId(), userId);
+                if (!restartFired) {
+                    eventPublisher.publishEvent(new WorkitemAssignedEvent(
+                            tenantId, id, fresh.getCurrentStepId(), fresh.getAssigneeRef(),
+                            fresh.getVersion(), userId));
+                }
+            }
+            return toVO(fresh);
+        }
+        if (!"AGENT".equals(w.getAssigneeType()) || w.getAssigneeRef() == null) {
+            throw new BizException(ErrorCode.PARAM_INVALID);
+        }
+        if (!scheduledStartAt.after(new Date())) {
+            throw new BizException(ErrorCode.PARAM_INVALID);
+        }
+        int rows = workitemDao.updateScheduledStartAt(id, tenantId, scheduledStartAt, w.getVersion(), userId);
+        if (rows == 0) {
+            throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+        }
+        return toVO(workitemDao.findById(id));
+    }
+
+    @Transactional
+    public WorkitemVO updateTags(long id, List<String> tags, long tenantId, long userId) {
+        return updateTags(id, "replace", tags, tenantId, userId, AssignmentActor.human(userId, null));
+    }
+
+    /**
+     * Web 全量替换与 MCP replace/add/remove 共用的标签写入口：统一 trim、去重、50/64 校验。
+     * 新旧集合相同（仅顺序不同视为相同）时不写库、不递增版本、不产生时间线事件。
+     */
+    @Transactional
+    public WorkitemVO updateTags(long id, String action, List<String> tags, long tenantId,
+                                 long modifierUserId, AssignmentActor actor) {
+        WorkitemDO w = workitemDao.findById(id);
+        if (w == null || !Long.valueOf(tenantId).equals(w.getTenantId())) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        List<String> current = parseTagsJson(w.getTags());
+        List<String> target;
+        switch (action == null ? "" : action.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "replace" -> target = tags;
+            case "add" -> {
+                List<String> merged = new ArrayList<>(current);
+                if (tags != null) {
+                    merged.addAll(tags);
+                }
+                target = merged;
+            }
+            case "remove" -> {
+                Set<String> toRemove = new HashSet<>();
+                if (tags != null) {
+                    for (String tag : tags) {
+                        if (tag != null) {
+                            toRemove.add(tag.trim());
+                        }
+                    }
+                }
+                target = current.stream().filter(tag -> !toRemove.contains(tag)).collect(Collectors.toList());
+            }
+            default -> throw new BizException(ErrorCode.PARAM_INVALID);
+        }
+        List<String> normalized = normalizeTags(target);
+        if (new HashSet<>(current).equals(new HashSet<>(normalized))) {
+            return toVO(w);
+        }
+        List<String> added = normalized.stream().filter(tag -> !current.contains(tag)).collect(Collectors.toList());
+        List<String> removed = current.stream().filter(tag -> !normalized.contains(tag)).collect(Collectors.toList());
+        String tagsJson = normalized.isEmpty() ? null : JSON.toJSONString(normalized);
+        int rows = workitemDao.updateTags(id, tenantId, tagsJson, w.getVersion(), modifierUserId);
+        if (rows == 0) {
+            throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+        }
+        Map<String, List<String>> detail = new LinkedHashMap<>();
+        detail.put("added", added);
+        detail.put("removed", removed);
+        AssignmentActor eventActor = actor == null ? AssignmentActor.human(modifierUserId, null) : actor;
+        writeEvent(tenantId, id, WorkitemEventType.TAG_CHANGE.code(),
+                summarizeTagEventValue(removed), summarizeTagEventValue(added),
+                eventActor.type(), eventActor.ref(), JSON.toJSONString(detail));
+        return toVO(workitemDao.findById(id));
+    }
+
+    public List<String> listTagOptions(long tenantId) {
+        return workitemDao.listTagOptions(tenantId, MAX_TAG_OPTIONS);
+    }
+
+    /** 事件列 from_val/to_val 的摘要：前 5 个标签，超长按 UTF-16 边界截断到 256。 */
+    private String summarizeTagEventValue(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return null;
+        }
+        String joined = tags.stream().limit(TAG_EVENT_DETAIL_LIMIT).collect(Collectors.joining("、"));
+        if (joined.length() <= TAG_EVENT_VALUE_MAX_LENGTH) {
+            return joined;
+        }
+        int end = TAG_EVENT_VALUE_MAX_LENGTH;
+        if (Character.isHighSurrogate(joined.charAt(end - 1))) {
+            end--;
+        }
+        return joined.substring(0, end);
+    }
+
+    /** 时间线展示：基于 detail_json 的完整 diff，每个方向前 5 个，其余以「等 N 个」收尾。 */
+    private String formatTagEventValue(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return null;
+        }
+        String shown = tags.stream().limit(TAG_EVENT_DETAIL_LIMIT).collect(Collectors.joining("、"));
+        if (tags.size() > TAG_EVENT_DETAIL_LIMIT) {
+            int remaining = tags.size() - TAG_EVENT_DETAIL_LIMIT;
+            shown += " " + SystemMessages.render("workitem.event.tag_change.more",
+                    new Object[]{remaining}, "等 " + remaining + " 个");
+        }
+        return shown;
+    }
+
+    private List<String> tagEventValues(WorkitemEventDO event, String key) {
+        if (event == null || event.getDetailJson() == null || event.getDetailJson().isBlank()) {
+            return List.of();
+        }
+        try {
+            JSONObject detail = JSON.parseObject(event.getDetailJson());
+            JSONArray values = detail == null ? null : detail.getJSONArray(key);
+            if (values == null) {
+                return List.of();
+            }
+            List<String> result = new ArrayList<>();
+            for (Object value : values) {
+                if (value != null) {
+                    result.add(String.valueOf(value));
+                }
+            }
+            return result;
+        } catch (RuntimeException ignored) {
+            return List.of();
+        }
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null) {
+            return List.of();
+        }
+        Set<String> normalized = new LinkedHashSet<>();
+        for (String tag : tags) {
+            if (tag == null) {
+                continue;
+            }
+            String trimmed = tag.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if (trimmed.length() > MAX_TAG_LENGTH) {
+                throw new BizException(ErrorCode.PARAM_INVALID);
+            }
+            normalized.add(trimmed);
+            if (normalized.size() > MAX_TAGS_PER_WORKITEM) {
+                throw new BizException(ErrorCode.PARAM_INVALID);
+            }
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    List<String> parseTagsJson(String tagsJson) {
+        if (tagsJson == null || tagsJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<String> parsed = JSON.parseArray(tagsJson, String.class);
+            return parsed == null ? List.of() : parsed;
+        } catch (RuntimeException e) {
+            log.warn("Failed to parse workitem tags json: {}", tagsJson, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Atomically moves the authoritative workitem cursor to the worker/step selected by
+     * a comment-triggered rework. This intentionally does not publish WorkitemAssignedEvent:
+     * the already-created COMMENT_REWORK dispatch is the single dispatch authority.
+     */
+    @Transactional
+    public void rebindForInteractionRework(long tenantId, long workitemId, long targetAgentId,
+            long targetSdlcId, long targetStepId, long userId) {
+        for (int retry = 0; retry < 3; retry++) {
+            WorkitemDO current = workitemDao.findById(workitemId);
+            if (current == null || current.getTenantId() != tenantId) {
+                throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+            }
+            boolean routeMatches = Objects.equals(current.getSdlcId(), targetSdlcId)
+                    && Objects.equals(current.getCurrentStepId(), targetStepId);
+            if (!routeMatches) {
+                if (workitemDao.updateSdlcAndStep(workitemId, tenantId, targetSdlcId, targetStepId,
+                        current.getVersion(), userId) == 0) {
+                    continue;
+                }
+                current = workitemDao.findById(workitemId);
+                if (current == null) {
+                    throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+                }
+            }
+            if ("AGENT".equals(current.getAssigneeType())
+                    && Objects.equals(current.getAssigneeRef(), targetAgentId)) {
+                return;
+            }
+            Long fromRef = current.getAssigneeRef();
+            String fromType = current.getAssigneeType();
+            if (workitemDao.updateAssignee(workitemId, tenantId, "AGENT", targetAgentId,
+                    current.getVersion(), userId) == 0) {
+                continue;
+            }
+            writeEvent(tenantId, workitemId, WorkitemEventType.ASSIGN.code(),
+                    fromRef == null ? null : String.valueOf(fromRef), String.valueOf(targetAgentId),
+                    "HUMAN", userId, assignDetailJson(fromType, "AGENT"));
+            return;
+        }
+        throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+    }
+
+    private boolean bindAssignmentEntry(WorkitemDO w, long sdlcId, int version, long userId) {
+        if (!Objects.equals(w.getSdlcId(), sdlcId)) {
+            SdlcDO sdlc = sdlcDao.findById(sdlcId);
+            if (sdlc == null || !w.getTenantId().equals(sdlc.getTenantId())) {
+                throw new BizException(ErrorCode.SDLC_NOT_FOUND);
+            }
+        }
+        SdlcStepDO first = sdlcResolver.firstStep(w.getTenantId(), sdlcId);
+        if (first == null) {
+            throw new BizException(ErrorCode.SDLC_STEP_NOT_FOUND);
+        }
+        if (Objects.equals(w.getSdlcId(), sdlcId) && first.getId().equals(w.getCurrentStepId())) {
+            return false;
+        }
+        int rows = workitemDao.updateSdlcAndStep(w.getId(), w.getTenantId(), sdlcId, first.getId(), version, userId);
+        if (rows == 0) {
+            throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+        }
+        return true;
+    }
+
+    private Long resolveAgentSdlcId(long agentId, long tenantId, String workType) {
+        AgentDO agent = agentDao.findById(agentId);
+        if (agent == null || !Long.valueOf(tenantId).equals(agent.getTenantId())) {
+            throw new BizException(ErrorCode.AGENT_NOT_FOUND);
+        }
+        Long sdlcId = sdlcResolver.resolveSdlcId(tenantId, agentId);
+        if (sdlcId != null) {
+            return sdlcId;
+        }
+        SdlcDO fallback = workType == null || workType.isBlank() ? null : sdlcDao.findDefault(workType);
+        if (fallback != null && fallback.getId() != null
+                && Long.valueOf(tenantId).equals(fallback.getTenantId())) {
+            return fallback.getId();
+        }
+        throw new BizException(ErrorCode.SDLC_NOT_FOUND);
+    }
+
+    private void validateSquadMember(String assigneeType, Long assigneeRef, Long squadId, long tenantId) {
+        if (!"AGENT".equals(assigneeType) || assigneeRef == null || squadId == null) {
+            return;
+        }
+        SquadMemberDO member = squadMemberDao.findBySquadAndAgent(squadId, assigneeRef);
+        if (member == null || !Long.valueOf(tenantId).equals(member.getTenantId())) {
+            throw new BizException(ErrorCode.SQUAD_NOT_FOUND);
+        }
+    }
+
+    @Transactional
+    public WorkitemVO updateContent(long id, String title, String contentMd, long tenantId, long userId) {
+        WorkitemDO w = workitemDao.findById(id);
+        if (w == null) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        if (!safeList(externalWorkitemLinkDao.listByWorkitem(tenantId, id)).isEmpty()) {
+            throw new BizException(ErrorCode.WORKITEM_EXTERNAL_CONTENT_READ_ONLY);
+        }
+        String effectiveTitle = title == null ? w.getTitle() : title;
+        String effectiveContentMd = contentMd == null ? w.getContentMd() : contentMd;
+        if (Objects.equals(w.getTitle(), effectiveTitle) && Objects.equals(w.getContentMd(), effectiveContentMd)) {
+            return toVO(w);
+        }
+        int rows = workitemDao.updateContent(id, tenantId, effectiveTitle, effectiveContentMd, w.getVersion(), userId);
+        if (rows == 0) {
+            throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+        }
+        writeEvent(tenantId, id, WorkitemEventType.EDIT.code(), null, null, "HUMAN", userId);
+        boolean titleChanged = !Objects.equals(w.getTitle(), effectiveTitle);
+        eventPublisher.publishEvent(new WorkitemContentUpdatedEvent(tenantId, id, effectiveTitle,
+                effectiveContentMd, userId, titleChanged));
+        return toVO(workitemDao.findById(id));
+    }
+
+    @Transactional
+    public void delete(long id, long tenantId, long userId) {
+        WorkitemDO w = workitemDao.findById(id);
+        if (w == null || !Long.valueOf(tenantId).equals(w.getTenantId())) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        if (!externalWorkitemLinkDao.listByWorkitem(tenantId, id).isEmpty()) {
+            throw new BizException(ErrorCode.WORKITEM_EXTERNAL_NO_DELETE);
+        }
+        List<DispatchDO> dispatches = safeList(dispatchDao.listByWorkitem(tenantId, id));
+        boolean running = dispatches.stream()
+                .anyMatch(d -> d != null && ACTIVE_DISPATCH_STATUSES.contains(d.getStatus()));
+        if (running) {
+            throw new BizException(ErrorCode.WORKITEM_RUNNING_NO_DELETE);
+        }
+        int rows = workitemDao.softDelete(id, tenantId, w.getVersion(), userId);
+        if (rows == 0) {
+            throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+        }
+        writeEvent(tenantId, id, WorkitemEventType.DELETE.code(), null, null, "HUMAN", userId);
+        // 提交后再清理派生数据（澄清附件等），清理失败不回滚删除。
+        eventPublisher.publishEvent(new WorkitemDeletedEvent(tenantId, id));
+    }
+
+    /** 回收站列表：只查 is_deleted=1 的工单，按删除时间倒序，复用常规列表的过滤维度。 */
+    public PageResult<WorkitemVO> listRecycled(String workType, String assigneeType, Long assigneeRef,
+                                               String keyword, long tenantId, int page, int size) {
+        int p = page < 1 ? 1 : page;
+        int s = size < 1 ? 20 : Math.min(size, 200);
+        int offset = (p - 1) * s;
+        String trimmed = keyword == null ? null : keyword.trim();
+        String effectiveKeyword = (trimmed != null && !trimmed.isEmpty()) ? trimmed : null;
+        Long keywordId = null;
+        if (effectiveKeyword != null && effectiveKeyword.matches("\\d+")) {
+            try {
+                keywordId = Long.parseLong(effectiveKeyword);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        long total = workitemDao.countRecycled(tenantId, workType, assigneeType, assigneeRef,
+                effectiveKeyword, keywordId);
+        List<WorkitemDO> rows = workitemDao.listRecycled(tenantId, workType, assigneeType, assigneeRef,
+                effectiveKeyword, keywordId, offset, s);
+
+        Set<Long> humanIds = new HashSet<>();
+        Set<Long> agentIds = new HashSet<>();
+        Set<Long> nodeIds = new HashSet<>();
+        Set<Long> sdlcIds = new HashSet<>();
+        Long tenantIdObj = null;
+        for (WorkitemDO w : rows) {
+            if (tenantIdObj == null && w.getTenantId() != null) {
+                tenantIdObj = w.getTenantId();
+            }
+            if ("HUMAN".equals(w.getAssigneeType()) && w.getAssigneeRef() != null) {
+                humanIds.add(w.getAssigneeRef());
+            } else if ("AGENT".equals(w.getAssigneeType()) && w.getAssigneeRef() != null) {
+                agentIds.add(w.getAssigneeRef());
+            }
+            if (w.getCreatorId() != null) {
+                humanIds.add(w.getCreatorId());
+            }
+            if (w.getStatusNodeId() != null) {
+                nodeIds.add(w.getStatusNodeId());
+            }
+            if (w.getSdlcId() != null) {
+                sdlcIds.add(w.getSdlcId());
+            }
+        }
+
+        Map<Long, UserDO> userMap = humanIds.isEmpty() ? Map.of()
+                : safeList(userDao.listByIds(humanIds)).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(UserDO::getId, u -> u, (a, b) -> a));
+        Map<Long, AgentDO> agentMap = agentIds.isEmpty() || tenantIdObj == null ? Map.of()
+                : safeList(agentDao.listByIds(tenantIdObj, agentIds)).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(AgentDO::getId, a -> a, (a, b) -> a));
+        Map<Long, StatusNodeDO> nodeMap = nodeIds.isEmpty() ? Map.of()
+                : safeList(nodeDao.listByIds(nodeIds)).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(StatusNodeDO::getId, n -> n, (a, b) -> a));
+        Map<Long, SdlcDO> sdlcMap = sdlcIds.isEmpty() ? Map.of()
+                : safeList(sdlcDao.listByIds(sdlcIds)).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(SdlcDO::getId, s2 -> s2, (a, b) -> a));
+
+        List<WorkitemVO> result = new ArrayList<>();
+        for (WorkitemDO w : rows) {
+            WorkitemVO vo = toVO(w, userMap, agentMap, nodeMap, sdlcMap);
+            vo.setDeletedAt(w.getDeletedAt());
+            result.add(vo);
+        }
+        return new PageResult<>(result, total, p, s);
+    }
+
+    /** 从回收站恢复工单：乐观锁防并发恢复；恢复后保留删除前的状态/指派等全部业务数据。 */
+    @Transactional
+    public WorkitemVO restore(long id, long tenantId, long userId) {
+        WorkitemDO w = workitemDao.findByIdIncludingDeleted(id);
+        if (w == null || !Long.valueOf(tenantId).equals(w.getTenantId())) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        if (w.getIsDeleted() == null || w.getIsDeleted() == 0) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_RECYCLED);
+        }
+        int rows = workitemDao.restore(id, tenantId, w.getVersion(), userId);
+        if (rows == 0) {
+            throw new BizException(ErrorCode.WORKITEM_VERSION_CONFLICT);
+        }
+        writeEvent(tenantId, id, WorkitemEventType.RESTORE.code(), null, null, "HUMAN", userId);
+        return toVO(workitemDao.findById(id));
+    }
+
+    @Transactional
+    public CommentVO addComment(long workitemId, String contentMd, long tenantId, long userId) {
+        return addComment(workitemId, contentMd, List.of(), tenantId, userId);
+    }
+
+    @Transactional
+    public CommentVO addComment(long workitemId, String contentMd, List<Long> targetHumanIds, long tenantId, long userId) {
+        WorkitemDO w = workitemDao.findById(workitemId);
+        if (w == null || tenantId != w.getTenantId()) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        LinkedHashMap<Long, UserDO> targetHumans = resolveHumanMentions(tenantId, targetHumanIds);
+        if (targetHumans.isEmpty()) {
+            targetHumans = resolvePlainTextHumanMentions(workitemId, tenantId, contentMd);
+        }
+        WorkitemCommentDO c = new WorkitemCommentDO();
+        c.setTenantId(tenantId);
+        c.setWorkitemId(workitemId);
+        c.setAuthorType("HUMAN");
+        c.setAuthorRef(userId);
+        c.setContentMd(contentMd);
+        commentDao.insert(c);
+        persistHumanMentions(tenantId, workitemId, c.getId(), targetHumans);
+        writeEvent(tenantId, workitemId, WorkitemEventType.COMMENT.code(), null, null, "HUMAN", userId);
+        if (c.getId() != null) {
+            eventPublisher.publishEvent(new WorkitemCommentCreatedEvent(tenantId, workitemId, c.getId(),
+                    "HUMAN", userId, contentMd));
+            publishHumanMentionEvents(tenantId, workitemId, w.getTitle(), c.getId(), targetHumans,
+                    "HUMAN", userId, resolveActorDisplayName("HUMAN", userId), userId, contentMd);
+        }
+        return toCommentVO(c);
+    }
+
+    private LinkedHashMap<Long, UserDO> resolveHumanMentions(long tenantId, List<Long> targetHumanIds) {
+        LinkedHashMap<Long, UserDO> humans = new LinkedHashMap<>();
+        if (targetHumanIds == null) {
+            return humans;
+        }
+        for (Long targetHumanId : targetHumanIds) {
+            if (targetHumanId == null || humans.containsKey(targetHumanId)) {
+                continue;
+            }
+            if (workspaceMemberDao == null) {
+                continue;
+            }
+            WorkspaceMemberDO member = workspaceMemberDao.findByWorkspaceAndUser(tenantId, targetHumanId);
+            if (member == null || member.getStatus() == null || member.getStatus() != 0) {
+                throw new BizException(ErrorCode.WORKSPACE_NOT_MEMBER);
+            }
+            UserDO user = userDao.findById(targetHumanId);
+            if (user == null) {
+                throw new BizException(ErrorCode.WORKSPACE_NOT_MEMBER);
+            }
+            humans.put(targetHumanId, user);
+        }
+        return humans;
+    }
+
+    private void persistHumanMentions(long tenantId, long workitemId, Long commentId, LinkedHashMap<Long, UserDO> humans) {
+        if (commentMentionDao == null || commentId == null || humans == null || humans.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Long, UserDO> entry : humans.entrySet()) {
+            WorkitemCommentMentionDO mention = new WorkitemCommentMentionDO();
+            mention.setTenantId(tenantId);
+            mention.setWorkitemId(workitemId);
+            mention.setCommentId(commentId);
+            mention.setTargetType("HUMAN");
+            mention.setTargetRef(entry.getKey());
+            mention.setDisplayNameSnapshot(resolveUserName(entry.getValue()));
+            commentMentionDao.insert(mention);
+        }
+    }
+
+    private void publishHumanMentionEvents(long tenantId, long workitemId, String workitemTitle, long commentId,
+            LinkedHashMap<Long, UserDO> humans, String actorType, long actorRef, String actorDisplayName,
+            Long skipUserId, String contentMd) {
+        if (humans == null || humans.isEmpty()) {
+            return;
+        }
+        for (Long recipientUserId : humans.keySet()) {
+            if (recipientUserId == null || Objects.equals(recipientUserId, skipUserId)) {
+                continue;
+            }
+            eventPublisher.publishEvent(new WorkitemCommentMentionedEvent(tenantId, workitemId, workitemTitle,
+                    commentId, recipientUserId, actorType, actorRef, actorDisplayName, currentRequestId(), contentMd));
+        }
+    }
+
+    private LinkedHashMap<Long, UserDO> resolvePlainTextHumanMentions(long workitemId, long tenantId, String contentMd) {
+        LinkedHashMap<Long, UserDO> humans = new LinkedHashMap<>();
+        if (contentMd == null || contentMd.isBlank()) {
+            return humans;
+        }
+        Map<String, List<ParticipantVO>> byName = new LinkedHashMap<>();
+        for (ParticipantVO candidate : getMentionCandidates(workitemId, tenantId, null, 100)) {
+            if (candidate == null || !"HUMAN".equals(candidate.getTargetType())
+                    || candidate.getUserId() == null || candidate.getName() == null || candidate.getName().isBlank()) {
+                continue;
+            }
+            byName.computeIfAbsent(candidate.getName(), ignored -> new ArrayList<>()).add(candidate);
+        }
+        for (Map.Entry<String, List<ParticipantVO>> entry : byName.entrySet()) {
+            if (entry.getValue().size() != 1 || !containsPlainMention(contentMd, entry.getKey())) {
+                continue;
+            }
+            Long userId = entry.getValue().get(0).getUserId();
+            UserDO user = userDao.findById(userId);
+            if (user != null) {
+                humans.putIfAbsent(userId, user);
+            }
+        }
+        return humans;
+    }
+
+    private boolean containsPlainMention(String contentMd, String name) {
+        String needle = "@" + name;
+        int from = 0;
+        while (from < contentMd.length()) {
+            int index = contentMd.indexOf(needle, from);
+            if (index < 0) {
+                return false;
+            }
+            int end = index + needle.length();
+            boolean leftBoundary = index == 0 || isMentionBoundary(contentMd.charAt(index - 1));
+            boolean rightBoundary = end == contentMd.length() || isMentionBoundary(contentMd.charAt(end));
+            if (leftBoundary && rightBoundary) {
+                return true;
+            }
+            from = index + 1;
+        }
+        return false;
+    }
+
+    private boolean isMentionBoundary(char value) {
+        return Character.isWhitespace(value)
+                || value == ',' || value == '.' || value == ';' || value == ':' || value == '!'
+                || value == '?' || value == ')' || value == ']' || value == '}'
+                || value == '，' || value == '。' || value == '；' || value == '：' || value == '！'
+                || value == '？' || value == '）' || value == '】' || value == '」';
+    }
+
+    private String resolveUserName(UserDO user) {
+        return UserAccountStates.displayName(user);
+    }
+
+    private ParticipantVO toHumanParticipant(UserDO user) {
+        ParticipantVO vo = new ParticipantVO();
+        vo.setUserId(user.getId());
+        vo.setTargetType("HUMAN");
+        vo.setName(resolveUserName(user));
+        vo.setDisplayId(String.valueOf(user.getId()));
+        vo.setAgent(false);
+        vo.setRole("HUMAN");
+        vo.setRoleName("真人");
+        vo.setOnline(false);
+        vo.setStatus(user.getStatus() == null ? null : String.valueOf(user.getStatus()));
+        return vo;
+    }
+
+    private boolean matchesMentionQuery(ParticipantVO participant, String query) {
+        if (query == null || query.isBlank()) {
+            return true;
+        }
+        String normalized = query.trim().toLowerCase();
+        return containsIgnoreCase(participant.getName(), normalized)
+                || containsIgnoreCase(participant.getDisplayId(), normalized)
+                || containsIgnoreCase(participant.getRoleName(), normalized);
+    }
+
+    private boolean containsIgnoreCase(String value, String normalizedQuery) {
+        return value != null && value.toLowerCase().contains(normalizedQuery);
+    }
+
+    public CommentVO addAgentComment(long workitemId, String contentMd, long tenantId, long agentId) {
+        return addAgentComment(workitemId, contentMd, List.of(), tenantId, agentId, null);
+    }
+
+    public CommentVO addAgentComment(long workitemId, String contentMd, List<Long> targetHumanIds,
+            long tenantId, long agentId) {
+        return addAgentComment(workitemId, contentMd, targetHumanIds, tenantId, agentId, null);
+    }
+
+    public CommentVO addAgentComment(long workitemId, String contentMd, List<Long> targetHumanIds,
+            long tenantId, long agentId, Long initiatorUserId) {
+        WorkitemDO w = workitemDao.findById(workitemId);
+        if (w == null || tenantId != w.getTenantId()) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        LinkedHashMap<Long, UserDO> targetHumans = resolveHumanMentions(tenantId, targetHumanIds);
+        if (targetHumans.isEmpty()) {
+            targetHumans = resolvePlainTextHumanMentions(workitemId, tenantId, contentMd);
+        }
+        WorkitemCommentDO c = new WorkitemCommentDO();
+        c.setTenantId(tenantId);
+        c.setWorkitemId(workitemId);
+        c.setAuthorType("AGENT");
+        c.setAuthorRef(agentId);
+        c.setContentMd(contentMd);
+        commentDao.insert(c);
+        persistHumanMentions(tenantId, workitemId, c.getId(), targetHumans);
+        writeEvent(tenantId, workitemId, WorkitemEventType.COMMENT.code(), null, null, "AGENT", agentId);
+        if (c.getId() != null) {
+            eventPublisher.publishEvent(new WorkitemCommentCreatedEvent(tenantId, workitemId, c.getId(),
+                    "AGENT", agentId, contentMd));
+            publishHumanMentionEvents(tenantId, workitemId, w.getTitle(), c.getId(), targetHumans,
+                    "AGENT", agentId, resolveActorDisplayName("AGENT", agentId), initiatorUserId, contentMd);
+        }
+        return toCommentVO(c);
+    }
+
+    public List<CommentVO> listComments(long workitemId) {
+        WorkitemDO owner = workitemDao.findById(workitemId);
+        if (owner == null || owner.getTenantId() == null) throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        List<CommentVO> result = new ArrayList<>();
+        for (WorkitemCommentDO c : commentDao.listByWorkitem(owner.getTenantId(), workitemId)) {
+            result.add(toCommentVO(c));
+        }
+        return result;
+    }
+
+    public List<EventVO> timeline(long workitemId) {
+        List<EventVO> result = new ArrayList<>();
+        for (WorkitemEventDO e : eventDao.listByWorkitem(workitemId)) {
+            EventVO vo = new EventVO();
+            vo.setId(e.getId());
+            vo.setEventType(e.getEventType());
+            vo.setFromVal(e.getFromVal());
+            vo.setToVal(e.getToVal());
+            vo.setActorType(e.getActorType());
+            vo.setActorRef(e.getActorRef());
+            ExternalPrincipalVO actor = externalActorPrincipal(e.getActorType(), e.getActorRef());
+            vo.setActorName("EXTERNAL".equals(e.getActorType()) && externalWorkitemViewService != null ? ExternalWorkitemViewService.formatPrincipalName(actor) : resolveActorName(e.getActorType(), e.getActorRef()));
+            vo.setActorDisplayName("EXTERNAL".equals(e.getActorType()) && externalWorkitemViewService != null ? ExternalWorkitemViewService.formatPrincipalDisplayName(actor) : resolveActorDisplayName(e.getActorType(), e.getActorRef()));
+            vo.setActorNameFallback(ExternalWorkitemViewService.nameFallback(actor));
+            ExternalPrincipalVO from = externalEventValuePrincipal(e, e.getFromVal());
+            ExternalPrincipalVO to = externalEventValuePrincipal(e, e.getToVal());
+            vo.setFromValDisplay(resolveEventValueDisplay(e, e.getFromVal(), "fromType", from));
+            vo.setToValDisplay(resolveEventValueDisplay(e, e.getToVal(), "toType", to));
+            vo.setFromValNameFallback(ExternalWorkitemViewService.nameFallback(from));
+            vo.setToValNameFallback(ExternalWorkitemViewService.nameFallback(to));
+            vo.setDetailJson(e.getDetailJson());
+            vo.setGmtCreate(e.getGmtCreate());
+            result.add(vo);
+        }
+        return result;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.aliyun.autowonder.dispatch.DispatchRecoveryService deliveryRecoveryService;
+
+    public DeliveryProgressVO getDeliveryProgress(long workitemId, long tenantId) {
+        WorkitemDO w = workitemDao.findById(workitemId);
+        if (w == null) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        List<DispatchDO> dispatches = dispatchDao.listByWorkitem(tenantId, workitemId);
+        if (dispatches == null) {
+            dispatches = List.of();
+        }
+        ProgressReadContext context = new ProgressReadContext(DeliveryProgressSpill.forRequest());
+        runtimeEventDao.streamForProgress(tenantId, workitemId, row -> context.accept(row.getResultObject()));
+        context.bindDelivery(tenantId, workitemId, dispatches);
+        if (deliveryRecoveryService != null) {
+            context.waitingReasons.putAll(deliveryRecoveryService.waitingReasons(tenantId, dispatches.stream()
+                    .filter(d -> DispatchStatus.PENDING.equals(d.getStatus())).map(DispatchDO::getId).toList()));
+        }
+        List<Long> agentIds = resolveProgressAgentIds(w, tenantId, dispatches);
+
+        List<AgentDeliveryProgressVO> agentProgress = new ArrayList<>();
+        for (Long agentId : agentIds) {
+            AgentDeliveryProgressVO agentVO = buildAgentProgress(w, tenantId, agentId, dispatches, context);
+            if (agentVO != null) {
+                agentProgress.add(agentVO);
+            }
+        }
+
+        com.aliyun.autowonder.aiusage.dto.WorkitemUsageSummaryVO totalUsage =
+                enrichAgentUsage(tenantId, workitemId, dispatches, agentProgress, context);
+
+        WorkflowPlanVO workflowPlan = latestWorkflowPlan(context.latestPlan, context);
+        if (!applyWorkflowPlan(workflowPlan, agentProgress)) {
+            workflowPlan = null;
+        }
+
+        List<DeliveryStepVO> compatSteps = selectCompatSteps(w, agentProgress);
+        if (compatSteps.isEmpty() && w.getSdlcId() != null) {
+            compatSteps = buildLegacySteps(w, dispatches, context);
+        }
+        DeliveryProgressVO result = new DeliveryProgressVO();
+        List<DispatchAttemptVO> executions = buildAttempts(dispatches, null, context.latestEvents, context);
+        Date timingNow = new Date();
+        for (int i = 0; i < dispatches.size(); i++) {
+            DispatchDO dispatch = dispatches.get(i);
+            // Resolve the flow from this execution's entry step, not the employee's current binding.
+            SdlcStepDO entryStep = dispatch.getSdlcStepId() == null ? null : context.step(dispatch.getSdlcStepId());
+            if (!isInteractionDispatch(dispatch) && entryStep != null && entryStep.getSdlcId() != null) {
+                executions.get(i).setStepTimings(DispatchStepTimings.buildProgress(dispatch,
+                        context.eventsByDispatch.getOrDefault(dispatch.getId(), List.of()),
+                        context.maxEventTime.get(dispatch.getId()), context.steps(entryStep.getSdlcId()), timingNow));
+            }
+        }
+        result.setExecutions(executions);
+        result.setAgents(agentProgress);
+        result.setSteps(compatSteps);
+        result.setWorkflowPlan(workflowPlan);
+        result.setProcessGraph(buildProcessGraph(w, tenantId, dispatches, context));
+        result.setTotalDurationMs(sumAgentDurations(agentProgress));
+        result.setTotalUsage(totalUsage);
+        boolean allTerminal = dispatches.stream().allMatch(d -> DispatchStatus.isTerminal(d.getStatus()));
+        result.setClosed(context.controlClosed);
+        result.setCanReopen(context.controlClosed && allTerminal);
+        result.setReopenReasonKey(allTerminal ? null : "dispatch.recovery.cancel_pending");
+        result.setReopenReasonArgs(List.of());
+        if (context.spill != null) context.eventsByDispatch.values().forEach(context.spill::discard);
+        return result;
+    }
+
+    private ProcessGraphVO buildProcessGraph(WorkitemDO workitem, long tenantId,
+                                             List<DispatchDO> dispatches, ProgressReadContext context) {
+        List<DispatchDO> formal = safeList(dispatches).stream()
+                .filter(Objects::nonNull)
+                .filter(row -> !isInteractionDispatch(row))
+                .filter(row -> row.getId() != null)
+                .sorted(Comparator.comparingLong(DispatchDO::getId))
+                .toList();
+        Map<Long, DispatchDO> byId = formal.stream()
+                .collect(Collectors.toMap(DispatchDO::getId, row -> row,
+                        (left, right) -> left, LinkedHashMap::new));
+        Map<Long, GuidanceDO> guidanceByDispatch = safeList(
+                guidanceDao.listByWorkitem(tenantId, workitem.getId())).stream()
+                .filter(Objects::nonNull)
+                .filter(row -> row.getDispatchId() != null)
+                .collect(Collectors.toMap(GuidanceDO::getDispatchId, row -> row,
+                        (left, right) -> left, LinkedHashMap::new));
+
+        List<ProcessGraphNodeVO> nodes = new ArrayList<>();
+        List<ProcessGraphEdgeVO> edges = new ArrayList<>();
+        Map<Long, ProcessGraphNodeVO> nodesByDispatch = new LinkedHashMap<>();
+        for (DispatchDO row : formal) {
+            ProcessGraphNodeVO node = graphNode(row, context);
+            nodes.add(node);
+            nodesByDispatch.put(row.getId(), node);
+        }
+
+        for (DispatchDO target : formal) {
+            if (target.getIdempotencyKey() != null && target.getIdempotencyKey().startsWith("restart:")
+                    && target.getDeliverySourceDispatchId() != null) {
+                addGraphEdge(edges, byId, target.getDeliverySourceDispatchId(), target, "RESTART", null,
+                        com.aliyun.autowonder.common.i18n.SystemMessages.render("dispatch.round_restart", new Object[0], "交付重启"));
+                continue;
+            }
+            if ("COMMENT_REWORK".equals(target.getResumeMode())) {
+                Long sideDispatchId = parsePrefixedId(target.getIdempotencyKey(), "interaction-rework:");
+                GuidanceDO guidance = sideDispatchId == null ? null : guidanceByDispatch.get(sideDispatchId);
+                Long commentId = guidance == null ? null : guidance.getCommentId();
+                nodesByDispatch.get(target.getId()).setTriggerCommentId(commentId);
+                Long sourceId = parsePrefixedId(target.getResultSummary(), "waitForDispatchId=");
+                addGraphEdge(edges, byId, sourceId, target, "COMMENT_REWORK", commentId,
+                        commentId == null ? "用户返工" : "用户返工（评论 #" + commentId + "）");
+                continue;
+            }
+            Long handoffSource = parsePrefixedId(target.getIdempotencyKey(), "handoff:");
+            if (handoffSource != null) {
+                DispatchDO source = byId.get(handoffSource);
+                String label = source != null && isFailed(source.getStatus()) ? "失败后交接" : "交接";
+                addGraphEdge(edges, byId, handoffSource, target, "HANDOFF", null, label);
+                continue;
+            }
+            if (target.getResumeFromDispatchId() != null) {
+                addGraphEdge(edges, byId, target.getResumeFromDispatchId(), target,
+                        "CONTINUE", null, "恢复执行");
+            }
+        }
+
+        appendHumanHandoff(workitem, formal, nodes, edges);
+        ProcessGraphVO graph = new ProcessGraphVO();
+        graph.setNodes(nodes);
+        graph.setEdges(edges);
+        return graph;
+    }
+
+    private ProcessGraphNodeVO graphNode(DispatchDO row, ProgressReadContext context) {
+        ProcessGraphNodeVO node = new ProcessGraphNodeVO();
+        node.setKey("dispatch:" + row.getId());
+        node.setDispatchId(row.getId());
+        node.setAgentId(row.getAgentId());
+        node.setAgentName(context.agentName(row.getAgentId()));
+        node.setStepId(row.getSdlcStepId());
+        SdlcStepDO step = row.getSdlcStepId() == null ? null : context.step(row.getSdlcStepId());
+        node.setStepName(step == null ? null : step.getName());
+        node.setStatus(row.getStatus());
+        node.setStartedAt(row.getGmtCreate());
+        node.setDurationMs(durationOf(row));
+        node.setError(row.getError());
+        return node;
+    }
+
+    private void addGraphEdge(List<ProcessGraphEdgeVO> edges, Map<Long, DispatchDO> formalById,
+                              Long sourceId, DispatchDO target, String type,
+                              Long commentId, String label) {
+        if (sourceId == null || target == null || target.getId() == null
+                || !formalById.containsKey(sourceId)) {
+            return;
+        }
+        ProcessGraphEdgeVO edge = new ProcessGraphEdgeVO();
+        edge.setSourceKey("dispatch:" + sourceId);
+        edge.setTargetKey("dispatch:" + target.getId());
+        edge.setType(type);
+        edge.setSourceDispatchId(sourceId);
+        edge.setTargetDispatchId(target.getId());
+        edge.setCommentId(commentId);
+        edge.setLabel(label);
+        edges.add(edge);
+    }
+
+    private void appendHumanHandoff(WorkitemDO workitem, List<DispatchDO> formal,
+                                    List<ProcessGraphNodeVO> nodes,
+                                    List<ProcessGraphEdgeVO> edges) {
+        if (!"HUMAN".equals(workitem.getAssigneeType()) || workitem.getAssigneeRef() == null
+                || formal.isEmpty()) {
+            return;
+        }
+        DispatchDO latest = formal.get(formal.size() - 1);
+        if (!DispatchStatus.SUCCEEDED.equals(latest.getStatus())) {
+            return;
+        }
+        UserDO user = userDao.findByIdIncludingDeleted(workitem.getAssigneeRef());
+        ProcessGraphNodeVO human = new ProcessGraphNodeVO();
+        human.setKey("human:" + workitem.getAssigneeRef());
+        String humanName = user == null ? null : UserAccountStates.displayName(user);
+        if (humanName == null || humanName.isBlank()) {
+            human.setAgentNameFallback("HUMAN");
+            human.setAgentName(SystemMessages.render("workitem.graph.human", new Object[0], "真人"));
+        } else {
+            human.setAgentName(humanName);
+        }
+        human.setStatus("HUMAN");
+        nodes.add(human);
+
+        ProcessGraphEdgeVO edge = new ProcessGraphEdgeVO();
+        edge.setSourceKey("dispatch:" + latest.getId());
+        edge.setTargetKey(human.getKey());
+        edge.setType("HUMAN_HANDOFF");
+        edge.setSourceDispatchId(latest.getId());
+        edge.setLabel(SystemMessages.render("workitem.graph.human_handoff", new Object[0], "交接真人"));
+        edges.add(edge);
+    }
+
+    private Long parsePrefixedId(String value, String prefix) {
+        if (value == null || !value.startsWith(prefix)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.substring(prefix.length()));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private List<DeliveryStepVO> buildLegacySteps(WorkitemDO w, List<DispatchDO> dispatches, ProgressReadContext context) {
+        List<SdlcStepDO> sdlcSteps = context.steps(w.getSdlcId());
+        sdlcSteps.sort(Comparator.comparingInt(s -> s.getStepOrder() == null ? 0 : s.getStepOrder()));
+        Map<Long, List<DispatchDO>> dispatchesByStep = new LinkedHashMap<>();
+        for (DispatchDO d : dispatches) {
+            dispatchesByStep.computeIfAbsent(d.getSdlcStepId(), ignored -> new ArrayList<>()).add(d);
+        }
+        DispatchDO latestWorkitemDispatch = latestDispatch(dispatches);
+
+        List<DeliveryStepVO> stepVOs = new ArrayList<>();
+        for (SdlcStepDO step : sdlcSteps) {
+            DeliveryStepVO vo = new DeliveryStepVO();
+            vo.setStepId(step.getId());
+            vo.setStepKey(step.getCode());
+            vo.setName(step.getName());
+            List<DispatchDO> stepDispatches = dispatchesByStep.get(step.getId());
+            DispatchDO latestDispatch = latestDispatch(stepDispatches);
+            vo.setAttempts(buildAttempts(stepDispatches,
+                    latestWorkitemDispatch != null ? latestWorkitemDispatch.getId() : null,
+                    Map.of(), context));
+            if (latestDispatch != null) {
+                vo.setError(latestDispatch.getError());
+                vo.setExecutionStatus(latestDispatch.getStatus());
+                vo.setCurrentDispatchId(latestDispatch.getId());
+                vo.setWaitingReason(DispatchStatus.PENDING.equals(latestDispatch.getStatus()) ? context.waitingReasons.get(latestDispatch.getId()) : null);
+                vo.setAgentName(context.agentName(latestDispatch.getAgentId()));
+                vo.setExecutorId(latestDispatch.getExecutorId());
+                vo.setExecutorName(context.executorName(latestDispatch.getExecutorId()));
+                vo.setSubSteps(dispatchSubSteps(latestDispatch));
+            }
+            if (latestDispatch != null && DispatchStatus.CANCELED.equals(latestDispatch.getStatus())) {
+                vo.setStatus("cancelled");
+            } else if (latestDispatch != null && isFailed(latestDispatch.getStatus())) {
+                vo.setStatus("failed");
+            } else if (step.getId().equals(w.getCurrentStepId())) {
+                vo.setStatus("active");
+            } else {
+                boolean hasSucceeded = stepDispatches != null && stepDispatches.stream()
+                        .anyMatch(d -> DispatchStatus.SUCCEEDED.equals(d.getStatus()));
+                vo.setStatus(hasSucceeded ? "done" : "pending");
+            }
+            stepVOs.add(vo);
+        }
+        return stepVOs;
+    }
+
+    private List<Long> resolveProgressAgentIds(WorkitemDO w, long tenantId, List<DispatchDO> dispatches) {
+        LinkedHashMap<Long, Long> ids = new LinkedHashMap<>();
+        for (DispatchDO d : dispatches) {
+            if (d.getAgentId() != null) {
+                ids.putIfAbsent(d.getAgentId(), d.getAgentId());
+            }
+        }
+        if ("AGENT".equals(w.getAssigneeType()) && w.getAssigneeRef() != null) {
+            ids.putIfAbsent(w.getAssigneeRef(), w.getAssigneeRef());
+        }
+        List<SquadMemberDO> squadMembers = resolveSquad(tenantId, new ArrayList<>(ids.keySet())).members();
+        for (SquadMemberDO member : squadMembers) {
+            if (member.getAgentId() != null) {
+                ids.putIfAbsent(member.getAgentId(), member.getAgentId());
+            }
+        }
+        return new ArrayList<>(ids.keySet());
+    }
+
+    private AgentDeliveryProgressVO buildAgentProgress(WorkitemDO w, long tenantId, Long agentId,
+                                                       List<DispatchDO> allDispatches,
+                                                       ProgressReadContext context) {
+        // Historical executions belong to the flow of their entry step, even after
+        // the employee publishes a version bound to a different SDLC.
+        Map<Long, List<DispatchDO>> dispatchesByFlow = new LinkedHashMap<>();
+        List<DispatchDO> interactions = new ArrayList<>();
+        Long fallbackSdlcId = null;
+        for (DispatchDO dispatch : allDispatches) {
+            if (!Objects.equals(agentId, dispatch.getAgentId())) continue;
+            if (isInteractionDispatch(dispatch)) {
+                interactions.add(dispatch);
+                continue;
+            }
+            SdlcStepDO entry = dispatch.getSdlcStepId() == null ? null : context.step(dispatch.getSdlcStepId());
+            Long flowId = entry == null ? null : entry.getSdlcId();
+            if (flowId == null) {
+                if (fallbackSdlcId == null) fallbackSdlcId = sdlcResolver.resolveSdlcId(tenantId, agentId);
+                flowId = fallbackSdlcId == null ? w.getSdlcId() : fallbackSdlcId;
+            }
+            if (flowId != null) dispatchesByFlow.computeIfAbsent(flowId, ignored -> new ArrayList<>()).add(dispatch);
+        }
+        if (dispatchesByFlow.isEmpty()) {
+            Long flowId = sdlcResolver.resolveSdlcId(tenantId, agentId);
+            if (flowId == null) flowId = w.getSdlcId();
+            if (flowId == null) return null;
+            dispatchesByFlow.put(flowId, new ArrayList<>());
+        }
+        List<Map.Entry<Long, List<DispatchDO>>> flows = new ArrayList<>(dispatchesByFlow.entrySet());
+        flows.sort(Comparator.comparingLong(flow -> {
+            DispatchDO latest = latestDispatch(flow.getValue());
+            return latest == null ? Long.MIN_VALUE : latest.getId();
+        }));
+        List<DeliveryStepVO> historicalSteps = new ArrayList<>();
+        AgentDeliveryProgressVO result = null;
+        for (int i = 0; i < flows.size(); i++) {
+            Map.Entry<Long, List<DispatchDO>> flow = flows.get(i);
+            List<DispatchDO> flowDispatches = new ArrayList<>(flow.getValue());
+            if (i == flows.size() - 1) flowDispatches.addAll(interactions);
+            flowDispatches.sort(Comparator.comparing(DispatchDO::getId));
+            result = buildAgentFlowProgress(w, agentId, flowDispatches, context, flow.getKey(),
+                    i == flows.size() - 1 ? latestDispatch(flow.getValue()) : null);
+            // Keep the latest flow first so name/key-based workflow plans do not
+            // attach to an older flow that reused the same step identifiers.
+            historicalSteps.addAll(0, result.getSteps());
+        }
+        result.setSteps(historicalSteps);
+        result.setDurationMs(totalDuration(allDispatches.stream()
+                .filter(dispatch -> Objects.equals(agentId, dispatch.getAgentId()) && !isInteractionDispatch(dispatch))
+                .toList()));
+        return result;
+    }
+
+    private AgentDeliveryProgressVO buildAgentFlowProgress(WorkitemDO w, Long agentId,
+                                                           List<DispatchDO> allDispatches,
+                                                           ProgressReadContext context, Long sdlcId, DispatchDO controlDispatch) {
+        List<SdlcStepDO> sdlcSteps = context.steps(sdlcId);
+        sdlcSteps.sort(Comparator.comparingInt(s -> s.getStepOrder() == null ? 0 : s.getStepOrder()));
+        List<DispatchDO> allAgentDispatches = allDispatches.stream()
+                .filter(d -> Objects.equals(agentId, d.getAgentId()))
+                .collect(Collectors.toList());
+        List<DispatchDO> agentDispatches = allAgentDispatches.stream()
+                .filter(d -> !isInteractionDispatch(d))
+                .collect(Collectors.toList());
+        DispatchDO latestAgentDispatch = latestDispatch(agentDispatches);
+        boolean completedAgentWorkflow = completedAgentWorkflow(agentDispatches);
+        Map<Long, List<DispatchDO>> dispatchesByStep = new LinkedHashMap<>();
+        for (DispatchDO d : agentDispatches) {
+            dispatchesByStep.computeIfAbsent(d.getSdlcStepId(), ignored -> new ArrayList<>()).add(d);
+        }
+        List<DispatchRuntimeEventDO> displayRuntimeEvents = latestAgentDispatch == null
+                ? List.of() : context.eventsByDispatch.getOrDefault(latestAgentDispatch.getId(), List.of());
+        Iterable<DispatchRuntimeEventDO> agentEvents = () -> java.util.stream.StreamSupport
+                .stream(displayRuntimeEvents.spliterator(), false)
+                .filter(event -> Objects.equals(agentId, event.getAgentId())).iterator();
+        RuntimeStepTimeline runtimeState = RuntimeStepTimeline.fromProgress(
+                agentEvents, sdlcSteps, new Date(), true, context.spill);
+
+        List<DeliveryStepVO> stepVOs = new ArrayList<>();
+        for (SdlcStepDO step : sdlcSteps) {
+            DeliveryStepVO vo = new DeliveryStepVO();
+            vo.setStepId(step.getId());
+            vo.setStepKey(step.getCode());
+            vo.setName(step.getName());
+
+            List<DispatchDO> stepDispatches = dispatchesByStep.get(step.getId());
+            DispatchDO latestDispatch = latestDispatch(stepDispatches);
+            vo.setAttempts(buildAttempts(stepDispatches,
+                    controlDispatch != null ? controlDispatch.getId() : null,
+                    context.latestEvents, context));
+            if (latestDispatch != null) {
+                if (latestAgentDispatch != null && Objects.equals(latestDispatch.getId(), latestAgentDispatch.getId()))
+                    vo.setError(latestDispatch.getError());
+                vo.setCurrentDispatchId(latestDispatch.getId());
+                vo.setExecutionStatus(latestDispatch.getStatus());
+                vo.setWaitingReason(DispatchStatus.PENDING.equals(latestDispatch.getStatus())
+                        ? context.waitingReasons.get(latestDispatch.getId()) : null);
+                vo.setAgentName(context.agentName(latestDispatch.getAgentId()));
+                vo.setExecutorId(latestDispatch.getExecutorId());
+                vo.setExecutorName(context.executorName(latestDispatch.getExecutorId()));
+                vo.setSubSteps(dispatchSubSteps(latestDispatch));
+            }
+            if (latestAgentDispatch != null && !isTerminal(latestAgentDispatch.getStatus())
+                    && (latestDispatch == null || !Objects.equals(latestDispatch.getId(), latestAgentDispatch.getId()))) {
+                vo.setCurrentDispatchId(null);
+                vo.setExecutionStatus(null);
+                vo.setWaitingReason(null);
+            }
+            vo.setDurationMs(runtimeState.durationOf(step));
+            String runtimeStatus = runtimeState.statusOf(step);
+            if (runtimeStatus != null && runtimeState.isCurrent(step) && latestAgentDispatch != null) {
+                if (DispatchStatus.CANCELED.equals(latestAgentDispatch.getStatus())) {
+                    runtimeStatus = "cancelled";
+                } else if (DispatchStatus.PAUSED.equals(latestAgentDispatch.getStatus())) {
+                    runtimeStatus = "paused";
+                } else if (DispatchStatus.PENDING.equals(latestAgentDispatch.getStatus())
+                        && "failed".equals(runtimeStatus)) {
+                    runtimeStatus = null;
+                } else if (isFailed(latestAgentDispatch.getStatus())) {
+                    runtimeStatus = "failed";
+                }
+            }
+            List<SubStepVO> runtimeSubSteps = runtimeStatus == null
+                    ? List.of() : runtimeState.subStepsOf(step, runtimeStatus);
+            DispatchRuntimeEventDO lastEvent = runtimeStatus == null
+                    ? null : runtimeState.lastEventOf(step);
+            if (runtimeStatus != null && !completedAgentWorkflow) {
+                vo.setStatus(runtimeStatus);
+            } else if (latestDispatch != null && DispatchStatus.CANCELED.equals(latestDispatch.getStatus())) {
+                vo.setStatus("cancelled");
+            } else if (latestDispatch != null && DispatchStatus.PAUSED.equals(latestDispatch.getStatus())) {
+                vo.setStatus("paused");
+            } else if (latestDispatch != null && isFailed(latestDispatch.getStatus())) {
+                vo.setStatus("failed");
+            } else if (latestDispatch != null && !isTerminal(latestDispatch.getStatus())) {
+                vo.setStatus("active");
+            } else {
+                boolean hasSucceeded = stepDispatches != null && stepDispatches.stream()
+                        .anyMatch(d -> "SUCCEEDED".equals(d.getStatus()));
+                vo.setStatus((hasSucceeded || completedAgentWorkflow) ? "done" : "pending");
+            }
+            if (!runtimeSubSteps.isEmpty()) {
+                vo.setSubSteps(runtimeSubSteps);
+            }
+            if (lastEvent != null && lastEvent.getError() != null
+                    && !looksLikeMojibake(lastEvent.getError())) {
+                vo.setError(lastEvent.getError());
+            }
+            // runtimeState 来自 latestAgentDispatch 的运行事件：由它驱动的步骤展示该 dispatch 的
+            // 执行器，即使步骤本身没有入口 dispatch 或仅有更早的历史入口 dispatch。
+            if (runtimeStatus != null && latestAgentDispatch != null
+                    && (latestDispatch == null || !Objects.equals(latestDispatch.getId(), latestAgentDispatch.getId()))) {
+                vo.setAgentName(context.agentName(agentId));
+                vo.setExecutorId(latestAgentDispatch.getExecutorId());
+                vo.setExecutorName(context.executorName(latestAgentDispatch.getExecutorId()));
+            }
+
+            if (runtimeStatus == null && latestAgentDispatch != null && !isTerminal(latestAgentDispatch.getStatus())
+                    && latestDispatch != null && !Objects.equals(latestDispatch.getId(), latestAgentDispatch.getId())
+                    && "failed".equals(vo.getStatus())) {
+                vo.setStatus("pending");
+                vo.setSubSteps(List.of());
+            }
+            stepVOs.add(vo);
+        }
+
+        AgentDeliveryProgressVO agentVO = new AgentDeliveryProgressVO();
+        agentVO.setAgentId(agentId);
+        agentVO.setAgentName(context.agentName(agentId));
+        agentVO.setSteps(stepVOs);
+        DispatchDO latestAnyDispatch = latestDispatch(allAgentDispatches);
+        boolean interactionActive = latestAnyDispatch != null && isInteractionDispatch(latestAnyDispatch)
+                && !isTerminal(latestAnyDispatch.getStatus());
+        agentVO.setStatus(interactionActive ? "active" : resolveAgentProgressStatus(w, agentId, stepVOs));
+        DispatchDO currentDispatch = interactionActive ? latestAnyDispatch : latestAgentDispatch;
+        if (currentDispatch != null) {
+            agentVO.setCurrentDispatchId(currentDispatch.getId());
+            agentVO.setExecutionStatus(currentDispatch.getStatus());
+            agentVO.setWaitingReason(DispatchStatus.PENDING.equals(currentDispatch.getStatus())
+                    ? context.waitingReasons.get(currentDispatch.getId()) : null);
+        }
+        agentVO.setDurationMs(totalDuration(agentDispatches));
+        List<DispatchDO> activeAgentDispatches = allAgentDispatches.stream()
+                .filter(dispatch -> !isTerminal(dispatch.getStatus()))
+                .collect(Collectors.toList());
+        List<DispatchRuntimeEventDO> activeRuntimeEvents = activeAgentDispatches.stream()
+                .map(dispatch -> context.latestActivity.get(new ActivityKey(agentId, dispatch.getId())))
+                .filter(Objects::nonNull).toList();
+        agentVO.setCurrentActivity(latestAgentActivity(activeRuntimeEvents));
+        return agentVO;
+    }
+
+    private boolean isInteractionDispatch(DispatchDO dispatch) {
+        return dispatch != null && ("SIDE_INTERACTION".equals(dispatch.getResumeMode())
+                || "CANONICAL_INTERACTION".equals(dispatch.getResumeMode())
+                || "COMMENT_INTERACTION".equals(dispatch.getResumeMode()));
+    }
+
+    private String latestAgentActivity(List<DispatchRuntimeEventDO> events) {
+        return safeList(events).stream()
+                .filter(Objects::nonNull)
+                .filter(event -> "agent.progress".equals(event.getEventType()))
+                .filter(event -> event.getMessage() != null && !event.getMessage().isBlank())
+                .filter(event -> !looksLikeMojibake(event.getMessage()))
+                .max((left, right) -> {
+                    if (left.getId() != null && right.getId() != null) {
+                        return left.getId().compareTo(right.getId());
+                    }
+                    if (left.getEventTime() != null && right.getEventTime() != null) {
+                        return left.getEventTime().compareTo(right.getEventTime());
+                    }
+                    return 0;
+                })
+                .map(DispatchRuntimeEventDO::getMessage)
+                .orElse(null);
+    }
+
+    private WorkflowPlanVO latestWorkflowPlan(DispatchRuntimeEventDO latest, ProgressReadContext context) {
+        if (latest == null || latest.getDetailJson() == null || latest.getDetailJson().isBlank()) {
+            return null;
+        }
+        try {
+            JSONObject detail = JSON.parseObject(latest.getDetailJson());
+            Integer revision = detail.getInteger("revision");
+            String targetStepId = detail.getString("targetStepId");
+            com.aliyun.autowonder.json.JSONArray rawSteps = detail.getJSONArray("steps");
+            if (revision == null || revision < 1 || targetStepId == null || targetStepId.isBlank()
+                    || rawSteps == null || rawSteps.isEmpty()) {
+                return null;
+            }
+            List<WorkflowPlanStepVO> steps = new ArrayList<>();
+            Set<String> validStatuses = Set.of("RUN", "REUSED", "SKIPPED");
+            for (int i = 0; i < rawSteps.size(); i++) {
+                JSONObject raw = rawSteps.getJSONObject(i);
+                String stepKey = raw.getString("stepKey");
+                String name = raw.getString("name");
+                String planStatus = raw.getString("planStatus");
+                if ((stepKey == null || stepKey.isBlank()) && (name == null || name.isBlank())) {
+                    return null;
+                }
+                if (!validStatuses.contains(planStatus)) {
+                    return null;
+                }
+                WorkflowPlanStepVO step = new WorkflowPlanStepVO();
+                step.setStepKey(stepKey);
+                step.setName(name);
+                step.setPlanStatus(planStatus);
+                step.setSourceAttempt(raw.getInteger("sourceAttempt"));
+                steps.add(step);
+            }
+            WorkflowPlanVO result = new WorkflowPlanVO();
+            result.setRevision(revision);
+            result.setAgentId(latest.getAgentId());
+            result.setAgentName(context.agentName(latest.getAgentId()));
+            result.setTargetStepId(targetStepId);
+            result.setReason(detail.getString("reason"));
+            com.aliyun.autowonder.json.JSONArray rawGuidanceIds = detail.getJSONArray("sourceGuidanceIds");
+            List<Long> guidanceIds = new ArrayList<>();
+            if (rawGuidanceIds != null) {
+                for (int i = 0; i < rawGuidanceIds.size(); i++) {
+                    guidanceIds.add(rawGuidanceIds.getLong(i));
+                }
+            }
+            result.setSourceGuidanceIds(guidanceIds);
+            result.setSteps(steps);
+            return result;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private boolean applyWorkflowPlan(WorkflowPlanVO plan, List<AgentDeliveryProgressVO> agents) {
+        if (plan == null || plan.getSteps() == null) {
+            return plan == null;
+        }
+        List<Map.Entry<DeliveryStepVO, WorkflowPlanStepVO>> matches = new ArrayList<>();
+        for (AgentDeliveryProgressVO agent : agents) {
+            if (plan.getAgentId() != null && !Objects.equals(plan.getAgentId(), agent.getAgentId())) {
+                continue;
+            }
+            for (WorkflowPlanStepVO planned : plan.getSteps()) {
+                DeliveryStepVO step = safeList(agent.getSteps()).stream()
+                        .filter(item -> (planned.getStepKey() != null && Objects.equals(planned.getStepKey(), item.getStepKey()))
+                                || (planned.getName() != null && Objects.equals(planned.getName(), item.getName())))
+                        .findFirst()
+                        .orElse(null);
+                if (step == null) {
+                    return false;
+                }
+                matches.add(Map.entry(step, planned));
+            }
+            break;
+        }
+        if (matches.size() != plan.getSteps().size()) {
+            return false;
+        }
+        for (Map.Entry<DeliveryStepVO, WorkflowPlanStepVO> match : matches) {
+            match.getKey().setPlanStatus(match.getValue().getPlanStatus());
+            match.getKey().setSourceAttempt(match.getValue().getSourceAttempt());
+        }
+        return true;
+    }
+
+    private static boolean looksLikeMojibake(String text) {
+        return MojibakeDetector.looksLikeMojibake(text);
+    }
+
+    private boolean completedAgentWorkflow(List<DispatchDO> dispatches) {
+        if (dispatches == null || dispatches.isEmpty()) {
+            return false;
+        }
+        DispatchDO latest = latestDispatch(dispatches);
+        boolean latestSucceeded = latest != null && DispatchStatus.SUCCEEDED.equals(latest.getStatus());
+        boolean hasRunningState = dispatches.stream().anyMatch(d -> !isTerminal(d.getStatus()));
+        long distinctSteps = dispatches.stream()
+                .map(DispatchDO::getSdlcStepId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+        return latestSucceeded && !hasRunningState && distinctSteps <= 1;
+    }
+
+    private List<DeliveryStepVO> selectCompatSteps(WorkitemDO w, List<AgentDeliveryProgressVO> agents) {
+        if (agents.isEmpty()) {
+            return List.of();
+        }
+        for (AgentDeliveryProgressVO agent : agents) {
+            if (hasActiveSdlcStep(agent)) {
+                return agent.getSteps();
+            }
+        }
+        for (AgentDeliveryProgressVO agent : agents) {
+            if ("active".equals(agent.getStatus())) {
+                return agent.getSteps();
+            }
+        }
+        for (AgentDeliveryProgressVO agent : agents) {
+            if (Objects.equals(w.getAssigneeRef(), agent.getAgentId())) {
+                return agent.getSteps();
+            }
+        }
+        return agents.get(agents.size() - 1).getSteps();
+    }
+
+    private com.aliyun.autowonder.aiusage.dto.WorkitemUsageSummaryVO enrichAgentUsage(
+            long tenantId, long workitemId, List<DispatchDO> dispatches,
+            List<AgentDeliveryProgressVO> agentProgress, ProgressReadContext context) {
+        List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO> usageRows =
+                loadDispatchUsageRows(tenantId, workitemId, dispatches);
+        List<com.aliyun.autowonder.aiusage.AgentConversationUsageDO> clarificationRows =
+                loadClarificationUsageRows(tenantId, workitemId);
+        if (usageRows.isEmpty() && clarificationRows.isEmpty()) {
+            return null;
+        }
+        applyDispatchUsageToAgents(usageRows, agentProgress);
+        List<DispatchDO> knownDispatches = dispatches.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        return com.aliyun.autowonder.aiusage.WorkitemUsageAggregator.summarize(
+                usageRows, knownDispatches, clarificationRows, context::agentName);
+    }
+
+    private List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO> loadDispatchUsageRows(
+            long tenantId, long workitemId, List<DispatchDO> dispatches) {
+        if (dispatchAiUsageDao == null || dispatches == null || dispatches.isEmpty()) {
+            return List.of();
+        }
+        List<Long> dispatchIds = dispatches.stream()
+                .map(DispatchDO::getId).filter(Objects::nonNull).collect(Collectors.toList());
+        if (dispatchIds.isEmpty()) {
+            return List.of();
+        }
+        try {
+            List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO> rows =
+                    dispatchAiUsageDao.listByDispatchIds(tenantId, dispatchIds);
+            return rows == null ? List.of() : rows;
+        } catch (RuntimeException ex) {
+            log.warn("dispatch usage load failed workitemId={}", workitemId, ex);
+            return List.of();
+        }
+    }
+
+    private List<com.aliyun.autowonder.aiusage.AgentConversationUsageDO> loadClarificationUsageRows(
+            long tenantId, long workitemId) {
+        if (agentConversationUsageService == null) {
+            return List.of();
+        }
+        try {
+            List<com.aliyun.autowonder.aiusage.AgentConversationUsageDO> rows =
+                    agentConversationUsageService.listByWorkitem(tenantId, workitemId,
+                            com.aliyun.autowonder.aiusage.AgentConversationUsageService
+                                    .CHANNEL_WORKITEM_CLARIFICATION);
+            return rows == null ? List.of() : rows;
+        } catch (RuntimeException ex) {
+            // 会话用量表缺失/查询失败不能影响工单进度展示，派发用量照常展示。
+            log.warn("clarification usage load failed workitemId={}", workitemId, ex);
+            return List.of();
+        }
+    }
+
+    private void applyDispatchUsageToAgents(List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO> usageRows,
+                                            List<AgentDeliveryProgressVO> agentProgress) {
+        if (usageRows.isEmpty()) {
+            return;
+        }
+        Map<Long, List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO>> byAgent = usageRows.stream()
+                .filter(r -> r.getAgentId() != null)
+                .collect(Collectors.groupingBy(com.aliyun.autowonder.aiusage.DispatchAiUsageDO::getAgentId));
+        for (AgentDeliveryProgressVO agent : agentProgress) {
+            List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO> rows = byAgent.get(agent.getAgentId());
+            if (rows == null || rows.isEmpty()) {
+                continue;
+            }
+            agent.setUsage(aggregateUsage(rows));
+
+            // Per-step usage aggregation
+            Map<String, List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO>> byStep = rows.stream()
+                    .filter(r -> r.getStepId() != null && !r.getStepId().isEmpty())
+                    .collect(Collectors.groupingBy(com.aliyun.autowonder.aiusage.DispatchAiUsageDO::getStepId));
+            if (!byStep.isEmpty() && agent.getSteps() != null) {
+                for (DeliveryStepVO step : agent.getSteps()) {
+                    List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO> stepRows =
+                            byStep.get(String.valueOf(step.getStepId()));
+                    if (stepRows != null && !stepRows.isEmpty()) {
+                        step.setUsage(aggregateUsage(stepRows));
+                    }
+                }
+            }
+        }
+    }
+
+    private com.aliyun.autowonder.aiusage.dto.StepUsageSummaryVO aggregateUsage(
+            List<com.aliyun.autowonder.aiusage.DispatchAiUsageDO> rows) {
+        var vo = new com.aliyun.autowonder.aiusage.dto.StepUsageSummaryVO();
+        long input = 0, output = 0, cacheRead = 0, reasoning = 0;
+        java.math.BigDecimal credits = java.math.BigDecimal.ZERO;
+        String model = null;
+        for (var row : rows) {
+            input += row.getInputTokens() != null ? row.getInputTokens() : 0;
+            output += row.getOutputTokens() != null ? row.getOutputTokens() : 0;
+            cacheRead += row.getCacheReadTokens() != null ? row.getCacheReadTokens() : 0;
+            reasoning += row.getReasoningTokens() != null ? row.getReasoningTokens() : 0;
+            if (row.getCredits() != null) {
+                credits = credits.add(row.getCredits());
+            }
+            if (model == null && row.getModel() != null) {
+                model = row.getModel();
+            }
+        }
+        vo.setModel(model);
+        vo.setInputTokens(input);
+        vo.setOutputTokens(output);
+        vo.setCacheReadTokens(cacheRead);
+        vo.setReasoningTokens(reasoning);
+        vo.setCredits(credits.compareTo(java.math.BigDecimal.ZERO) == 0 ? null : credits);
+        return vo;
+    }
+
+    private boolean hasActiveSdlcStep(AgentDeliveryProgressVO agent) {
+        return safeList(agent.getSteps()).stream()
+                .anyMatch(step -> "active".equals(step.getStatus())
+                        || "paused".equals(step.getStatus())
+                        || "failed".equals(step.getStatus()));
+    }
+
+    private String resolveAgentProgressStatus(WorkitemDO w, Long agentId, List<DeliveryStepVO> steps) {
+        boolean hasPaused = steps.stream().anyMatch(s -> "paused".equals(s.getStatus()));
+        if (hasPaused) {
+            return "paused";
+        }
+        boolean hasActive = steps.stream().anyMatch(s -> "active".equals(s.getStatus()));
+        if (hasActive) {
+            return "active";
+        }
+        if (steps.stream().anyMatch(s -> "cancelled".equals(s.getStatus()))) return "cancelled";
+        boolean hasFailed = steps.stream().anyMatch(s -> "failed".equals(s.getStatus()));
+        boolean hasDone = steps.stream().anyMatch(s -> "done".equals(s.getStatus()));
+        if (hasFailed && !hasActive) {
+            return "failed";
+        }
+        if (hasDone && !hasActive) {
+            return "finished";
+        }
+        return "pending";
+    }
+
+    private Long totalDuration(List<DispatchDO> dispatches) {
+        long total = 0L;
+        boolean any = false;
+        for (DispatchDO d : dispatches) {
+            Long duration = durationOf(d);
+            if (duration != null) {
+                total += duration;
+                any = true;
+            }
+        }
+        return any ? total : null;
+    }
+
+    /**
+     * 工单纯 Agent 执行总耗时：各 Agent 展示耗时之和。
+     *
+     * <p>与每个 Agent 面板展示的耗时完全同口径（各非交互 dispatch 的创建→更新时间之和，
+     * 已剔除人工交互 dispatch），因此总耗时恒等于页面上各 Agent 耗时累加值，
+     * 不包含数字人之间的交接、排队与人工处理间隔。
+     */
+    private Long sumAgentDurations(List<AgentDeliveryProgressVO> agents) {
+        long total = 0L;
+        boolean any = false;
+        for (AgentDeliveryProgressVO agent : safeList(agents)) {
+            if (agent == null || agent.getDurationMs() == null) {
+                continue;
+            }
+            total += agent.getDurationMs();
+            any = true;
+        }
+        return any ? total : null;
+    }
+
+    private record ActivityKey(Long agentId, Long dispatchId) {}
+
+    /** Request-scoped caches: never share mutable progress or presence across requests. */
+    private final class ProgressReadContext {
+        private final DeliveryProgressSpill spill;
+        private final Map<Long, DispatchRuntimeEventDO> latestEvents = new HashMap<>();
+        private final Map<ActivityKey, DispatchRuntimeEventDO> latestActivity = new HashMap<>();
+        private final Map<Long, Date> maxEventTime = new HashMap<>();
+        private DispatchRuntimeEventDO latestPlan;
+        private final Map<Long, List<DispatchRuntimeEventDO>> eventsByDispatch = new HashMap<>();
+        private final Map<Long, String> waitingReasons = new HashMap<>();
+        private final Map<Long, String> names = new HashMap<>();
+        private final Map<Long, String> executorNames = new HashMap<>();
+        private final Map<Long, Boolean> executorOnline = new HashMap<>();
+        private final Map<Long, List<SdlcStepDO>> stepsBySdlc = new HashMap<>();
+        private final Map<Long, SdlcStepDO> stepsById = new HashMap<>();
+        private List<DispatchDO> allDispatches = List.of();
+        private Map<Long, com.aliyun.autowonder.dispatch.DispatchRecoveryService.ControlState> controlStates = Map.of();
+        private boolean controlClosed;
+
+        private ProgressReadContext(DeliveryProgressSpill spill) {
+            this.spill = spill;
+        }
+
+        private void accept(DispatchRuntimeEventDO event) {
+            if (event == null) return;
+            Long dispatchId = event.getDispatchId();
+            if ("workflow.plan_applied".equals(event.getEventType())
+                    && (latestPlan == null || compareRuntimeEvent(event, latestPlan) > 0)) {
+                latestPlan = event;
+            }
+            if (dispatchId == null) return;
+            latestEvents.merge(dispatchId, event, WorkitemService.this::laterProgressEvent);
+            if ("agent.progress".equals(event.getEventType()) && event.getMessage() != null
+                    && !event.getMessage().isBlank() && !looksLikeMojibake(event.getMessage())) {
+                latestActivity.merge(new ActivityKey(event.getAgentId(), dispatchId), event,
+                        WorkitemService.this::laterProgressEvent);
+            }
+            Date time = event.getEventTime() == null ? event.getGmtCreate() : event.getEventTime();
+            if (time != null) maxEventTime.merge(dispatchId, time, (left, right) -> left.after(right) ? left : right);
+            if (event.getStepOrder() != null || event.getStepId() != null || event.getStepKey() != null
+                    || event.getStepName() != null || "dispatch.executor_failover".equals(event.getEventType())) {
+                eventsByDispatch.computeIfAbsent(dispatchId,
+                        ignored -> spill == null ? new ArrayList<>() : spill.list(DispatchRuntimeEventDO.class)).add(event);
+            }
+        }
+
+        private void bindDelivery(long tenantId, long workitemId, List<DispatchDO> dispatches) {
+            this.allDispatches = safeList(dispatches);
+            this.controlClosed = deliveryRecoveryService != null && deliveryRecoveryService.closed(tenantId, workitemId);
+            if (deliveryRecoveryService != null) {
+                this.controlStates = deliveryRecoveryService.controlStates(tenantId,
+                        allDispatches.stream().map(DispatchDO::getId).toList());
+            }
+        }
+
+        private com.aliyun.autowonder.dispatch.DispatchRecoveryService.ControlState controlState(Long dispatchId) {
+            return controlStates.getOrDefault(dispatchId,
+                    com.aliyun.autowonder.dispatch.DispatchRecoveryService.ControlState.none());
+        }
+
+        private List<DispatchDO> workerDispatches(Long agentId) {
+            return allDispatches.stream()
+                    .filter(d -> Objects.equals(d.getAgentId(), agentId))
+                    .toList();
+        }
+
+        private boolean executorOffline(Long id) {
+            return id == null || !executorOnline.computeIfAbsent(id, presenceManager::isExecutorOnline);
+        }
+
+        private String agentName(Long id) {
+            if (id == null) return null;
+            // containsKey also caches missing agents/names.
+            if (!names.containsKey(id)) names.put(id, resolveAgentName(id));
+            return names.get(id);
+        }
+
+        private String executorName(Long id) {
+            if (id == null) return null;
+            if (!executorNames.containsKey(id)) {
+                ExecutorDO executor = executorDao.findById(id);
+                executorNames.put(id, executor == null ? null : executor.getName());
+            }
+            return executorNames.get(id);
+        }
+
+        private List<SdlcStepDO> steps(Long id) {
+            return stepsBySdlc.computeIfAbsent(id, key -> {
+                List<SdlcStepDO> rows = new ArrayList<>(safeList(stepDao.listBySdlc(key)));
+                rows.sort(Comparator.comparingInt(row -> row.getStepOrder() == null ? 0 : row.getStepOrder()));
+                return rows;
+            });
+        }
+
+        private SdlcStepDO step(Long id) {
+            if (!stepsById.containsKey(id)) stepsById.put(id, stepDao.findById(id));
+            return stepsById.get(id);
+        }
+    }
+
+    private String resolveAgentName(Long agentId) {
+        if (agentId == null) {
+            return null;
+        }
+        AgentDO agent = agentDao.findById(agentId);
+        return agent == null ? null : agent.getName();
+    }
+
+    private DispatchDO latestDispatch(List<DispatchDO> dispatches) {
+        if (dispatches == null || dispatches.isEmpty()) {
+            return null;
+        }
+        return dispatches.get(dispatches.size() - 1);
+    }
+
+    private Long durationOf(DispatchDO d) {
+        if (d == null || d.getGmtCreate() == null || d.getGmtModified() == null) {
+            return null;
+        }
+        return d.getGmtModified().getTime() - d.getGmtCreate().getTime();
+    }
+
+    private List<DispatchAttemptVO> buildAttempts(List<DispatchDO> stepDispatches,
+            Long resumableDispatchId, Map<Long, DispatchRuntimeEventDO> latestEventByDispatch, ProgressReadContext context) {
+        List<DispatchAttemptVO> attempts = new ArrayList<>();
+        if (stepDispatches == null) {
+            return attempts;
+        }
+        for (int i = 0; i < stepDispatches.size(); i++) {
+            DispatchDO d = stepDispatches.get(i);
+            DispatchRuntimeEventDO latestEvent = latestEventByDispatch.get(d.getId());
+            boolean runtimeFailed = !DispatchStatus.PENDING.equals(d.getStatus())
+                    && !DispatchStatus.isTerminal(d.getStatus())
+                    && isRuntimeFailureEvent(latestEvent);
+            DispatchAttemptVO vo = new DispatchAttemptVO();
+            vo.setDispatchId(d.getId());
+            vo.setAgentId(d.getAgentId());
+            vo.setAgentName(context.agentName(d.getAgentId()));
+            vo.setExecutorId(d.getExecutorId());
+            vo.setExecutorName(context.executorName(d.getExecutorId()));
+            vo.setStatus(runtimeFailed && !DispatchStatus.CANCELED.equals(d.getStatus()) ? DispatchStatus.FAILED : d.getStatus());
+            vo.setResumeMode(d.getResumeMode());
+            vo.setWaitingReason(DispatchStatus.PENDING.equals(d.getStatus()) ? context.waitingReasons.get(d.getId()) : null);
+            boolean executorFailover = DispatchStatus.PENDING.equals(d.getStatus())
+                    && latestEvent != null
+                    && "dispatch.executor_failover".equals(latestEvent.getEventType());
+            vo.setError(runtimeFailed || executorFailover
+                    ? runtimeFailureMessage(latestEvent)
+                    : d.getError());
+            vo.setStartedAt(d.getGmtCreate());
+            vo.setEndedAt(DispatchStatus.isTerminal(d.getStatus()) ? d.getGmtModified() : null);
+            vo.setDurationMs(durationOf(d));
+            DispatchControlCapabilitiesVO control = controlCapabilities(d, runtimeFailed, context);
+            vo.setControl(control);
+            vo.setCanPause(control.getPause().isAllowed());
+            vo.setCanContinue(control.getResume().isAllowed());
+            var controlState = context.controlState(d.getId());
+            vo.setCancelRequested(controlState.cancelRequested());
+            vo.setStopPending(controlState.stopPending());
+            vo.setForced(controlState.forced());
+            attempts.add(vo);
+        }
+        return attempts;
+    }
+
+    private DispatchControlCapabilitiesVO controlCapabilities(DispatchDO d, boolean runtimeFailed,
+                                                               ProgressReadContext context) {
+        var state = context.controlState(d.getId());
+        boolean terminal = DispatchStatus.isTerminal(d.getStatus());
+        boolean cancelled = state.cancelRequested();
+        boolean interaction = DispatchService.isInteractionDispatchValue(d);
+        DispatchControlCapabilitiesVO capabilities = new DispatchControlCapabilitiesVO();
+        DispatchDO latestFormal = context.allDispatches.stream()
+                .filter(row -> !DispatchService.isInteractionDispatchValue(row))
+                .max(Comparator.comparingLong(DispatchDO::getId)).orElse(null);
+        capabilities.setRestartLatest(!context.controlClosed && !interaction && !cancelled && !state.stopPending()
+                && DispatchStatus.PAUSED.equals(d.getStatus()) && latestFormal != null
+                && Objects.equals(latestFormal.getId(), d.getId())
+                ? ControlActionCapabilityVO.allowed()
+                : ControlActionCapabilityVO.denied("delivery.controlReason.notResumable"));
+
+        boolean pauseCandidate = !context.controlClosed && !interaction && !cancelled && !runtimeFailed
+                && (DispatchStatus.isPauseable(d.getStatus()) || DispatchStatus.PAUSE_FAILED.equals(d.getStatus()));
+        boolean executorOnline = !pauseCandidate || !context.executorOffline(d.getExecutorId());
+        DispatchService.PauseResolution pause = DispatchService.resolvePauseCapability(
+                d, context.workerDispatches(d.getAgentId()), context.controlClosed,
+                cancelled, runtimeFailed, executorOnline);
+        capabilities.setPause(pause.allowed()
+                ? ControlActionCapabilityVO.allowed()
+                : ControlActionCapabilityVO.denied(pause.reasonKey()));
+
+        DispatchEndControlPolicy.applyEnd(capabilities, terminal, cancelled);
+
+        if (context.controlClosed) {
+            capabilities.setResume(ControlActionCapabilityVO.denied("delivery.controlReason.closed"));
+            return capabilities;
+        }
+        DispatchService.ContinueResolution resolution =
+                DispatchService.resolveContinueTarget(d, context.workerDispatches(d.getAgentId()));
+        if (resolution.errorKey() != null) {
+            capabilities.setResume(resumeDenied(resolution.errorKey(), resolution.errorArgs()));
+            return capabilities;
+        }
+        DispatchDO target = resolution.target();
+        if (target == null) {
+            capabilities.setResume(ControlActionCapabilityVO.denied("delivery.controlReason.notResumable"));
+            return capabilities;
+        }
+        if (!DispatchStatus.PAUSED.equals(target.getStatus()) && !DispatchStatus.isTerminal(target.getStatus())) {
+            capabilities.setResume(ControlActionCapabilityVO.denied("delivery.controlReason.running"));
+            return capabilities;
+        }
+        if (!DispatchService.canContinue(target, System.currentTimeMillis())) {
+            capabilities.setResume(ControlActionCapabilityVO.denied("delivery.controlReason.online"));
+            return capabilities;
+        }
+        ControlActionCapabilityVO resume = ControlActionCapabilityVO.allowed();
+        resume.setTargetDispatchId(target.getId());
+        resume.setMode(DispatchStatus.PAUSED.equals(target.getStatus()) ? "RESUME" : "RETRY");
+        var targetState = context.controlState(target.getId());
+        resume.setTargetStatus(target.getStatus());
+        resume.setTargetStopPending(targetState.stopPending());
+        resume.setTargetForced(targetState.forced());
+        capabilities.setResume(resume);
+        return capabilities;
+    }
+
+    private ControlActionCapabilityVO resumeDenied(String errorKey, Object[] args) {
+        String reason = switch (errorKey) {
+            case "dispatch.recovery.interaction" -> "delivery.controlReason.interactionBusy";
+            case "dispatch.recovery.newer" -> "delivery.controlReason.newer";
+            case "dispatch.recovery.latest" -> "delivery.controlReason.notLatest";
+            default -> "delivery.controlReason.notResumable";
+        };
+        String[] stringArgs = args == null ? new String[0]
+                : java.util.Arrays.stream(args).map(String::valueOf).toArray(String[]::new);
+        return ControlActionCapabilityVO.denied(reason, stringArgs);
+    }
+
+    private DispatchRuntimeEventDO laterProgressEvent(DispatchRuntimeEventDO left, DispatchRuntimeEventDO right) {
+        return compareRuntimeEvent(left, right) >= 0 ? left : right;
+    }
+
+    private int compareRuntimeEvent(DispatchRuntimeEventDO left, DispatchRuntimeEventDO right) {
+        if (left.getId() != null && right.getId() != null) {
+            return left.getId().compareTo(right.getId());
+        }
+        if (left.getGmtCreate() != null && right.getGmtCreate() != null) {
+            return left.getGmtCreate().compareTo(right.getGmtCreate());
+        }
+        if (left.getEventTime() != null && right.getEventTime() != null) {
+            return left.getEventTime().compareTo(right.getEventTime());
+        }
+        return 0;
+    }
+
+    private boolean isRuntimeFailureEvent(DispatchRuntimeEventDO event) {
+        return DispatchRuntimeFailure.isFailure(event);
+    }
+
+    private String runtimeFailureMessage(DispatchRuntimeEventDO event) {
+        return DispatchRuntimeFailure.message(event);
+    }
+
+    private List<SubStepVO> dispatchSubSteps(DispatchDO dispatch) {
+        String dispatchStatus = dispatch.getStatus();
+        if (DispatchStatus.PENDING.equals(dispatchStatus)) {
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("WAIT_DISPATCH", "等待调度执行", "active"),
+                    subStep("CLIENT_ACCEPT", "客户端接单", "pending"),
+                    subStep("EXECUTING", "执行中", "pending")
+            );
+        }
+        if (DispatchStatus.PACKAGING.equals(dispatchStatus)) {
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("PREPARE_CONTEXT", "准备执行上下文", "active"),
+                    subStep("CLIENT_ACCEPT", "客户端接单", "pending"),
+                    subStep("EXECUTING", "执行中", "pending")
+            );
+        }
+        if (DispatchStatus.DISPATCHED.equals(dispatchStatus)) {
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("PREPARE_CONTEXT", "准备执行上下文", "done"),
+                    subStep("WAIT_CLIENT", "等待客户端接单", "active"),
+                    subStep("EXECUTING", "执行中", "pending")
+            );
+        }
+        if (DispatchStatus.ACKED.equals(dispatchStatus)) {
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("PREPARE_CONTEXT", "准备执行上下文", "done"),
+                    subStep("CLIENT_ACCEPTED", "客户端已接单", "active"),
+                    subStep("EXECUTING", "执行中", "pending")
+            );
+        }
+        if (DispatchStatus.RUNNING.equals(dispatchStatus)) {
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("PREPARE_CONTEXT", "准备执行上下文", "done"),
+                    subStep("CLIENT_ACCEPTED", "客户端已接单", "done"),
+                    subStep("EXECUTION_ACTIVE", "正在执行", "active")
+            );
+        }
+        if (DispatchStatus.PAUSING.equals(dispatchStatus)) {
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("CLIENT_ACCEPTED", "客户端已接单", "done"),
+                    subStep("WAIT_SAFE_END", "等待当前动作安全结束", "active"),
+                    subStep("SAVE_CHECKPOINT", "保存恢复检查点", "pending")
+            );
+        }
+        if (DispatchStatus.PAUSED.equals(dispatchStatus)) {
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("CLIENT_ACCEPTED", "客户端已接单", "done"),
+                    subStep("SAFE_END", "当前动作已安全结束", "done"),
+                    subStep("PAUSED_CHECKPOINT", "已暂停，恢复检查点已保存", "done")
+            );
+        }
+        if (DispatchStatus.SUCCEEDED.equals(dispatchStatus)) {
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("PREPARE_CONTEXT", "准备执行上下文", "done"),
+                    subStep("CLIENT_ACCEPTED", "客户端已接单", "done"),
+                    subStep("EXECUTION_FINISHED", "执行完成", "done")
+            );
+        }
+        if (DispatchStatus.CANCELED.equals(dispatchStatus)) return List.of(subStep("EXECUTION_CANCELED", "本次执行已取消", "cancelled"));
+        if (isFailed(dispatchStatus)) {
+            if (dispatch.getExecutorId() == null) {
+                return List.of(
+                        subStep("START_DELIVERY", "启动交付", "done"),
+                        subStep("NOT_DISPATCHED", "未派发到客户端", "failed")
+                );
+            }
+            return List.of(
+                    subStep("START_DELIVERY", "启动交付", "done"),
+                    subStep("PREPARE_CONTEXT", "准备执行上下文", "done"),
+                    subStep("EXECUTOR_ASSIGNED", "已分配执行器", "done"),
+                    subStep("EXECUTION_FAILED", "执行失败", "failed")
+            );
+        }
+        return null;
+    }
+
+    private boolean isTerminal(String status) {
+        return DispatchStatus.SUCCEEDED.equals(status) || isFailed(status);
+    }
+
+    private boolean isFailed(String status) {
+        return DispatchStatus.FAILED.equals(status)
+                || DispatchStatus.TIMEOUT.equals(status)
+                || DispatchStatus.CANCELED.equals(status)
+                || DispatchStatus.PAUSE_FAILED.equals(status);
+    }
+
+    private SubStepVO subStep(String fallbackCode, String name, String status) {
+        SubStepVO vo = new SubStepVO();
+        vo.setFallbackCode(fallbackCode);
+        vo.setName(SystemMessages.render("workitem.substep." + fallbackCode.toLowerCase(java.util.Locale.ROOT), new Object[0], name));
+        vo.setStatus(status);
+        return vo;
+    }
+
+    public List<ParticipantVO> getParticipants(long workitemId, long tenantId) {
+        return participantsWithSquad(workitemId, tenantId).participants();
+    }
+
+    /**
+     * Participants plus the delivery squad they were derived from, so mention
+     * candidates can be grouped and ordered by the same squad resolution.
+     */
+    private ParticipantsWithSquad participantsWithSquad(long workitemId, long tenantId) {
+        WorkitemDO w = workitemDao.findById(workitemId);
+        if (w == null) {
+            throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        }
+        List<DispatchDO> dispatches = dispatchDao.listByWorkitem(tenantId, workitemId);
+        if (dispatches == null) {
+            dispatches = List.of();
+        }
+        LinkedHashMap<Long, Long> seedAgentIds = new LinkedHashMap<>();
+        for (DispatchDO d : dispatches) {
+            if (d.getAgentId() != null) {
+                seedAgentIds.putIfAbsent(d.getAgentId(), d.getAgentId());
+            }
+        }
+        if ("AGENT".equals(w.getAssigneeType()) && w.getAssigneeRef() != null) {
+            seedAgentIds.putIfAbsent(w.getAssigneeRef(), w.getAssigneeRef());
+        }
+
+        SquadResolution squad = resolveSquad(tenantId, new ArrayList<>(seedAgentIds.keySet()));
+        LinkedHashMap<Long, Long> participantAgentIds = new LinkedHashMap<>();
+        if (!squad.members().isEmpty()) {
+            for (SquadMemberDO member : squad.members()) {
+                if (member.getAgentId() != null) {
+                    participantAgentIds.putIfAbsent(member.getAgentId(), member.getAgentId());
+                }
+            }
+        } else {
+            participantAgentIds.putAll(seedAgentIds);
+        }
+
+        List<ParticipantVO> participants = new ArrayList<>();
+        for (Long humanId : participantHumanIds(tenantId, w)) {
+            UserDO user = userDao.findByIdIncludingDeleted(humanId);
+            if (user != null) {
+                participants.add(toHumanParticipant(user));
+            }
+        }
+        Map<Long, SquadNameResolver.SquadLabel> labels =
+                resolveSquadLabels(tenantId, participantAgentIds.keySet(), squad.squadId());
+        for (Long agentId : participantAgentIds.keySet()) {
+            ParticipantVO participant = toAgentParticipant(tenantId, agentId);
+            applySquadLabel(participant, labels.get(agentId));
+            participants.add(participant);
+        }
+        return new ParticipantsWithSquad(participants, squad.squadId());
+    }
+
+    public List<ParticipantVO> getMentionCandidates(long workitemId, long tenantId) {
+        return getMentionCandidates(workitemId, tenantId, null, 50);
+    }
+
+    public List<ParticipantVO> getMentionCandidates(long workitemId, long tenantId, String query, int limit) {
+        int effectiveLimit = limit <= 0 ? 50 : Math.min(limit, 100);
+        ParticipantsWithSquad context = participantsWithSquad(workitemId, tenantId);
+        LinkedHashMap<String, ParticipantVO> candidates = new LinkedHashMap<>();
+        for (ParticipantVO participant : context.participants()) {
+            addMentionCandidate(candidates, participant, query);
+        }
+        LinkedHashMap<Long, Long> tenantAgentIds = new LinkedHashMap<>();
+        for (AgentDO agent : safeList(agentDao.listByTenant(tenantId))) {
+            if (agent == null || agent.getId() == null || agent.getOnlineVersionId() == null) {
+                continue;
+            }
+            tenantAgentIds.putIfAbsent(agent.getId(), agent.getId());
+        }
+        Map<Long, SquadNameResolver.SquadLabel> tenantAgentLabels =
+                resolveSquadLabels(tenantId, tenantAgentIds.keySet(), context.currentSquadId());
+        for (Long agentId : tenantAgentIds.keySet()) {
+            ParticipantVO participant = toAgentParticipant(tenantId, agentId);
+            applySquadLabel(participant, tenantAgentLabels.get(agentId));
+            addMentionCandidate(candidates, participant, query);
+        }
+        if (workspaceMemberDao != null) {
+            for (WorkspaceMemberDO member : safeList(workspaceMemberDao.listByTenant(tenantId))) {
+                if (member == null || member.getUserId() == null
+                        || member.getStatus() == null || member.getStatus() != 0) {
+                    continue;
+                }
+                UserDO user = userDao.findById(member.getUserId());
+                if (user != null) {
+                    addMentionCandidate(candidates, toHumanParticipant(user), query);
+                }
+            }
+        }
+        List<ParticipantVO> result = new ArrayList<>(candidates.values());
+        // Current delivery squad first; the stable sort keeps the original order inside each group.
+        result.sort(Comparator.comparingInt(candidate -> candidate.isCurrentSquad() ? 0 : 1));
+        if (result.size() > effectiveLimit) {
+            return new ArrayList<>(result.subList(0, effectiveLimit));
+        }
+        return result;
+    }
+
+    private void addMentionCandidate(LinkedHashMap<String, ParticipantVO> candidates,
+            ParticipantVO participant, String query) {
+        if (participant == null || participant.getUserId() == null || participant.getName() == null
+                || participant.getName().isBlank()) {
+            return;
+        }
+        if (!matchesMentionQuery(participant, query)) {
+            return;
+        }
+        String targetType = participant.getTargetType() != null
+                ? participant.getTargetType() : (participant.isAgent() ? "AGENT" : "HUMAN");
+        candidates.putIfAbsent(targetType + ":" + participant.getUserId(), participant);
+    }
+
+    public List<Long> getHumanParticipantIds(long workitemId, long tenantId) {
+        WorkitemDO workitem = workitemDao.findById(workitemId);
+        if (workitem == null || !Objects.equals(workitem.getTenantId(), tenantId)) throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        return participantHumanIds(tenantId, workitem);
+    }
+
+    private List<Long> participantHumanIds(long tenantId, WorkitemDO workitem) {
+        LinkedHashMap<Long, Long> ids = new LinkedHashMap<>();
+        if (workitem.getCreatorId() != null) {
+            ids.putIfAbsent(workitem.getCreatorId(), workitem.getCreatorId());
+        }
+        if ("HUMAN".equals(workitem.getAssigneeType()) && workitem.getAssigneeRef() != null) {
+            ids.putIfAbsent(workitem.getAssigneeRef(), workitem.getAssigneeRef());
+        }
+        for (WorkitemCommentDO comment : safeList(commentDao.listByWorkitem(workitem.getTenantId(), workitem.getId()))) {
+            if (comment != null && "HUMAN".equals(comment.getAuthorType()) && comment.getAuthorRef() != null) {
+                ids.putIfAbsent(comment.getAuthorRef(), comment.getAuthorRef());
+            }
+        }
+        if (commentMentionDao != null) {
+            for (WorkitemCommentMentionDO mention : safeList(commentMentionDao.listByWorkitem(tenantId, workitem.getId()))) {
+                if (mention != null && "HUMAN".equals(mention.getTargetType()) && mention.getTargetRef() != null) {
+                    ids.putIfAbsent(mention.getTargetRef(), mention.getTargetRef());
+                }
+            }
+        }
+        for (Long actorId : safeList(workitemDao.listHumanRequestActors(tenantId, workitem.getId()))) {
+            ids.putIfAbsent(actorId, actorId);
+        }
+        return new ArrayList<>(ids.keySet());
+    }
+
+    private SquadResolution resolveSquad(long tenantId, List<Long> agentIds) {
+        if (agentIds.isEmpty()) {
+            return SquadResolution.EMPTY;
+        }
+        Set<Long> seedIds = new HashSet<>(agentIds);
+        Long bestSquadId = null;
+        List<SquadMemberDO> bestMembers = List.of();
+        int bestScore = 0;
+        Set<Long> visitedSquads = new HashSet<>();
+        for (Long agentId : agentIds) {
+            for (SquadMemberDO link : safeList(squadMemberDao.listByAgent(agentId))) {
+                if (link == null || link.getSquadId() == null || !visitedSquads.add(link.getSquadId())) {
+                    continue;
+                }
+                List<SquadMemberDO> members = safeList(squadMemberDao.listBySquad(link.getSquadId())).stream()
+                        .filter(m -> m != null && Long.valueOf(tenantId).equals(m.getTenantId()))
+                        .collect(Collectors.toList());
+                int score = (int) members.stream()
+                        .filter(m -> seedIds.contains(m.getAgentId()))
+                        .count();
+                if (score > bestScore || (score == bestScore && members.size() > bestMembers.size())) {
+                    bestScore = score;
+                    bestMembers = members;
+                    bestSquadId = link.getSquadId();
+                }
+            }
+        }
+        return new SquadResolution(bestSquadId, bestMembers);
+    }
+
+    private Map<Long, SquadNameResolver.SquadLabel> resolveSquadLabels(long tenantId,
+            Collection<Long> agentIds, Long currentSquadId) {
+        if (squadNameResolver == null) {
+            return Map.of();
+        }
+        return squadNameResolver.resolve(tenantId, agentIds, currentSquadId);
+    }
+
+    private void applySquadLabel(ParticipantVO participant, SquadNameResolver.SquadLabel label) {
+        if (participant == null || label == null) {
+            return;
+        }
+        participant.setSquadName(label.squadName());
+        participant.setCurrentSquad(label.currentSquad());
+    }
+
+    private record SquadResolution(Long squadId, List<SquadMemberDO> members) {
+        private static final SquadResolution EMPTY = new SquadResolution(null, List.of());
+    }
+
+    private record ParticipantsWithSquad(List<ParticipantVO> participants, Long currentSquadId) {
+    }
+
+    private ParticipantVO toAgentParticipant(long tenantId, Long agentId) {
+        ParticipantVO vo = new ParticipantVO();
+        vo.setUserId(agentId);
+        vo.setTargetType("AGENT");
+        vo.setDisplayId(String.valueOf(agentId));
+        vo.setAgent(true);
+        vo.setRole("AGENT");
+        vo.setRoleName("开发小队成员");
+        AgentDO agent = agentDao.findById(agentId);
+        if (agent != null) {
+            vo.setName(agent.getName());
+            vo.setStatus(agent.getStatus());
+        }
+        String executorStatus = resolveExecutorStatus(tenantId, agentId);
+        vo.setExecutorStatus(executorStatus);
+        vo.setOnline("ONLINE".equals(executorStatus) || "BUSY".equals(executorStatus));
+        return vo;
+    }
+
+    private String resolveExecutorStatus(long tenantId, Long agentId) {
+        List<ExecutorDO> executors = safeList(executorDao.listByAgent(tenantId, agentId));
+        List<ExecutorDO> onlineExecutors = executors.stream()
+                .filter(e -> e != null && e.getId() != null && presenceManager.isExecutorOnline(e.getId()))
+                .toList();
+        if (onlineExecutors.stream().anyMatch(e -> "BUSY".equals(e.getStatus()))) {
+            return "BUSY";
+        }
+        if (!onlineExecutors.isEmpty()) {
+            return "ONLINE";
+        }
+        return "OFFLINE";
+    }
+
+    private <T> List<T> safeList(List<T> rows) {
+        return rows == null ? List.of() : rows;
+    }
+
+    public List<TimelineItemVO> getUnifiedTimeline(long workitemId) {
+        WorkitemDO owner = workitemDao.findById(workitemId);
+        if (owner == null || owner.getTenantId() == null) throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        return projectTimeline(workitemId, commentDao.listByWorkitem(owner.getTenantId(), workitemId), eventDao.listByWorkitem(workitemId));
+    }
+
+    public List<TimelineItemVO> getTimelineWindow(long workitemId, int page) {
+        WorkitemDO owner = workitemDao.findById(workitemId);
+        if (owner == null || owner.getTenantId() == null) throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        List<WorkitemCommentDO> comments = new ArrayList<>();
+        List<WorkitemEventDO> events = new ArrayList<>();
+        for (TimelineItemVO key : eventDao.listWindowKeys(owner.getTenantId(), workitemId, Math.max(0L, (long) page) * 50)) {
+            if ("comment".equals(key.getType())) {
+                WorkitemCommentDO comment = commentDao.findById(owner.getTenantId(), key.getId());
+                if (comment != null) comments.add(comment);
+            } else {
+                WorkitemEventDO event = eventDao.findById(owner.getTenantId(), key.getId());
+                if (event != null) events.add(event);
+            }
+        }
+        return projectTimeline(workitemId, comments, events);
+    }
+
+    private List<TimelineItemVO> projectTimeline(long workitemId, List<WorkitemCommentDO> comments, List<WorkitemEventDO> events) {
+        List<TimelineItemVO> items = new ArrayList<>();
+        WorkitemDO workitem = workitemDao.findById(workitemId);
+        ExternalCollaborationVO externalCollaboration = workitem == null || workitem.getTenantId() == null
+                || externalWorkitemViewService == null
+                ? null
+                : externalWorkitemViewService.find(workitem.getTenantId(), workitemId);
+
+        for (WorkitemCommentDO c : comments) {
+            TimelineItemVO item = new TimelineItemVO();
+            item.setId(c.getId());
+            item.setType("comment");
+            item.setAuthorId(c.getAuthorRef());
+            item.setAuthorType(c.getAuthorType());
+            item.setAgent("AGENT".equals(c.getAuthorType()));
+            item.setContent(c.getContentMd());
+            item.setGmtCreate(c.getGmtCreate());
+            ExternalPrincipalVO author = externalActorPrincipal(c.getAuthorType(), c.getAuthorRef());
+            item.setAuthorName("EXTERNAL".equals(c.getAuthorType()) && externalWorkitemViewService != null ? ExternalWorkitemViewService.formatPrincipalDisplayName(author) : resolveActorDisplayName(c.getAuthorType(), c.getAuthorRef()));
+            item.setAuthorNameFallback(ExternalWorkitemViewService.nameFallback(author));
+            items.add(item);
+        }
+
+        for (WorkitemEventDO e : events) {
+            TimelineItemVO item = new TimelineItemVO();
+            item.setId(e.getId());
+            item.setType("system");
+            item.setAuthorId(e.getActorRef());
+            item.setAuthorType(e.getActorType());
+            item.setAgent("AGENT".equals(e.getActorType()));
+            item.setGmtCreate(e.getGmtCreate());
+            ExternalPrincipalVO actor = externalActorPrincipal(e.getActorType(), e.getActorRef());
+            item.setAuthorName("EXTERNAL".equals(e.getActorType()) && externalWorkitemViewService != null ? ExternalWorkitemViewService.formatPrincipalDisplayName(actor) : resolveActorDisplayName(e.getActorType(), e.getActorRef()));
+            item.setAuthorNameFallback(ExternalWorkitemViewService.nameFallback(actor));
+            ExternalPrincipalVO from = externalEventValuePrincipal(e, e.getFromVal());
+            ExternalPrincipalVO to = externalEventValuePrincipal(e, e.getToVal());
+            String fromVal = resolveEventValueDisplay(e, e.getFromVal(), "fromType", from);
+            String toVal = resolveEventValueDisplay(e, e.getToVal(), "toType", to);
+            item.setFromValNameFallback(ExternalWorkitemViewService.nameFallback(from));
+            item.setToValNameFallback(ExternalWorkitemViewService.nameFallback(to));
+            item.setEventType(e.getEventType());
+            item.setFromValDisplay(fromVal);
+            item.setToValDisplay(toVal);
+            applyControlDetail(item, e);
+            String operator = "EXTERNAL".equals(e.getActorType()) && externalWorkitemViewService != null
+                    && ("STATUS_CHANGE".equals(e.getEventType()) || "ASSIGN".equals(e.getEventType()))
+                    && e.getActorRef() != null && e.getActorRef() != 0L
+                    ? ExternalWorkitemViewService.formatPrincipalDisplayName(actor) : operatorDisplayName(e);
+            if (operator != null && operator.isBlank()) operator = null;
+            item.setOperatorDisplayName(operator);
+            if (operator != null) item.setOperatorNameFallback(ExternalWorkitemViewService.nameFallback(actor));
+            item.setContent(formatTimelineEventContent(e, fromVal, toVal, operator));
+            if (isAoneSyncEvent(e) && externalCollaboration != null) {
+                item.setSourceProvider(externalCollaboration.getProvider());
+                item.setSourceExternalWorkitemId(externalCollaboration.getExternalWorkitemId());
+                item.setSourceExternalUrl(externalCollaboration.getExternalUrl());
+            }
+            items.add(item);
+        }
+
+        items.sort(Comparator
+                .comparing(TimelineItemVO::getGmtCreate,
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(TimelineItemVO::getId,
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(TimelineItemVO::getType, Comparator.reverseOrder()));
+        return items;
+    }
+
+    private void applyControlDetail(TimelineItemVO item, WorkitemEventDO event) {
+        if (event == null || event.getDetailJson() == null) return;
+        if (WorkitemEventType.EXECUTION_CONTROL.code().equals(event.getEventType())) {
+            JSONObject detail = JSON.parseObject(event.getDetailJson());
+            ExecutionControlVO control = new ExecutionControlVO();
+            control.setAction(detail.getString("action"));
+            control.setPhase(detail.getString("phase"));
+            control.setOrigin(detail.getString("origin"));
+            control.setDispatchId(detail.getLong("dispatchId"));
+            control.setAgentId(detail.getLong("agentId"));
+            control.setAgentName(detail.getString("agentName"));
+            if (control.getAgentName() == null) control.setAgentName(resolveAgentName(control.getAgentId()));
+            control.setRequestedById(detail.getLong("requestedById"));
+            control.setRequestedByName(detail.getString("requestedByName"));
+            if (control.getRequestedByName() == null && control.getRequestedById() != null && control.getRequestedById() > 0) {
+                control.setRequestedByName(resolveActorDisplayName("HUMAN", control.getRequestedById()));
+            }
+            control.setSourceDispatchId(detail.getLong("sourceDispatchId"));
+            control.setTargetDispatchId(detail.getLong("targetDispatchId"));
+            control.setSupersedesRequestEventId(detail.getLong("supersedesRequestEventId"));
+            control.setRequestEventId(detail.getLong("requestEventId"));
+            control.setParentRequestEventId(detail.getLong("parentRequestEventId"));
+            control.setStopPending(detail.getBoolean("stopPending"));
+            control.setForced(detail.getBoolean("forced"));
+            control.setReason(detail.getString("reason"));
+            control.setMode(detail.getString("mode"));
+            item.setExecutionControl(control);
+            return;
+        }
+        if (WorkitemEventType.DELIVERY_CONTROL.code().equals(event.getEventType())) {
+            JSONObject detail = JSON.parseObject(event.getDetailJson());
+            DeliveryControlVO control = new DeliveryControlVO();
+            control.setAction(detail.getString("action"));
+            control.setRequestedById(detail.getLong("requestedById"));
+            control.setRequestedByName(detail.getString("requestedByName"));
+            if (control.getRequestedByName() == null && control.getRequestedById() != null && control.getRequestedById() > 0) {
+                control.setRequestedByName(resolveActorDisplayName("HUMAN", control.getRequestedById()));
+            }
+            control.setReason(detail.getString("reason"));
+            List<DeliveryControlVO.AffectedDispatch> affected = new ArrayList<>();
+            List<JSONObject> rows = detail.getJSONArray("affectedDispatches") == null ? List.of()
+                    : detail.getJSONArray("affectedDispatches").stream().map(row -> (JSONObject) row).toList();
+            for (JSONObject row : rows) {
+                DeliveryControlVO.AffectedDispatch value = new DeliveryControlVO.AffectedDispatch();
+                value.setDispatchId(row.getLong("dispatchId"));
+                value.setFromStatus(row.getString("fromStatus"));
+                value.setToStatus(row.getString("toStatus"));
+                value.setStopPending(row.getBoolean("stopPending"));
+                affected.add(value);
+            }
+            control.setAffectedDispatches(affected);
+            item.setDeliveryControl(control);
+        }
+    }
+
+    private String formatTimelineEventContent(WorkitemEventDO event, String fromVal, String toVal, String operator) {
+        WorkitemEventType eventType = WorkitemEventType.fromCode(event.getEventType()).orElse(null);
+        if (eventType == WorkitemEventType.EXECUTION_CONTROL && event.getDetailJson() != null) {
+            JSONObject detail = JSON.parseObject(event.getDetailJson());
+            String action = detail.getString("action");
+            String phase = detail.getString("phase");
+            String key = "workitem.event.execution_control."
+                    + (action == null ? "unknown" : action.toLowerCase(java.util.Locale.ROOT))
+                    + "." + (phase == null ? "unknown" : phase.toLowerCase(java.util.Locale.ROOT));
+            Object dispatchId = detail.getLong("dispatchId");
+            String diagnostic = "执行控制: action=" + action + ", phase=" + phase + ", dispatchId=" + dispatchId;
+            return SystemMessages.render(key, new Object[]{dispatchId == null ? "-" : dispatchId.toString()}, diagnostic);
+        }
+        if (eventType == WorkitemEventType.DELIVERY_CONTROL && event.getDetailJson() != null) {
+            JSONObject detail = JSON.parseObject(event.getDetailJson());
+            String action = detail.getString("action");
+            String key = "workitem.event.delivery_control."
+                    + (action == null ? "unknown" : action.toLowerCase(java.util.Locale.ROOT));
+            int count = detail.getJSONArray("affectedDispatches") == null ? 0 : detail.getJSONArray("affectedDispatches").size();
+            return SystemMessages.render(key, new Object[]{count}, "交付控制: action=" + action + ", affected=" + count);
+        }
+        if (eventType == null) {
+            if (event.getFromVal() != null && event.getToVal() != null) return event.getEventType() + ": " + fromVal + " → " + toVal;
+            return event.getToVal() == null ? event.getEventType() : event.getEventType() + ": " + toVal;
+        }
+        String key = "workitem.event." + eventType.code().toLowerCase(java.util.Locale.ROOT);
+        String diagnostic = eventType.actionLabel();
+        List<Object> args = new ArrayList<>();
+        if (eventType == WorkitemEventType.AONE_IMPORT || eventType == WorkitemEventType.AONE_UPDATE) {
+            return SystemMessages.render(key, new Object[0], diagnostic);
+        }
+        if (eventType == WorkitemEventType.TAG_CHANGE) {
+            String addedText = formatTagEventValue(tagEventValues(event, "added"));
+            String removedText = formatTagEventValue(tagEventValues(event, "removed"));
+            if (addedText != null && removedText != null) {
+                key += ".both";
+                args.add(removedText);
+                args.add(addedText);
+                diagnostic += ": 添加 " + addedText + "；移除 " + removedText;
+            } else if (addedText != null) {
+                key += ".to";
+                args.add(addedText);
+                diagnostic += ": 添加 " + addedText;
+            } else if (removedText != null) {
+                key += ".from";
+                args.add(removedText);
+                diagnostic += ": 移除 " + removedText;
+            }
+        } else if (eventType == WorkitemEventType.EXTERNAL_COMMENT_EDIT
+                || eventType == WorkitemEventType.EXTERNAL_COMMENT_AUTHOR_CHANGE
+                || eventType == WorkitemEventType.EXTERNAL_COMMENT_DELETE) {
+            if (event.getFromVal() != null && !event.getFromVal().isBlank()) {
+                key += ".comment";
+                args.add(event.getFromVal());
+                diagnostic += "（评论 #" + event.getFromVal() + "）";
+            }
+        } else if (event.getFromVal() != null && event.getToVal() != null) {
+            key += ".both";
+            args.add(fromVal); args.add(toVal);
+            diagnostic += ": " + fromVal + " → " + toVal;
+        } else if (event.getToVal() != null) {
+            key += ".to";
+            args.add(toVal);
+            diagnostic += ": " + toVal;
+        }
+        if (operator != null) {
+            key += ".operator";
+            args.add(operator);
+            diagnostic += " （操作人：" + operator + "）";
+        }
+        return SystemMessages.render(key, args.toArray(), diagnostic);
+    }
+
+    private String operatorDisplayName(WorkitemEventDO event) {
+        if (event == null) {
+            return null;
+        }
+        WorkitemEventType eventType = WorkitemEventType.fromCode(event.getEventType()).orElse(null);
+        if (eventType != WorkitemEventType.STATUS_CHANGE && eventType != WorkitemEventType.ASSIGN
+                && eventType != WorkitemEventType.TAG_CHANGE
+                && eventType != WorkitemEventType.EXECUTION_CONTROL && eventType != WorkitemEventType.DELIVERY_CONTROL) {
+            return null;
+        }
+        String actorType = event.getActorType();
+        Long actorRef = event.getActorRef();
+        if (actorType == null || "SYSTEM".equals(actorType) || actorRef == null || actorRef == 0L) {
+            return null;
+        }
+        String display = resolveActorDisplayName(actorType, actorRef);
+        return display == null || display.isBlank() ? null : display;
+    }
+
+    private boolean isAoneSyncEvent(WorkitemEventDO event) {
+        return event != null && (WorkitemEventType.AONE_IMPORT.code().equals(event.getEventType())
+                || WorkitemEventType.AONE_UPDATE.code().equals(event.getEventType()));
+    }
+
+    private ExternalPrincipalVO externalActorPrincipal(String type, Long ref) {
+        return "EXTERNAL".equals(type) && externalWorkitemViewService != null
+                ? externalWorkitemViewService.principalIdentity(ref) : null;
+    }
+
+    private ExternalPrincipalVO externalEventValuePrincipal(WorkitemEventDO event, String value) {
+        if (!"EXTERNAL_BUSINESS_OWNER_CHANGE".equals(event.getEventType()) || value == null || value.isBlank()
+                || externalWorkitemViewService == null) return null;
+        try { return externalWorkitemViewService.principalIdentity(Long.parseLong(value)); }
+        catch (NumberFormatException ignored) { return null; }
+    }
+
+    private String resolveEventValueDisplay(WorkitemEventDO event, String value, String typeKey, ExternalPrincipalVO principal) {
+        if (!"EXTERNAL_BUSINESS_OWNER_CHANGE".equals(event.getEventType())) return resolveEventValueDisplay(event, value, typeKey);
+        String display = ExternalWorkitemViewService.formatPrincipalCompactName(principal);
+        return display == null ? value : display;
+    }
+
+    private String resolveActorName(String actorType, Long actorRef) {
+        if (actorRef == null) {
+            return null;
+        }
+        if ("AGENT".equals(actorType)) {
+            AgentDO agent = agentDao.findById(actorRef);
+            return agent == null ? null : agent.getName();
+        }
+        if ("HUMAN".equals(actorType)) {
+            return UserAccountStates.displayName(userDao.findByIdIncludingDeleted(actorRef));
+        }
+        if ("EXTERNAL".equals(actorType) && externalWorkitemViewService != null) {
+            return externalWorkitemViewService.principalName(actorRef);
+        }
+        return null;
+    }
+
+    private AssignmentActor resolveHumanActor(long userId) {
+        String name = resolveActorName("HUMAN", userId);
+        return name == null || name.isBlank()
+                ? new AssignmentActor("HUMAN", userId, "用户", AssignmentActor.HUMAN_NAME_FALLBACK)
+                : AssignmentActor.human(userId, name);
+    }
+
+    private String currentRequestId() {
+        String requestId = MDC.get(BizLoggerFilter.REQUEST_ID_KEY);
+        if (requestId != null && !requestId.isBlank()) {
+            return requestId;
+        }
+        requestId = AutoWonderContext.get().getRequestId();
+        return requestId == null || requestId.isBlank() ? null : requestId;
+    }
+
+    private String resolveActorDisplayName(String actorType, Long actorRef) {
+        if ("EXTERNAL".equals(actorType) && externalWorkitemViewService != null) {
+            return externalWorkitemViewService.principalDisplayName(actorRef);
+        }
+        String name = resolveActorName(actorType, actorRef);
+        if (actorRef == null) {
+            return name;
+        }
+        if (name == null || name.isBlank()) {
+            return String.valueOf(actorRef);
+        }
+        return name + "(" + actorRef + ")";
+    }
+
+    private String resolveEventValueDisplay(WorkitemEventDO event, String value, String typeKey) {
+        if (value == null || value.isBlank() || event == null
+                || (!WorkitemEventType.ASSIGN.code().equals(event.getEventType())
+                && !WorkitemEventType.EXTERNAL_BUSINESS_OWNER_CHANGE.code().equals(event.getEventType()))) {
+            return value;
+        }
+        try {
+            long ref = Long.parseLong(value);
+            if (WorkitemEventType.EXTERNAL_BUSINESS_OWNER_CHANGE.code().equals(event.getEventType())) {
+                String display = externalWorkitemViewService == null ? null
+                        : externalWorkitemViewService.principalCompactDisplayName(ref);
+                return display == null ? value : display;
+            }
+            String explicitType = eventDetailType(event.getDetailJson(), typeKey);
+            if (explicitType != null) {
+                String explicitDisplay = resolveActorDisplayName(explicitType, ref);
+                return explicitDisplay == null ? value : explicitDisplay;
+            }
+            String agentDisplay = resolveActorDisplayName("AGENT", ref);
+            if (agentDisplay != null && !agentDisplay.equals(value)) {
+                return agentDisplay;
+            }
+            String humanDisplay = resolveActorDisplayName("HUMAN", ref);
+            return humanDisplay == null ? value : humanDisplay;
+        } catch (NumberFormatException ignored) {
+            return value;
+        }
+    }
+
+    private String eventDetailType(String detailJson, String key) {
+        if (detailJson == null || detailJson.isBlank()) {
+            return null;
+        }
+        try {
+            JSONObject detail = JSON.parseObject(detailJson);
+            String value = detail == null ? null : detail.getString(key);
+            return ("AGENT".equals(value) || "HUMAN".equals(value)) ? value : null;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private CommentVO toCommentVO(WorkitemCommentDO c) {
+        CommentVO vo = new CommentVO();
+        vo.setId(c.getId());
+        vo.setWorkitemId(c.getWorkitemId());
+        vo.setAuthorType(c.getAuthorType());
+        vo.setAuthorRef(c.getAuthorRef());
+        vo.setContentMd(c.getContentMd());
+        vo.setGmtCreate(c.getGmtCreate());
+        return vo;
+    }
+
+    void writeEvent(long tenantId, long workitemId, String eventType,
+                    String fromVal, String toVal, String actorType, Long actorRef) {
+        writeEvent(tenantId, workitemId, eventType, fromVal, toVal, actorType, actorRef, null);
+    }
+
+    void writeEvent(long tenantId, long workitemId, String eventType,
+                    String fromVal, String toVal, String actorType, Long actorRef, String detailJson) {
+        WorkitemEventDO e = new WorkitemEventDO();
+        e.setTenantId(tenantId);
+        e.setWorkitemId(workitemId);
+        e.setEventType(eventType);
+        e.setFromVal(fromVal);
+        e.setToVal(toVal);
+        e.setActorType(actorType);
+        e.setActorRef(actorRef);
+        e.setDetailJson(detailJson);
+        eventDao.insert(e);
+    }
+
+    private String assignDetailJson(String fromType, String toType) {
+        return assignmentDetailJson(fromType, toType);
+    }
+
+    static boolean isAssignmentType(String type) {
+        return "HUMAN".equals(type) || "AGENT".equals(type);
+    }
+
+    public static String assignmentDetailJson(String fromType, String toType) {
+        Map<String, String> detail = new LinkedHashMap<>();
+        if (isAssignmentType(fromType)) {
+            detail.put("fromType", fromType);
+        }
+        if (isAssignmentType(toType)) {
+            detail.put("toType", toType);
+        }
+        return detail.isEmpty() ? null : JSON.toJSONString(detail);
+    }
+
+    WorkitemVO toVO(WorkitemDO w) {
+        WorkitemVO vo = new WorkitemVO();
+        vo.setId(w.getId());
+        vo.setWorkType(w.getWorkType());
+        vo.setTitle(w.getTitle());
+        vo.setContentMd(w.getContentMd());
+        vo.setTemplateId(w.getTemplateId());
+        vo.setStatusNodeId(w.getStatusNodeId());
+        vo.setAssigneeType(w.getAssigneeType());
+        vo.setAssigneeRef(w.getAssigneeRef());
+        vo.setCreatorId(w.getCreatorId());
+        vo.setCreatorName(resolveActorName("HUMAN", w.getCreatorId()));
+        vo.setCreatorDisplayName(resolveActorDisplayName("HUMAN", w.getCreatorId()));
+        vo.setPriority(w.getPriority());
+        vo.setVersion(w.getVersion());
+        vo.setGmtCreate(w.getGmtCreate());
+        vo.setGmtModified(w.getGmtModified());
+        vo.setPendingDecision(false);
+        vo.setScheduledStartAt(w.getScheduledStartAt());
+        vo.setScheduledStartTriggeredAt(w.getScheduledStartTriggeredAt());
+        vo.setTags(parseTagsJson(w.getTags()));
+        if (w.getOriginType() != null && w.getOriginId() != null) {
+            WorkitemOriginVO origin = new WorkitemOriginVO();
+            origin.setType(w.getOriginType());
+            origin.setId(w.getOriginId());
+            if ("SCHEDULED_TASK_RUN".equals(w.getOriginType()) && scheduledTaskRunDao != null
+                    && scheduledTaskDao != null && w.getTenantId() != null) {
+                ScheduledTaskRunDO run = scheduledTaskRunDao.findById(w.getTenantId(), w.getOriginId());
+                if (run != null && Objects.equals(run.getWorkspaceId(), w.getTenantId())
+                        && run.getScheduledTaskId() != null) {
+                    ScheduledTaskDO task = scheduledTaskDao.findById(w.getTenantId(), run.getScheduledTaskId());
+                    if (task != null && Objects.equals(task.getWorkspaceId(), w.getTenantId())) {
+                        origin.setScheduledTaskId(task.getId());
+                        origin.setScheduledTaskName(task.getName());
+                    }
+                }
+            }
+            vo.setOrigin(origin);
+        }
+
+        // Resolve status node name
+        if (w.getStatusNodeId() != null) {
+            StatusNodeDO node = nodeDao.findById(w.getStatusNodeId());
+            if (node != null) {
+                vo.setStatusName(node.getName());
+                vo.setStatusLabelKey(node.getSystemLabelKey());
+            }
+        }
+
+        // Resolve SDLC name
+        vo.setSdlcId(w.getSdlcId());
+        if (w.getSdlcId() != null) {
+            SdlcDO sdlc = sdlcDao.findById(w.getSdlcId());
+            if (sdlc != null) {
+                vo.setSdlcName(sdlc.getName());
+            }
+        }
+
+        if (w.getAssigneeRef() != null) {
+            ExternalPrincipalVO assignee = externalActorPrincipal(w.getAssigneeType(), w.getAssigneeRef());
+            vo.setAssigneeName("EXTERNAL".equals(w.getAssigneeType()) && externalWorkitemViewService != null ? ExternalWorkitemViewService.formatPrincipalName(assignee) : resolveActorName(w.getAssigneeType(), w.getAssigneeRef()));
+            vo.setAssigneeDisplayName("EXTERNAL".equals(w.getAssigneeType()) && externalWorkitemViewService != null ? ExternalWorkitemViewService.formatPrincipalDisplayName(assignee) : resolveActorDisplayName(w.getAssigneeType(), w.getAssigneeRef()));
+            vo.setAssigneeNameFallback(ExternalWorkitemViewService.nameFallback(assignee));
+        }
+
+        List<DispatchDO> dispatches = w.getTenantId() == null || w.getId() == null
+                ? List.of()
+                : safeList(dispatchDao.listByWorkitem(w.getTenantId(), w.getId()));
+        applyDeleteEligibility(vo, w, dispatches);
+        boolean pendingHumanRequest = w.getTenantId() != null && w.getId() != null
+                && !safeList(workitemDao.listPendingHumanRequestWorkitemIds(w.getTenantId(), List.of(w.getId()))).isEmpty();
+        applyClassification(vo, w, dispatches, null, pendingHumanRequest);
+        return vo;
+    }
+
+    private void applyDeleteEligibility(WorkitemVO vo, WorkitemDO w, List<DispatchDO> dispatches) {
+        vo.setSourceType(SOURCE_TYPE_NATIVE);
+        vo.setDeletable(true);
+        vo.setDeletableReason(null);
+        if (w.getId() == null || w.getTenantId() == null) {
+            return;
+        }
+        if (!safeList(externalWorkitemLinkDao.listByWorkitem(w.getTenantId(), w.getId())).isEmpty()) {
+            vo.setSourceType(SOURCE_TYPE_EXTERNAL);
+            vo.setDeletable(false);
+            vo.setDeletableReason(SystemMessages.render(ErrorCode.WORKITEM_EXTERNAL_NO_DELETE.getMessageKey(), new Object[0], ErrorCode.WORKITEM_EXTERNAL_NO_DELETE.getMessage()));
+            return;
+        }
+        boolean running = dispatches.stream()
+                .anyMatch(d -> d != null && ACTIVE_DISPATCH_STATUSES.contains(d.getStatus()));
+        if (running) {
+            vo.setDeletable(false);
+            vo.setDeletableReason(SystemMessages.render(ErrorCode.WORKITEM_RUNNING_NO_DELETE.getMessageKey(), new Object[0], ErrorCode.WORKITEM_RUNNING_NO_DELETE.getMessage()));
+        }
+    }
+
+    WorkitemVO toVO(WorkitemDO w, Map<Long, UserDO> users, Map<Long, AgentDO> agents,
+                    Map<Long, StatusNodeDO> nodes, Map<Long, SdlcDO> sdlcs) {
+        WorkitemVO vo = new WorkitemVO();
+        vo.setId(w.getId());
+        vo.setWorkType(w.getWorkType());
+        vo.setTitle(w.getTitle());
+        vo.setContentMd(w.getContentMd());
+        vo.setTemplateId(w.getTemplateId());
+        vo.setStatusNodeId(w.getStatusNodeId());
+        vo.setAssigneeType(w.getAssigneeType());
+        vo.setAssigneeRef(w.getAssigneeRef());
+        vo.setCreatorId(w.getCreatorId());
+        vo.setCreatorName(resolveActorNameFromMaps("HUMAN", w.getCreatorId(), users, agents));
+        vo.setCreatorDisplayName(resolveActorDisplayNameFromMaps("HUMAN", w.getCreatorId(), users, agents));
+        vo.setPriority(w.getPriority());
+        vo.setVersion(w.getVersion());
+        vo.setGmtCreate(w.getGmtCreate());
+        vo.setGmtModified(w.getGmtModified());
+        vo.setPendingDecision(false);
+        vo.setScheduledStartAt(w.getScheduledStartAt());
+        vo.setScheduledStartTriggeredAt(w.getScheduledStartTriggeredAt());
+        vo.setTags(parseTagsJson(w.getTags()));
+
+        if (w.getStatusNodeId() != null) {
+            StatusNodeDO node = nodes.get(w.getStatusNodeId());
+            if (node != null) {
+                vo.setStatusName(node.getName());
+                vo.setStatusLabelKey(node.getSystemLabelKey());
+            }
+        }
+
+        vo.setSdlcId(w.getSdlcId());
+        if (w.getSdlcId() != null) {
+            SdlcDO sdlc = sdlcs.get(w.getSdlcId());
+            if (sdlc != null) {
+                vo.setSdlcName(sdlc.getName());
+            }
+        }
+
+        if (w.getAssigneeRef() != null) {
+            vo.setAssigneeName(resolveActorNameFromMaps(w.getAssigneeType(), w.getAssigneeRef(), users, agents));
+            vo.setAssigneeDisplayName(resolveActorDisplayNameFromMaps(w.getAssigneeType(), w.getAssigneeRef(), users, agents));
+        }
+
+        return vo;
+    }
+
+    private void applyDeleteEligibility(WorkitemVO vo, WorkitemDO w,
+                                        Map<Long, List<ExternalWorkitemLinkDO>> extLinksMap,
+                                        Map<Long, List<DispatchDO>> allDispatches) {
+        vo.setSourceType(SOURCE_TYPE_NATIVE);
+        vo.setDeletable(true);
+        vo.setDeletableReason(null);
+        if (w.getId() == null || w.getTenantId() == null) {
+            return;
+        }
+        List<ExternalWorkitemLinkDO> links = extLinksMap.getOrDefault(w.getId(), List.of());
+        if (!links.isEmpty()) {
+            vo.setSourceType(SOURCE_TYPE_EXTERNAL);
+            vo.setDeletable(false);
+            vo.setDeletableReason(SystemMessages.render(ErrorCode.WORKITEM_EXTERNAL_NO_DELETE.getMessageKey(), new Object[0], ErrorCode.WORKITEM_EXTERNAL_NO_DELETE.getMessage()));
+            return;
+        }
+        boolean running = allDispatches.getOrDefault(w.getId(), List.of()).stream()
+                .anyMatch(d -> d != null && ACTIVE_DISPATCH_STATUSES.contains(d.getStatus()));
+        if (running) {
+            vo.setDeletable(false);
+            vo.setDeletableReason(SystemMessages.render(ErrorCode.WORKITEM_RUNNING_NO_DELETE.getMessageKey(), new Object[0], ErrorCode.WORKITEM_RUNNING_NO_DELETE.getMessage()));
+        }
+    }
+
+    private void applyExternalSource(WorkitemVO vo, List<ExternalWorkitemLinkDO> links) {
+        ExternalWorkitemLinkDO preferred = safeList(links).stream()
+                .filter(Objects::nonNull)
+                .min(Comparator
+                        .comparing((ExternalWorkitemLinkDO link) -> !"AONE".equals(link.getProvider()))
+                        .thenComparing(ExternalWorkitemLinkDO::getGmtCreate,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(ExternalWorkitemLinkDO::getId,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .orElse(null);
+        if (preferred != null) {
+            vo.setSourceProvider(preferred.getProvider());
+            vo.setSourceUrl(preferred.getExternalUrl());
+        }
+    }
+
+    private String resolveActorNameFromMaps(String actorType, Long actorRef,
+                                            Map<Long, UserDO> users, Map<Long, AgentDO> agents) {
+        if (actorRef == null) {
+            return null;
+        }
+        if ("AGENT".equals(actorType)) {
+            AgentDO agent = agents.get(actorRef);
+            return agent == null ? null : agent.getName();
+        }
+        if ("HUMAN".equals(actorType)) {
+            return UserAccountStates.displayName(users.get(actorRef));
+        }
+        return null;
+    }
+
+    private String resolveActorDisplayNameFromMaps(String actorType, Long actorRef,
+                                                   Map<Long, UserDO> users, Map<Long, AgentDO> agents) {
+        String name = resolveActorNameFromMaps(actorType, actorRef, users, agents);
+        if (actorRef == null) {
+            return name;
+        }
+        if (name == null || name.isBlank()) {
+            return String.valueOf(actorRef);
+        }
+        return name + "(" + actorRef + ")";
+    }
+}

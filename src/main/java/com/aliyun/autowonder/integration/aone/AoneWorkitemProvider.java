@@ -1,0 +1,488 @@
+package com.aliyun.autowonder.integration.aone;
+
+import com.aliyun.autowonder.json.JSONArray;
+import com.aliyun.autowonder.json.JSONObject;
+import com.aliyun.autowonder.integration.provider.ExternalComment;
+import com.aliyun.autowonder.integration.provider.ExternalPrincipalRef;
+import com.aliyun.autowonder.integration.provider.ExternalStatusOption;
+import com.aliyun.autowonder.integration.provider.ExternalWorkitemDetail;
+import com.aliyun.autowonder.integration.provider.ExternalWorkitemProvider;
+import com.aliyun.autowonder.integration.provider.ExternalWorkitemSummary;
+import com.aliyun.autowonder.integration.provider.PageResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+@Component
+public class AoneWorkitemProvider implements ExternalWorkitemProvider {
+
+    private static final Logger log = LoggerFactory.getLogger(AoneWorkitemProvider.class);
+
+    private static final Pattern COMMENT_ID_PATTERN = Pattern.compile("comment\\s+id\\s*:?\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+
+    /** Aone searchV4 caps perPage at 200. */
+    private static final int PER_PAGE = 200;
+    /** Aone searchV4 rejects idList larger than 50, so searchByIds must batch requests. */
+    private static final int ID_LIST_MAX = 50;
+    /** Aone rejects offset=(page-1)*perPage > 5000, capping a single window at 26 pages of 200. */
+    private static final int WINDOW_MAX_ITEMS = 5000;
+    private static final int MAX_PAGES = 26;
+    /** 2000-01-01 00:00:00 Asia/Shanghai — lower bound when no createdFrom is supplied. */
+    private static final long DEFAULT_EPOCH_MILLIS = 946656000000L;
+
+    private final AoneOpenApiClient client;
+    private final AoneWorkitemMapper mapper;
+
+    public AoneWorkitemProvider(AoneOpenApiClient client) {
+        this(client, null);
+    }
+
+    @Autowired
+    public AoneWorkitemProvider(AoneOpenApiClient client, AoneIntegrationProperties properties) {
+        this.client = client;
+        this.mapper = new AoneWorkitemMapper(properties == null ? null : properties.getWebBaseUrl());
+    }
+
+    @Override
+    public String provider() {
+        return "AONE";
+    }
+
+    @Override
+    public PageResult<ExternalWorkitemSummary> searchByIds(AoneOpenApiConfig config, String externalProjectId, List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return PageResult.of(new ArrayList<>(), 1, PER_PAGE, 0);
+        }
+        Map<String, ExternalWorkitemSummary> collected = new LinkedHashMap<>();
+        int totalCount = 0;
+        for (int start = 0; start < ids.size(); start += ID_LIST_MAX) {
+            List<String> batch = ids.subList(start, Math.min(start + ID_LIST_MAX, ids.size()));
+            JSONObject result = searchPage(config, externalProjectId, batch, null, null, 1, PER_PAGE);
+            totalCount += result.getIntValue("totalCount");
+            for (ExternalWorkitemSummary item : toWorkitems(result)) {
+                if (item.getExternalId() != null) {
+                    collected.putIfAbsent(item.getExternalId(), item);
+                }
+            }
+        }
+        return PageResult.of(new ArrayList<>(collected.values()), 1, PER_PAGE, totalCount);
+    }
+
+    @Override
+    public PageResult<ExternalWorkitemSummary> searchProjectFirstPage(AoneOpenApiConfig config, String externalProjectId) {
+        JSONObject result = searchPage(config, externalProjectId, List.of(), null, null, 1, PER_PAGE);
+        return PageResult.of(toWorkitems(result), 1, PER_PAGE, result.getIntValue("totalCount"));
+    }
+
+    @Override
+    public PageResult<ExternalWorkitemSummary> searchProject(AoneOpenApiConfig config, String externalProjectId,
+                                                             Date createdFrom, Date createdTo) {
+        long from = createdFrom == null ? DEFAULT_EPOCH_MILLIS : createdFrom.getTime();
+        long to = createdTo == null ? System.currentTimeMillis() : createdTo.getTime();
+        Map<String, ExternalWorkitemSummary> collected = new LinkedHashMap<>();
+        ScanState state = new ScanState();
+        scanWindow(config, externalProjectId, from, to, collected, state);
+        return PageResult.of(new ArrayList<>(collected.values()), 1, PER_PAGE, collected.size());
+    }
+
+    /**
+     * Depth-first scan of a [from, to] createdAt window. Aone rejects offset>5000, so any window
+     * whose totalCount exceeds WINDOW_MAX_ITEMS is bisected at its time midpoint until each window
+     * is pageable within the offset cap. The first request failure propagates (nothing collected
+     * yet); later failures are treated as partial success so already-fetched items survive.
+     */
+    private void scanWindow(AoneOpenApiConfig config, String externalProjectId, long from, long to,
+                            Map<String, ExternalWorkitemSummary> collected, ScanState state) {
+        Date fromDate = from <= DEFAULT_EPOCH_MILLIS ? null : new Date(from);
+        Date toDate = new Date(to);
+        JSONObject firstPage;
+        try {
+            firstPage = searchPage(config, externalProjectId, List.of(), fromDate, toDate, 1, PER_PAGE);
+        } catch (RuntimeException e) {
+            if (!state.firstDone) {
+                throw e;
+            }
+            log.warn("Aone window scan failed, returning partial result from={} to={} error={}",
+                    fromDate, toDate, e.getMessage());
+            return;
+        }
+        state.firstDone = true;
+        int totalCount = firstPage.getIntValue("totalCount");
+        if (totalCount == 0) {
+            return;
+        }
+        boolean canSplit = to - from > 1;
+        if (totalCount > WINDOW_MAX_ITEMS && canSplit) {
+            long mid = from + (to - from) / 2;
+            scanWindow(config, externalProjectId, from, mid, collected, state);
+            scanWindow(config, externalProjectId, mid + 1, to, collected, state);
+            return;
+        }
+        addAll(firstPage, collected);
+        int totalPages = pageCount(totalCount);
+        for (int pageNo = 2; pageNo <= totalPages && pageNo <= MAX_PAGES; pageNo++) {
+            JSONObject page;
+            try {
+                page = searchPage(config, externalProjectId, List.of(), fromDate, toDate, pageNo, PER_PAGE);
+            } catch (RuntimeException e) {
+                log.warn("Aone window page fetch failed, returning partial result from={} to={} page={} error={}",
+                        fromDate, toDate, pageNo, e.getMessage());
+                return;
+            }
+            addAll(page, collected);
+        }
+    }
+
+    private void addAll(JSONObject result, Map<String, ExternalWorkitemSummary> collected) {
+        for (ExternalWorkitemSummary item : toWorkitems(result)) {
+            if (item.getExternalId() != null) {
+                collected.putIfAbsent(item.getExternalId(), item);
+            }
+        }
+    }
+
+    private int pageCount(int totalCount) {
+        return (totalCount + PER_PAGE - 1) / PER_PAGE;
+    }
+
+    private JSONObject searchPage(AoneOpenApiConfig config, String externalProjectId, List<String> ids,
+                                  Date createdFrom, Date createdTo, int pageNo, int perPage) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("akProjectId", externalProjectId);
+        if (ids != null && !ids.isEmpty()) {
+            params.put("idList", ids);
+        }
+        params.put("stamp", "Req,Bug,Task");
+        if (createdFrom != null) {
+            params.put("createdAtFrom", formatTime(createdFrom));
+        }
+        if (createdTo != null) {
+            params.put("createdAtTo", formatTime(createdTo));
+        }
+        params.put("page", pageNo);
+        params.put("perPage", perPage);
+        return client.postForm(config, "/issue/openapi/IssueTopService/searchV4", params);
+    }
+
+    private String formatTime(Date date) {
+        SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        fmt.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+        return fmt.format(date);
+    }
+
+    private static final class ScanState {
+        private boolean firstDone;
+    }
+
+    private List<ExternalWorkitemSummary> toWorkitems(JSONObject result) {
+        List<ExternalWorkitemSummary> items = new ArrayList<>();
+        for (Object item : arrayFrom(result)) {
+            if (item instanceof JSONObject obj) {
+                items.add(mapper.toDetail(obj));
+            }
+        }
+        return items;
+    }
+
+    @Override
+    public ExternalWorkitemDetail getWorkitem(AoneOpenApiConfig config, String externalWorkitemId) {
+        JSONObject result = client.get(config, "/issue/openapi/IssueTopService/getById",
+                Map.of("id", externalWorkitemId));
+        return mapper.toDetail(result);
+    }
+
+    @Override
+    public Map<String, List<ExternalStatusOption>> listOperationalStatuses(AoneOpenApiConfig config, String staffId, List<String> externalWorkitemIds) {
+        if (staffId == null || staffId.isBlank() || externalWorkitemIds == null || externalWorkitemIds.isEmpty()) {
+            return Map.of();
+        }
+        JSONObject result = client.get(config, "/issue/openapi/IssueTopService/getOperationalStatus",
+                Map.of("staffId", staffId, "issueIds", numericIds(externalWorkitemIds)));
+        Map<String, List<ExternalStatusOption>> statusesByIssue = new LinkedHashMap<>();
+        Object data = result.get("result");
+        if (data instanceof JSONObject obj) {
+            for (String issueId : obj.keySet()) {
+                List<ExternalStatusOption> statuses = new ArrayList<>();
+                Object value = obj.get(issueId);
+                if (value instanceof JSONArray array) {
+                    for (Object item : array) {
+                        if (item instanceof JSONObject statusObj) {
+                            statuses.add(toStatusOption(statusObj));
+                        }
+                    }
+                }
+                statusesByIssue.put(issueId, statuses);
+            }
+        }
+        return statusesByIssue;
+    }
+
+    @Override
+    public List<ExternalComment> listComments(AoneOpenApiConfig config, List<String> externalWorkitemIds) {
+        JSONObject result = client.get(config, "/issue/openapi/CommentTopService/get",
+                Map.of("targetType", "Issue", "ids", numericIds(externalWorkitemIds)));
+        List<ExternalComment> comments = new ArrayList<>();
+        for (Object item : arrayFrom(result)) {
+            if (item instanceof JSONObject obj) {
+                comments.add(toComment(obj));
+            }
+        }
+        resolveCommentAuthors(config, comments);
+        return comments;
+    }
+
+    @Override
+    public ExternalComment createComment(AoneOpenApiConfig config, String externalWorkitemId, String staffId, String contentMd) {
+        // POST form body: a GET query string exceeds the gateway URL length limit once the
+        // content grows past a few hundred chars (URL-encoded UTF-8 roughly triples CJK),
+        // which previously dead-lettered long comments without any error surfacing.
+        JSONObject result = client.postForm(config, "/issue/openapi/IssueTopService/createComment",
+                Map.of("targetType", "Issue", "targetId", externalWorkitemId, "user", staffId, "content", contentMd));
+        ExternalComment comment = toComment(result);
+        if (comment.getExternalId() == null) {
+            comment.setExternalId(commentIdFromMessage(result.getString("message")));
+        }
+        comment.setExternalWorkitemId(externalWorkitemId);
+        comment.setAuthorStaffId(staffId);
+        comment.setContentMd(contentMd);
+        return comment;
+    }
+
+    @Override
+    public void updateStatus(AoneOpenApiConfig config, String externalWorkitemId, String staffId, String statusName) {
+        client.postForm(config, "/issue/openapi/IssueTopService/update",
+                Map.of("issueId", externalWorkitemId, "modifier", staffId, "status", statusName));
+    }
+
+    @Override
+    public void updateContent(AoneOpenApiConfig config, String externalWorkitemId, String staffId, String title, String contentMd) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("issueId", externalWorkitemId);
+        params.put("modifier", staffId);
+        params.put("subject", title);
+        params.put("description", contentMd);
+        client.postForm(config, "/issue/openapi/IssueTopService/update", params);
+    }
+
+    private ExternalComment toComment(JSONObject obj) {
+        ExternalComment comment = new ExternalComment();
+        comment.setExternalId(firstNonBlank(str(obj, "id"), str(obj, "commentId")));
+        comment.setExternalWorkitemId(firstNonBlank(str(obj, "targetId"), str(obj, "issueId")));
+        JSONObject author = firstObject(obj, "author", "user", "creator");
+        comment.setAuthorStaffId(firstNonBlank(
+                explicitStaffId(obj),
+                explicitStaffId(author),
+                scalarSubjectId(obj, "creator"),
+                scalarSubjectId(author, "creator")));
+        comment.setAuthorInternalUserId(firstNonBlank(
+                internalUserId(obj),
+                internalUserId(author)));
+        comment.setAuthorName(firstNonBlank(
+                explicitPersonName(obj),
+                explicitPersonName(author),
+                scalarDisplayName(obj, "creator"),
+                scalarDisplayName(obj, "user"),
+                scalarDisplayName(obj, "author")));
+        comment.setAuthor(ExternalPrincipalRef.user(comment.getAuthorStaffId(), comment.getAuthorName()));
+        comment.setContentMd(firstNonBlank(str(obj, "content"), str(obj, "body")));
+        comment.setCreatedAt(date(firstNonBlank(str(obj, "createdAt"), str(obj, "gmtCreate"))));
+        comment.setUpdatedAt(date(firstNonBlank(str(obj, "updatedAt"), str(obj, "gmtModified"))));
+        comment.setSourceStatus(Boolean.TRUE.equals(obj.getBoolean("isDeleted")) ? "DELETED" : "ACTIVE");
+        comment.setRawJson(obj.toJSONString());
+        return comment;
+    }
+
+    /**
+     * CommentTopService returns its author's Aone internal userId rather than the staff ID used by
+     * the rest of the external identity contract. Resolve every distinct internal ID once so an
+     * individual failed lookup never prevents the batch of comments from being synchronized.
+     */
+    private void resolveCommentAuthors(AoneOpenApiConfig config, List<ExternalComment> comments) {
+        Map<String, ExternalPrincipalRef> resolvedByInternalUserId = new HashMap<>();
+        Set<String> attemptedInternalUserIds = new HashSet<>();
+        for (ExternalComment comment : comments) {
+            if (comment.getAuthorStaffId() != null && !comment.getAuthorStaffId().isBlank()) {
+                comment.setAuthor(ExternalPrincipalRef.user(comment.getAuthorStaffId(), comment.getAuthorName()));
+                continue;
+            }
+            String internalUserId = comment.getAuthorInternalUserId();
+            if (internalUserId == null || internalUserId.isBlank()) {
+                continue;
+            }
+            ExternalPrincipalRef principal = resolvedByInternalUserId.get(internalUserId);
+            if (!attemptedInternalUserIds.contains(internalUserId)) {
+                attemptedInternalUserIds.add(internalUserId);
+                principal = resolveCommentAuthor(config, internalUserId);
+                if (principal != null) {
+                    resolvedByInternalUserId.put(internalUserId, principal);
+                }
+            }
+            if (principal == null) {
+                continue;
+            }
+            comment.setAuthorStaffId(principal.getSubjectId());
+            comment.setAuthorName(firstNonBlank(comment.getAuthorName(), principal.getDisplayName()));
+            comment.setAuthor(ExternalPrincipalRef.user(comment.getAuthorStaffId(), comment.getAuthorName()));
+        }
+    }
+
+    private ExternalPrincipalRef resolveCommentAuthor(AoneOpenApiConfig config, String internalUserId) {
+        try {
+            JSONObject response = client.get(config, "/ak/project/openapi/UserApiFacade/getById",
+                    Map.of("id", internalUserId));
+            JSONObject user = firstObject(response, "result", "data");
+            if (user == null) {
+                user = response;
+            }
+            String staffId = firstNonBlank(str(user, "staffId"), str(user, "userStaffId"), str(user, "employeeId"));
+            if (staffId == null || staffId.isBlank()) {
+                log.warn("Aone comment author lookup returned no staff ID: userId={}", internalUserId);
+                return null;
+            }
+            String displayName = firstNonBlank(str(user, "userName"), str(user, "nickName"), str(user, "nickname"),
+                    str(user, "realName"), str(user, "displayName"), str(user, "name"));
+            return ExternalPrincipalRef.user(staffId, displayName);
+        } catch (RuntimeException e) {
+            log.warn("Aone comment author lookup failed: userId={}, error={}", internalUserId, e.getMessage());
+            log.debug("Aone comment author lookup failure details: userId={}", internalUserId, e);
+            return null;
+        }
+    }
+
+    private ExternalStatusOption toStatusOption(JSONObject obj) {
+        ExternalStatusOption option = new ExternalStatusOption();
+        option.setExternalId(firstNonBlank(str(obj, "id"), str(obj, "statusId")));
+        option.setName(firstNonBlank(str(obj, "name"), str(obj, "status")));
+        return option;
+    }
+
+    private List<Object> numericIds(List<String> ids) {
+        List<Object> result = new ArrayList<>();
+        for (String id : ids) {
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            try {
+                result.add(Long.parseLong(id));
+            } catch (NumberFormatException ignored) {
+                result.add(id);
+            }
+        }
+        return result;
+    }
+
+    private JSONArray arrayFrom(JSONObject result) {
+        Object data = result.get("result");
+        if (data instanceof JSONArray array) return array;
+        data = result.get("data");
+        if (data instanceof JSONArray array) return array;
+        data = result.get("list");
+        if (data instanceof JSONArray array) return array;
+        JSONArray array = new JSONArray();
+        if (!result.isEmpty()) array.add(result);
+        return array;
+    }
+
+    private Date date(String millis) {
+        if (millis == null || millis.isBlank()) return null;
+        try {
+            return new Date(Long.parseLong(millis));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String str(JSONObject object, String key) {
+        if (object == null) {
+            return null;
+        }
+        Object value = object.get(key);
+        return value == null || value instanceof JSONObject || value instanceof JSONArray ? null : String.valueOf(value);
+    }
+
+    private JSONObject firstObject(JSONObject source, String... keys) {
+        if (source == null) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = source.get(key);
+            if (value instanceof JSONObject object) {
+                return object;
+            }
+        }
+        return null;
+    }
+
+    private String explicitStaffId(JSONObject person) {
+        return firstNonBlank(
+                str(person, "userStaffId"), str(person, "staffId"), str(person, "authorStaffId"),
+                str(person, "creatorStaffId"), str(person, "operatorStaffId"));
+    }
+
+    private String internalUserId(JSONObject person) {
+        return firstNonBlank(str(person, "userId"), str(person, "authorId"), str(person, "creatorId"));
+    }
+
+    private String explicitPersonName(JSONObject person) {
+        return firstNonBlank(
+                str(person, "userName"), str(person, "authorName"), str(person, "creatorName"),
+                str(person, "nickName"), str(person, "nickname"), str(person, "displayName"), str(person, "name"));
+    }
+
+    private String scalarSubjectId(JSONObject source, String key) {
+        String value = str(source, key);
+        return looksLikeExternalSubjectId(value) ? value : null;
+    }
+
+    private String scalarDisplayName(JSONObject source, String key) {
+        String value = str(source, key);
+        return looksLikeExternalSubjectId(value) ? null : value;
+    }
+
+    private boolean looksLikeExternalSubjectId(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        boolean numeric = true;
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch < '0' || ch > '9') {
+                numeric = false;
+                break;
+            }
+        }
+        if (numeric) {
+            return true;
+        }
+        String normalized = value.toUpperCase(java.util.Locale.ROOT);
+        return normalized.startsWith("WB") || normalized.startsWith("WORKER_") || normalized.startsWith("V00_");
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
+    }
+
+    private String commentIdFromMessage(String message) {
+        if (message == null || message.isBlank()) return null;
+        Matcher matcher = COMMENT_ID_PATTERN.matcher(message);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+}

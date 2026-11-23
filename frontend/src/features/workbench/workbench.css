@@ -1,0 +1,239 @@
+.aw-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.aw-workbench-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+  align-items: start;
+}
+
+.aw-workbench-main,
+.aw-workbench-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.aw-workbench-card .ant-card-body {
+  padding: 10px 12px;
+}
+
+.aw-workbench-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.aw-workbench-todo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aw-workbench-todo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--aw-border-color, rgba(0, 0, 0, 0.06));
+  font-size: 13px;
+  min-width: 0;
+}
+
+.aw-workbench-todo-row:last-child {
+  border-bottom: none;
+}
+
+.aw-workbench-todo-status {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.aw-workbench-todo-handle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.aw-workbench-todo-id,
+.aw-workbench-todo-reason,
+.aw-workbench-todo-updated {
+  flex: 0 0 auto;
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.aw-workbench-todo-updated {
+  min-width: 78px;
+  text-align: right;
+}
+
+.aw-workbench-pagination {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.aw-workbench-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.aw-workbench-search {
+  width: 240px;
+  /* 搜索框紧邻关系 Tab，用固定间距而不是两端对齐。 */
+  margin-right: 0;
+}
+
+.aw-workbench-filter-select {
+  min-width: 130px;
+}
+
+.aw-workbench-workitem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aw-workbench-workitem-meta {
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aw-workbench-assignee {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.aw-workbench-assignee-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.aw-workbench-assignee-squad {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-workbench-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.aw-workbench-status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.aw-workbench-status-change {
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
+}
+
+.aw-workbench-status-change:hover {
+  color: var(--aw-accent-text);
+}
+
+.aw-workbench-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aw-workbench-activity-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--aw-border-color, rgba(0, 0, 0, 0.06));
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.aw-workbench-activity-row:last-child {
+  border-bottom: none;
+}
+
+.aw-workbench-activity-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aw-workbench-unread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aw-accent-text);
+  flex: 0 0 auto;
+}
+
+.aw-workbench-activity-content {
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.aw-workbench-activity-time {
+  color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.45));
+  font-size: 11px;
+}
+
+.aw-workbench-smart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.aw-workbench-timezone {
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .aw-workbench-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .aw-workbench-todo-row {
+    flex-wrap: wrap;
+  }
+
+  .aw-workbench-search {
+    width: 100%;
+  }
+}

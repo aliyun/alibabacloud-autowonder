@@ -1,0 +1,64 @@
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
+import { Button, ConfigProvider, Dropdown, message } from 'antd';
+import { CheckOutlined, CloseOutlined, DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import zhCN from 'antd/locale/zh_CN';
+import enUS from 'antd/locale/en_US';
+import dayjs from 'dayjs';
+import 'dayjs/locale/zh-cn';
+import { useTranslation } from 'react-i18next';
+import { useLocale } from '@/shared/i18n/LocaleProvider';
+import { APPEARANCE_KEY, DEFAULT_APPEARANCE, createAppearanceTheme, getAppearanceVariables, normalizeAppearance, resolveAppearance, type AppearanceMode, type ResolvedAppearance } from './appearance';
+import './crystal.css';
+
+const AppearanceContext = createContext<{ mode: AppearanceMode; resolved: ResolvedAppearance; setMode: (mode: AppearanceMode) => void }>({ mode: DEFAULT_APPEARANCE, resolved: DEFAULT_APPEARANCE, setMode: () => {} });
+export const useAppearance = () => useContext(AppearanceContext);
+function readMode() { try { return normalizeAppearance(localStorage.getItem(APPEARANCE_KEY)); } catch { return DEFAULT_APPEARANCE; } }
+export function AppearanceProvider({ accent, children }: { accent: string; children: ReactNode }) {
+  const { locale } = useLocale();
+  const antLocale = locale === 'en-US' ? enUS : zhCN;
+  const { t } = useTranslation('common');
+  const closeLabel = t('overlay.close');
+  const overlay = useMemo(() => ({ closable: { 'aria-label': closeLabel }, closeIcon: <CloseOutlined aria-hidden="true" /> }), [closeLabel]);
+  useLayoutEffect(() => { dayjs.locale(locale === 'en-US' ? 'en' : 'zh-cn'); }, [locale]);
+  const [mode, updateMode] = useState<AppearanceMode>(readMode);
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
+  const resolved = resolveAppearance(mode, systemDark);
+  const variables = useMemo(() => getAppearanceVariables(resolved, accent), [resolved, accent]);
+  const config = useMemo(() => createAppearanceTheme(resolved, accent), [resolved, accent]);
+  useEffect(() => {
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const syncSystem = () => setSystemDark(media?.matches ?? false);
+    const syncStorage = (event: StorageEvent) => { if (event.key === APPEARANCE_KEY || event.key === null) updateMode(normalizeAppearance(event.newValue)); };
+    media?.addEventListener('change', syncSystem);
+    window.addEventListener('storage', syncStorage);
+    syncSystem();
+    return () => { media?.removeEventListener('change', syncSystem); window.removeEventListener('storage', syncStorage); };
+  }, []);
+  useLayoutEffect(() => {
+    document.documentElement.dataset.appearance = resolved;
+    Object.entries(variables).forEach(([key, value]) => document.documentElement.style.setProperty(key, value));
+  }, [resolved, variables]);
+  useLayoutEffect(() => {
+    ConfigProvider.config({ holderRender: holder => <ConfigProvider locale={antLocale} theme={config} modal={overlay} drawer={overlay}>{holder}</ConfigProvider> });
+  }, [config, antLocale, overlay]);
+  function setMode(next: AppearanceMode) {
+    updateMode(next);
+    try { localStorage.setItem(APPEARANCE_KEY, next); } catch { /* Browser policy may deny persistence; current-tab switching still works. */ }
+  }
+  return <AppearanceContext.Provider value={{ mode, resolved, setMode }}><ConfigProvider locale={antLocale} theme={config} modal={overlay} drawer={overlay}>{children}</ConfigProvider></AppearanceContext.Provider>;
+}
+export function AppearanceSwitch() {
+  const { mode, resolved, setMode } = useAppearance();
+  const { t } = useTranslation('common');
+  const options = [
+    { key: 'dark', title: t('appearance.dark'), icon: <MoonOutlined aria-hidden="true" /> },
+    { key: 'light', title: t('appearance.light'), icon: <SunOutlined aria-hidden="true" /> },
+    { key: 'system', title: t('appearance.system'), icon: <DesktopOutlined aria-hidden="true" /> },
+  ];
+  return <Dropdown trigger={['click']} placement="bottomRight" menu={{ selectable: true, selectedKeys: [mode], onClick: ({ key }) => {
+    setMode(normalizeAppearance(key));
+    message.info({ key: 'appearance-scope', content: t('appearance.scope') });
+  }, items: options.map(({ key, title, icon }) => ({ key, icon, label: <span className="appearance-option">{title}{mode === key && <CheckOutlined aria-hidden="true" />}</span> })) }}>
+    <Button type="text" className="appearance-switch" aria-label={t('appearance.switch')} title={t('appearance.current', { mode: options.find(item => item.key === mode)?.title })} icon={mode === 'system' ? <DesktopOutlined aria-hidden="true" /> : resolved === 'dark' ? <MoonOutlined aria-hidden="true" /> : <SunOutlined aria-hidden="true" />} />
+  </Dropdown>;
+}

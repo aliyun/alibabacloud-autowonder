@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "mode": "new",
+  "phase": "questionnaire",
+  "status": "planned",
+  "cloudProfile": "auto-wonder",
+  "region": "",
+  "regionPreset": [
+    "cn-zhangjiakou",
+    "cn-hangzhou",
+    "cn-shanghai",
+    "cn-beijing"
+  ],
+  "environment": "auto-wonder-prod",
+  "deploymentId": "",
+  "accountUid": "",
+  "topology": "multi-az-ha",
+  "architecture": "x86_64",
+  "availabilityZones": [],
+  "sizePreset": "small",
+  "stateMode": "remote",
+  "lifecycle": "persistent",
+  "billing": {
+    "strategy": "subscription-first",
+    "purchasePeriodMonths": 1,
+    "autoRenew": true,
+    "autoRenewPeriodMonths": 1,
+    "payAsYouGoExceptions": ["ALB", "OSS", "SLS"]
+  },
+  "ingressScenario": "no-domain-no-certificate",
+  "domain": "",
+  "publicSourceCidrs": [],
+  "network": {
+    "vpcCidr": "10.0.0.0/16",
+    "zoneACidr": "10.0.1.0/24",
+    "zoneBCidr": "10.0.2.0/24"
+  },
+  "resourceSelection": {"version": 1, "status": "candidate"},
+  "resolvedInfrastructure": {
+    "ecsImageId": "",
+    "ecsInstanceType": "",
+    "preferredEcsInstanceType": "ecs.c8a.large",
+    "ecsVcpus": 2,
+    "ecsMemoryGiB": 4,
+    "rdsInstanceType": "",
+    "rdsCategory": "",
+    "rdsStorageType": "",
+    "rdsStorageGb": 0,
+    "redisInstanceClass": "",
+    "zonePlan": {
+      "ecsZones": [],
+      "rds": { "primaryZone": "", "slaveZone": "" },
+      "redis": { "primaryZone": "", "secondaryZone": "" },
+      "alb": { "zones": [] },
+      "downgrades": [],
+      "resolvedBy": "",
+      "evidence": {}
+    }
+  },
+  "slsEnabled": true,
+  "aoneEnabled": false,
+  "publicEgress": false,
+  "adminUsername": "admin",
+  "repositoryUrl": "",
+  "repositoryRef": "community",
+  "repositoryCommit": "",
+  "executionMode": "unattended",
+  "tags": {
+    "Project": "AutoWonder",
+    "Environment": "auto-wonder-prod",
+    "DeploymentId": "",
+    "ManagedBy": "Terraform",
+    "Topology": "multi-az-ha"
+  },
+  "terraform": {
+    "backendDirectory": "",
+    "stateReference": "",
+    "stateBucket": "",
+    "stateKey": "",
+    "backendStatus": "pending",
+    "mainDestroyVerified": false,
+    "planFingerprint": ""
+  },
+  "resources": {},
+  "artifacts": {},
+  "upgrade": {},
+  "phases": [],
+  "evidence": []
+}

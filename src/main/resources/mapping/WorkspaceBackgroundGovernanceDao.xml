@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aliyun.autowonder.workspace.WorkspaceBackgroundGovernanceDao">
+    <!-- Deleted workspaces are a valid historical state: before deletion stopped external sync,
+         their bindings stayed enabled and their timers kept firing. This query lists only the
+         workspaces that still have something to stop, so a repeated sweep converges instead of
+         re-scanning every deleted workspace forever. Every branch is joined to org.is_deleted = 1,
+         so an active workspace can never be picked up. -->
+    <select id="listResidualWorkspaceIds" resultType="long">
+        SELECT DISTINCT x.tenant_id FROM (
+            SELECT b.tenant_id AS tenant_id FROM external_project_binding b
+            INNER JOIN `org` o ON o.id = b.tenant_id AND o.is_deleted = 1
+            WHERE b.enabled = 1 AND b.is_deleted = 0
+            UNION
+            SELECT t.workspace_id AS tenant_id FROM scheduled_task t
+            INNER JOIN `org` o2 ON o2.id = t.workspace_id AND o2.is_deleted = 1
+            WHERE t.status = 'ACTIVE' AND t.is_deleted = 0
+            UNION
+            SELECT d.tenant_id AS tenant_id FROM dispatch d
+            INNER JOIN `org` o3 ON o3.id = d.tenant_id AND o3.is_deleted = 1
+            WHERE d.is_deleted = 0
+              AND d.status IN
+              <foreach collection="dispatchStatuses" item="s" open="(" separator="," close=")">#{s}</foreach>
+        ) x
+        ORDER BY x.tenant_id
+        LIMIT #{limit}
+    </select>
+</mapper>

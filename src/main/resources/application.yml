@@ -1,0 +1,219 @@
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  mvc:
+    async:
+      request-timeout: 180000
+  datasource:
+    hikari:
+      maximum-pool-size: ${AW_DB_POOL_MAX:50}
+      minimum-idle: ${AW_DB_POOL_MIN_IDLE:5}
+      connection-timeout: ${AW_DB_POOL_WAIT_MS:3000}
+      idle-timeout: 600000
+  redis-meta:
+    poolMaxTotal: ${AW_REDIS_POOL_MAX:${REDIS_POOL_MAX_TOTAL:200}}
+    poolMaxIdle: ${AW_REDIS_POOL_MAX_IDLE:100}
+    poolMinIdle: ${AW_REDIS_POOL_MIN_IDLE:8}
+    poolMaxWaitMs: ${AW_REDIS_POOL_WAIT_MS:${REDIS_POOL_MAX_WAIT_MS:1000}}
+
+mybatis:
+  mapper-locations: classpath:mapping/*Dao.xml
+  type-aliases-package: com.aliyun.autowonder.dao
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  config: classpath:log4j2.xml
+
+server:
+  tomcat:
+    threads:
+      min-spare: ${AW_HTTP_THREADS_MIN:10}
+      max: ${AW_HTTP_THREADS_MAX:400}
+      stuck-detected:
+        threshold: 100
+        interruptThreadThreshold: 110
+    # Shared by all profiles: leave headroom above 5000 established connections.
+    # accept-count is the OS accept backlog, not the worker task queue.
+    accept-count: ${AW_HTTP_ACCEPT_COUNT:1000}
+    max-connections: ${AW_HTTP_MAX_CONNECTIONS:8192}
+    connection-timeout: ${AW_HTTP_CONNECTION_TIMEOUT:20s}
+    keep-alive-timeout: ${AW_HTTP_KEEP_ALIVE_TIMEOUT:30s}
+    max-keep-alive-requests: ${AW_HTTP_MAX_KEEP_ALIVE_REQUESTS:1000}
+
+oss:
+  enabled: ${OSS_ENABLED:true}
+  endpoint: ${OSS_ENDPOINT:}
+  public-endpoint: ${OSS_PUBLIC_ENDPOINT:}
+  bucket: ${OSS_BUCKET:}
+  access-key-id: ${OSS_ACCESS_KEY_ID:}
+  access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+  task-pkg-bucket: ${OSS_TASK_PKG_BUCKET:${OSS_BUCKET:}}
+  artifact-bucket: ${OSS_ARTIFACT_BUCKET:${OSS_BUCKET:}}
+  skill-bucket: ${OSS_SKILL_BUCKET:${OSS_BUCKET:}}
+  backup-bucket: ${OSS_BACKUP_BUCKET:}
+
+# S3-compatible object storage (AWS S3, MinIO, etc.). Mutually exclusive with oss.enabled.
+# endpoint is used server-side; public-endpoint signs download URLs handed to clients.
+s3:
+  enabled: ${S3_ENABLED:false}
+  endpoint: ${S3_ENDPOINT:}
+  public-endpoint: ${S3_PUBLIC_ENDPOINT:}
+  region: ${S3_REGION:us-east-1}
+  access-key-id: ${S3_ACCESS_KEY_ID:}
+  access-key-secret: ${S3_ACCESS_KEY_SECRET:}
+  force-path-style: true
+  # Bucket names are configured under oss.* (shared across backends), not here.
+
+autowonder:
+  version: ${AUTOWONDER_VERSION:x.x.x}
+  public-base-url: ${AUTOWONDER_PUBLIC_BASE_URL:http://localhost:7001}
+  # 社区版本：为 true 时前端隐藏新建 MCP 令牌入口中的「更多客户端接入」。
+  # 支持环境变量 AUTOWONDER_COMMUNITY_EDITION 覆盖。
+  community-edition: ${AUTOWONDER_COMMUNITY_EDITION:true}
+  telemetry:
+    # Additional metric/business export switch; AUTOWONDER_SLS_ENABLED still gates all SLS.
+    sls-enabled: ${AUTOWONDER_TELEMETRY_SLS_ENABLED:true}
+  conversation:
+    events:
+      retention-days: ${AUTOWONDER_CONVERSATION_EVENTS_RETENTION_DAYS:30}
+    event-display:
+      enabled: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_ENABLED:true}
+      admission-enabled: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_ADMISSION_ENABLED:true}
+      write-deadline-ms: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_WRITE_DEADLINE_MS:20000}
+      release-grace-ms: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_RELEASE_GRACE_MS:5000}
+      realtime-batch: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_REALTIME_BATCH:20}
+      history-batch: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_HISTORY_BATCH:20}
+      history-scan-rows: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_HISTORY_SCAN_ROWS:200}
+      history-time-budget-ms: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_HISTORY_TIME_BUDGET_MS:300}
+      cleanup-batch: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_CLEANUP_BATCH:500}
+      realtime-delay-ms: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_REALTIME_DELAY_MS:10}
+      history-delay-ms: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_HISTORY_DELAY_MS:2000}
+      cleanup-delay-ms: ${AUTOWONDER_CONVERSATION_EVENT_DISPLAY_CLEANUP_DELAY_MS:3600000}
+    queue-recovery:
+      fixed-delay-ms: ${AUTOWONDER_CONVERSATION_QUEUE_RECOVERY_FIXED_DELAY_MS:10000}
+    im-delivery:
+      fixed-delay-ms: ${AUTOWONDER_CONVERSATION_IM_DELIVERY_FIXED_DELAY_MS:5000}
+    elicitation:
+      timeout-minutes: ${AUTOWONDER_CONVERSATION_ELICITATION_TIMEOUT_MINUTES:30}
+      delivery-timeout-seconds: ${AUTOWONDER_CONVERSATION_ELICITATION_DELIVERY_TIMEOUT_SECONDS:300}
+      delivery-sweep-ms: ${AUTOWONDER_CONVERSATION_ELICITATION_DELIVERY_SWEEP_MS:1000}
+  browser-realtime:
+    send-timeout-ms: ${AUTOWONDER_BROWSER_REALTIME_SEND_TIMEOUT_MS:5000}
+  workspace-governance:
+    batch-size: ${AUTOWONDER_WORKSPACE_GOVERNANCE_BATCH_SIZE:100}
+    fixed-delay-ms: ${AUTOWONDER_WORKSPACE_GOVERNANCE_FIXED_DELAY_MS:3600000}
+  squad:
+    workflow:
+      cancel-interval-ms: ${AUTOWONDER_SQUAD_WORKFLOW_CANCEL_INTERVAL_MS:30000}
+      recovery-interval-ms: ${AUTOWONDER_SQUAD_WORKFLOW_RECOVERY_INTERVAL_MS:30000}
+      cleanup-interval-ms: ${AUTOWONDER_SQUAD_WORKFLOW_CLEANUP_INTERVAL_MS:3600000}
+      max-active-generations: ${AUTOWONDER_SQUAD_WORKFLOW_MAX_ACTIVE_GENERATIONS:2}
+      deadline-seconds: ${AUTOWONDER_SQUAD_WORKFLOW_DEADLINE_SECONDS:1200}
+      retention-failed-days: ${AUTOWONDER_SQUAD_WORKFLOW_RETENTION_FAILED_DAYS:7}
+      retention-success-days: ${AUTOWONDER_SQUAD_WORKFLOW_RETENTION_SUCCESS_DAYS:30}
+      max-input-bytes: ${AUTOWONDER_SQUAD_WORKFLOW_MAX_INPUT_BYTES:2097152}
+  runtime:
+    recommended-version: ${AUTOWONDER_RUNTIME_RECOMMENDED_VERSION:0.3.48}
+    # 全局自动升级开关：开启后服务端发现执行器版本落后就自动下发升级指令。默认开启；
+    # 关闭请改这里（或设同名环境变量）后重启服务端，手动与批量升级不受它影响。
+    executor-auto-update-enabled: ${AUTOWONDER_RUNTIME_EXECUTOR_AUTO_UPDATE_ENABLED:true}
+  frontend-project:
+    probe:
+      fixed-delay-ms: ${AUTOWONDER_FRONTEND_PROJECT_PROBE_FIXED_DELAY_MS:5000}
+      sweep-delay-ms: ${AUTOWONDER_FRONTEND_PROJECT_PROBE_SWEEP_DELAY_MS:60000}
+  workitem:
+    duplicate-intent:
+      scan-ms: ${AUTOWONDER_WORKITEM_DUPLICATE_INTENT_SCAN_MS:5000}
+      expire-ms: ${AUTOWONDER_WORKITEM_DUPLICATE_INTENT_EXPIRE_MS:5000}
+      cleanup-ms: ${AUTOWONDER_WORKITEM_DUPLICATE_INTENT_CLEANUP_MS:3600000}
+      max-prompt-bytes: ${AUTOWONDER_WORKITEM_DUPLICATE_INTENT_MAX_PROMPT_BYTES:65536}
+  # Public OIDC/SAML federation. Connections remain disabled until an administrator configures them.
+  federation:
+    sp-entity-id: ${AUTOWONDER_FEDERATION_SP_ENTITY_ID:autowonder}
+    login-state-ttl-seconds: ${AUTOWONDER_FEDERATION_LOGIN_STATE_TTL_SECONDS:600}
+    ticket-ttl-seconds: ${AUTOWONDER_FEDERATION_TICKET_TTL_SECONDS:300}
+    clock-skew-seconds: ${AUTOWONDER_FEDERATION_CLOCK_SKEW_SECONDS:120}
+    jwks-cache-ttl-seconds: ${AUTOWONDER_FEDERATION_JWKS_CACHE_TTL_SECONDS:3600}
+    http-timeout-seconds: ${AUTOWONDER_FEDERATION_HTTP_TIMEOUT_SECONDS:15}
+  provider-model-catalog:
+    refresh-fixed-delay-ms: 86400000
+    refresh-lock-ttl-ms: 120000
+    request-timeout-seconds: 20
+    ticket-ttl-seconds: 30
+    max-candidates: 3
+    failure-cooldown-seconds: 300
+    worker-queue-capacity: 8
+  executor-update:
+    scan-fixed-delay-ms: ${AUTOWONDER_EXECUTOR_UPDATE_SCAN_FIXED_DELAY_MS:60000}
+  debug-log:
+    reconciliation:
+      fixed-delay-ms: ${AUTOWONDER_DEBUG_LOG_RECONCILIATION_FIXED_DELAY_MS:3600000}
+  dispatch:
+    recovery:
+      package-retries: ${AUTOWONDER_DISPATCH_RECOVERY_PACKAGE_RETRIES:3}
+      retry-delay-ms: ${AUTOWONDER_DISPATCH_RECOVERY_RETRY_DELAY_MS:30000}
+  im:
+    notification:
+      dlq-stream-key: ${AUTOWONDER_IM_NOTIFICATION_DLQ_STREAM_KEY:autowonder:im-notification:dlq}
+      dlq-max-length: ${AUTOWONDER_IM_NOTIFICATION_DLQ_MAX_LENGTH:10000}
+      max-backoff-ms: ${AUTOWONDER_IM_NOTIFICATION_MAX_BACKOFF_MS:30000}
+  scheduled-task:
+    # Enabled by default: a fresh community install imports the complete
+    # docs/autowonder-schema.sql, so the module is ready immediately. When
+    # upgrading an existing multi-node deployment, set all three to false until
+    # every node runs the new schema — see docs/scheduled-task-operations.md.
+    enabled: ${AUTOWONDER_SCHEDULED_TASK_ENABLED:true}
+    scanner-enabled: ${AUTOWONDER_SCHEDULED_TASK_SCANNER_ENABLED:true}
+    cluster-ready-attestation: ${AUTOWONDER_SCHEDULED_TASK_CLUSTER_READY:true}
+    scan-fixed-delay-ms: ${AUTOWONDER_SCHEDULED_TASK_SCAN_FIXED_DELAY_MS:10000}
+    scan-batch-size: ${AUTOWONDER_SCHEDULED_TASK_SCAN_BATCH_SIZE:100}
+    lock-ttl-seconds: ${AUTOWONDER_SCHEDULED_TASK_LOCK_TTL_SECONDS:30}
+  security:
+    secret-crypto:
+      master-key: ${AUTOWONDER_SECRET_MASTER_KEY:}
+  jwt:
+    secret: ${AUTOWONDER_JWT_SECRET:}
+    access-ttl-seconds: 7200
+    refresh-ttl-seconds: 31536000
+  sls:
+    enabled: ${AUTOWONDER_SLS_ENABLED:false}
+    endpoint: ${SLS_ENDPOINT:}
+    project: ${SLS_PROJECT:}
+    sys-log-store: ${SLS_SYS_LOGSTORE:}
+    biz-log-store: ${SLS_BIZ_LOGSTORE:}
+    metric-log-store: ${SLS_METRIC_LOGSTORE:}
+    access-key-id: ${SLS_ACCESS_KEY_ID:}
+    access-key-secret: ${SLS_ACCESS_KEY_SECRET:}
+    topic: ${SLS_TOPIC:}
+    source: ${SLS_SOURCE:}
+  integration:
+    aone:
+      enabled: ${AUTOWONDER_AONE_ENABLED:false}
+      web-base-url: ${AUTOWONDER_AONE_WEB_BASE_URL:}
+  metrics:
+    sigar:
+      enabled: ${AUTOWONDER_SIGAR_ENABLED:true}
+  insights:
+    human-agent:
+      timezone: Asia/Shanghai
+      cron: "0 0 3 * * *"
+      cache-ttl-seconds: 97200
+      lock-ttl-millis: 3600000
+      refresh-core-pool-size: 1
+      refresh-max-pool-size: 2
+      refresh-queue-capacity: 20
+      tail-cache-ttl-seconds: ${AUTOWONDER_INSIGHTS_HUMAN_AGENT_TAIL_CACHE_TTL_SECONDS:60}
+
+feishu:
+  inbox:
+    poll-ms: ${FEISHU_INBOX_POLL_MS:3000}
+    initial-delay-ms: ${FEISHU_INBOX_INITIAL_DELAY_MS:15000}
+
+memory:
+  document-store:
+    enabled: ${AUTOWONDER_MEMORY_DOCUMENT_STORE_ENABLED:true}
+
+dashboard:
+  pipeline-health:
+    avg-source: ${DASHBOARD_PIPELINE_HEALTH_AVG_SOURCE:FACT}

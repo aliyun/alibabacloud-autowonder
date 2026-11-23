@@ -1,0 +1,200 @@
+package com.aliyun.autowonder.workitem;
+
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+
+@Mapper
+public interface WorkitemDao {
+    List<WorkitemDO> listByIds(@Param("tenantId") Long tenantId, @Param("ids") Collection<Long> ids);
+    List<Long> listPendingHumanRequestWorkitemIds(@Param("tenantId") Long tenantId, @Param("ids") Collection<Long> ids);
+    List<Long> listHumanRequestActors(@Param("tenantId") Long tenantId, @Param("workitemId") Long workitemId);
+    void insert(WorkitemDO w);
+    WorkitemDO findById(@Param("id") Long id);
+    /**
+     * 跨项目归属解析专用：只回传 tenant_id，并已在
+     * {@code TenantInterceptor.CROSS_TENANT_STATEMENTS} 显式登记、不做租户改写。
+     */
+    Long findTenantIdById(@Param("id") Long id);
+    WorkitemDO findByIdForUpdate(@Param("id") Long id, @Param("tenantId") Long tenantId);
+    List<WorkitemDO> listByOrigin(@Param("tenantId") Long tenantId,
+                                  @Param("originType") String originType,
+                                  @Param("originId") Long originId);
+    List<WorkitemDO> list(@Param("tenantId") Long tenantId,
+            @Param("workType") String workType,
+            @Param("statusNodeId") Long statusNodeId,
+            @Param("statusCategory") String statusCategory,
+            @Param("assigneeType") String assigneeType,
+            @Param("assigneeRef") Long assigneeRef,
+            @Param("pendingDecisionOnly") boolean pendingDecisionOnly,
+            @Param("mineScope") String mineScope,
+            @Param("currentUserId") Long currentUserId,
+            @Param("keyword") String keyword, @Param("keywordId") Long keywordId,
+            @Param("tag") String tag,
+            @Param("scheduledStart") String scheduledStart,
+            @Param("createdFrom") Date createdFrom, @Param("createdTo") Date createdTo,
+            @Param("creatorIds") List<Long> creatorIds,
+            @Param("tagConditions") List<WorkitemTagCondition> tagConditions,
+            @Param("squadIds") List<Long> squadIds,
+            @Param("unassignedSquad") boolean unassignedSquad,
+            @Param("offset") int offset, @Param("limit") int limit);
+    long count(@Param("tenantId") Long tenantId,
+            @Param("workType") String workType,
+            @Param("statusNodeId") Long statusNodeId,
+            @Param("statusCategory") String statusCategory,
+            @Param("assigneeType") String assigneeType,
+            @Param("assigneeRef") Long assigneeRef,
+            @Param("pendingDecisionOnly") boolean pendingDecisionOnly,
+            @Param("mineScope") String mineScope,
+            @Param("currentUserId") Long currentUserId,
+            @Param("keyword") String keyword, @Param("keywordId") Long keywordId,
+            @Param("tag") String tag,
+            @Param("scheduledStart") String scheduledStart,
+            @Param("createdFrom") Date createdFrom, @Param("createdTo") Date createdTo,
+            @Param("creatorIds") List<Long> creatorIds,
+            @Param("tagConditions") List<WorkitemTagCondition> tagConditions,
+            @Param("squadIds") List<Long> squadIds,
+            @Param("unassignedSquad") boolean unassignedSquad);
+
+    /**
+     * 工作台扩展查询：在原列表条件上追加多分类、多关系并集与最近更新排序。
+     * 三个新参数缺省时与原查询等价；列表与计数必须使用同一组条件。
+     */
+    List<WorkitemDO> listExtended(@Param("tenantId") Long tenantId,
+            @Param("workType") String workType,
+            @Param("statusNodeId") Long statusNodeId,
+            @Param("statusCategory") String statusCategory,
+            @Param("statusCategories") List<String> statusCategories,
+            @Param("assigneeType") String assigneeType,
+            @Param("assigneeRef") Long assigneeRef,
+            @Param("pendingDecisionOnly") boolean pendingDecisionOnly,
+            @Param("mineScope") String mineScope,
+            @Param("mineScopes") List<String> mineScopes,
+            @Param("currentUserId") Long currentUserId,
+            @Param("keyword") String keyword, @Param("keywordId") Long keywordId,
+            @Param("tag") String tag,
+            @Param("scheduledStart") String scheduledStart,
+            @Param("createdFrom") Date createdFrom, @Param("createdTo") Date createdTo,
+            @Param("creatorIds") List<Long> creatorIds,
+            @Param("tagConditions") List<WorkitemTagCondition> tagConditions,
+            @Param("squadIds") List<Long> squadIds,
+            @Param("unassignedSquad") boolean unassignedSquad,
+            @Param("sortBy") String sortBy,
+            @Param("offset") int offset, @Param("limit") int limit);
+
+    long countExtended(@Param("tenantId") Long tenantId,
+            @Param("workType") String workType,
+            @Param("statusNodeId") Long statusNodeId,
+            @Param("statusCategory") String statusCategory,
+            @Param("statusCategories") List<String> statusCategories,
+            @Param("assigneeType") String assigneeType,
+            @Param("assigneeRef") Long assigneeRef,
+            @Param("pendingDecisionOnly") boolean pendingDecisionOnly,
+            @Param("mineScope") String mineScope,
+            @Param("mineScopes") List<String> mineScopes,
+            @Param("currentUserId") Long currentUserId,
+            @Param("keyword") String keyword, @Param("keywordId") Long keywordId,
+            @Param("tag") String tag,
+            @Param("scheduledStart") String scheduledStart,
+            @Param("createdFrom") Date createdFrom, @Param("createdTo") Date createdTo,
+            @Param("creatorIds") List<Long> creatorIds,
+            @Param("tagConditions") List<WorkitemTagCondition> tagConditions,
+            @Param("squadIds") List<Long> squadIds,
+            @Param("unassignedSquad") boolean unassignedSquad,
+            @Param("sortBy") String sortBy);
+    int updateContent(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("title") String title, @Param("contentMd") String contentMd,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int updateExternalContent(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("title") String title, @Param("contentMd") String contentMd,
+            @Param("priority") Integer priority,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int softDelete(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    WorkitemDO findByIdIncludingDeleted(@Param("id") Long id);
+    List<WorkitemDO> listRecycled(@Param("tenantId") Long tenantId,
+            @Param("workType") String workType,
+            @Param("assigneeType") String assigneeType,
+            @Param("assigneeRef") Long assigneeRef,
+            @Param("keyword") String keyword, @Param("keywordId") Long keywordId,
+            @Param("offset") int offset, @Param("limit") int limit);
+    long countRecycled(@Param("tenantId") Long tenantId,
+            @Param("workType") String workType,
+            @Param("assigneeType") String assigneeType,
+            @Param("assigneeRef") Long assigneeRef,
+            @Param("keyword") String keyword, @Param("keywordId") Long keywordId);
+    int restore(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int updateStatus(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("statusNodeId") Long statusNodeId,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int updateTemplateAndStatus(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("templateId") Long templateId, @Param("statusNodeId") Long statusNodeId,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int updateAssignee(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("assigneeType") String assigneeType, @Param("assigneeRef") Long assigneeRef,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int updateAssignOperator(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("assignOperatorId") Long assignOperatorId,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int countBySdlcId(@Param("sdlcId") Long sdlcId);
+    List<Long> listIdsBySdlcId(@Param("sdlcId") Long sdlcId, @Param("limit") int limit);
+
+    int countActiveByAssignee(@Param("assigneeType") String assigneeType,
+                              @Param("assigneeRef") Long assigneeRef);
+    int updateCurrentStep(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("currentStepId") Long currentStepId,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int updateSdlcAndStep(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("sdlcId") Long sdlcId, @Param("currentStepId") Long currentStepId,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+
+    /** Due agent-assigned workitems whose scheduled_start_at has arrived, oldest first. */
+    List<WorkitemDO> findScheduledDue(@Param("now") Date now, @Param("limit") int limit);
+    /** CAS-clear a due scheduled_start_at; rows already cleared or updated return 0. */
+    int clearScheduledStartAt(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("version") Integer version);
+    /** CAS-clear a scheduled_start_at that actually fired, stamping scheduled_start_triggered_at. */
+    int fireScheduledStartAt(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("version") Integer version);
+    int updateScheduledStartAt(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("scheduledStartAt") Date scheduledStartAt,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+    int updateTags(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("tags") String tagsJson,
+            @Param("version") Integer version, @Param("modifierId") Long modifierId);
+
+    /** 未删除工单使用过的标签，按使用次数降序、名称升序，最多 limit 个。 */
+    List<String> listTagOptions(@Param("tenantId") Long tenantId, @Param("limit") int limit);
+
+    /** 按分享令牌取工单（令牌全局唯一；软删工单不可见，对外链接随之失效）。 */
+    WorkitemDO findByExternalShareToken(@Param("externalShareToken") String externalShareToken);
+
+    /** 仅当令牌为空时写入（并发首写竞败方返回 0 行，需回读取胜者令牌）。 */
+    int updateExternalShareTokenIfAbsent(@Param("id") Long id, @Param("tenantId") Long tenantId,
+            @Param("externalShareToken") String externalShareToken);
+
+    /**
+     * 同名检测的候选预筛：用标题包含匹配取超集，避免数据库比较器的大小写/重音不敏感
+     * 以及 SQL TRIM 与 Java 空白口径的差异造成漏检；精确比较由
+     * {@code WorkitemDuplicateService} 在内存中完成。
+     */
+    List<WorkitemDO> listByExactTitleCandidate(@Param("tenantId") long tenantId,
+            @Param("title") String title, @Param("excludeId") Long excludeId,
+            @Param("limit") int limit);
+
+    /**
+     * 同意图检测的唯一候选读取：一次 SQL 只投影 id/title，按 id 升序流式消费。
+     * 不分页、不截断；调用方在同一结果集内累加有界大小，超限立即停止消费。
+     */
+    void streamIntentCandidates(@Param("tenantId") long tenantId, @Param("since") Date since,
+            @Param("through") Date through, @Param("excludeId") Long excludeId,
+            org.apache.ibatis.session.ResultHandler<WorkitemDO> handler);
+
+    /** 展示/通知用的轻量投影：不含正文、评论或附件。 */
+    List<WorkitemDO> listSummaryByIds(@Param("tenantId") Long tenantId,
+            @Param("ids") Collection<Long> ids);
+}
