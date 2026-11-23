@@ -1,0 +1,85 @@
+# Community Documentation Policy
+
+## Purpose
+
+Keep only documentation required to deploy, operate, verify, synchronize, or
+extend the community edition. Product-development working notes belong in Git
+history, not in the published community tree.
+
+## Retained Documents
+
+- `docs/autowonder-schema.sql`: complete schema for a fresh installation.
+- `docs/migration/`: immutable, versioned SQL for incremental upgrades.
+- `docs/autowonder-community-templates.sql`: idempotent system squad-template seed.
+- `docs/THIRD-PARTY-NOTICES.md`: required third-party notices.
+- `docs/openapi-reference.md`: public server API reference.
+- `docs/scheduler-executor-protocol.md`: server/client runtime protocol.
+- `docs/runtime-usage.md`: client runtime command reference and operator QA.
+- `docs/scheduled-task-operations.md`: staged rollout runbook for scheduled tasks.
+- `docs/mcp-memory-management.md`: MCP memory tools.
+- `docs/mcp-skill-package-upload.md`: MCP Skill package tools.
+- `docs/autowonder-s3-storage.md`: optional standard S3 backend configuration.
+- `docs/checklist-applicability.md`: conditional checklist execution contract.
+- `docs/context-material-contract.md`: runtime context material contract.
+- `docs/dispatch-runtime-authoritative-recovery.md`: dispatch recovery rollout.
+- `docs/executor-restart-controls.md`: executor restart operations.
+- `docs/dispatch-workflow-rounds.md`: frozen workflow rounds, explicit restart and external-operation receipts.
+- `docs/server-capacity-baseline.md`: connection and concurrency configuration, monitoring and rollback.
+- `docs/feishu-channel.md`: optional public Feishu integration.
+- `docs/legacy-checkpoint-compatibility.md`: checkpoint recovery compatibility.
+- `docs/mcp/runtime-trace.md`: runtime trace API operations.
+- `docs/memory-audit-cleanup.md`: memory maintenance operations.
+- `docs/platform-im-notifications.md`: notification operations.
+- `docs/platform-intelligence.md`: platform intelligence configuration.
+- `docs/project-backup.md`: project configuration backup contract.
+- `docs/community/environment-variable-operations.md`: encrypted environment variables and upgrade safeguards.
+- `docs/community/runtime-configuration.md`: optional runtime tuning and deployment configuration bindings.
+- `docs/community/README.md`: community runtime entry point.
+- `docs/community/application.env.example`: runtime configuration inventory.
+- `docs/community/docker-compose.dependencies.yml`: local dependencies.
+- `docs/community/verification.md`: release verification gates.
+- `docs/community/upstream-sync-guide.md`: master-to-community sync rules.
+- `docs/community/sync-quality-contract.md`: portable sync acceptance and evidence contract.
+- `docs/community/upstream-sync-log.md`: verified upstream baselines and history.
+- `docs/community/docs-policy.md`: this retention policy.
+- `docs/community/squad-template-seed.md`: template data and deployment contract.
+
+All published product Skills are managed under the root `skills/` directory
+(e.g. deploying, upgrading, execution optimizer). The `skills/` directory and
+the root `.agents/` directory are both part of the community distribution and
+synced to the external GitHub repository.
+
+- `docs/executor-client-kind-recovery.md`: recovery of historical executor client configuration.
+
+## Excluded Documents
+
+Do not publish these categories in `community`:
+
+- Superpowers specs, implementation plans, and other development working notes;
+- completed fix reports, rehearsals, execution journals, and temporary runbooks;
+- stale PRDs, gap analyses, backlogs, and internal deployment instructions;
+- documents containing internal endpoints, credentials, environment identities,
+  or obsolete KeyCenter/Akless instructions.
+
+Database migrations are retained only under `docs/migration/` and must follow
+its immutable naming and execution contract. Temporary migration notes, database
+dumps, rollback experiments, and environment-specific SQL remain excluded.
+
+## Upstream Sync Rule
+
+When merging `origin/master`, apply
+[upstream-sync-guide.md](upstream-sync-guide.md) first, then apply this policy to
+new or changed documentation. Keep master product behavior, but do not restore
+excluded documentation merely because it exists on master.
+
+Any proposed exception must be necessary for community deployment, operations,
+verification, synchronization, or supported extension, and must not expose
+Alibaba-internal implementation details.
+
+## Operational additions retained in 1.0.0
+
+- `docs/dispatch-requests.md`: durable dispatch interaction operation.
+- `docs/executor-model-upgrade-policy.md`: executor model and upgrade behavior.
+- `docs/operations/artifact-upload-diagnostics.md`: safe upload troubleshooting.
+- `docs/personal-mcp-memory.md`: supported personal MCP memory usage.
+- `docs/sdlc_step_timing.md`: delivery timing interpretation and API contract.

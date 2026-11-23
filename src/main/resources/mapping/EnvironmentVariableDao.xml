@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aliyun.autowonder.environment.EnvironmentVariableDao">
+    <insert id="insert" parameterType="com.aliyun.autowonder.environment.EnvironmentVariableDO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO environment_variable
+            (tenant_id, name, credential_ref, description, description_label_key, creator_id, modifier_id, is_deleted, version)
+        VALUES
+            (#{tenantId}, #{name}, #{credentialRef}, #{description}, #{descriptionLabelKey}, #{creatorId}, #{modifierId}, 0, 0)
+    </insert>
+
+    <!-- Mount counters and listActiveReferences share one boundary: only an Agent's current online
+         version or current editing draft counts, soft-deleted Agents/versions are ignored, and each
+         Agent is counted once even when several of its versions mount the same variable. -->
+    <sql id="mountCountAggregate">
+        SELECT ref.environment_variable_id AS vid,
+               COUNT(DISTINCT CASE WHEN a.online_version_id = av.id THEN a.id END) AS online_agent_count,
+               COUNT(DISTINCT CASE WHEN a.editing_version_id = av.id
+                                    AND (a.online_version_id IS NULL OR a.online_version_id &lt;&gt; av.id)
+                                   THEN a.id END) AS draft_agent_count
+        FROM agent_environment_variable_ref ref
+        JOIN agent_version av ON av.id = ref.agent_version_id
+                             AND av.tenant_id = ref.tenant_id AND av.is_deleted = 0
+        JOIN agent a ON a.id = av.agent_id
+                    AND a.tenant_id = ref.tenant_id AND a.is_deleted = 0
+        WHERE ref.tenant_id = #{tenantId}
+          AND (a.online_version_id = av.id OR a.editing_version_id = av.id)
+        GROUP BY ref.environment_variable_id
+    </sql>
+
+    <select id="listActive" resultType="com.aliyun.autowonder.environment.EnvironmentVariableDO">
+        SELECT ev.id, ev.tenant_id, ev.name, ev.description, ev.description_label_key, ev.gmt_create, ev.gmt_modified,
+               ev.creator_id, ev.modifier_id, ev.is_deleted, ev.version,
+               COALESCE(m.online_agent_count, 0) AS onlineMountCount,
+               COALESCE(m.draft_agent_count, 0) AS draftMountCount
+        FROM environment_variable ev
+        LEFT JOIN (<include refid="mountCountAggregate"/>) m ON m.vid = ev.id
+        WHERE ev.tenant_id = #{tenantId} AND ev.is_deleted = 0
+        ORDER BY ev.name, ev.id
+    </select>
+
+    <select id="countMounts" resultType="com.aliyun.autowonder.environment.EnvironmentVariableDO">
+        SELECT COALESCE(m.online_agent_count, 0) AS onlineMountCount,
+               COALESCE(m.draft_agent_count, 0) AS draftMountCount
+        FROM environment_variable ev
+        LEFT JOIN (<include refid="mountCountAggregate"/>) m ON m.vid = ev.id
+        WHERE ev.tenant_id = #{tenantId} AND ev.id = #{id} AND ev.is_deleted = 0
+    </select>
+
+    <select id="findActiveById" resultType="com.aliyun.autowonder.environment.EnvironmentVariableDO">
+        SELECT id, tenant_id, name, credential_ref, description, description_label_key, gmt_create, gmt_modified,
+               creator_id, modifier_id, is_deleted, version
+        FROM environment_variable
+        WHERE tenant_id = #{tenantId} AND id = #{id} AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="findActiveByIdForUpdate" resultType="com.aliyun.autowonder.environment.EnvironmentVariableDO">
+        SELECT id, tenant_id, name, credential_ref, description, description_label_key, gmt_create, gmt_modified,
+               creator_id, modifier_id, is_deleted, version
+        FROM environment_variable
+        WHERE tenant_id = #{tenantId} AND id = #{id} AND is_deleted = 0
+        LIMIT 1 FOR UPDATE
+    </select>
+
+    <select id="findActiveByNameIgnoreCase" resultType="com.aliyun.autowonder.environment.EnvironmentVariableDO">
+        SELECT id, tenant_id, name, description, gmt_create, gmt_modified,
+               creator_id, modifier_id, is_deleted, version
+        FROM environment_variable
+        WHERE tenant_id = #{tenantId} AND LOWER(name) = LOWER(#{name}) AND is_deleted = 0
+        LIMIT 1
+    </select>
+
+    <update id="updateMetadata">
+        UPDATE environment_variable
+        SET name = #{name}, description = #{description}, modifier_id = #{modifierId},
+            version = version + 1
+        WHERE tenant_id = #{tenantId} AND id = #{id} AND is_deleted = 0 AND version = #{version}
+    </update>
+
+    <update id="updateWithValue">
+        UPDATE environment_variable
+        SET name = #{name}, description = #{description}, credential_ref = #{credentialRef},
+            modifier_id = #{modifierId}, version = version + 1
+        WHERE tenant_id = #{tenantId} AND id = #{id} AND is_deleted = 0 AND version = #{version}
+    </update>
+
+    <update id="updateDescriptionLabelKey">
+        UPDATE environment_variable
+        SET description_label_key = #{descriptionLabelKey}
+        WHERE tenant_id = #{tenantId} AND id = #{id} AND is_deleted = 0
+    </update>
+
+    <update id="softDelete">
+        UPDATE environment_variable
+        SET is_deleted = id, modifier_id = #{modifierId}, version = version + 1
+        WHERE tenant_id = #{tenantId} AND id = #{id} AND is_deleted = 0 AND version = #{version}
+    </update>
+
+    <select id="listActiveReferences"
+            resultType="com.aliyun.autowonder.environment.EnvironmentVariableReference">
+        SELECT a.id AS agentId,
+               a.name AS agentName,
+               av.id AS agentVersionId,
+               av.version_no AS versionNo,
+               CASE WHEN a.online_version_id = av.id THEN 'ONLINE' ELSE 'EDITING' END AS refType
+        FROM agent_environment_variable_ref ref
+        JOIN agent_version av ON av.id = ref.agent_version_id AND av.tenant_id = #{tenantId}
+        JOIN agent a ON a.id = av.agent_id AND a.tenant_id = #{tenantId}
+        WHERE ref.tenant_id = #{tenantId}
+          AND ref.environment_variable_id = #{environmentVariableId}
+          AND a.is_deleted = 0
+          AND av.is_deleted = 0
+          AND (a.online_version_id = av.id OR a.editing_version_id = av.id)
+        ORDER BY a.id, av.version_no
+    </select>
+</mapper>

@@ -1,0 +1,402 @@
+package com.aliyun.autowonder.auth.filter;
+
+import com.aliyun.autowonder.json.JSON;
+import com.aliyun.autowonder.access.WorkspaceAccessLevel;
+import com.aliyun.autowonder.auth.jwt.JwtService;
+import com.aliyun.autowonder.auth.jwt.TokenPayload;
+import com.aliyun.autowonder.auth.session.SessionService;
+import com.aliyun.autowonder.common.error.ErrorCode;
+import com.aliyun.autowonder.common.result.Result;
+import com.aliyun.autowonder.context.AutoWonderContext;
+import com.aliyun.autowonder.email.EmailVerificationPolicyService;
+import com.aliyun.autowonder.email.EmailVerificationTokenService;
+import com.aliyun.autowonder.log.BizLog;
+import com.aliyun.autowonder.workspace.WorkspaceMemberDO;
+import com.aliyun.autowonder.workspace.WorkspaceMemberDao;
+import com.aliyun.autowonder.workspace.WorkspaceDao;
+import com.aliyun.autowonder.user.UserDO;
+import com.aliyun.autowonder.user.UserDao;
+import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.aliyun.autowonder.common.i18n.SystemMessages;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+public class AuthFilter extends OncePerRequestFilter {
+
+    private static final List<String> WHITELIST_EXACTS = List.of("/api/mcp");
+    private static final String DINGTALK_CALLBACK_PATH = "/api/integrations/dingtalk/callback";
+    private static final String INTEGRATION_CAPABILITIES_PATH = "/api/integrations/capabilities";
+    private static final String PLATFORM_BRANDING_PUBLIC_PATH = "/api/platform/branding/public";
+    private static final String PLATFORM_BRANDING_LOGO_PATH = "/api/platform/branding/logo";
+    private static final Pattern WORKSPACE_SWITCH_PATH =
+            Pattern.compile("^/api/workspaces/[0-9]+/switch$");
+    private static final Pattern WORKSPACE_LIFECYCLE_PATH =
+            Pattern.compile("^/api/workspaces/[0-9]+$");
+    private static final Pattern WORKSPACE_RESTORE_PATH =
+            Pattern.compile("^/api/workspaces/[0-9]+/restore$");
+    private static final String WORKSPACE_RECYCLE_BIN_PATH = "/api/workspaces/recycle-bin";
+    // 空间发现列表按调用者可见范围统计，与 token 绑定的当前空间无关；绑定空间已失效时
+    // 仍要能列出全部空间，否则用户无法切换或申请，只能看到 403。
+    private static final String WORKSPACE_ALL_PATH = "/api/workspaces/all";
+    private static final Pattern CLI_WORKITEM_UPLOAD_PATH =
+            Pattern.compile("^/api/cli/workitems/[0-9]+/requirement-documents$");
+    private static final Pattern CLI_SCHEDULED_TASK_UPLOAD_PATH =
+            Pattern.compile("^/api/cli/scheduled-tasks/[0-9]+/documents$");
+    private static final Pattern CLI_WORKITEM_DOWNLOAD_INDEX_PATH =
+            Pattern.compile("^/api/cli/workitems/[0-9]+/requirement-documents/index$");
+    private static final Pattern CLI_WORKITEM_DOWNLOAD_CONTENT_PATH =
+            Pattern.compile("^/api/cli/workitems/[0-9]+/requirement-documents/[0-9]+/content$");
+    // 对外只读分享：仅 GET 且令牌形态匹配（awshare_ + 43 位 base64url）才放行，
+    // 其余 /api/share/** 仍走登录校验；端点自身只返回已显式暴露的产物。
+    private static final Pattern SHARE_WORKITEM_PATH =
+            Pattern.compile("^/api/share/workitems/awshare_[A-Za-z0-9_-]{43}(/(artifacts|requests)/[0-9]+)?$");
+    // path 模式 MCP 入口：/api/mcp/<个人令牌>[/(rpc)[/]]，放行后由 McpController 做令牌鉴权
+    private static final Pattern PERSONAL_MCP_PATH_TOKEN_PATH =
+            Pattern.compile("^/api/mcp/awmcp_[A-Za-z0-9_-]{43}(?:/(?:rpc/?)?)?$");
+    private static final String PERSONAL_MCP_TOKEN_PREFIX = "/api/mcp/tokens";
+    private static final String PERSONAL_USER_API_PREFIX = "/api/users/me/";
+    // 空间级看板按调用者可管理的空间集合统计，与 token 绑定的当前空间无关；当前空间被停用或删除时
+    // 若仍校验，看板会以 ORG_DELETED_OR_DISABLED 拒绝，而它并不依赖该空间。
+    private static final String SPACE_DASHBOARD_PREFIX = "/api/space-dashboard/";
+    private static final Pattern PLATFORM_USER_READ = Pattern.compile(
+            "^/api/platform/users(?:/[0-9]+(?:/(?:workspaces|im-identity))?)?$");
+    private static final Pattern PLATFORM_USER_UPDATE = Pattern.compile(
+            "^/api/platform/users/[0-9]+/(?:profile|workspace-creation-permission|workspaces/[0-9]+|im-identity/[A-Za-z0-9_-]+)$");
+    private static final Pattern PLATFORM_USER_ACTION = Pattern.compile(
+            "^/api/platform/users/[0-9]+/(?:password|delete|restore|registration-review|workspaces|im-identity/[A-Za-z0-9_-]+/test)$");
+    private static final List<String> WHITELIST_PREFIXES = List.of(
+            "/api/auth/", "/api/hello", "/api/daemon/", "/api/mcp/rpc", "/api/mcp/tools");
+
+    private final JwtService jwtService;
+    private final SessionService sessionService;
+    private final WorkspaceMemberDao workspaceMemberDao;
+    private final WorkspaceDao workspaceDao;
+    private final UserDao userDao;
+    /** 邮箱验证门禁与受限凭证；为 null 时保持既有行为（既有调用方与测试）。 */
+    private final EmailVerificationPolicyService emailVerificationPolicyService;
+    private final EmailVerificationTokenService emailVerificationTokenService;
+
+    public AuthFilter(JwtService jwtService, SessionService sessionService,
+                      WorkspaceMemberDao workspaceMemberDao, WorkspaceDao workspaceDao,
+                      UserDao userDao) {
+        this(jwtService, sessionService, workspaceMemberDao, workspaceDao, userDao, null, null);
+    }
+
+    public AuthFilter(JwtService jwtService, SessionService sessionService,
+                      WorkspaceMemberDao workspaceMemberDao, WorkspaceDao workspaceDao,
+                      UserDao userDao,
+                      EmailVerificationPolicyService emailVerificationPolicyService,
+                      EmailVerificationTokenService emailVerificationTokenService) {
+        this.jwtService = jwtService;
+        this.sessionService = sessionService;
+        this.workspaceMemberDao = workspaceMemberDao;
+        this.workspaceDao = workspaceDao;
+        this.userDao = userDao;
+        this.emailVerificationPolicyService = emailVerificationPolicyService;
+        this.emailVerificationTokenService = emailVerificationTokenService;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+                                    FilterChain chain) throws ServletException, IOException {
+        var previousLocaleContext = LocaleContextHolder.getLocaleContext();
+        LocaleContextHolder.setLocale(SystemMessages.resolveAcceptLanguage(request.getHeader("Accept-Language")), false);
+        try {
+            String path = request.getRequestURI();
+            if (isWhitelisted(request)) {
+                chain.doFilter(request, response);
+                return;
+            }
+            String header = request.getHeader("Authorization");
+            if (header == null || !header.startsWith("Bearer ")) {
+                writeUnauthorized(response);
+                return;
+            }
+            String token = header.substring("Bearer ".length()).trim();
+            if (emailVerificationTokenService != null
+                    && token.startsWith(EmailVerificationTokenService.RESTRICTED_PREFIX)) {
+                handleRestrictedToken(request, response, chain, token);
+                return;
+            }
+            TokenPayload payload;
+            try {
+                payload = jwtService.parse(token);
+            } catch (Exception e) {
+                writeUnauthorized(response);
+                return;
+            }
+            if (payload.getJti() != null && sessionService.isBlacklisted(payload.getJti())) {
+                writeUnauthorized(response);
+                return;
+            }
+            // Read the live row on every request: findById filters is_deleted = 0, so a logically
+            // deleted user resolves to null and loses access immediately, without waiting for the
+            // stateless access token to expire.
+            UserDO user = userDao.findById(payload.getUserId());
+            if (user == null) {
+                writeUnauthorized(response);
+                return;
+            }
+            // status=1 is the platform-wide disabled flag; pure SSO accounts have no password
+            // hash at all, so the DEACTIVATED sentinel alone would miss them.
+            if (Integer.valueOf(1).equals(user.getStatus())
+                    && (user.getPasswordHash() == null
+                        || "DEACTIVATED".equals(user.getPasswordHash()))) {
+                writeFailure(response, HttpServletResponse.SC_UNAUTHORIZED,
+                        ErrorCode.DEACTIVATION_ACCOUNT_DISABLED);
+                return;
+            }
+            // 待审核账号即便持有旧令牌也不能调用任何受保护接口。
+            if (Integer.valueOf(2).equals(user.getStatus())) {
+                writeFailure(response, HttpServletResponse.SC_UNAUTHORIZED,
+                        ErrorCode.USER_REGISTRATION_PENDING_REVIEW);
+                return;
+            }
+            // 邮箱验证门禁：已登录会话同样即时受限，不能只依赖前端跳转。
+            if (emailVerificationPolicyService != null
+                    && emailVerificationPolicyService.requiresVerification(user)) {
+                writeFailure(response, HttpServletResponse.SC_FORBIDDEN,
+                        ErrorCode.EMAIL_VERIFICATION_REQUIRED);
+                return;
+            }
+            try {
+                AutoWonderContext ctx = AutoWonderContext.get();
+                ctx.setUserId(payload.getUserId());
+                boolean platformRequest = isPlatformUserRequest(request);
+                boolean personalNotification = isPersonalNotificationRequest(request);
+                ctx.setCurrentWorkspaceId(platformRequest ? null : payload.getCurrentWorkspaceId());
+                BizLog bizLog = ctx.getBizLog();
+                if (bizLog != null) {
+                    bizLog.setUserId(payload.getUserId());
+                    bizLog.setWorkspaceId(ctx.getCurrentWorkspaceId());
+                }
+                ctx.setTraceId(UUID.randomUUID().toString());
+                if (payload.getCurrentWorkspaceId() != null
+                        && !platformRequest
+                        && !isLoginOnlyRequest(request)) {
+                    // Read from the database on every request instead of trusting the token: a workspace
+                    // deleted after the token was issued must stop working immediately, and there is no
+                    // revocation path that reaches already-issued access tokens.
+                    if (workspaceDao.countUsable(payload.getCurrentWorkspaceId()) == 0) {
+                        if (personalNotification) {
+                            clearWorkspaceContext(ctx);
+                        } else {
+                            writeFailure(response, HttpServletResponse.SC_FORBIDDEN,
+                                    ErrorCode.ORG_DELETED_OR_DISABLED);
+                            return;
+                        }
+                    } else {
+                        WorkspaceMemberDO member = workspaceMemberDao.findByWorkspaceAndUser(
+                                payload.getCurrentWorkspaceId(), payload.getUserId());
+                        boolean activeMember = member != null
+                                && Integer.valueOf(0).equals(member.getIsDeleted())
+                                && Integer.valueOf(0).equals(member.getStatus());
+                        if (activeMember) {
+                            try {
+                                ctx.setWorkspaceAccessLevel(WorkspaceAccessLevel.valueOf(member.getAccessLevel()));
+                                ctx.setWorkspaceMember(member);
+                            } catch (IllegalArgumentException | NullPointerException e) {
+                                writeFailure(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                                        ErrorCode.WORKSPACE_ACCESS_LEVEL_INVALID);
+                                return;
+                            }
+                        } else if (isPlatformAdmin(payload.getUserId())) {
+                            // A platform admin does not have to be a member of the workspace: ADMIN is the
+                            // highest WorkspaceAccessLevel, so every @RequireWorkspaceAccess guard passes
+                            // through this single branch. The flag is read from the database on every
+                            // request, so a revoked admin loses cross-workspace access immediately.
+                            ctx.setWorkspaceAccessLevel(WorkspaceAccessLevel.ADMIN);
+                        } else {
+                            if (personalNotification) {
+                                clearWorkspaceContext(ctx);
+                            } else {
+                                writeFailure(response, HttpServletResponse.SC_FORBIDDEN,
+                                        ErrorCode.WORKSPACE_NOT_MEMBER);
+                                return;
+                            }
+                        }
+                    }
+                }
+                chain.doFilter(request, response);
+            } finally {
+                AutoWonderContext.destroy();
+            }
+        } finally {
+            LocaleContextHolder.setLocaleContext(previousLocaleContext, false);
+        }
+    }
+
+    /**
+     * 受限验证凭证：只放行读取本人资料，其他业务接口一律拒绝，
+     * 防止把 15 分钟受限凭证当作普通会话使用。
+     */
+    private void handleRestrictedToken(HttpServletRequest request, HttpServletResponse response,
+                                       FilterChain chain, String token)
+            throws ServletException, IOException {
+        Long userId = emailVerificationTokenService.resolveRestricted(token);
+        if (userId == null) {
+            writeFailure(response, HttpServletResponse.SC_UNAUTHORIZED,
+                    ErrorCode.EMAIL_VERIFICATION_TOKEN_INVALID);
+            return;
+        }
+        if (!isRestrictedAllowed(request)) {
+            writeFailure(response, HttpServletResponse.SC_FORBIDDEN,
+                    ErrorCode.EMAIL_RESTRICTED_CREDENTIAL_REQUIRED);
+            return;
+        }
+        UserDO user = userDao.findById(userId);
+        if (user == null) {
+            writeUnauthorized(response);
+            return;
+        }
+        try {
+            AutoWonderContext ctx = AutoWonderContext.get();
+            ctx.setUserId(userId);
+            ctx.setTraceId(UUID.randomUUID().toString());
+            chain.doFilter(request, response);
+        } finally {
+            AutoWonderContext.destroy();
+        }
+    }
+
+    private boolean isRestrictedAllowed(HttpServletRequest request) {
+        String method = request.getMethod();
+        String path = normalizeTrailingSlash(request.getRequestURI());
+        return "GET".equalsIgnoreCase(method) && "/api/users/me/profile".equals(path);
+    }
+
+    private boolean isPlatformAdmin(Long userId) {
+        UserDO user = userDao.findById(userId);
+        return user != null && Integer.valueOf(1).equals(user.getIsAdmin());
+    }
+
+    private boolean isWhitelisted(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if ("POST".equalsIgnoreCase(request.getMethod())
+                && ("/api/integrations/feishu/callback".equals(path)
+                    || "/api/integrations/feishu/group-callback".equals(path))) {
+            return true;
+        }
+        if (WHITELIST_EXACTS.contains(path) || DINGTALK_CALLBACK_PATH.equals(path)) {
+            return true;
+        }
+        if ("GET".equalsIgnoreCase(request.getMethod())
+                && (PLATFORM_BRANDING_PUBLIC_PATH.equals(path)
+                || PLATFORM_BRANDING_LOGO_PATH.equals(path)
+                || INTEGRATION_CAPABILITIES_PATH.equals(path))) {
+            return true;
+        }
+        if ("POST".equalsIgnoreCase(request.getMethod())
+                && (CLI_WORKITEM_UPLOAD_PATH.matcher(path).matches()
+                    || CLI_SCHEDULED_TASK_UPLOAD_PATH.matcher(path).matches())) {
+            return true;
+        }
+        if ("GET".equalsIgnoreCase(request.getMethod())
+                && (CLI_WORKITEM_DOWNLOAD_INDEX_PATH.matcher(path).matches()
+                    || CLI_WORKITEM_DOWNLOAD_CONTENT_PATH.matcher(path).matches()
+                    || SHARE_WORKITEM_PATH.matcher(path).matches())) {
+            return true;
+        }
+        if (PERSONAL_MCP_PATH_TOKEN_PATH.matcher(path).matches()) {
+            return true;
+        }
+        for (String prefix : WHITELIST_PREFIXES) {
+            if (path.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isLoginOnlyRequest(HttpServletRequest request) {
+        String method = request.getMethod();
+        String path = normalizeTrailingSlash(request.getRequestURI());
+        if (path.startsWith(PERSONAL_MCP_TOKEN_PREFIX)) {
+            return true;
+        }
+        if (path.startsWith(PERSONAL_USER_API_PREFIX)) {
+            return true;
+        }
+        // 空间创建权限申请与能力查询属于平台级能力，不依赖 token 绑定的当前空间。
+        if (path.startsWith("/api/workspaces/creation-requests")) {
+            return true;
+        }
+        if ("GET".equalsIgnoreCase(method) && WORKSPACE_RECYCLE_BIN_PATH.equals(path)) {
+            return true;
+        }
+        if ("GET".equalsIgnoreCase(method) && WORKSPACE_ALL_PATH.equals(path)) {
+            return true;
+        }
+        if ("GET".equalsIgnoreCase(method) && path.startsWith(SPACE_DASHBOARD_PREFIX)) {
+            return true;
+        }
+        if (("PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method))
+                && WORKSPACE_LIFECYCLE_PATH.matcher(path).matches()) {
+            return true;
+        }
+        if ("POST".equalsIgnoreCase(method) && WORKSPACE_RESTORE_PATH.matcher(path).matches()) {
+            return true;
+        }
+        return ("POST".equalsIgnoreCase(method) && "/api/workspaces".equals(path))
+                || ("GET".equalsIgnoreCase(method) && "/api/workspaces/mine".equals(path))
+                || ("POST".equalsIgnoreCase(method) && WORKSPACE_SWITCH_PATH.matcher(path).matches());
+    }
+
+    private boolean isPlatformUserRequest(HttpServletRequest request) {
+        String path = normalizeTrailingSlash(request.getRequestURI());
+        return switch (request.getMethod()) {
+            case "GET" -> PLATFORM_USER_READ.matcher(path).matches();
+            case "PUT" -> PLATFORM_USER_UPDATE.matcher(path).matches();
+            case "POST" -> PLATFORM_USER_ACTION.matcher(path).matches();
+            case "DELETE" -> path.matches("^/api/platform/users/[0-9]+/workspaces/[0-9]+$");
+            default -> false;
+        };
+    }
+
+    /** Only recipient-scoped notification operations; workspace preferences deliberately excluded. */
+    private boolean isPersonalNotificationRequest(HttpServletRequest request) {
+        String path = normalizeTrailingSlash(request.getRequestURI());
+        return switch (request.getMethod()) {
+            case "GET" -> path.equals("/api/notifications") || path.equals("/api/notifications/unread-count")
+                    || path.matches("^/api/notifications/[0-9]+$");
+            case "POST" -> path.equals("/api/notifications/read-all")
+                    || path.matches("^/api/notifications/[0-9]+/read$");
+            case "DELETE" -> path.matches("^/api/notifications/[0-9]+$");
+            default -> false;
+        };
+    }
+
+    private void clearWorkspaceContext(AutoWonderContext ctx) {
+        ctx.setCurrentWorkspaceId(null);
+        ctx.setWorkspaceAccessLevel(null);
+        ctx.setWorkspaceMember(null);
+        if (ctx.getBizLog() != null) ctx.getBizLog().setWorkspaceId(null);
+    }
+
+    private String normalizeTrailingSlash(String path) {
+        return path.length() > 1 && path.endsWith("/")
+                ? path.substring(0, path.length() - 1)
+                : path;
+    }
+
+    private void writeUnauthorized(HttpServletResponse response) throws IOException {
+        writeFailure(response, HttpServletResponse.SC_UNAUTHORIZED, ErrorCode.UNAUTHORIZED);
+    }
+
+    private void writeFailure(HttpServletResponse response, int status, ErrorCode errorCode)
+            throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json;charset=UTF-8");
+        Result<Void> body = Result.fail(errorCode);
+        response.getWriter().write(JSON.toJSONString(body));
+    }
+}

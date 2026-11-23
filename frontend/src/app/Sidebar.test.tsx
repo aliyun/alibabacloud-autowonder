@@ -1,0 +1,392 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { i18n } from '@/shared/i18n';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { http, HttpResponse } from 'msw';
+import { server } from '@/test/mocks/server';
+import { buildMenuItems, NAV_GROUPS, resolveSelectedNavKey, Sidebar } from './Sidebar';
+import type { ItemType, MenuItemGroupType, MenuItemType } from 'antd/es/menu/interface';
+import { scheduledTaskCapabilityQueryKey } from '@/features/scheduledTask/hooks';
+import type { ScheduledTaskCapability } from '@/features/scheduledTask/types';
+
+const readyCapability: ScheduledTaskCapability = {
+  available: true,
+  mode: 'V037_READY',
+  clusterReady: true,
+  reason: null,
+};
+
+afterEach(async () => { cleanup(); await act(async () => { await i18n.changeLanguage('zh-CN'); }); });
+
+it('uses translated menu names without decorative glyph names on a cached sidebar', async () => {
+  render(<TestWrapper><Sidebar /></TestWrapper>);
+  const workitems = screen.getByRole('menuitem', { name: '工单' });
+  expect(screen.queryAllByRole('img')).toHaveLength(0);
+  await act(async () => { await i18n.changeLanguage('en-US'); });
+  expect(screen.getByRole('menuitem', { name: 'Work items' })).toBe(workitems);
+  expect(screen.queryAllByRole('img')).toHaveLength(0);
+});
+
+it('keeps complete English navigation names and the pending review count together', async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData(['agents', 'reviews', 'count'], 125);
+  await act(async () => { await i18n.changeLanguage('en-US'); });
+  render(<TestWrapper queryClient={queryClient}><Sidebar /></TestWrapper>);
+  expect(await screen.findByText('99+')).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Employees 99+' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Project configuration backups' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitem', { name: 'Environment variables' })).toBeInTheDocument();
+});
+
+function TestWrapper({
+  children,
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+}: {
+  children: React.ReactNode;
+  queryClient?: QueryClient;
+}) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/workitems']}>
+        {children}
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+function isGroupItem(item: ItemType | null | undefined): item is MenuItemGroupType<MenuItemType> {
+  return Boolean(item && item.type === 'group' && 'children' in item);
+}
+
+function childKeys(item: ItemType | null | undefined) {
+  return isGroupItem(item) ? (item.children ?? []).map((child) => child?.key) : [];
+}
+
+describe('Sidebar helpers', () => {
+  it('shows 定时任务 between 工单 and 执行记录 under the delivery group', () => {
+    const deliveryGroup = NAV_GROUPS.find((item) => item.key === 'delivery');
+    const workersGroup = NAV_GROUPS.find((item) => item.key === 'workers-group');
+    const scheduledTaskItem = deliveryGroup?.items.find((item) => item.key === '/scheduled-tasks');
+
+    expect(deliveryGroup?.items.map((item) => item.key))
+      .toEqual(['/workbench', '/overview', '/workitems', '/scheduled-tasks', '/executions', '/workitems/recycled']);
+    expect(deliveryGroup?.items[0]?.label).toBe('工作台');
+    expect(scheduledTaskItem?.label).toBe('定时任务');
+    expect(workersGroup?.items.map((item) => item.key)).not.toContain('/scheduled-tasks');
+    expect(resolveSelectedNavKey('/scheduled-tasks')).toBe('/scheduled-tasks');
+    expect(resolveSelectedNavKey('/overview')).toBe('/overview');
+  });
+
+  it('places 回收站 after 执行记录 in the delivery group and selects its route', () => {
+    const deliveryGroup = NAV_GROUPS.find((item) => item.key === 'delivery');
+    const keys = deliveryGroup?.items.map((item) => item.key) ?? [];
+    const recycledItem = deliveryGroup?.items.find((item) => item.key === '/workitems/recycled');
+
+    expect(keys.indexOf('/workitems/recycled')).toBe(keys.indexOf('/executions') + 1);
+    expect(recycledItem?.label).toBe('回收站');
+    expect(resolveSelectedNavKey('/workitems/recycled')).toBe('/workitems/recycled');
+  });
+
+  it('gates the 定时任务 delivery entry behind the scheduled task capability', () => {
+    const unavailableGroup = buildMenuItems(undefined, false, false).find((item) => item?.key === 'delivery');
+    const availableGroup = buildMenuItems(undefined, false, true).find((item) => item?.key === 'delivery');
+
+    expect(childKeys(unavailableGroup)).toEqual(['/workbench', '/workitems', '/executions', '/workitems/recycled']);
+    expect(childKeys(availableGroup))
+      .toEqual(['/workbench', '/workitems', '/scheduled-tasks', '/executions', '/workitems/recycled']);
+  });
+
+  it('preserves every available delivery, insight and learn entry in focused mode', () => {
+    const items = buildMenuItems(undefined, false, true, 'compact');
+
+    expect(items.map((item) => item?.key)).toEqual(['delivery', 'insight-group', 'about-group']);
+    const delivery = items.find((item) => item?.key === 'delivery');
+    expect(childKeys(delivery)).toEqual(['/workbench', '/workitems', '/scheduled-tasks', '/executions', '/workitems/recycled']);
+    expect(childKeys(items.find(item => item?.key === 'insight-group'))).toEqual(['/insights', '/audit-logs']);
+    expect(childKeys(items.find(item => item?.key === 'about-group'))).toEqual(['/about']);
+    expect(buildMenuItems(undefined, false, false, 'full').flatMap(childKeys)).not.toContain('/overview');
+    expect(resolveSelectedNavKey('/overview')).toBe('/overview');
+  });
+
+  it('places insights and audit logs in a dedicated group instead of config', () => {
+    const items = buildMenuItems();
+    const configGroup = items.find((item) => item?.key === 'config-group');
+    const insightGroup = items.find((item) => item?.key === 'insight-group');
+
+    expect(isGroupItem(configGroup)).toBe(true);
+    expect(isGroupItem(insightGroup)).toBe(true);
+    expect(childKeys(configGroup)).not.toContain('/insights');
+    expect(childKeys(configGroup)).not.toContain('/audit-logs');
+    expect(childKeys(insightGroup)).toContain('/insights');
+    expect(childKeys(insightGroup)).toContain('/audit-logs');
+  });
+
+  it('exposes a single member management entry', () => {
+    const items = buildMenuItems();
+    const configGroup = items.find((item) => item?.key === 'config-group');
+
+    expect(childKeys(configGroup)).toContain('/settings/members');
+    expect(childKeys(configGroup)).not.toContain('/settings/members-roles');
+    expect(childKeys(configGroup)).not.toContain('/settings/roles');
+    expect(childKeys(configGroup)).not.toContain('/platform/branding');
+    expect(resolveSelectedNavKey('/platform/branding')).toBe('');
+  });
+
+  it('shows environment variables under config and selects its route', () => {
+    const items = buildMenuItems();
+    const configGroup = items.find((item) => item?.key === 'config-group');
+
+    expect(childKeys(configGroup)).toContain('/settings/environment-variables');
+    expect(resolveSelectedNavKey('/settings/environment-variables')).toBe('/settings/environment-variables');
+  });
+
+  it('exposes the about platform page', () => {
+    const items = buildMenuItems();
+    const aboutGroup = items.find((item) => item?.key === 'about-group');
+
+    expect(isGroupItem(aboutGroup)).toBe(true);
+    expect(childKeys(aboutGroup)).toContain('/about');
+    expect(NAV_GROUPS.flatMap((group) => group.items).find((item) => item.key === '/about')?.label).toBe('关于平台');
+    expect(resolveSelectedNavKey('/about')).toBe('/about');
+  });
+
+  it('labels the skills navigation item as capability', () => {
+    const items = buildMenuItems();
+    const knowledgeGroup = items.find((item) => item?.key === 'knowledge-group');
+    const skillsItem = isGroupItem(knowledgeGroup) ? (knowledgeGroup.children ?? []).find((child) => child?.key === '/skills') : undefined;
+
+    expect(skillsItem && 'label' in skillsItem ? skillsItem.label : undefined).toBe('能力');
+    expect(resolveSelectedNavKey('/skills')).toBe('/skills');
+  });
+
+  it('no longer exposes the open platform entry because MCP moved to personal settings', () => {
+    const items = buildMenuItems();
+    const visibleKeys = items.flatMap(childKeys);
+
+    expect(items.find((item) => item?.key === 'open-group')).toBeUndefined();
+    expect(visibleKeys).not.toContain('/open-platform');
+    expect(resolveSelectedNavKey('/open-platform')).toBe('');
+  });
+
+  it('places about directly after insights once the open group is gone', () => {
+    const groupKeys = buildMenuItems().map((item) => item?.key);
+
+    expect(groupKeys).not.toContain('open-group');
+    expect(groupKeys.indexOf('about-group')).toBe(groupKeys.indexOf('insight-group') + 1);
+  });
+
+  it('hides the system settings entry from the menu while keeping its route metadata', () => {
+    const items = buildMenuItems();
+    const configGroup = items.find((item) => item?.key === 'config-group');
+
+    expect(childKeys(configGroup)).not.toContain('/settings');
+    expect(NAV_GROUPS.flatMap((group) => group.items).map((item) => item.key)).toContain('/settings');
+    expect(resolveSelectedNavKey('/settings')).toBe('/settings');
+  });
+
+  it('always exposes every configured visible navigation item', () => {
+    const items = buildMenuItems();
+    const visibleKeys = items.flatMap(childKeys);
+    const configuredVisibleKeys = NAV_GROUPS.flatMap((group) =>
+      group.items.filter((item) => !item.hidden && item.key !== '/scheduled-tasks').map((item) => item.key),
+    );
+
+    expect(visibleKeys).toEqual(configuredVisibleKeys);
+  });
+
+  it('hides the evolution entry from the menu while keeping its route resolvable', () => {
+    const items = buildMenuItems();
+    const insightGroup = items.find((item) => item?.key === 'insight-group');
+
+    expect(items.flatMap(childKeys)).not.toContain('/evolution');
+    expect(childKeys(insightGroup)).toEqual(['/insights', '/audit-logs']);
+    expect(resolveSelectedNavKey('/evolution')).toBe('/evolution');
+  });
+
+  it('does not render the evolution label in the rendered menu', () => {
+    render(
+      <TestWrapper>
+        <Sidebar />
+      </TestWrapper>,
+    );
+
+    expect(screen.queryByText('自进化')).toBeNull();
+    expect(screen.getByText('数据洞察')).toBeInTheDocument();
+    expect(screen.getByText('审计日志')).toBeInTheDocument();
+  });
+
+  it('exposes the 状态模版 entry in the config group while keeping its route resolvable', () => {
+    const items = buildMenuItems();
+    const configGroup = items.find((item) => item?.key === 'config-group');
+
+    expect(items.flatMap(childKeys)).toContain('/status-templates');
+    expect(childKeys(configGroup)).toEqual([
+      '/status-templates',
+      '/integrations',
+      '/settings/members',
+      '/settings/backups',
+      '/settings/environment-variables',
+    ]);
+    expect(NAV_GROUPS.flatMap((group) => group.items).map((item) => item.key)).toContain('/status-templates');
+    expect(resolveSelectedNavKey('/status-templates')).toBe('/status-templates');
+  });
+
+  it('renders the 状态模版 label in the menu', () => {
+    render(
+      <TestWrapper>
+        <Sidebar />
+      </TestWrapper>,
+    );
+
+    expect(screen.getByRole('menuitem', { name: '状态模版' })).toBeInTheDocument();
+    expect(screen.getByText('平台集成')).toBeInTheDocument();
+  });
+
+  it('hides 定时任务 until the capability request is ready', async () => {
+    let resolveCapability: (() => void) | undefined;
+    server.use(
+      http.get('/api/capabilities/scheduled-task', async () => {
+        await new Promise<void>((resolve) => { resolveCapability = resolve; });
+        return HttpResponse.json({ success: true, code: '0', message: '', data: { available: true, mode: 'V037_READY', clusterReady: true, reason: null } });
+      }),
+    );
+
+    render(<TestWrapper><Sidebar /></TestWrapper>);
+
+    expect(screen.queryByText('定时任务')).not.toBeInTheDocument();
+    expect(screen.getByText('工单')).toBeInTheDocument();
+    await waitFor(() => expect(resolveCapability).toBeTypeOf('function'));
+    act(() => resolveCapability?.());
+    expect(await screen.findByText('定时任务')).toBeInTheDocument();
+  });
+
+  it('hides 定时任务 when the capability is unavailable', async () => {
+    server.use(
+      http.get('/api/capabilities/scheduled-task', () => HttpResponse.json({ success: true, code: '0', message: '', data: { available: false, mode: 'LEGACY', clusterReady: false, reason: 'DATABASE_UPGRADE_REQUIRED' } })),
+    );
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<TestWrapper queryClient={queryClient}><Sidebar /></TestWrapper>);
+
+    await waitFor(() => expect(queryClient.getQueryState(scheduledTaskCapabilityQueryKey)?.status).toBe('success'));
+    expect(screen.getByText('工单')).toBeInTheDocument();
+    expect(screen.queryByText('定时任务')).not.toBeInTheDocument();
+  });
+
+  it('hides 定时任务 when the capability request fails', async () => {
+    server.use(
+      http.get('/api/capabilities/scheduled-task', () => HttpResponse.json({ success: false, code: '10000', message: 'failed', data: null }, { status: 500 })),
+    );
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<TestWrapper queryClient={queryClient}><Sidebar /></TestWrapper>);
+
+    await waitFor(() => expect(queryClient.getQueryState(scheduledTaskCapabilityQueryKey)?.status).toBe('error'));
+    expect(screen.getByText('工单')).toBeInTheDocument();
+    expect(screen.queryByText('定时任务')).not.toBeInTheDocument();
+  });
+
+  it('hides 定时任务 while stale cached readiness is revalidated', async () => {
+    let resolveCapability: (() => void) | undefined;
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(scheduledTaskCapabilityQueryKey, readyCapability, { updatedAt: 0 });
+    server.use(
+      http.get('/api/capabilities/scheduled-task', async () => {
+        await new Promise<void>((resolve) => { resolveCapability = resolve; });
+        return HttpResponse.json({ success: true, code: '0', message: '', data: readyCapability });
+      }),
+    );
+
+    render(<TestWrapper queryClient={queryClient}><Sidebar /></TestWrapper>);
+
+    await waitFor(() => expect(queryClient.getQueryState(scheduledTaskCapabilityQueryKey)?.fetchStatus).toBe('fetching'));
+    expect(screen.queryByText('定时任务')).not.toBeInTheDocument();
+    act(() => resolveCapability?.());
+    expect(await screen.findByText('定时任务')).toBeInTheDocument();
+  });
+
+  it('keeps 定时任务 hidden when stale cached readiness fails revalidation', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(scheduledTaskCapabilityQueryKey, readyCapability, { updatedAt: 0 });
+    server.use(http.get('/api/capabilities/scheduled-task', () => HttpResponse.error()));
+
+    render(<TestWrapper queryClient={queryClient}><Sidebar /></TestWrapper>);
+
+    expect(screen.getByText('工单')).toBeInTheDocument();
+    expect(screen.queryByText('定时任务')).not.toBeInTheDocument();
+    await waitFor(() => expect(queryClient.getQueryState(scheduledTaskCapabilityQueryKey)?.status).toBe('error'));
+    expect(screen.queryByText('定时任务')).not.toBeInTheDocument();
+  });
+
+  it('matches the most specific navigation item for nested and legacy routes', () => {
+    expect(resolveSelectedNavKey('/agents/reviews')).toBe('/agents');
+    expect(resolveSelectedNavKey('/agents/42')).toBe('/agents');
+    expect(resolveSelectedNavKey('/repos/map')).toBe('/repos');
+    expect(resolveSelectedNavKey('/integrations/channels')).toBe('/integrations');
+    expect(resolveSelectedNavKey('/settings/members-roles/roles')).toBe('/settings/members');
+    expect(resolveSelectedNavKey('/settings/roles')).toBe('/settings/members');
+  });
+
+  it('merges workers, repos and integrations entries into single hub navigation items', () => {
+    const items = buildMenuItems();
+    const visibleKeys = items.flatMap(childKeys);
+    const workersGroup = NAV_GROUPS.find((item) => item.key === 'workers-group');
+    const knowledgeGroup = NAV_GROUPS.find((item) => item.key === 'knowledge-group');
+
+    expect(workersGroup?.items.map((item) => item.key)).toEqual(['/agents', '/sdlcs', '/executors']);
+    expect(workersGroup?.items.find((item) => item.key === '/agents')?.label).toBe('员工');
+    expect(knowledgeGroup?.items.map((item) => item.key)).toEqual(['/repos', '/memories', '/skills']);
+    expect(knowledgeGroup?.items.find((item) => item.key === '/repos')?.label).toBe('仓库');
+    expect(childKeys(items.find((item) => item?.key === 'config-group'))).toContain('/integrations');
+    expect(visibleKeys).not.toContain('/agents/reviews');
+    expect(visibleKeys).not.toContain('/squads');
+    expect(visibleKeys).not.toContain('/repos/map');
+    expect(visibleKeys).not.toContain('/integrations/channels');
+    expect(visibleKeys).not.toContain('/integrations/workitem');
+  });
+
+  it('places SDLC workflows in the workers group between 管理 and 执行器', () => {
+    const workersGroup = NAV_GROUPS.find((item) => item.key === 'workers-group');
+    const configGroup = NAV_GROUPS.find((item) => item.key === 'config-group');
+    const workersKeys = workersGroup?.items.map((item) => item.key) ?? [];
+
+    expect(workersKeys).toEqual(['/agents', '/sdlcs', '/executors']);
+    expect(workersKeys.indexOf('/sdlcs')).toBe(workersKeys.indexOf('/agents') + 1);
+    expect(workersKeys.indexOf('/executors')).toBe(workersKeys.indexOf('/sdlcs') + 1);
+    expect(workersGroup?.items.find((item) => item.key === '/sdlcs')?.label).toBe('SDLC 流程');
+    expect(configGroup?.items.map((item) => item.key)).not.toContain('/sdlcs');
+    expect(resolveSelectedNavKey('/sdlcs')).toBe('/sdlcs');
+    expect(resolveSelectedNavKey('/sdlcs/42')).toBe('/sdlcs');
+  });
+
+  it('renders badge count on the merged agents entry when count > 0', () => {
+    const items = buildMenuItems({ '/agents': 5 });
+    const workersGroup = items.find((item) => item?.key === 'workers-group');
+    const agentsItem = isGroupItem(workersGroup)
+      ? (workersGroup.children ?? []).find((child) => child?.key === '/agents')
+      : undefined;
+
+    expect(agentsItem && 'label' in agentsItem ? agentsItem.label : undefined).not.toBe('员工');
+  });
+
+  it('keeps plain label when badge count is 0 or absent', () => {
+    const items = buildMenuItems({ '/agents': 0 });
+    const workersGroup = items.find((item) => item?.key === 'workers-group');
+    const agentsItem = isGroupItem(workersGroup)
+      ? (workersGroup.children ?? []).find((child) => child?.key === '/agents')
+      : undefined;
+
+    expect(agentsItem && 'label' in agentsItem ? agentsItem.label : undefined).toBe('员工');
+  });
+
+  it('renders badge dot on icon in collapsed mode when count > 0', () => {
+    const items = buildMenuItems({ '/agents': 3 }, true);
+    const workersGroup = items.find((item) => item?.key === 'workers-group');
+    const agentsItem = isGroupItem(workersGroup)
+      ? (workersGroup.children ?? []).find((child) => child?.key === '/agents')
+      : undefined;
+
+    expect(agentsItem && 'label' in agentsItem ? agentsItem.label : undefined).toBe('员工');
+  });
+});

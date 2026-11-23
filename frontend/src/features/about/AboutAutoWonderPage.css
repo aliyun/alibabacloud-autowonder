@@ -1,0 +1,136 @@
+.about-aw-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* 介绍区与流程图在标题下方的空间居中 */
+  justify-content: center;
+  padding: 0;
+  color: var(--aw-text);
+  background: var(--aw-panel);
+}
+.about-aw-page > .aw-page-heading { margin-bottom: auto; }
+.about-aw-header {
+  flex-shrink: 0;
+  /* 左右两栏等宽、gap 为 0：分割线（右栏 border-left）落在页面正中，
+     两个文本模块各自在所属半区居中，整体关于分割线对称。 */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+}
+.about-aw-eyebrow {
+  margin: 0 0 20px;
+  color: var(--aw-accent-text);
+  font-size: clamp(18px, 2.3vw, 32px);
+  font-weight: 500;
+  letter-spacing: -.025em;
+}
+.about-aw-intro {
+  text-align: center;
+  padding-right: 40px;
+}
+.about-aw-intro h2 {
+  margin: 0;
+  font-size: clamp(22px, 2.5vw, 36px);
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: .025em;
+}
+.about-aw-version {
+  min-width: 0;
+  padding-left: 40px;
+  border-left: 1px solid var(--aw-border);
+  text-align: center;
+}
+.about-aw-version-label {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--aw-muted);
+  font-size: 13px;
+}
+.about-aw-version-number {
+  display: block;
+  text-align: center;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: clamp(36px, 5vw, 72px);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -.06em;
+  overflow-wrap: anywhere;
+}
+/* A delivery circuit, not a live status display. Color follows the platform accent. */
+.about-aw-delivery {
+  position: relative;
+  flex-shrink: 0;
+  min-height: 180px;
+  max-height: 280px;
+  margin: 32px 0 auto;
+}
+.about-aw-delivery-lines { display: block; width: 100%; height: 100%; overflow: visible; }
+.about-aw-delivery-track { stroke: var(--aw-border); stroke-width: 1.5; }
+.about-aw-delivery-return { stroke: var(--aw-border); stroke-width: 1; }
+.about-aw-delivery-flow {
+  stroke: var(--aw-accent-text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 7 93;
+  animation: about-aw-delivery-travel 8s linear infinite;
+}
+.about-aw-delivery-flow--return { opacity: .45; animation-delay: -4s; stroke-width: 1.5; }
+.about-aw-delivery-steps {
+  position: absolute;
+  inset: 0 0 auto;
+  height: calc(200% / 3);
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.about-aw-delivery-steps li { position: relative; display: grid; justify-items: center; }
+.about-aw-delivery-node {
+  display: grid;
+  place-items: center;
+  width: min(48px, 70%);
+  aspect-ratio: 1;
+  border: 1px solid var(--aw-border);
+  border-radius: 12px;
+  background: var(--aw-panel);
+  color: var(--aw-text);
+  font-size: clamp(16px, 2vw, 22px);
+}
+.about-aw-delivery-steps li:last-child .about-aw-delivery-node { color: var(--aw-accent-text); border-color: var(--aw-accent-text); }
+.about-aw-delivery-label { position: absolute; top: calc(100% + 12px); color: var(--aw-muted); font-size: clamp(9px, 1vw, 12px); max-width: 100%; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+.about-aw-delivery-label--accent { color: var(--aw-accent-text); }
+.about-aw-delivery figcaption {
+  position: absolute;
+  top: 75%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 2px 14px;
+  background: var(--aw-panel);
+  color: var(--aw-muted);
+  font-size: 11px;
+  letter-spacing: .12em;
+}
+@keyframes about-aw-delivery-travel { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+
+
+@media (max-width: 900px) {
+  .about-aw-page { padding: 0; }
+  .about-aw-header { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .about-aw-intro { padding-right: 0; }
+  .about-aw-version { padding: 24px 0 0; border-left: 0; border-top: 1px solid var(--aw-border); }
+}
+@media (max-width: 480px) {
+  .about-aw-delivery { aspect-ratio: auto; padding-bottom: 24px; }
+  .about-aw-delivery-lines { display: none; }
+  .about-aw-delivery-steps { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px 0; }
+  .about-aw-delivery-label { position: static; margin-top: 8px; font-size: 11px; }
+  .about-aw-delivery figcaption { top: auto; bottom: 0; transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-aw-delivery-flow { animation: none; stroke-dasharray: none; opacity: .25; }
+}

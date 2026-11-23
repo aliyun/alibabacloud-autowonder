@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aliyun.autowonder.email.MailSettingsDao">
+
+    <select id="find" resultType="com.aliyun.autowonder.email.MailSettingsDO">
+        SELECT * FROM platform_mail_settings WHERE id = 1
+    </select>
+
+    <insert id="insert" parameterType="com.aliyun.autowonder.email.MailSettingsDO">
+        INSERT INTO platform_mail_settings
+            (id, draft_config, active_config, draft_secret_ref, active_secret_ref,
+             draft_secret_version, active_secret_version, draft_version, active_version,
+             tested_fingerprint, tested_at, test_success, test_result, updated_by)
+        VALUES
+            (1, #{draftConfig,jdbcType=LONGVARCHAR}, #{activeConfig,jdbcType=LONGVARCHAR},
+             #{draftSecretRef,jdbcType=VARCHAR}, #{activeSecretRef,jdbcType=VARCHAR},
+             #{draftSecretVersion}, #{activeSecretVersion}, #{draftVersion}, #{activeVersion},
+             #{testedFingerprint,jdbcType=VARCHAR}, #{testedAt,jdbcType=TIMESTAMP},
+             #{testSuccess}, #{testResult,jdbcType=VARCHAR}, #{updatedBy})
+    </insert>
+
+    <update id="updateDraft">
+        UPDATE platform_mail_settings
+        SET draft_config = #{row.draftConfig,jdbcType=LONGVARCHAR},
+            active_config = #{row.activeConfig,jdbcType=LONGVARCHAR},
+            draft_secret_ref = #{row.draftSecretRef,jdbcType=VARCHAR},
+            active_secret_ref = #{row.activeSecretRef,jdbcType=VARCHAR},
+            draft_secret_version = #{row.draftSecretVersion},
+            active_secret_version = #{row.activeSecretVersion},
+            draft_version = #{row.draftVersion},
+            active_version = #{row.activeVersion},
+            tested_fingerprint = #{row.testedFingerprint,jdbcType=VARCHAR},
+            tested_at = #{row.testedAt,jdbcType=TIMESTAMP},
+            test_success = #{row.testSuccess},
+            test_result = #{row.testResult,jdbcType=VARCHAR},
+            updated_by = #{row.updatedBy}
+        WHERE id = 1 AND draft_version = #{expectedVersion}
+    </update>
+
+    <update id="recordTest">
+        UPDATE platform_mail_settings
+        SET tested_fingerprint = #{row.testedFingerprint,jdbcType=VARCHAR},
+            tested_at = #{row.testedAt,jdbcType=TIMESTAMP},
+            test_success = #{row.testSuccess},
+            test_result = #{row.testResult,jdbcType=VARCHAR},
+            updated_by = #{row.updatedBy}
+        WHERE id = 1 AND draft_version = #{expectedVersion}
+    </update>
+
+    <update id="updateDraftSecret">
+        UPDATE platform_mail_settings
+        SET draft_secret_ref = #{secretRef},
+            draft_secret_version = #{secretVersion},
+            updated_by = #{updatedBy}
+        WHERE id = 1 AND draft_version = #{expectedVersion}
+    </update>
+</mapper>

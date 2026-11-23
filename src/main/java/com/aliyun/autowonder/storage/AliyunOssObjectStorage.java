@@ -1,0 +1,133 @@
+package com.aliyun.autowonder.storage;
+
+import com.aliyun.oss.HttpMethod;
+import com.aliyun.oss.OSS;
+import com.aliyun.oss.OSSClientBuilder;
+import com.aliyun.oss.OSSException;
+import com.aliyun.oss.model.GeneratePresignedUrlRequest;
+import com.aliyun.oss.model.OSSObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.URL;
+import java.time.Duration;
+import java.util.Date;
+
+public class AliyunOssObjectStorage implements ObjectStorage {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AliyunOssObjectStorage.class);
+
+    private final OSS serviceClient;
+    private final OSS publicClient;
+
+    public AliyunOssObjectStorage(String endpoint, String publicEndpoint,
+                                  String accessKeyId, String accessKeySecret) {
+        this(new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret),
+                new OSSClientBuilder().build(publicEndpoint, accessKeyId, accessKeySecret));
+    }
+
+    AliyunOssObjectStorage(OSS serviceClient, OSS publicClient) {
+        this.serviceClient = serviceClient;
+        this.publicClient = publicClient;
+    }
+
+    @Override
+    public StoredObject put(String bucket, String key, byte[] data) {
+        try {
+            serviceClient.putObject(bucket, key, new ByteArrayInputStream(data));
+            return new StoredObject(bucket + "/" + key, StorageRefs.md5Hex(data), data.length);
+        } catch (OSSException e) {
+            LOGGER.error("oss put failed bucket={} key={} errorCode={}", bucket, key, e.getErrorCode(), e);
+            throw new ObjectStorageException("oss put failed", bucket, key, e.getErrorCode(), e);
+        } catch (Exception e) {
+            LOGGER.error("oss put failed bucket={} key={}", bucket, key, e);
+            throw new ObjectStorageException("oss put failed", bucket, key, null, e);
+        }
+    }
+
+    @Override
+    public byte[] get(String ossRef) {
+        String[] bk = StorageRefs.split(ossRef);
+        try (OSSObject obj = serviceClient.getObject(bk[0], bk[1]);
+             InputStream in = obj.getObjectContent()) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                out.write(buf, 0, n);
+            }
+            return out.toByteArray();
+        } catch (OSSException e) {
+            String code = e.getErrorCode();
+            if ("NoSuchKey".equals(code) || "404".equals(code)) {
+                LOGGER.info("oss object not found ref={}", ossRef);
+                return null;
+            }
+            LOGGER.error("oss get failed ref={} errorCode={}", ossRef, code, e);
+            throw new ObjectStorageException("oss get failed", bk[0], bk[1], code, e);
+        } catch (Exception e) {
+            LOGGER.error("oss get failed ref={} errorType={}", ossRef, e.getClass().getSimpleName(), e);
+            throw new ObjectStorageException("oss get failed", bk[0], bk[1], null, e);
+        }
+    }
+
+    @Override
+    public StoredObject putFile(String bucket, String key, java.nio.file.Path file) {
+        try (InputStream input = java.nio.file.Files.newInputStream(file)) {
+            var metadata = new com.aliyun.oss.model.ObjectMetadata();
+            metadata.setContentLength(java.nio.file.Files.size(file));
+            serviceClient.putObject(bucket, key, input, metadata);
+            return new StoredObject(bucket + "/" + key, StorageRefs.md5Hex(file), metadata.getContentLength());
+        } catch (OSSException failure) {
+            throw new ObjectStorageException("oss file upload failed", bucket, key, failure.getErrorCode(), failure);
+        } catch (Exception failure) {
+            throw new ObjectStorageException("oss file upload failed", bucket, key, null, failure);
+        }
+    }
+
+    @Override
+    public String presignGet(String ossRef, int ttlSeconds) {
+        String[] bk = StorageRefs.split(ossRef);
+        Date expiry = new Date(System.currentTimeMillis() + ttlSeconds * 1000L);
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(bk[0], bk[1]);
+        req.setExpiration(expiry);
+        URL url = publicClient.generatePresignedUrl(req);
+        return forceHttps(url.toString());
+    }
+
+    private String forceHttps(String url) {
+        if (url != null && url.regionMatches(true, 0, "http://", 0, "http://".length())) {
+            return "https://" + url.substring("http://".length());
+        }
+        return url;
+    }
+
+    @Override
+    public String presignPut(String bucket, String key, Duration ttl) {
+        Date expiry = new Date(System.currentTimeMillis() + ttl.toMillis());
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(bucket, key);
+        req.setExpiration(expiry);
+        req.setMethod(HttpMethod.PUT);
+        URL url = publicClient.generatePresignedUrl(req);
+        return url.toString();
+    }
+
+    @Override
+    public boolean exists(String ossRef) {
+        String[] bk = StorageRefs.split(ossRef);
+        return serviceClient.doesObjectExist(bk[0], bk[1]);
+    }
+
+    @Override
+    public void delete(String ossRef) {
+        String[] bk = StorageRefs.split(ossRef);
+        try {
+            serviceClient.deleteObject(bk[0], bk[1]);
+        } catch (Exception e) {
+            LOGGER.warn("oss delete failed ref={}", ossRef, e);
+        }
+    }
+}

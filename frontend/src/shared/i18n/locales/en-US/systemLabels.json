@@ -1,0 +1,35 @@
+{
+  "statusTemplate": {
+    "REQ": "Requirement Default Flow",
+    "TASK": "Task Default Flow",
+    "BUG": "Bug Default Flow"
+  },
+  "statusNode": {
+    "REQ": {
+      "new": "New",
+      "developing": "In Development",
+      "verifying": "Verifying",
+      "released": "Released",
+      "canceled": "Canceled"
+    },
+    "TASK": {
+      "todo": "To Do",
+      "doing": "In Progress",
+      "done": "Done"
+    },
+    "BUG": {
+      "open": "Open",
+      "fixing": "Fixing",
+      "verifying": "Verifying",
+      "closed": "Closed"
+    }
+  },
+  "statusTransition": {
+    "forward": "Advance",
+    "cancel": "Cancel"
+  },
+  "envPreset": {
+    "qoder": "Qoder API key (PAT) used by executors to authenticate at startup without a browser login on the machine",
+    "qodercn": "Qoder CN API key (PAT) used by executors to authenticate at startup without a browser login on the machine"
+  }
+}

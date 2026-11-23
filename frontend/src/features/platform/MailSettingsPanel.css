@@ -1,0 +1,36 @@
+/* 加密方式：方形勾选卡片单选（对齐前端参考 v0.3 的 .mail-choice 布局）。 */
+.mail-choice-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mail-choice-group .ant-radio-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.mail-choice-group .ant-radio-wrapper-checked {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.05);
+}
+
+.mail-choice-group small {
+  display: block;
+  margin-top: 5px;
+  color: #8c8c8c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 680px) {
+  .mail-choice-group {
+    grid-template-columns: 1fr;
+  }
+}

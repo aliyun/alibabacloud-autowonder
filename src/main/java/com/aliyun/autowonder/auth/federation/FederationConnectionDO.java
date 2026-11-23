@@ -1,0 +1,46 @@
+package com.aliyun.autowonder.auth.federation;
+
+import lombok.Getter;
+import lombok.Setter;
+
+import java.util.Date;
+
+/**
+ * 协议连接（providerId）：一条 IdP 实例与一种协议的组合，是登录页入口、回调地址与
+ * 身份绑定归属的最小配置单元。不同协议的特有字段共存于一条记录，按 protocol 取用。
+ */
+@Getter
+@Setter
+public class FederationConnectionDO {
+    private Long id;
+    private Long idpId;
+    private String name;
+    private String protocol;
+    private Integer enabled;
+    private String issuer;
+    private String samlSsoUrl;
+    private String samlCert;
+    private String oidcAuthorizeUrl;
+    private String oidcTokenUrl;
+    private String oidcJwksUrl;
+    private String clientId;
+    private String clientSecret;
+    private String scopes;
+    /** 稳定 subject 的取值方式：OIDC 支持 "sub"、"tid:oid"（Entra）等 claim 组合；SAML 为属性名，"nameid" 表示 NameID。 */
+    private String subjectClaim;
+    private String nameClaim;
+    private String emailClaim;
+    /** 认证结果中 AutoWonder 用户名的声明名；新建连接默认取用户标识声明，空表示沿用旧的随机用户名建号行为。 */
+    private String usernameClaim;
+    /** 认证结果中飞书 user_id 的属性名；为空表示不同步飞书身份。 */
+    private String feishuUserIdClaim;
+    /** 首次登录未绑定时是否自动创建内部普通账号（0 关闭 / 1 开启）。 */
+    private Integer autoProvision;
+    /** 同名账号自动绑定：是否允许把已存在且尚无身份绑定的本地账号绑定到该身份（0 关闭 / 1 开启）。 */
+    private Integer bindExistingByUsername;
+    /** 逗号分隔的允许租户（Entra tid）清单，为空表示不限制。 */
+    private String allowedTenants;
+    private Integer sortOrder;
+    private Date gmtCreate;
+    private Date gmtModified;
+}
