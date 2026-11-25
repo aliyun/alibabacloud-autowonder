@@ -37,3 +37,10 @@ Use the equivalent model name provided by the selected executor.
 Deployment details are in the
 [community runtime guide](docs/community/README.md) and the
 [Alibaba Cloud deployment Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md).
+
+## License / 开源许可证
+
+AutoWonder Community's original code and documentation are distributed under the
+[MIT License](LICENSE). Third-party components are subject to their respective
+licenses. See [Third-Party Notices](docs/THIRD-PARTY-NOTICES.md) and the notices
+included with individual components.
