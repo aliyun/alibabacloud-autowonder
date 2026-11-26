@@ -25,17 +25,6 @@ They can also deploy it in a cloud VPC.
 For a quick proof of concept (POC), use the
 [Alibaba Cloud deployment Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md).
 
-## Recommended Deployment
-
-The recommended topology is a multi-zone HA deployment with two application
-nodes and private data services.
-
-<p align="center">
-  <a href="docs/images/autowonder-deployment-architecture.png">
-    <img src="docs/images/autowonder-deployment-architecture.png" alt="AutoWonder recommended deployment architecture" width="1048">
-  </a>
-</p>
-
 ## Collaboration Model
 
 Users can collaborate through the native work item platform, supported IM
@@ -45,6 +34,17 @@ connected through AutoWonder MCP.
 <p align="center">
   <a href="docs/images/autowonder-collaboration-model.png">
     <img src="docs/images/autowonder-collaboration-model.png" alt="AutoWonder collaboration model" width="1048">
+  </a>
+</p>
+
+## Recommended Deployment
+
+The recommended topology is a multi-zone HA deployment with two application
+nodes and private data services.
+
+<p align="center">
+  <a href="docs/images/autowonder-deployment-architecture.png">
+    <img src="docs/images/autowonder-deployment-architecture.png" alt="AutoWonder recommended deployment architecture" width="1048">
   </a>
 </p>
 
