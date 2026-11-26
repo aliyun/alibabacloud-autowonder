@@ -38,8 +38,9 @@ nodes and private data services.
 
 ## Collaboration Model
 
-Users collaborate through the native work item platform, DingTalk groups, or a
-personal Agent client connected through AutoWonder MCP.
+Users can collaborate through the native work item platform, supported IM
+channels such as DingTalk and Feishu group chats, or a personal Agent client
+connected through AutoWonder MCP.
 
 <p align="center">
   <a href="docs/images/autowonder-collaboration-model.png">
@@ -67,6 +68,9 @@ Use the equivalent model name provided by the selected executor.
 Deployment details are in the
 [community runtime guide](docs/community/README.md) and the
 [Alibaba Cloud deployment Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md).
+
+See the [changelog](docs/community/CHANGELOG.md) for release highlights and
+upgrade notes.
 
 ## License
 

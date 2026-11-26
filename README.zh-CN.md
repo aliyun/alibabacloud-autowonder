@@ -30,7 +30,8 @@ AutoWonder 源于阿里云内部的 AI 原生工程实践，**推动软件交付
 
 ## 三端协作
 
-用户可通过 AutoWonder 原生工单平台、钉钉群，或通过 AutoWonder MCP 接入的个人 Agent 客户端协作。
+用户可通过 AutoWonder 原生工单平台、钉钉和飞书群聊等受支持的即时通讯（IM）渠道，
+或通过 AutoWonder MCP 接入的个人 Agent 客户端协作。
 
 <p align="center">
   <a href="docs/images/autowonder-collaboration-model.png">
