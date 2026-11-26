@@ -22,7 +22,7 @@ public class PlatformBrandingService {
     public static final String DEFAULT_PLATFORM_NAME = "AutoWonder";
     public static final String DEFAULT_THEME_KEY = "aliyun-orange";
     public static final String DEFAULT_PRIMARY_COLOR = "#f97316";
-    public static final String DEFAULT_DEPLOYMENT_VERSION = "x.x.x";
+    public static final String DEFAULT_DEPLOYMENT_VERSION = "1.4.1";
 
     private static final Set<String> THEME_KEYS = Set.of(
             "alicloud-blue", "aliyun-orange", "ocean-blue", "jade-green", "indigo", "rose",
@@ -54,7 +54,7 @@ public class PlatformBrandingService {
                                    OssProperties ossProperties,
                                    @Value("${autowonder.public-base-url:}") String publicBaseUrl,
                                    @Value("${autowonder.runtime.recommended-version:0.3.48}") String recommendedRuntimeVersion,
-                                   @Value("${autowonder.version:x.x.x}") String deploymentVersion,
+                                   @Value("${autowonder.version:}") String deploymentVersion,
                                    @Value("${autowonder.community-edition:false}") boolean communityEdition) {
         this.brandingDao = brandingDao;
         this.objectStorage = objectStorage;
@@ -272,14 +272,13 @@ public class PlatformBrandingService {
 
     private static String normalizeDeploymentVersion(String value) {
         String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
+        if (trimmed.isEmpty() || "x.x.x".equals(trimmed)) {
             return DEFAULT_DEPLOYMENT_VERSION;
         }
-        if (DEFAULT_DEPLOYMENT_VERSION.equals(trimmed)
-                || trimmed.matches("^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$")) {
+        if (trimmed.matches("^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$")) {
             return trimmed;
         }
-        throw new IllegalStateException("autowonder.version must be x.x.x or a semantic version");
+        throw new IllegalStateException("autowonder.version must be a semantic version");
     }
 
     private static String requirePublicBaseUrl(String value) {

@@ -320,6 +320,13 @@ Every sync that increments `VERSION` must produce a release file at
 - risks;
 - MR/PR links.
 
+Use the root `VERSION` as the Community release version. In the same release
+commit, set `AUTOWONDER_VERSION` in `docs/community/application.env.example`,
+the fallback for `autowonder.version` in `src/main/resources/application.yml`,
+and the fallback for blank or legacy values in `PlatformBrandingService` to
+that exact version. The `PlatformBrandingServiceTest` release checks must pass
+before mirroring to GitHub.
+
 The external GitHub copy must include `VERSION` and
 `releases/release_vX.Y.Z_YYYYMMDD.md` matching the
 community branch exactly. A missing or outdated `VERSION` in the external
