@@ -69,9 +69,27 @@ function rows(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>('li.ant-list-item'));
 }
 
-// 单目标通知的整行点击会直达关联页面，要检查详情只能用行内「详情」动作。
-async function openDrawerByDetail(container: HTMLElement, index = 0) {
-  await userEvent.click(within(rows(container)[index]).getByRole('button', { name: /详情|Details/ }));
+async function openRowMenu(container: HTMLElement, index = 0) {
+  await userEvent.click(within(rows(container)[index]).getByRole('button', { name: /更多操作|More actions/ }));
+}
+
+// 行内低频操作收在「···」菜单里，点菜单项前要先展开当前行的菜单。
+async function clickRowAction(container: HTMLElement, name: string | RegExp, index = 0) {
+  await openRowMenu(container, index);
+  await userEvent.click(await screen.findByRole('menuitem', { name }));
+}
+
+// 单目标通知的整行点击会直达关联页面，要检查详情只能用菜单里的「详情」；
+// 无直达目标时整行点击本身就是打开详情，菜单里不重复放「详情」。
+async function openDetailByAction(container: HTMLElement, index = 0) {
+  await openRowMenu(container, index);
+  const detailItem = screen.queryByRole('menuitem', { name: /详情|Details/ });
+  if (detailItem) {
+    await userEvent.click(detailItem);
+    return;
+  }
+  await userEvent.keyboard('{Escape}');
+  await userEvent.click(rows(container)[index]);
 }
 
 // 一个会随写操作变化的假后端，这样断言的是「操作后 UI 与角标真的刷新」而不是只断言请求发出
@@ -198,6 +216,12 @@ describe('NotificationCenterPage', () => {
     const [unreadRow, readRow] = rows(container);
     expect(within(unreadRow).getByText('未读')).toBeInTheDocument();
     expect(within(readRow).queryByText('未读')).not.toBeInTheDocument();
+    // 原型 17：标题统一 13px/600，未读只靠圆点区分；未读文案留在行内供读屏与状态断言使用
+    const titleOf = (row: HTMLElement) => row.querySelector('.ntf-line1 .ntf-title') as HTMLElement;
+    expect(titleOf(unreadRow).textContent).toBe('未读一');
+    expect(titleOf(readRow).textContent).toBe('已读一');
+    expect(unreadRow.querySelector('.ntf-unread-dot')).not.toBeNull();
+    expect(readRow.querySelector('.ntf-unread-dot')).toBeNull();
     // 列表只做 60 字摘要，完整正文留给抽屉
     expect(within(unreadRow).getByText(`${'A'.repeat(60)}...`)).toBeInTheDocument();
     expect(within(unreadRow).queryByText(longContent)).not.toBeInTheDocument();
@@ -248,23 +272,25 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('派单失败');
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
 
     expect(await screen.findByText('通知详情')).toBeInTheDocument();
     expect(screen.getByText(longContent)).toBeInTheDocument();
-    expect(screen.getByText('DISPATCH_ALERT')).toBeInTheDocument();
+    // 行内类型 Tag 与抽屉会重复展示同一类型文案，断言限定在抽屉内
+    expect(within(screen.getByRole('dialog')).getByText('DISPATCH_ALERT')).toBeInTheDocument();
     expect(screen.getByText('工单 #42')).toBeInTheDocument();
   });
 
-  it('shows a dash for the related object when the notification has none', async () => {
+  it('omits the related object when the notification has none', async () => {
     store = [notification({ id: 11, refType: null, refId: null, status: 'READ' })];
     const { container } = renderPage();
     await screen.findByText('派单失败');
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
 
-    expect(await screen.findByText('关联对象')).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByText('关联对象')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('—')).not.toBeInTheDocument();
   });
 
   it('auto-marks an unread notification as read when its drawer opens', async () => {
@@ -273,7 +299,7 @@ describe('NotificationCenterPage', () => {
     await screen.findByText('未读一');
     expect(within(rows(container)[0]).getByText('未读')).toBeInTheDocument();
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
 
     await waitFor(() => expect(readCalls).toEqual([7]));
     // 抽屉保持打开并展示打开时的快照，列表里的未读标识消失
@@ -286,7 +312,7 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('派单失败');
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
 
     expect(await screen.findByText('通知详情')).toBeInTheDocument();
     expect(readCalls).toEqual([]);
@@ -297,7 +323,7 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('派单失败');
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
     await userEvent.click(await screen.findByRole('button', { name: '前往处理' }));
 
     expect(await screen.findByTestId('workitem-page')).toBeInTheDocument();
@@ -358,10 +384,14 @@ describe('NotificationCenterPage', () => {
       ],
     })];
     const { container } = renderPage();
-    await screen.findByText('重复工单提醒');
+    // 该类型的 Tag 文案与标题相同，行内会出现两处，按行定位
+    await screen.findAllByText('重复工单提醒');
+    await waitFor(() => expect(rows(container)).toHaveLength(1));
 
-    // 多个工单目标时整行只打开详情让用户选择，不提供会直接跳单一链接的「详情」动作
-    expect(within(rows(container)[0]).queryByRole('button', { name: '详情' })).not.toBeInTheDocument();
+    // 多个工单目标时整行只打开详情让用户选择，菜单里不提供会直接跳单一链接的「详情」
+    await openRowMenu(container);
+    expect(screen.queryByRole('menuitem', { name: '详情' })).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(rows(container)[0]);
 
     expect(await screen.findByText('通知详情')).toBeInTheDocument();
@@ -373,47 +403,49 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('无链接通知');
 
-    expect(within(rows(container)[0]).queryByRole('button', { name: '详情' })).not.toBeInTheDocument();
+    await openRowMenu(container);
+    expect(screen.queryByRole('menuitem', { name: '详情' })).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(rows(container)[0]);
 
     expect(await screen.findByText('通知详情')).toBeInTheDocument();
     expect(screen.queryByTestId('workitem-page')).not.toBeInTheDocument();
   });
 
-  it('keeps the current page after the drawer is closed', async () => {
+  it('keeps the current page after the detail modal is closed', async () => {
     store = manyNotifications(25, 'READ');
-    const { container, baseElement } = renderPage();
+    const { container } = renderPage();
     await screen.findByText('通知 1');
 
     await userEvent.click(screen.getByTitle('2'));
     expect(await screen.findByText('通知 11')).toBeInTheDocument();
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
     expect(await screen.findByText('通知详情')).toBeInTheDocument();
-    expect(baseElement.querySelector('.ant-drawer-open')).not.toBeNull();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    await userEvent.click(baseElement.querySelector('.ant-drawer-close') as Element);
-    await waitFor(() => expect(baseElement.querySelector('.ant-drawer-open')).toBeNull());
+    await userEvent.click(screen.getByRole('button', { name: '关闭' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
-    // 抽屉关闭后其内容仍挂在 body 上的 portal 里，断言要限定在页面容器内
+    // 弹窗关闭后其内容仍挂在 body 上的 portal 里，断言要限定在页面容器内
     expect(within(container).getByText('通知 11')).toBeInTheDocument();
     expect(within(container).getByTitle('2')).toHaveClass('ant-pagination-item-active');
     expect(readCalls).toEqual([]);
   });
 
-  it('keeps the active status tab after the drawer is closed', async () => {
+  it('keeps the active status tab after the detail modal is closed', async () => {
     store = [notification({ id: 1, title: '未读一', status: 'UNREAD' }), notification({ id: 2, title: '已读一', status: 'READ' })];
-    const { container, baseElement } = renderPage();
+    const { container } = renderPage();
     await screen.findByText('未读一');
 
     await userEvent.click(screen.getByRole('tab', { name: '未读' }));
     await waitFor(() => expect(screen.queryByText('已读一')).not.toBeInTheDocument());
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
     expect(await screen.findByText('通知详情')).toBeInTheDocument();
 
-    await userEvent.click(baseElement.querySelector('.ant-drawer-close') as Element);
-    await waitFor(() => expect(baseElement.querySelector('.ant-drawer-open')).toBeNull());
+    await userEvent.click(screen.getByRole('button', { name: '关闭' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     expect(screen.getByRole('tab', { name: '未读' })).toHaveAttribute('aria-selected', 'true');
     expect(lastListRequest()).toEqual({ status: 'UNREAD', page: 1, size: 10 });
@@ -427,11 +459,12 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage({ withBell: true });
     await screen.findByText('未读一');
 
-    const [unreadRow, readRow] = rows(container);
-    expect(within(readRow).queryByRole('button', { name: '标记已读' })).not.toBeInTheDocument();
+    await openRowMenu(container, 1);
+    expect(screen.queryByRole('menuitem', { name: '标记已读' })).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
 
     const callsBefore = unreadCountCalls;
-    await userEvent.click(within(unreadRow).getByRole('button', { name: '标记已读' }));
+    await clickRowAction(container, '标记已读');
 
     await waitFor(() => expect(readCalls).toEqual([1]));
     await waitFor(() => expect(within(rows(container)[0]).queryByText('未读')).not.toBeInTheDocument());
@@ -443,7 +476,7 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('未读一');
 
-    await userEvent.click(within(rows(container)[0]).getByRole('button', { name: '标记已读' }));
+    await clickRowAction(container, '标记已读');
 
     await waitFor(() => expect(readCalls).toEqual([1]));
     expect(screen.queryByText('通知详情')).not.toBeInTheDocument();
@@ -473,7 +506,7 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('未读一');
 
-    await userEvent.click(within(rows(container)[0]).getByRole('button', { name: '删除' }));
+    await clickRowAction(container, '删除');
     expect(await screen.findByText('确认删除这条通知？')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '确认删除' })).toBeInTheDocument();
     // 点「删除」只能弹二次确认，不能直接发出删除请求
@@ -496,7 +529,7 @@ describe('NotificationCenterPage', () => {
     expect(screen.getByText('共 2 条')).toBeInTheDocument();
 
     const callsBefore = unreadCountCalls;
-    await userEvent.click(within(rows(container)[0]).getByRole('button', { name: '删除' }));
+    await clickRowAction(container, '删除');
     await userEvent.click(await screen.findByRole('button', { name: '确认删除' }));
 
     await waitFor(() => expect(deleteCalls).toEqual([1]));
@@ -552,7 +585,7 @@ describe('NotificationCenterPage', () => {
     expect(await screen.findByText('通知 21')).toBeInTheDocument();
     expect(rows(container)).toHaveLength(1);
 
-    await userEvent.click(within(rows(container)[0]).getByRole('button', { name: '删除' }));
+    await clickRowAction(container, '删除');
     await userEvent.click(await screen.findByRole('button', { name: '确认删除' }));
 
     await waitFor(() => expect(deleteCalls).toEqual([21]));
@@ -567,7 +600,7 @@ describe('NotificationCenterPage', () => {
   // CR-1：「未读」Tab 末页唯一一行被自动已读后离开筛选，total 同样收缩，页码要回落
   it('falls back to the first page when the last unread row on the current page is auto-read', async () => {
     store = manyNotifications(11, 'UNREAD');
-    const { container, baseElement } = renderPage();
+    const { container } = renderPage();
     await screen.findByText('通知 1');
 
     await userEvent.click(screen.getByRole('tab', { name: '未读' }));
@@ -578,15 +611,15 @@ describe('NotificationCenterPage', () => {
     expect(await screen.findByText('通知 11')).toBeInTheDocument();
     expect(lastListRequest()).toEqual({ status: 'UNREAD', page: 2, size: 10 });
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
 
     await waitFor(() => expect(readCalls).toEqual([11]));
     expect(await screen.findByText('共 10 条')).toBeInTheDocument();
     await waitFor(() => expect(within(container).getByTitle('1')).toHaveClass('ant-pagination-item-active'));
     expect(within(container).getByText('通知 1')).toBeInTheDocument();
     expect(within(container).queryByText('暂无通知')).not.toBeInTheDocument();
-    // 抽屉不因该行离开筛选而变空，仍展示打开时的快照
-    expect(baseElement.querySelector('.ant-drawer-open')).not.toBeNull();
+    // 弹窗不因该行离开筛选而变空，仍展示打开时的快照
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(lastListRequest()).toEqual({ status: 'UNREAD', page: 1, size: 10 });
   });
 
@@ -627,19 +660,20 @@ describe('NotificationCenterPage', () => {
     expect(lastListRequest()).toEqual({ status: null, page: 3, size: 10 });
   });
 
-  // NB-1：抽屉宽度必须自适应，窄屏下不能沿用固定 520px 溢出视口
-  it('sizes the detail drawer responsively instead of a fixed 520px', async () => {
+  // NB-1：详情改为居中弹窗，宽度不再固定占满右侧也不会溢出窄视口
+  it('renders the detail in a centered modal with a scrollable body', async () => {
     store = [notification({ id: 12, status: 'READ' })];
     const { container, baseElement } = renderPage();
     await screen.findByText('派单失败');
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
     expect(await screen.findByText('通知详情')).toBeInTheDocument();
 
-    const wrapper = baseElement.querySelector('.ant-drawer-content-wrapper') as HTMLElement;
-    expect(wrapper).not.toBeNull();
-    // jsdom 的 cssstyle 可能丢弃 min() 这类 CSS 数学函数，两种可观察结果都说明宽度已不是固定 520px
-    expect(['min(520px, 92vw)', '']).toContain(wrapper.style.width);
+    const modal = baseElement.querySelector('.ant-modal') as HTMLElement;
+    expect(modal).not.toBeNull();
+    expect(modal.closest('.ant-modal-centered')).not.toBeNull();
+    // 正文区独立滚动（max-height 80vh 由样式表提供，jsdom 不加载 CSS，这里只断言结构）
+    expect(baseElement.querySelector('.ntf-detail-modal .ant-modal-body')).not.toBeNull();
   });
 
   // NB-2：删除请求在途时确认按钮必须禁用，否则第二次点击命中后端 0 行分支弹「删除失败」
@@ -658,15 +692,13 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('未读一');
 
-    await userEvent.click(within(rows(container)[0]).getByRole('button', { name: '删除' }));
+    await clickRowAction(container, '删除');
     await userEvent.click(await screen.findByRole('button', { name: /确认删除/ }));
 
     await waitFor(() => expect(deleteCalls).toEqual([1]));
-    // onConfirm 返回 Promise 后气泡保持打开并进入 loading，禁用态才真的落到 DOM；已禁用的按钮无法再被激活，
-    // 这本身就是防重复的护栏，因此这里不再去点击它（antd v5 的 loading 按钮 pointer-events:none 会让 userEvent 抛错）。
-    // loading 图标带 aria-label="loading"，按钮可访问名变成「loading 确认删除」，只能按子串匹配。
+    // 请求在途时确认气泡保持打开且确认按钮禁用；行内「···」也禁用，无法从菜单再次发起删除。
     await waitFor(() => expect(screen.getByRole('button', { name: /确认删除/ })).toBeDisabled());
-    expect(within(rows(container)[0]).getByRole('button', { name: '删除' })).toBeDisabled();
+    expect(within(rows(container)[0]).getByRole('button', { name: '更多操作' })).toBeDisabled();
 
     release();
     await waitFor(() => expect(screen.queryByText('未读一')).not.toBeInTheDocument());
@@ -692,13 +724,13 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('未读一');
 
-    const readButton = within(rows(container)[0]).getByRole('button', { name: '标记已读' });
-    await userEvent.click(readButton);
+    await clickRowAction(container, '标记已读');
 
     await waitFor(() => expect(readCalls).toEqual([1]));
-    expect(readButton).toBeDisabled();
-
-    await userEvent.click(readButton);
+    // 请求在途时菜单项禁用，重新展开菜单也无法再次触发同一操作
+    await openRowMenu(container);
+    expect(await screen.findByRole('menuitem', { name: '标记已读' })).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.keyboard('{Escape}');
     expect(readCalls).toEqual([1]);
 
     release();
@@ -747,7 +779,7 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('派单失败');
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('旧通知纯文本正文')).toBeInTheDocument();
@@ -769,7 +801,7 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('派单失败');
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('空标题快照正文')).toBeInTheDocument();
@@ -790,7 +822,7 @@ describe('NotificationCenterPage', () => {
     const { container } = renderPage();
     await screen.findByText('派单失败');
 
-    await openDrawerByDetail(container);
+    await openDetailByAction(container);
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('不安全链接正文')).toBeInTheDocument();
@@ -833,12 +865,12 @@ it('keeps both history languages, current page and drawer while translating know
   expect(screen.getByText('历史正文<img src=x>')).toBeInTheDocument(); expect(screen.getByText('11 notifications')).toBeInTheDocument();
   expect(within(rows(container)[0]).getByText(new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date('2026-09-01T10:00:00.000Z')))).toBeInTheDocument();
   await userEvent.click(screen.getByTitle('2')); await screen.findByText('Past English title');
-  await openDrawerByDetail(container); await screen.findByText('Notification details');
-  expect(screen.getByText('Scheduled task run failed')).toBeInTheDocument(); expect(screen.getByText('Work item #42')).toBeInTheDocument();
+  await openDetailByAction(container); await screen.findByText('Notification details');
+  expect(within(screen.getByRole('dialog')).getByText('Scheduled task run failed')).toBeInTheDocument(); expect(screen.getByText('Work item #42')).toBeInTheDocument();
   const body = within(screen.getByRole('dialog')).getByText('Past English body <b>raw</b>'); const calls = listRequests.length;
   expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   await switchLanguage('zh-CN'); expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
-  expect(screen.getByText('定时任务运行失败')).toBeInTheDocument(); expect(screen.getByText('工单 #42')).toBeInTheDocument();
+  expect(within(screen.getByRole('dialog')).getByText('定时任务运行失败')).toBeInTheDocument(); expect(screen.getByText('工单 #42')).toBeInTheDocument();
   expect(within(screen.getByRole('dialog')).getByText('Past English body <b>raw</b>')).toBe(body); expect(within(container).getByTitle('2')).toHaveClass('ant-pagination-item-active');
   expect(listRequests).toHaveLength(calls); expect(readCalls).toEqual([]); expect(document.querySelector('b')).toBeNull();
 });
@@ -848,12 +880,12 @@ it('retains an unread snapshot and pending delete while completion feedback uses
   server.use(http.delete('/api/notifications/:id', async () => { await new Promise<void>(resolve => { release = resolve; }); return HttpResponse.json({ success: false, code: '10500', message: '', data: null }); }));
   const error = vi.spyOn(message, 'error').mockImplementation(() => undefined as unknown as ReturnType<typeof message.error>);
   const { container } = renderPage(); await screen.findByText('raw held'); await userEvent.click(screen.getByRole('tab', { name: '未读' }));
-  await waitFor(() => expect(lastListRequest().status).toBe('UNREAD')); await openDrawerByDetail(container); await waitFor(() => expect(readCalls).toEqual([1]));
+  await waitFor(() => expect(lastListRequest().status).toBe('UNREAD')); await openDetailByAction(container); await waitFor(() => expect(readCalls).toEqual([1]));
   await waitFor(() => expect(rows(container)).toHaveLength(0)); await switchLanguage('en-US');
   expect(screen.getByRole('tab', { name: 'Unread' })).toHaveAttribute('aria-selected', 'true'); expect(screen.getByText('No body')).toBeInTheDocument();
   expect(screen.getByText('future.type')).toBeInTheDocument(); expect(screen.getByText('future.ref #42')).toBeInTheDocument(); expect(readCalls).toEqual([1]);
   await userEvent.click(screen.getByRole('button', { name: 'Close' })); await userEvent.click(screen.getByRole('tab', { name: 'All' })); await waitFor(() => expect(rows(container)).toHaveLength(1));
-  await userEvent.click(within(rows(container)[0]).getByRole('button', { name: 'Delete' })); await userEvent.click(screen.getByRole('button', { name: 'Confirm deletion' })); await waitFor(() => expect(release).toBeDefined());
+  await clickRowAction(container, 'Delete'); await userEvent.click(screen.getByRole('button', { name: 'Confirm deletion' })); await waitFor(() => expect(release).toBeDefined());
   await switchLanguage('zh-CN'); expect(screen.getByRole('button', { name: '确认删除' })).toBeDisabled(); await act(async () => { release(); }); await waitFor(() => expect(error).toHaveBeenCalledWith('删除失败'));
 });
 it('resolves zero count during pending loading and singular totals in English', async () => {
@@ -880,7 +912,7 @@ it('keeps the open deletion confirmation decorative and cancellable in both lang
   store = [notification({ title: 'raw history', status: 'READ' })];
   const { container } = renderPage();
   await screen.findByText('raw history');
-  await userEvent.click(within(rows(container)[0]).getByRole('button', { name: '删除' }));
+  await clickRowAction(container, '删除');
   const popup = await screen.findByRole('tooltip');
   for (const locale of ['zh-CN', 'en-US']) {
     await switchLanguage(locale);

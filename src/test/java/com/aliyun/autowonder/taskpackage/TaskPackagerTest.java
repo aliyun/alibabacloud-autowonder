@@ -27,6 +27,17 @@ class TaskPackagerTest {
     }
 
     @Test
+    void stageTimingIsOnlyPackagedWhenEnabled() throws Exception {
+        var ctx = baseCtx();
+        for (boolean enabled : List.of(false, true)) {
+            if (enabled) ctx.getSdlc().put("stageTimingEnabled", true);
+            var files = unzip(storage.get(packager.build(ctx).getOssRef()));
+            var policy = JSON.parseObject(new String(files.get("policy.json"), StandardCharsets.UTF_8));
+            assertEquals(enabled ? Boolean.TRUE : null, policy.get("stageTimingEnabled"));
+        }
+    }
+
+    @Test
     void restartedRoundCarriesLineageAndTheCrossRoundReceiptContract() throws Exception {
         PackageContext ctx = baseCtx();
         ctx.setDeliveryRoundId(1234L); ctx.setSourceDispatchId(1200L); ctx.setWorkflowSnapshotSha256("frozen-hash");

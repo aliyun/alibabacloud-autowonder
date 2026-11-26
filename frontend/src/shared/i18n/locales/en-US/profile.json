@@ -1,6 +1,9 @@
 {
   "basic": {
     "title": "Basic information",
+    "desc": "Your username cannot be changed. A changed email takes effect only after the new address is verified.",
+    "nicknameHint": "Shown in member lists, work items and comments.",
+    "identityLine": "{{username}} · {{email}}",
     "saved": "Basic information saved",
     "saveFailed": "Failed to save basic information",
     "loadFailed": "Failed to load basic information",
@@ -39,6 +42,7 @@
   "retry": "Retry",
   "password": {
     "title": "Account security",
+    "desc": "After changing your password, sign in again with the new one. Other signed-in sessions stay active.",
     "success": "Password changed",
     "failed": "Failed to change password",
     "current": "Current password",
@@ -56,6 +60,9 @@
   },
   "deactivation": {
     "title": "Delete account",
+    "desc": "Deletion takes effect immediately and cannot be undone from the profile page.",
+    "dangerTag": "Dangerous operation",
+    "confirmHint": "Requires typing your username to confirm",
     "notice": "Once deleted, your account can no longer sign in and every issued credential is invalidated immediately. Your work items, comments and other history are retained and shown under your username from before deletion.",
     "warning": "This deletes your account immediately (data is retained)",
     "warningHint": "A deleted account cannot be restored from the profile page; contact a platform administrator to restore it under User management.",
@@ -75,8 +82,28 @@
   "close": "Close",
   "title": "Personal settings",
   "description": "Manage global personal settings for your account.",
+  "nav": {
+    "heading": "Personal settings",
+    "label": "Personal settings sections",
+    "basicDesc": "Nickname, email and contact",
+    "imDesc": "DingTalk and Feishu delivery",
+    "federatedDesc": "SSO identity binding",
+    "mcpDesc": "Credentials for external clients",
+    "passwordDesc": "Account security",
+    "deactivateDesc": "Permanently disable this account",
+    "foot": "Personal settings apply across all workspaces."
+  },
+  "account": {
+    "unavailable": "(unavailable)",
+    "normal": "Active"
+  },
   "im": {
     "title": "IM identity",
+    "desc": "Save your user ID to receive assignment and test notifications. The message channel is configured by the platform.",
+    "robotHint": "Ask a platform administrator to configure the platform bot.",
+    "footerHint": "Test messages are sent to the saved user ID.",
+    "feishuBadge": "Fs",
+    "dingtalkBadge": "DT",
     "feishu": "Feishu",
     "dingtalk": "DingTalk",
     "saveFirst": "Save your user ID first",
@@ -100,6 +127,10 @@
   },
   "federated": {
     "title": "Enterprise identity",
+    "desc": "After binding you can sign in with your company identity system. Bindings use stable subject identifiers and are never merged by email.",
+    "emptySub": "After binding you can sign in to AutoWonder with your company account. Unbinding takes effect immediately.",
+    "boundTag": "Bound",
+    "unboundTag": "Not bound",
     "loadFailed": "Failed to load enterprise identities",
     "empty": "No enterprise identity is bound yet",
     "hint": "After binding, you can sign in to AutoWonder with your company identity provider. Bindings use stable subject identifiers and accounts are never merged by email address.",

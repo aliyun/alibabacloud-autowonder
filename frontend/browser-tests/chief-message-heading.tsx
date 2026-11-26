@@ -86,6 +86,10 @@ apiClient.defaults.adapter = async config => {
     return respond({ agentId: 42, executorId: 5, agentConfigured: true, skillsConfigured: true,
       executorConfigured: true, launchConfigured: true, ready: true, missingSkills: [] });
   }
+  // 顶栏入口与面板头部共用常驻执行器状态；真实后端按 OK/OFFLINE/NOT_CONFIGURED 返回。
+  if (method === 'get' && url === '/api/platform-agent/status') {
+    return respond({ state: 'OK', agentId: 42, executorCount: 1, onlineExecutorCount: 1 });
+  }
   if (method === 'get' && url === `/api/platform/conversations/${CONVERSATION_ID}`) return respond(conversation());
   if (method === 'get' && url === `/api/platform/conversations/${CONVERSATION_ID}/action-plans`) return respond([]);
   if (method === 'get' && new RegExp(`^/api/platform/conversations/${CONVERSATION_ID}/turns/\\d+/events$`).test(url)) return respond([]);

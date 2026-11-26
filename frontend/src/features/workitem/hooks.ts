@@ -236,7 +236,7 @@ export function useTransitionWorkitem() {
     mutationFn: ({ id, toNodeId, expected }: {
       id: number | string;
       toNodeId: number;
-      expected?: { fromNodeId: number | string; expectedVersion: number };
+      expected?: { fromNodeId?: number | string; expectedVersion?: number; reason?: string };
     }) => api.transitionWorkitem(id, toNodeId, expected),
     onSuccess: (data, variables) => {
       message.success(i18n.t('workitem:messages.transitioned'));

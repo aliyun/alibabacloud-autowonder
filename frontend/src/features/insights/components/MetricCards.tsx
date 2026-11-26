@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { ThunderboltOutlined, AimOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { AimOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { MetricCardShell, type MetricKpi } from './MetricCardShell';
 import { CreditsCostCard } from './CreditsCostCard';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { InsightMetrics } from '../types';
 
 interface MetricCardsProps {
@@ -22,7 +23,7 @@ export function MetricCards({ metrics }: MetricCardsProps) {
   const { t } = useTranslation('insights');
   const cards: MetricCard[] = [
     {
-      title: t('metric.efficiency'), icon: <ThunderboltOutlined aria-hidden="true" />, color: 'var(--aw-info)', bg: 'color-mix(in srgb, var(--aw-info) 10%, var(--aw-panel))',
+      title: t('metric.efficiency'), icon: <AwStrokeIcon name="zap" />, color: 'var(--aw-info)', bg: 'color-mix(in srgb, var(--aw-info) 10%, var(--aw-panel))',
       kpis: [
         { label: t('metric.completionRate'), value: metrics.efficiency.completionRate + '%' },
         { label: t('metric.completed'), value: String(metrics.efficiency.completedTasks) },
@@ -31,7 +32,7 @@ export function MetricCards({ metrics }: MetricCardsProps) {
       trend: metrics.efficiency.trend,
     },
     {
-      title: t('metric.stability'), icon: <AimOutlined aria-hidden="true" />, color: 'var(--aw-success)', bg: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))',
+      title: t('metric.stability'), icon: <AimOutlined aria-hidden="true" />, color: 'var(--aw-success-deep)', bg: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))',
       kpis: [
         { label: t('metric.firstPass'), value: metrics.stability.successRate + '%' },
         { label: t('metric.rework'), value: String(metrics.stability.retryCount) },
@@ -40,7 +41,7 @@ export function MetricCards({ metrics }: MetricCardsProps) {
       trend: metrics.stability.trend,
     },
     {
-      title: t('metric.security'), icon: <SafetyCertificateOutlined aria-hidden="true" />, color: 'var(--aw-error)', bg: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))',
+      title: t('metric.security'), icon: <AwStrokeIcon name="shield" />, color: 'var(--aw-error-deep)', bg: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))',
       kpis: [
         { label: t('metric.highRisk'), value: String(metrics.security.highRiskOps) },
         { label: t('metric.compliance'), value: metrics.security.complianceRate + '%' },

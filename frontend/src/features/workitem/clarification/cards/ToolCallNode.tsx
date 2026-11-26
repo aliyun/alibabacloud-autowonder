@@ -1,10 +1,7 @@
 import { formatNumber } from '@/shared/i18n/format';
 import { useTranslation } from 'react-i18next';
-import {
-  CodeOutlined, FileTextOutlined, EditOutlined, DeleteOutlined,
-  SwapOutlined, SearchOutlined, BulbOutlined, CloudDownloadOutlined, ToolOutlined,
-} from '@ant-design/icons';
-import { Tag, Typography } from 'antd';
+import { ToolOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { ReactElement } from 'react';
 import type { AcpToolKind } from '../types';
 import type { TimelineToolCall } from '../timeline';
@@ -19,23 +16,15 @@ interface ToolCallNodeProps {
 const STATUS_LABEL = { running: 'clarification.toolRunning', completed: 'clarification.toolCompleted', failed: 'clarification.toolFailed' } as const;
 
 const KIND_ICON: Record<AcpToolKind, ReactElement> = {
-  execute: <CodeOutlined data-testid="tool-icon-execute" />,
-  read: <FileTextOutlined data-testid="tool-icon-read" />,
-  edit: <EditOutlined data-testid="tool-icon-edit" />,
-  delete: <DeleteOutlined data-testid="tool-icon-delete" />,
-  move: <SwapOutlined data-testid="tool-icon-move" />,
-  search: <SearchOutlined data-testid="tool-icon-search" />,
-  think: <BulbOutlined data-testid="tool-icon-think" />,
-  fetch: <CloudDownloadOutlined data-testid="tool-icon-fetch" />,
+  execute: <span data-testid="tool-icon-execute"><AwStrokeIcon name="code" size={13} /></span>,
+  read: <span data-testid="tool-icon-read"><AwStrokeIcon name="file" size={13} /></span>,
+  edit: <span data-testid="tool-icon-edit"><AwStrokeIcon name="edit" size={13} /></span>,
+  delete: <span data-testid="tool-icon-delete"><AwStrokeIcon name="trash" size={13} /></span>,
+  move: <span data-testid="tool-icon-move"><AwStrokeIcon name="shuffle" size={13} /></span>,
+  search: <span data-testid="tool-icon-search"><AwStrokeIcon name="search" size={13} /></span>,
+  think: <span data-testid="tool-icon-think"><AwStrokeIcon name="bulb" size={13} /></span>,
+  fetch: <span data-testid="tool-icon-fetch"><AwStrokeIcon name="dl" size={13} /></span>,
   other: <ToolOutlined data-testid="tool-icon-other" />,
-};
-
-const PRE_STYLE = {
-  fontSize: 13, whiteSpace: 'pre-wrap' as const, maxHeight: 150, overflow: 'auto',
-  padding: '6px 10px', color: CLARIFICATION_THEME.textSecondary,
-  backgroundColor: CLARIFICATION_THEME.codeSurface,
-  border: `1px solid ${CLARIFICATION_THEME.codeBorder}`,
-  borderRadius: CLARIFICATION_THEME.radiusBlock, margin: '2px 0 0',
 };
 
 const SUMMARY_STYLE = {
@@ -46,127 +35,82 @@ export function ToolCallNode({ tool, foldKey }: ToolCallNodeProps) {
   const { t } = useTranslation('workitem');
   const icon = KIND_ICON[tool.toolKind ?? 'other'] ?? KIND_ICON.other;
   const diffs = tool.diffs ?? [];
+  const hasLocations = !!tool.locations && tool.locations.length > 0;
+  // 位置、diff、终端输出原本平铺可见，折叠后仍默认展开；入参/出参保持各自折叠。
+  const visibleByDefault = hasLocations || diffs.length > 0 || !!tool.terminalOutput;
+  const hasBody = visibleByDefault || !!tool.input || !!tool.output;
 
   return (
-    <div data-testid={`tool-call-${tool.callId}`} style={{ marginBottom: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {icon}
-        <Typography.Text
-          data-testid="tool-call-title"
-          title={tool.title || tool.tool}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            fontSize: 14,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
+    <details className="aw-cl-step" data-testid={`tool-call-${tool.callId}`} open={visibleByDefault}>
+      <summary>
+        <span className="ic">{icon}</span>
+        <span className="t" data-testid="tool-call-title" title={tool.title || tool.tool}>
           {tool.title || tool.tool}
-        </Typography.Text>
-        <Tag color={statusColor(tool.status)} style={{ marginInlineEnd: 0, fontSize: 13 }}>
-          {Object.prototype.hasOwnProperty.call(STATUS_LABEL, tool.status) ? t(STATUS_LABEL[tool.status as keyof typeof STATUS_LABEL]) : tool.status}
-        </Tag>
-      </div>
+        </span>
+        <span className="r">
+          <span className={statusClass(tool.status)}>
+            {Object.prototype.hasOwnProperty.call(STATUS_LABEL, tool.status) ? t(STATUS_LABEL[tool.status as keyof typeof STATUS_LABEL]) : tool.status}
+          </span>
+          {tool.durationMs != null && <span>{t('clarification.toolDuration', { duration: formatNumber(tool.durationMs) })}</span>}
+          {hasBody ? <span className="chev"><AwStrokeIcon name="chev-d" size={12} /></span> : null}
+        </span>
+      </summary>
 
-      {tool.durationMs != null && <Typography.Text type="secondary">{t('clarification.toolDuration', { duration: formatNumber(tool.durationMs) })}</Typography.Text>}
-      {tool.locations && tool.locations.length > 0 ? (
-        <div
-          data-testid="tool-locations"
-          style={{ fontSize: 13, color: CLARIFICATION_THEME.textMuted, marginTop: 2 }}
-        >
-          {tool.locations
-            .map((loc) => (loc.line != null ? `${loc.path}:${loc.line}` : loc.path))
-            .join(t('clarification.locationSeparator'))}
-        </div>
-      ) : null}
-
-      {diffs.length > 0 ? (
-        <div data-testid="tool-diffs" style={{ marginTop: 4 }}>
-          {diffs.map((diff, index) => (
-            <div
-              key={index}
-              data-testid={`tool-diff-${index}`}
-              style={{
-                border: `1px solid ${CLARIFICATION_THEME.hairline}`,
-                borderRadius: CLARIFICATION_THEME.radiusBlock, marginBottom: 4,
-                overflow: 'hidden',
-              }}
-            >
-              <div style={{
-                fontSize: 13, padding: '2px 8px',
-                backgroundColor: CLARIFICATION_THEME.codeSurface,
-                borderBottom: `1px solid ${CLARIFICATION_THEME.hairline}`,
-                fontFamily: 'monospace',
-              }}>
-                {diff.path}
-              </div>
-              {/* 增删色是语义色，不走中性令牌 */}
-              {diff.oldText ? (
-                <pre
-                  data-testid={`tool-diff-old-${index}`}
-                  style={{
-                    ...PRE_STYLE, backgroundColor: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))', color: 'var(--aw-error)',
-                    border: 'none', borderRadius: 0, margin: 0,
-                  }}
-                >
-                  {prefixLines(diff.oldText, '-')}
-                </pre>
-              ) : null}
-              {diff.newText ? (
-                <pre
-                  data-testid={`tool-diff-new-${index}`}
-                  style={{
-                    ...PRE_STYLE, backgroundColor: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))', color: 'var(--aw-success)',
-                    border: 'none', borderRadius: 0, margin: 0,
-                  }}
-                >
-                  {prefixLines(diff.newText, '+')}
-                </pre>
-              ) : null}
+      {hasBody ? (
+        <div className="aw-cl-step-body">
+          {hasLocations ? (
+            <div data-testid="tool-locations">
+              {tool.locations!
+                .map((loc) => (loc.line != null ? `${loc.path}:${loc.line}` : loc.path))
+                .join(t('clarification.locationSeparator'))}
             </div>
-          ))}
+          ) : null}
+
+          {diffs.length > 0 ? (
+            <div data-testid="tool-diffs">
+              {diffs.map((diff, index) => (
+                <div key={index} data-testid={`tool-diff-${index}`}>
+                  <div className="k">{diff.path}</div>
+                  <pre className="aw-cl-pre">
+                    {diff.oldText ? (
+                      <span className="del" style={{ display: 'block' }} data-testid={`tool-diff-old-${index}`}>{prefixLines(diff.oldText, '-')}</span>
+                    ) : null}
+                    {diff.newText ? (
+                      <span className="add" style={{ display: 'block' }} data-testid={`tool-diff-new-${index}`}>{prefixLines(diff.newText, '+')}</span>
+                    ) : null}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {tool.terminalOutput ? (
+            <pre className="aw-cl-pre" data-testid="tool-terminal-output">{tool.terminalOutput}</pre>
+          ) : null}
+
+          {tool.input ? (
+            <PersistentFold foldKey={`${foldKey ?? tool.callId}:input`} style={{ marginTop: 4 }}
+              summaryStyle={SUMMARY_STYLE} summary={t('clarification.toolInput')}>
+              <pre className="aw-cl-pre" data-testid="tool-input">{tool.input}</pre>
+            </PersistentFold>
+          ) : null}
+
+          {tool.output ? (
+            <PersistentFold foldKey={`${foldKey ?? tool.callId}:output`} style={{ marginTop: 4 }}
+              summaryStyle={SUMMARY_STYLE} summary={t('clarification.toolOutput')}>
+              <pre className="aw-cl-pre" data-testid="tool-output">{tool.output}</pre>
+            </PersistentFold>
+          ) : null}
         </div>
       ) : null}
-
-      {tool.terminalOutput ? (
-        <pre
-          data-testid="tool-terminal-output"
-          style={{
-            fontSize: 13, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto',
-            padding: '6px 10px', color: CLARIFICATION_THEME.textSecondary,
-            backgroundColor: CLARIFICATION_THEME.codeSurface,
-            border: `1px solid ${CLARIFICATION_THEME.codeBorder}`,
-            borderRadius: CLARIFICATION_THEME.radiusBlock, marginTop: 4,
-            fontFamily: 'monospace',
-          }}
-        >
-          {tool.terminalOutput}
-        </pre>
-      ) : null}
-
-      {tool.input ? (
-        <PersistentFold foldKey={`${foldKey ?? tool.callId}:input`} style={{ marginTop: 4 }}
-          summaryStyle={SUMMARY_STYLE} summary={t('clarification.toolInput')}>
-          <pre data-testid="tool-input" style={PRE_STYLE}>{tool.input}</pre>
-        </PersistentFold>
-      ) : null}
-
-      {tool.output ? (
-        <PersistentFold foldKey={`${foldKey ?? tool.callId}:output`} style={{ marginTop: 4 }}
-          summaryStyle={SUMMARY_STYLE} summary={t('clarification.toolOutput')}>
-          <pre data-testid="tool-output" style={PRE_STYLE}>{tool.output}</pre>
-        </PersistentFold>
-      ) : null}
-    </div>
+    </details>
   );
 }
 
-function statusColor(status: string): string {
-  if (status === 'completed') return 'green';
-  if (status === 'failed') return 'red';
-  return 'processing';
+function statusClass(status: string): string {
+  if (status === 'completed') return 'aw-cl-st-ok';
+  if (status === 'failed') return 'aw-cl-st-fail';
+  return 'aw-cl-st-run';
 }
 
 function prefixLines(text: string, prefix: string): string {

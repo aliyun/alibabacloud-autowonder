@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Tooltip, message } from 'antd';
-import { CheckOutlined, CopyOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { copyTextToClipboard } from '@/shared/lib/clipboard';
 
 /** ✓ 反馈停留时长；与 spec D1 一致 */
@@ -49,7 +49,7 @@ export function CopyMessageButton({ text, label }: CopyMessageButtonProps) {
       <Button
         type="text"
         size="small"
-        icon={copied ? <CheckOutlined aria-hidden="true" /> : <CopyOutlined aria-hidden="true" />}
+        icon={copied ? <AwStrokeIcon name="check" /> : <AwStrokeIcon name="copy" />}
         aria-label={name}
         data-testid="copy-message-button"
         onClick={handleCopy}

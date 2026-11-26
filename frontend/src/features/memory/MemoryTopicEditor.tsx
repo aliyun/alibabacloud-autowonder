@@ -2,6 +2,7 @@ import { i18n } from '@/shared/i18n';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useTranslation } from 'react-i18next';
 import { Alert, Form, Input, Modal, Select } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useEffect, useRef } from 'react';
 import type { MemoryDocument, MemoryOwner, MemoryScope, MemoryTopicInput, MemoryType } from './api';
 
@@ -23,6 +24,9 @@ export function MemoryTopicEditor({ open, owners, initialOwner, document, saving
   const scope = Form.useWatch('scope', form);
   const request = useRef({ signature: '', key: '' });
   const initialized = useRef('');
+  const locked = document ? t('topic.lockedSuffix') : '';
+  const scopeFieldLabel = t('topic.scope') + locked;
+  const ownerFieldLabel = t('topic.owner') + locked;
   useEffect(() => {
     if (!open) { initialized.current = ''; return; }
     const identity = `${initialOwner?.scope}:${initialOwner?.ownerRef}:${document?.id ?? 'new'}`;
@@ -45,16 +49,18 @@ export function MemoryTopicEditor({ open, owners, initialOwner, document, saving
       path: document?.path, expectedVersion: document?.version, idempotencyKey: request.current.key });
   };
   return <Modal closable={{ 'aria-label': t('actions.close') }} title={document ? t('topic.edit') : t('page.create')} open={open} width={720} onCancel={onCancel} onOk={submit} confirmLoading={saving} okText={t('actions.save')} cancelText={t('actions.cancel')}>
-    <Alert type="info" showIcon message={t('topic.hint')} style={{ marginBottom: 16 }} />
+    <Alert className="mem-dialog-alert" type="info" showIcon icon={<AwStrokeIcon name="bulb" />} message={t('topic.hint')} style={{ marginBottom: 16 }} />
     <Form form={form} layout="vertical">
-      <Form.Item name="scope" label={t('topic.scope')} rules={[{ required: true, message: t('validation.scope') }]}><Select disabled={!!document} onChange={() => form.setFieldValue('ownerRef', undefined)} options={[
-        { value: 'ORG', label: t('scope.ORG') }, { value: 'SQUAD', label: t('scope.SQUAD') }, { value: 'AGENT', label: t('scope.AGENT') },
-      ]} /></Form.Item>
-      <Form.Item name="ownerRef" label={t('topic.owner')} rules={[{ required: true, message: t('validation.owner') }]}><Select disabled={!!document} showSearch optionFilterProp="label" options={owners.filter(owner => owner.scope === scope && owner.canCreate).map(owner => ({ value: owner.ownerRef, label: t('owner.option', { squads: owner.squadNames?.length ? owner.squadNames.join(t('owner.squadSeparator')) + ' · ' : '', name: memoryOwnerName(owner) }) }))} /></Form.Item>
-      <Form.Item name="type" label={t('topic.type')} rules={[{ required: true, message: t('validation.type') }]}><Select options={Object.entries(memoryTypeLabels).map(([value, label]) => ({ value, label }))} /></Form.Item>
+      <div className="mem-topic-form-row">
+        <Form.Item name="scope" label={scopeFieldLabel} rules={[{ required: true, message: t('validation.scope') }]}><Select disabled={!!document} onChange={() => form.setFieldValue('ownerRef', undefined)} options={[
+          { value: 'ORG', label: t('scope.ORG') }, { value: 'SQUAD', label: t('scope.SQUAD') }, { value: 'AGENT', label: t('scope.AGENT') },
+        ]} /></Form.Item>
+        <Form.Item name="ownerRef" label={ownerFieldLabel} rules={[{ required: true, message: t('validation.owner') }]}><Select disabled={!!document} showSearch optionFilterProp="label" options={owners.filter(owner => owner.scope === scope && owner.canCreate).map(owner => ({ value: owner.ownerRef, label: t('owner.option', { squads: owner.squadNames?.length ? owner.squadNames.join(t('owner.squadSeparator')) + ' · ' : '', name: memoryOwnerName(owner) }) }))} /></Form.Item>
+        <Form.Item name="type" label={t('topic.type')} rules={[{ required: true, message: t('validation.type') }]}><Select options={Object.entries(memoryTypeLabels).map(([value, label]) => ({ value, label }))} /></Form.Item>
+      </div>
       <Form.Item name="title" label={t('topic.title')} rules={[{ required: true, message: t('validation.title'), whitespace: true }]}><Input maxLength={256} /></Form.Item>
       <Form.Item name="description" label={t('topic.description')} rules={[{ required: true, message: t('validation.description'), whitespace: true }]}><Input placeholder={t('topic.descriptionPlaceholder')} /></Form.Item>
-      <Form.Item name="contentMd" label={t('topic.body')} rules={[{ required: true, message: t('validation.body'), whitespace: true }]}><Input.TextArea rows={10} /></Form.Item>
+      <Form.Item name="contentMd" label={t('topic.body')} rules={[{ required: true, message: t('validation.body'), whitespace: true }]}><Input.TextArea className="mem-topic-body" rows={10} /></Form.Item>
     </Form>
   </Modal>;
 }

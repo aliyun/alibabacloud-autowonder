@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LocaleProvider } from '../src/shared/i18n/LocaleProvider';
@@ -20,14 +21,18 @@ const states: Record<string, Recovery> = {
   '903': { closed: true, canReopen: false, executions: [] },
 };
 const pendingPosts: Array<(value: unknown) => void> = [];
-let posts = 0;
+const writes: Array<{ url: string; body: unknown }> = [];
+const reads: string[] = [];
 
 apiClient.get = (async (url: string) => {
-  const id = /workitems\/(\d+)\/recovery/.exec(url)?.[1] ?? '901';
+  const id = /^\/api\/workitems\/(\d+)\/recovery$/.exec(url)?.[1];
+  if (!id || !states[id]) throw new Error(`Unexpected fixture GET ${url}`);
+  reads.push(id);
   return { data: states[id] };
 }) as never;
-apiClient.post = (() => {
-  posts += 1;
+apiClient.post = ((url: string, body: unknown) => {
+  if (!/^\/api\/workitems\/90[123]\/recovery$/.test(url)) throw new Error(`Unexpected fixture POST ${url}`);
+  writes.push({ url, body });
   return new Promise((resolve) => { pendingPosts.push(resolve); });
 }) as never;
 
@@ -36,11 +41,15 @@ apiClient.post = (() => {
     setState: (id: string, next: Recovery) => void;
     releasePosts: () => void;
     postCount: () => number;
+    writes: () => typeof writes;
+    reads: () => string[];
   };
 }).__deliveryFixture = {
   setState(id, next) { states[id] = next; },
   releasePosts() { pendingPosts.splice(0).forEach((resolve) => resolve({ data: null })); },
-  postCount() { return posts; },
+  postCount() { return writes.length; },
+  writes() { return [...writes]; },
+  reads() { return [...reads]; },
 };
 
 const client = new QueryClient({
@@ -51,19 +60,27 @@ const client = new QueryClient({
 useAuthStore.setState({ accessLevel: 'READ_WRITE' });
 
 function Panel({ id, title }: { id: string; title: string }) {
+  const [watched, setWatched] = useState(false);
+  const [actions, setActions] = useState<string[]>([]);
+  const record = (action: string) => setActions((current) => [...current, action]);
   return <section data-testid={`panel-${id}`} className="aw-content-frame" style={{ margin: '0 auto 16px', maxWidth: 1440 }}>
     <div className="aw-detail-title"><span>{title}</span></div>
     <RecoveryControls workitemId={id} renderActions={(deliveryControl) => <WorkitemActionBar
-      hasSdlc
+      workType="TASK"
+      statusName="Synthetic review"
+      priority={1}
+      hasSdlc={id !== '902'}
+      watched={watched}
       deliveryControl={deliveryControl}
-      onStartDelivery={() => {}}
-      onAssignHuman={() => {}}
-      onTransition={() => {}}
-      onToggleWatch={() => {}}
-      onSyncExternal={() => {}}
-      onAddComment={() => {}}
-      onDelete={() => {}}
+      onStartDelivery={() => record('start')}
+      onAssignHuman={() => record('assign-human')}
+      onTransition={() => record('transition')}
+      onToggleWatch={() => { setWatched((value) => !value); record('watch'); }}
+      onSyncExternal={() => record('reconcile')}
+      onAddComment={() => record('comment')}
+      onDelete={() => record('delete')}
     />} />
+    <output data-testid="fixture-action-log">{actions.join(',')}</output>
   </section>;
 }
 

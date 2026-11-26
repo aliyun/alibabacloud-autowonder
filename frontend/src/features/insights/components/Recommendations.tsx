@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { BulbOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 
 interface RecommendationsProps {
   items: string[];
@@ -10,7 +10,7 @@ export function Recommendations({ items }: RecommendationsProps) {
   return (
     <div style={{ background: 'var(--aw-panel)', border: '1px solid var(--aw-border)', borderRadius: 10, padding: '16px 18px', marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <BulbOutlined aria-hidden="true" style={{ color: 'var(--aw-success)' }} />
+        <span style={{ color: 'var(--aw-success-deep)', display: 'inline-flex' }}><AwStrokeIcon name="bulb" /></span>
         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--aw-text)' }}>{t('panels.recommendations')}</span>
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--aw-muted)' }}>{t('panels.updates')}</span>
       </div>

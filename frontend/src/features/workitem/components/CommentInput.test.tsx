@@ -77,10 +77,9 @@ describe('CommentInput mention menu', () => {
     mentionCandidatesMock.mockReturnValue(buildCandidates(15));
     render(<CommentInput workitemId="1" />);
     const menu = openMentionMenu();
-    expect(menu.style.overflowY).toBe('auto');
-    const maxHeight = Number.parseInt(menu.style.maxHeight, 10);
-    expect(maxHeight).toBeGreaterThan(0);
-    expect(maxHeight).toBeLessThanOrEqual(400);
+    const body = menu.querySelector('.aw-mm-body');
+    expect(body).not.toBeNull();
+    expect(screen.getAllByRole('menuitem')).toHaveLength(15);
   });
 
   it('still renders every candidate inside the scrollable menu', () => {
@@ -121,13 +120,15 @@ describe('CommentInput mention menu', () => {
     render(<CommentInput workitemId="1" />);
     const menu = openMentionMenu();
 
-    expect(within(menu).getByText('当前交付小队：优化测试')).toBeInTheDocument();
+    expect(menu.querySelector('.aw-mm-group-label')?.textContent).toBe('当前交付小队优化测试');
     expect(within(menu).getByText('其他小队成员')).toBeInTheDocument();
 
     const items = screen.getAllByRole('menuitem');
     expect(items).toHaveLength(3);
-    expect(items[0]).toHaveTextContent('优化测试-全栈开发工程师（优化测试）');
-    expect(items[2]).toHaveTextContent('另一名数字员工（其他小队）');
+    expect(items[0]).toHaveTextContent('优化测试-全栈开发工程师');
+    expect(items[0]).toHaveTextContent('优化测试');
+    expect(items[2]).toHaveTextContent('另一名数字员工');
+    expect(items[2]).toHaveTextContent('其他小队');
 
     fireEvent.click(items[0]);
     expect(composer().value).toBe('@优化测试-全栈开发工程师 ');
@@ -139,7 +140,7 @@ describe('CommentInput mention menu', () => {
     ]);
     render(<CommentInput workitemId="1" />);
     const menu = openMentionMenu();
-    expect(within(menu).getByText('当前交付小队')).toBeInTheDocument();
+    expect(menu.querySelector('.aw-mm-group-label')?.textContent).toBe('当前交付小队');
     expect(screen.getAllByRole('menuitem')).toHaveLength(1);
   });
 
@@ -346,6 +347,7 @@ describe('CommentInput delivery-closed feedback', () => {
 
 
 describe('CommentInput attachments', () => {
+  const pendingUploads = new Set<() => void>();
   const file = (name = 'spec.md', type = 'text/markdown') => new File(['test'], name, { type });
   const artifact = (name = 'spec.md', id = 10): Artifact => ({
     id, name: `requirements/${name}`, workitemId: 1, dispatchId: null,
@@ -359,7 +361,12 @@ describe('CommentInput attachments', () => {
     vi.spyOn(message, 'success').mockImplementation(() => undefined as never);
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn() }));
   });
-  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  afterEach(async () => {
+    await act(async () => pendingUploads.forEach((release) => release()));
+    pendingUploads.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it('stages multiple files without uploading, allows removing them, and sends attachments without text', async () => {
     render(<CommentInput workitemId="1" />);
@@ -389,17 +396,39 @@ describe('CommentInput attachments', () => {
   });
 
   it('retains a failed upload draft and retries it without sending a broken reference', async () => {
-    uploadMock.mockRejectedValueOnce(new Error('offline'));
-    render(<CommentInput workitemId="1" />);
-    fireEvent.change(composer(), { target: { value: 'please review' } }); select(file()); clickSend();
-    await waitFor(() => expect(composer()).toBeEnabled());
-    expect(mutateMock).not.toHaveBeenCalled();
-    expect(composer()).toHaveValue('please review');
-    expect(screen.getByRole('button', { name: '移除附件 spec.md' })).toBeInTheDocument();
-    // The textarea unlocks before Ant Design's effect clears the button's loading state.
-    await waitFor(() => expect(screen.getByRole('button', { name: /发\s*送/ })).not.toHaveClass('ant-btn-loading'));
-    clickSend(); await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
-    expect(uploadMock).toHaveBeenCalledTimes(2);
+    let reject: ((reason: Error) => void) | undefined;
+    uploadMock.mockImplementationOnce(() => new Promise<Artifact[]>((_resolve, rejectUpload) => { reject = rejectUpload; }));
+    const release = () => reject?.(new Error('offline'));
+    pendingUploads.add(release);
+    const { container } = render(<CommentInput workitemId="1" />);
+    const page = within(container);
+    const textarea = page.getByPlaceholderText('输入评论，键入 @ 选择成员...');
+    const send = page.getByRole('button', { name: /发\s*送/ });
+    try {
+      fireEvent.change(textarea, { target: { value: 'please review' } });
+      fireEvent.change(page.getByTestId('comment-file-input'), { target: { files: [file()] } });
+      fireEvent.click(send);
+      await waitFor(() => expect(uploadMock).toHaveBeenCalledTimes(1));
+      expect(textarea).toBeDisabled();
+      expect(send).toHaveClass('ant-btn-loading');
+      expect(mutateMock).not.toHaveBeenCalled();
+      await act(async () => release());
+      await waitFor(() => {
+        expect(textarea).toBeEnabled();
+        expect(send).toBeEnabled();
+        expect(send).not.toHaveClass('ant-btn-loading');
+      });
+      expect(mutateMock).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue('please review');
+      expect(page.getByRole('button', { name: '移除附件 spec.md' })).toBeInTheDocument();
+      fireEvent.click(send);
+      await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1));
+      expect(uploadMock).toHaveBeenCalledTimes(2);
+      expect(mutateMock.mock.calls[0][0].contentMd).toBe('please review\n\n` requirements/spec.md `');
+    } finally {
+      await act(async () => release());
+      pendingUploads.delete(release);
+    }
   });
 
   it('reuses uploaded files after comment rejection, even after the document cache refreshes', async () => {
@@ -446,7 +475,7 @@ describe('CommentInput attachments', () => {
     render(<CommentInput workitemId="1" />);
     select(file(name));
     expect(screen.getByRole('button', { name: `移除附件 ${name}` })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /发送/ }));
+    fireEvent.click(screen.getByRole('button', { name: /发\s*送/ }));
     await waitFor(() => expect(uploadMock).toHaveBeenCalled());
     expect(uploadMock.mock.calls[0][0].files[0].name).toBe(name);
   });

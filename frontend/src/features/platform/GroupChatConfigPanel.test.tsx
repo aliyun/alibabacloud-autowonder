@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import userEvent from '@testing-library/user-event';
 import { message } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -32,13 +33,16 @@ function config(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderPanel(provider = 'DINGTALK') {
+function renderPanel(provider = 'DINGTALK', props: Partial<ComponentProps<typeof GroupChatConfigPanel>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <GroupChatConfigPanel provider={provider} />
-    </QueryClientProvider>,
-  );
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <GroupChatConfigPanel provider={provider} {...props} />
+      </QueryClientProvider>,
+    ),
+    queryClient,
+  };
 }
 
 function mockConfig(provider: string, body: Record<string, unknown>) {
@@ -70,7 +74,7 @@ describe('GroupChatConfigPanel', () => {
     expect(screen.getByText('收尾中 2')).toBeInTheDocument();
     expect(screen.getByText('投递失败 1')).toBeInTheDocument();
     expect(screen.getByText('投递未知 3')).toBeInTheDocument();
-    expect(screen.getAllByText('已配置；可修改应用身份')).toHaveLength(2);
+    expect(screen.getAllByText('已配置后仍可修改应用身份。')).toHaveLength(2);
     expect(screen.queryByText(/群确认/)).not.toBeInTheDocument();
 
     const appKey = screen.getByLabelText('群聊 AppKey');
@@ -117,10 +121,11 @@ describe('GroupChatConfigPanel', () => {
     expect(await screen.findByText('平台群聊接入: 已暂停（非当前渠道）')).toBeInTheDocument();
     expect(screen.queryByLabelText('群聊 RobotCode')).not.toBeInTheDocument();
     expect(screen.getByLabelText('群聊 App ID')).toHaveValue('cli_shared');
-    expect(screen.getByText('已配置加密；留空保留已有密钥')).toBeInTheDocument();
+    expect(screen.getByText('Verification Token 已配置，留空保留；更换飞书应用需新 Token。')).toBeInTheDocument();
+    expect(screen.getByText('Encrypt Key 已配置，留空保留；与飞书加密策略保持一致。')).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('群聊 Verification Token'), 'verify-token');
-    await userEvent.type(screen.getByLabelText('群聊 Encrypt Key'), 'encrypt-key');
+    await userEvent.type(screen.getByLabelText('群聊 Encrypt Key（可选）'), 'encrypt-key');
     await userEvent.click(screen.getByRole('switch', { name: '清除 Encrypt Key（需同时关闭飞书端加密）' }));
     await userEvent.click(screen.getByRole('button', { name: '保存群聊机器人' }));
 
@@ -214,7 +219,7 @@ describe('GroupChatConfigPanel', () => {
     await userEvent.type(robotCode, 'robot_new');
     expect(await screen.findByText('即将更换群聊机器人应用身份')).toBeInTheDocument();
     // The application is unchanged, so the existing Secret must remain reusable.
-    expect(screen.queryByText('更换应用后必须填写新应用的 AppSecret')).not.toBeInTheDocument();
+    expect(screen.queryByText('AppSecret 未配置，启用时必填；更换应用需新 Secret。')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '保存群聊机器人' }));
 
     await waitFor(() => expect(saved).toEqual({
@@ -320,5 +325,88 @@ describe('GroupChatConfigPanel', () => {
     renderPanel();
 
     expect(await screen.findByText('平台群聊接入: 未知')).toBeInTheDocument();
+  });
+
+  it('notifies the parent before validation and locks same-frame submission through callbacks', async () => {
+    mockConfig('DINGTALK', config());
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    let writes = 0;
+    const onPendingChange = vi.fn();
+    server.use(http.put('/api/platform/im-channels/DINGTALK/group-chat', async () => {
+      writes += 1;
+      await pending;
+      return HttpResponse.json(ok(config({ version: 5 })));
+    }));
+    renderPanel('DINGTALK', { onPendingChange });
+    const save = screen.getByRole('button', { name: '保存群聊机器人' });
+    await waitFor(() => expect(save).toBeEnabled());
+    try {
+      act(() => { fireEvent.click(save); fireEvent.click(save); });
+      expect(onPendingChange.mock.calls).toEqual([[true]]);
+      expect(save).toBeDisabled();
+      await waitFor(() => expect(writes).toBe(1));
+      expect(screen.getByLabelText('群聊 AppKey')).toBeDisabled();
+      expect(screen.getByRole('button', { name: '显示群聊密钥' })).toBeDisabled();
+      expect(onPendingChange).not.toHaveBeenCalledWith(false);
+    } finally {
+      release();
+      await waitFor(() => expect(writes).toBeGreaterThan(0));
+      await waitFor(() => expect(save).toBeEnabled());
+    }
+    expect(onPendingChange.mock.calls).toEqual([[true], [false]]);
+    expect(writes).toBe(1);
+  });
+
+  it('preserves identity secret and original version drafts when the same provider is refreshed', async () => {
+    let reads = 0;
+    let saved: unknown;
+    server.use(
+      http.get('/api/platform/im-channels/DINGTALK/group-chat', () => {
+        reads += 1;
+        return HttpResponse.json(ok(config({ version: reads + 3, appKey: reads === 1 ? 'ding-shared' : 'ding-external' })));
+      }),
+      http.put('/api/platform/im-channels/DINGTALK/group-chat', async ({ request }) => {
+        saved = await request.json();
+        return HttpResponse.json(ok(config({ version: 6, appKey: 'draft-app' })));
+      }),
+    );
+    const { queryClient } = renderPanel();
+    await waitFor(() => expect(screen.getByLabelText('群聊 AppKey')).toHaveValue('ding-shared'));
+    const appKey = screen.getByLabelText('群聊 AppKey');
+    await userEvent.clear(appKey);
+    await userEvent.type(appKey, 'draft-app');
+    await userEvent.type(screen.getByLabelText('群聊 AppSecret'), 'draft-secret');
+    await act(async () => { await queryClient.invalidateQueries({ queryKey: ['platform-im-group-chat', 'DINGTALK'] }); });
+    expect(reads).toBe(2);
+    expect(appKey).toHaveValue('draft-app');
+    expect(screen.getByLabelText('群聊 AppSecret')).toHaveValue('draft-secret');
+    expect(screen.getByText('即将更换群聊机器人应用身份')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '保存群聊机器人' }));
+    await waitFor(() => expect(saved).toEqual({
+      enabled: true, version: 4, appKey: 'draft-app', robotCode: 'robot_shared', appSecret: 'draft-secret',
+    }));
+  });
+
+  it('does not write when the parent blocks submission', async () => {
+    mockConfig('DINGTALK', config());
+    const writes = vi.fn();
+    server.use(http.put('/api/platform/im-channels/DINGTALK/group-chat', () => {
+      writes();
+      return HttpResponse.json(ok(config()));
+    }));
+    renderPanel('DINGTALK', { onBeforeSubmit: () => false });
+    const save = screen.getByRole('button', { name: '保存群聊机器人' });
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it('keeps fields read-only when the parent is saving another section', async () => {
+    mockConfig('DINGTALK', config());
+    renderPanel('DINGTALK', { disabled: true });
+    await screen.findByText('平台群聊接入: 运行中');
+    expect(screen.getByLabelText('群聊 AppKey')).toBeDisabled();
+    expect(screen.getByRole('button', { name: '保存群聊机器人' })).toBeDisabled();
   });
 });

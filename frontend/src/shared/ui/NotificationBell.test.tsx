@@ -49,13 +49,13 @@ describe('NotificationBell', () => {
     expect(screen.getByRole('button', { name: '通知中心' })).toBeInTheDocument();
   });
 
-  it('shows unread count badge', async () => {
+  it('shows the unread dot when there are unread notifications', async () => {
     mockUnreadCount(3);
-    renderBell();
-    expect(await screen.findByText('3')).toBeInTheDocument();
+    const { container } = renderBell();
+    await waitFor(() => expect(container.querySelector('.aw-bell-dot')).not.toBeNull());
   });
 
-  it('hides the badge when there is nothing unread', async () => {
+  it('hides the dot when there is nothing unread', async () => {
     let countCalls = 0;
     server.use(
       http.get('/api/notifications/unread-count', () => {
@@ -65,16 +65,16 @@ describe('NotificationBell', () => {
     );
     const { container } = renderBell();
 
-    // 先等接口真的返回 0，否则「没有角标」可能只是请求还没落地
+    // 先等接口真的返回 0，否则「没有圆点」可能只是请求还没落地
     await waitFor(() => expect(countCalls).toBe(1));
-    await waitFor(() => expect(container.querySelector('.ant-badge-count')).toBeNull());
+    await waitFor(() => expect(container.querySelector('.aw-bell-dot')).toBeNull());
     expect(screen.getByRole('button', { name: '通知中心' })).toBeInTheDocument();
   });
 
   it('navigates to the notification center when clicked', async () => {
     mockUnreadCount(1);
-    renderBell();
-    await screen.findByText('1');
+    const { container } = renderBell();
+    await waitFor(() => expect(container.querySelector('.aw-bell-dot')).not.toBeNull());
 
     await userEvent.click(screen.getByRole('button', { name: '通知中心' }));
 
@@ -86,8 +86,8 @@ describe('NotificationBell', () => {
   // 故这里锁定「暴露为 button + 可聚焦 + 点击可导航」，不去模拟按键触发点击。
   it('is exposed as a focusable button that opens the notification center', async () => {
     mockUnreadCount(2);
-    renderBell();
-    await screen.findByText('2');
+    const { container } = renderBell();
+    await waitFor(() => expect(container.querySelector('.aw-bell-dot')).not.toBeNull());
 
     const bell = screen.getByRole('button', { name: '通知中心' });
     bell.focus();
@@ -114,7 +114,7 @@ describe('NotificationBell', () => {
       }),
     );
     renderBell();
-    await screen.findByText('1');
+    await waitFor(() => expect(document.querySelector('.aw-bell-dot')).not.toBeNull());
 
     await userEvent.click(screen.getByRole('button', { name: '通知中心' }));
 

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, DatePicker, Form, Input, Modal, Radio, Space, Tabs, Typography, message } from 'antd';
+import { Button, DatePicker, Form, Modal, Radio, Typography, message } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useCreateWorkitem, useAssignWorkitem } from '@/features/workitem/hooks';
@@ -16,22 +16,14 @@ import {
   WORKITEM_CREATE_INITIAL_VALUES,
   WorkitemCreateFields,
 } from '@/features/workitem/components/WorkitemCreateFields';
-import { setupStatus } from '@/features/chiefOfStaff/api';
-import { openChiefPanel } from '@/features/workspaceGuide/bridge';
 import { i18n } from '@/shared/i18n';
+import './NewWorkitemModal.css';
 
 type StartMode = 'later' | 'now' | 'scheduled';
 
 interface NewWorkitemModalProps {
   open: boolean;
   onClose: () => void;
-}
-
-function createClientMessageId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `workbench-create-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function NewWorkitemModal({ open, onClose }: NewWorkitemModalProps) {
@@ -47,49 +39,9 @@ export function NewWorkitemModal({ open, onClose }: NewWorkitemModalProps) {
   const duplicateCheck = useWorkitemDuplicateCheck({ title: titleValue });
   const agentId = Form.useWatch<number | undefined>('agentId', form);
   const [startMode, setStartMode] = useState<StartMode>('now');
-  const [activeTab, setActiveTab] = useState('default');
-  const [smartDraft, setSmartDraft] = useState('');
-  const [prefillRejected, setPrefillRejected] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const openedRef = useRef(false);
   const submitLock = useRef(false);
-
-  const setupQuery = useQuery({
-    queryKey: ['chief', 'setup', 'workbench-create'],
-    queryFn: setupStatus,
-    enabled: open && activeTab === 'smart',
-    staleTime: 15_000,
-    retry: false,
-  });
-  const chiefReady = setupQuery.data?.ready === true;
-
-  useEffect(() => {
-    if (open) {
-      setActiveTab('default');
-      setPrefillRejected(false);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open || activeTab !== 'smart' || !chiefReady || openedRef.current) {
-      return;
-    }
-    // 进入智能模式才建立与当前空间 Chief 的对话；每次打开弹窗只自动打开一次。
-    openedRef.current = true;
-    openChiefPanel({
-      expanded: true,
-      prefill: smartDraft.trim() || null,
-      clientMessageId: createClientMessageId(),
-      onPrefillResult: (accepted) => setPrefillRejected(!accepted),
-    });
-  }, [activeTab, chiefReady, open, smartDraft]);
-
-  useEffect(() => {
-    if (!open) {
-      openedRef.current = false;
-    }
-  }, [open]);
 
   // 取消数字员工选择后清除不再有效的启动安排，避免提交残留参数。
   useEffect(() => {
@@ -184,23 +136,15 @@ export function NewWorkitemModal({ open, onClose }: NewWorkitemModalProps) {
     });
   };
 
-  const handleReopenChief = () => {
-    setPrefillRejected(false);
-    openChiefPanel({
-      expanded: true,
-      prefill: smartDraft.trim() || null,
-      clientMessageId: createClientMessageId(),
-      onPrefillResult: (accepted) => setPrefillRejected(!accepted),
-    });
-  };
-
   const defaultTab = (
     <Form form={form} layout="vertical" initialValues={WORKITEM_CREATE_INITIAL_VALUES}>
       <WorkitemCreateFields
+        variant="modal"
         titleHandlers={duplicateCheck.titleHandlers}
         attachments={attachments}
         onAttachmentsChange={setAttachments}
       />
+      <div className="aw-create-divider" />
       <DeliveryTargetFields form={form} required={false} />
       {agentId != null ? (
         <Form.Item label={t('create.delivery.mode')}>
@@ -236,12 +180,6 @@ export function NewWorkitemModal({ open, onClose }: NewWorkitemModalProps) {
           />
         </Form.Item>
       ) : null}
-      <Space>
-        <Button type="primary" loading={createMut.isPending || submitting} onClick={() => { void handleSubmit(); }}>
-          {submitLabel}
-        </Button>
-        <Button onClick={onClose}>{i18n.t('workitem:create.cancel')}</Button>
-      </Space>
       <DuplicateWorkitemsModal
         open={duplicateCheck.modal.open}
         matches={duplicateCheck.modal.matches}
@@ -252,49 +190,24 @@ export function NewWorkitemModal({ open, onClose }: NewWorkitemModalProps) {
     </Form>
   );
 
-  const smartTab = (
-    <div className="aw-workbench-smart">
-      <Typography.Paragraph type="secondary">{t('create.smart.description')}</Typography.Paragraph>
-      {setupQuery.isLoading ? (
-        <Typography.Text type="secondary">{t('create.smart.checking')}</Typography.Text>
-      ) : !chiefReady ? (
-        <Alert type="info" showIcon message={t('create.smart.unavailable')} />
-      ) : null}
-      <Form layout="vertical">
-        <Form.Item label={t('create.smart.draftLabel')}>
-          <Input.TextArea
-            rows={5}
-            aria-label={t('create.smart.draftLabel')}
-            value={smartDraft}
-            placeholder={t('create.smart.draftPlaceholder')}
-            onChange={(event) => setSmartDraft(event.target.value)}
-          />
-        </Form.Item>
-      </Form>
-      {prefillRejected ? <Alert type="warning" showIcon message={t('create.smart.prefillRejected')} /> : null}
-      <Button type="primary" disabled={!chiefReady || !smartDraft.trim()} onClick={handleReopenChief}>
-        {t('create.smart.open')}
-      </Button>
-    </div>
-  );
-
   return (
     <Modal
       title={t('create.title')}
       open={open}
       onCancel={onClose}
-      footer={null}
+      className="aw-create-modal"
+      footer={(
+        <div className="aw-create-modal-foot">
+          <Button type="primary" loading={createMut.isPending || submitting} onClick={() => { void handleSubmit(); }}>
+            {submitLabel}
+          </Button>
+          <Button onClick={onClose}>{i18n.t('workitem:create.cancel')}</Button>
+        </div>
+      )}
       width={640}
       destroyOnHidden={false}
     >
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={[
-          { key: 'default', label: t('create.tabs.default'), children: defaultTab },
-          { key: 'smart', label: t('create.tabs.smart'), children: smartTab },
-        ]}
-      />
+      {defaultTab}
     </Modal>
   );
 }

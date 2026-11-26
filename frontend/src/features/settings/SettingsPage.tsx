@@ -6,7 +6,8 @@ import { PageHeading } from '@/shared/ui/PageHeading';
 import { useEffect, useMemo } from 'react';
 import { Card, Tabs, Form, Input, InputNumber, Button, Spin, message, Row, Col, Statistic, Switch, Space } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { SaveOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { EyeInvisibleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { ColumnsType } from 'antd/es/table';
 import type { FormInstance } from 'antd/es/form';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -78,7 +79,7 @@ function SettingFields({ schema }: { schema: SettingSchema[] }) {
     <>
       {schema.map((item) => (
         <Form.Item key={item.key} label={t(item.labelKey)} name={item.key} extra={item.hintKey ? t(item.hintKey) : undefined}>
-          {item.secret ? <Input.Password placeholder={item.placeholderKey ? t(item.placeholderKey) : undefined} iconRender={(visible) => <Button type="text" htmlType="button" aria-label={visible ? t('hideSecret') : t('showSecret')} icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />} />} /> : <Input />}
+          {item.secret ? <Input.Password placeholder={item.placeholderKey ? t(item.placeholderKey) : undefined} iconRender={(visible) => <Button type="text" htmlType="button" aria-label={visible ? t('hideSecret') : t('showSecret')} icon={visible ? <AwStrokeIcon name="eye" /> : <EyeInvisibleOutlined aria-hidden="true" />} />} /> : <Input />}
         </Form.Item>
       ))}
     </>
@@ -194,7 +195,7 @@ function AiSettingsTab() {
         <Table rowKey={(row) => row.scene} columns={usageColumns} dataSource={usage} pagination={false} size="small" />
       </Card>
 
-      <Button type="primary" icon={<SaveOutlined aria-hidden="true" />} aria-label={t('saveAi')} loading={saveMut.isPending} onClick={() =>
+      <Button type="primary" icon={<AwStrokeIcon name="check" />} aria-label={t('saveAi')} loading={saveMut.isPending} onClick={() =>
         runAccessCommand('ADMIN', t('saveAi'), () => saveMut.mutate())
       }>
         {t('saveAi')}
@@ -300,7 +301,7 @@ function NotifySettingsTab() {
         </Col>
       </Row>
 
-      <Button type="primary" icon={<SaveOutlined aria-hidden="true" />} aria-label={t('saveNotify')} loading={saveMut.isPending} onClick={() =>
+      <Button type="primary" icon={<AwStrokeIcon name="check" />} aria-label={t('saveNotify')} loading={saveMut.isPending} onClick={() =>
         runAccessCommand('ADMIN', t('saveNotify'), () => saveMut.mutate())
       }>
         {t('saveNotify')}
@@ -335,7 +336,7 @@ function SystemSettingsTab() {
           <SettingFields schema={SYSTEM_SETTINGS} />
         </Form>
       </Card>
-      <Button type="primary" icon={<SaveOutlined aria-hidden="true" />} aria-label={t('saveSystem')} loading={saveMut.isPending} onClick={() =>
+      <Button type="primary" icon={<AwStrokeIcon name="check" />} aria-label={t('saveSystem')} loading={saveMut.isPending} onClick={() =>
         runAccessCommand('ADMIN', t('saveSystem'), () => saveMut.mutate())
       }>
         {t('saveSystem')}

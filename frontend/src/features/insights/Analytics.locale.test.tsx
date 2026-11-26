@@ -24,14 +24,14 @@ it('translates the five insight tabs without retired execution audit and require
  server.use(http.get('/api/insights/delivery-analysis', () => ok({status:'COMPUTING',report:null,errorCode:null})), http.get('/api/dashboard/realtime', () => ok(null)), http.get('/api/dashboard/overview', () => ok(null)), http.get('/api/dashboard/pipeline-health', () => ok(null)), http.get('/api/insights/metrics', () => ok(metrics)), http.get('/api/insights/workers', () => ok([])), http.get('/api/insights/audit', () => ok({ items: [], total: 0 })));
  routed(<InsightsPage />);
  const zh = ['交付数据分析', '实时看板', '人机协作', '工单交付', '阶段耗时'];
- await screen.findByRole('radio', { name: zh[0] });
- for (const label of zh) expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
- expect(screen.queryByRole('radio', { name: '执行审计' })).toBeNull();
- expect(screen.queryByRole('radio', { name: '需求交付' })).toBeNull();
+ await screen.findByRole('tab', { name: zh[0] });
+ for (const label of zh) expect(screen.getByRole('tab', { name: label })).toBeInTheDocument();
+ expect(screen.queryByRole('tab', { name: '执行审计' })).toBeNull();
+ expect(screen.queryByRole('tab', { name: '需求交付' })).toBeNull();
  await act(async () => { await i18n.changeLanguage('en-US'); });
- for (const label of ['Delivery analytics', 'Realtime dashboard', 'Human–Agent participation', 'Work item delivery', 'Stage duration']) expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
- expect(screen.queryByRole('radio', { name: 'Execution audit' })).toBeNull();
- expect(screen.queryByRole('radio', { name: 'Requirement delivery' })).toBeNull();
+ for (const label of ['Delivery analytics', 'Realtime dashboard', 'Human–Agent participation', 'Work item delivery', 'Stage duration']) expect(screen.getByRole('tab', { name: label })).toBeInTheDocument();
+ expect(screen.queryByRole('tab', { name: 'Execution audit' })).toBeNull();
+ expect(screen.queryByRole('tab', { name: 'Requirement delivery' })).toBeNull();
 });
 it('keeps member search and dates on a cached independent consumer', async () => {
  const requests: string[] = [];
@@ -132,8 +132,7 @@ it.each(['zh-CN', 'en-US'])('final widget member search and nonempty clear prese
  await i18n.changeLanguage(locale); routed(<MemberDeliveryTab />);
  await screen.findByText('<raw>成员');
  const label = locale === 'en-US' ? 'Search project members' : '搜索项目成员';
- const input = screen.getByRole('searchbox', { name: label });
- expect(screen.getByRole('button', { name: label })).toBeEnabled();
+ const input = screen.getByRole('textbox', { name: label });
  await userEvent.type(input, 'missing');
  expect(screen.queryByText('<raw>成员')).not.toBeInTheDocument();
  const clear = screen.getByRole('button', { name: locale === 'en-US' ? 'Clear member search' : '清空成员搜索' });

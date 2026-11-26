@@ -1,0 +1,5 @@
+/* 调度运行详情：与工单详情同构的灰底画布分块，页面本身不再套页框。 */
+html .aw-run-main { overflow: visible; }
+
+.aw-run-head .aw-detail-title { flex-wrap: wrap; row-gap: 6px; }
+.aw-run-head .aw-run-meta { margin: 8px 0 0; }

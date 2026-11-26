@@ -6,19 +6,20 @@ import { conversationNotice } from './conversationNotice';
 import { AutoConversationQuestionHistory } from '@/shared/ui/AutoConversationQuestionHistory';
 import { projectQuestionHistory, questionIdentity, withoutCoveredQuestions } from './answerHistory';
 import { appendQuestionContext } from './continueQuestion';
-import { RobotHeadIcon } from '@/shared/ui/RobotHeadIcon';
+import { AgentInitial } from '../components/SquadMembers';
 import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import type { CSSProperties, DragEvent, ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Typography, Empty, message, Select, Tag } from 'antd';
+import { Button, message, Select, Tag } from 'antd';
 import {
-  SendOutlined, PlusOutlined, UserSwitchOutlined,
-  StopOutlined, VerticalAlignBottomOutlined, PaperClipOutlined,
+  StopOutlined, PaperClipOutlined,
 } from '@ant-design/icons';
 import { AutoConversationTurnContent, ConversationTurnCopyButton } from '@/shared/ui/AutoConversationTurnContent';
 import { useConversationTurnHistory } from '@/shared/ui/useConversationTurnHistory';
+import { getSquadMembers } from '@/features/squad/api';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { ResizeHandle } from '@/shared/ui/ResizeHandle';
 import { ApiError, ErrorCodes } from '@/shared/types/common';
 import { useAuthStore } from '@/shared/auth/store';
@@ -50,7 +51,7 @@ import type { ElicitationReply } from './cards/ElicitationCard';
 import { CopyMessageButton } from './CopyMessageButton';
 import { ArtifactPreviewDrawer } from './ArtifactPreviewDrawer';
 import type { Artifact } from '@/shared/types/workitem';
-import { CLARIFICATION_THEME, agentBlockStyle, userBubbleStyle } from './theme';
+import { agentBlockStyle, userBubbleStyle } from './theme';
 import { useClarificationBrowserNotification } from './useClarificationBrowserNotification';
 import {
   useClarificationConversations,
@@ -125,13 +126,12 @@ export function isNearScrollBottom(
 const clarificationBootstrapPrompt = (workitemId: string) =>
   i18n.t('workitem:clarification.bootstrapPrompt', { workitemId });
 
-/** 加载中/加载失败提示的居中样式：与 Empty 同视觉重量，不抢占消息流。 */
-const CLARIFICATION_LOAD_HINT_STYLE: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  gap: 8,
-  minHeight: 120,
+const TIME_HM: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+const TIME_FULL_NUM: Intl.DateTimeFormatOptions = {
+  year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric',
+};
+const TIME_FULL: Intl.DateTimeFormatOptions = {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
 };
 
 /** 历史加载失败/降级提示（工单 55411 缺陷一）：错误可见 + 显式重试入口，
@@ -144,8 +144,9 @@ function ClarificationLoadError({ testId, description, tone = 'danger', onRetry 
 }) {
   const { t } = useTranslation('workitem');
   return (
-    <div data-testid={testId} style={CLARIFICATION_LOAD_HINT_STYLE}>
-      <Typography.Text type={tone}>{description}</Typography.Text>
+    <div data-testid={testId} role="alert" className={`aw-cl-note ${tone === 'warning' ? 'warn' : 'error'}`}>
+      <span className="ic"><AwStrokeIcon name={tone === 'warning' ? 'alert-t' : 'alert-c'} /></span>
+      <span className="grow">{description}</span>
       <Button size="small" onClick={onRetry}>{t('clarification.retry')}</Button>
     </div>
   );
@@ -668,10 +669,9 @@ export function WorkitemClarificationPanel({
     && !streamedTurnTerminated
     && (isSubmittingCurrentConversation || isReplying);
 
-  // 流已给出本轮终态、详情却还停在 PROCESSING/QUEUED：回复指示已经隐藏，输入却仍
-  // 禁用——用户看到的是一个没有任何解释的禁用输入框。这里补一个明确、可恢复的
-  // 「结算中」状态与手动重试入口（事件触发的失效与 3s 轮询仍会自动收敛）。
-  // 不在此开放发送：服务端尚未结算就解除并发门禁会造成重复提交（工单 55851）。
+  // 流已给出本轮终态、详情却还停在 PROCESSING/QUEUED：静默自动补齐详情（事件触发的
+  // 失效与 3s 轮询会收敛），不额外占用消息区。不在此开放发送：服务端尚未结算就解除
+  // 并发门禁会造成重复提交（工单 55851）。
 
   const queryClient = useQueryClient();
   const previousProcessingStatusRef = useRef<string | null>(null);
@@ -1187,40 +1187,47 @@ export function WorkitemClarificationPanel({
     }
   }, []);
 
+  // 头部「执行器在线」与选人页同源：同一小队成员查询（共享缓存键），不额外请求。
+  const headerSquadId = userSelectedAgentRef.current
+    ? selection?.squadId ?? null
+    : urlRestore.identity?.squadId ?? selection?.squadId ?? null;
+  const headerMembers = useQuery({
+    queryKey: ['squad-members', 'clarification', headerSquadId],
+    queryFn: () => getSquadMembers(headerSquadId as number),
+    enabled: headerSquadId != null && headerSquadId > 0 && effectiveAgentId != null,
+  });
+  const executorOnline = headerMembers.data?.find(m => m.agentId === effectiveAgentId)?.executorOnline;
+
   const needsAgentSelection = !effectiveAgentId;
 
-  // 全屏时正文、选人页与输入行共用同一条铺满列：横向跟着视口走，
-  // 左右留白完全交给外层容器已有的内距（工单 53035：超宽屏不该空出大半横向空间）。
-  // minWidth: 0 让 flex 子项可收缩，overflowWrap 兜住不换行的长链接，
-  // 两者共同保证视口变窄时列跟着收缩而不是撑出横向溢出。
+  // 全屏时正文、选人页与输入行共用同一条居中列（上限 1080px）：铺满整屏时
+  // 宽屏下单行过长、短回复与输入框相距太远，阅读焦点散开；1080 比原型 800 宽，
+  // 给表格和代码块留足横向空间（工单 53035 嫌的是 760 限宽在超宽屏空出大半）。
+  // minWidth: 0 让 flex 子项可收缩，overflowWrap 兜住不换行的长链接。
   // 必须算在选人早返回之前：切换数字人 / 交付进度落地都会在全屏态下回到选人页，
   // 否则那一屏会与对话屏宽度不一致。
   const fullscreenColumnStyle: CSSProperties = fullscreen
-    ? { width: '100%', minWidth: 0, overflowWrap: 'break-word' }
+    ? {
+      width: '100%', maxWidth: 1080, marginLeft: 'auto', marginRight: 'auto',
+      minWidth: 0, overflowWrap: 'break-word',
+    }
     : {};
 
   if (latestPending) {
     // 最近会话结果返回前的轻量加载态：只保留头行（返回/全屏仍可用），
     // 不渲染选人页，避免「先闪一下选人页再跳走」。
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div
-          data-testid="clarification-panel-header"
-          style={{
-            padding: fullscreen ? '12px 24px' : '10px 14px',
-            borderBottom: `1px solid ${CLARIFICATION_THEME.hairline}`,
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className={fullscreen ? 'aw-clarification-panel is-fullscreen' : 'aw-clarification-panel'}>
+        <div data-testid="clarification-panel-header" className="aw-cl-head">
+          <div className="aw-cl-head-row">
             {headerPrefix}
             {/* 解析窗口里也留出改选入口：查询迟迟不返回时用户不必被钉在加载态，
                 点击即接管选择，迟到的结果不再覆盖（AC-10）。 */}
             <Button
-              size="middle"
-              icon={<UserSwitchOutlined />}
+              type="text"
+              className="aw-cl-ghost"
+              icon={<AwStrokeIcon name="transfer" />}
               aria-label={t('clarification.switchAgent')}
-              style={{ flexShrink: 0 }}
               onClick={() => {
                 userSelectedAgentRef.current = true;
                 setSelection(null);
@@ -1239,34 +1246,20 @@ export function WorkitemClarificationPanel({
 
   if (needsAgentSelection) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className={fullscreen ? 'aw-clarification-panel is-fullscreen' : 'aw-clarification-panel'}>
         {/* 选人页头部：外层已不渲染独立头行，「返回/全屏」插槽在这里接住，
             与对话页一致；否则进入选人页后没有任何返回入口。 */}
-        <div
-          data-testid="clarification-panel-header"
-          style={{
-            padding: fullscreen ? '12px 24px' : '10px 14px',
-            borderBottom: `1px solid ${CLARIFICATION_THEME.hairline}`,
-            flexShrink: 0,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              flexWrap: fullscreen ? 'nowrap' : 'wrap',
-              ...(fullscreen ? {} : { marginBottom: 8 }),
-            }}
-          >
+        <div data-testid="clarification-panel-header" className="aw-cl-head">
+          <div className="aw-cl-head-row">
             {headerPrefix}
-            <span style={{ flex: '1 1 0%' }} />
-            {headerSuffix}
+            <span className="aw-cl-title">{t('detail.aiClarification')}</span>
+            <span className="aw-cl-head-actions">{headerSuffix}</span>
           </div>
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: fullscreen ? '20px 24px' : 12 }}>
-          <div data-testid="clarification-selection-column" style={fullscreenColumnStyle}>
-            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-              {t('clarification.selectSquadAgent')}
-            </Typography.Text>
+        <div className="aw-cl-pick">
+          <div data-testid="clarification-selection-column" className="aw-cl-pick-col" style={fullscreenColumnStyle}>
+            <p className="aw-cl-pick-intro">{t('clarification.selectSquadAgent')}</p>
+            <p className="aw-cl-pick-intro">{t('clarification.pickIntro', { id: workitemId })}</p>
             <SquadAgentSelector
               value={selection}
               onChange={handleSelectionChange}
@@ -1287,116 +1280,69 @@ export function WorkitemClarificationPanel({
     ? null
     : Math.min(inputHeight, inputHeightMax);
 
-  // 数字人名称列：basis 0 + minWidth 0 让它只占「剩余空间」而不是内容宽度，
-  // 名称再长也只是 ellipsis，不会把同行控件挤变形（停靠与全屏共用）。
-  // 停靠态名称在「返回/全屏」之间视觉居中：flex 占满中段 + 文本居中。
-  const agentNameNode = (centered: boolean) => (
-    <Typography.Text
-      strong
-      ellipsis={{ tooltip: displayName }}
-      title={displayName}
-      style={{ flex: '1 1 0%', minWidth: 0, whiteSpace: 'nowrap', textAlign: centered ? 'center' : 'start' }}
+  const conversationItems = conversations.data ?? [];
+  // 「最近」只认真实对话时间：新建未发言的空会话不能拿创建时间冒充最近活跃。
+  const conversationSelectOptions = conversationItems.map((item) => {
+    const lastActive = formatDateTime(item.lastTurnAt ?? '', TIME_FULL_NUM);
+    return {
+      value: item.id,
+      selectedLabel: (
+        <span className="aw-cl-session-label">
+          <span>{t('clarification.conversationNumber', { id: item.id })}</span>
+          <span className="s">{t('clarification.lastActive', { date: lastActive })}</span>
+        </span>
+      ),
+      label: (
+        <span className="aw-cl-menu-item">
+          <span className="t">{t('clarification.conversationNumber', { id: item.id })}</span>
+          <span className="s">{t('clarification.lastActive', { date: lastActive })}</span>
+          <span className="s">{t('clarification.createdAt', { date: formatDateTime(item.gmtCreate, TIME_FULL_NUM) })}</span>
+        </span>
+      ),
+    };
+  });
+
+  const switchAgentButton = (
+    <Button
+      type="text"
+      className="aw-cl-ghost"
+      icon={<AwStrokeIcon name="transfer" />}
+      aria-label={t('clarification.switchAgent')}
+      title={t('clarification.switchAgent')}
+      disabled={isCreatingConversation}
+      onClick={() => {
+        userSelectedAgentRef.current = true;
+        setSelection(null);
+      }}
     >
-      {displayName}
-    </Typography.Text>
+      {t('clarification.switchShort')}
+    </Button>
   );
 
-  // 「最近」只认真实对话时间：新建未发言的空会话显示「—」并排在已对话会话之后，
-  // 不能再拿创建时间冒充最近活跃，否则又会出现「排序与时间对不上」的观感。
-  const conversationSelectOptions = (conversations.data ?? []).map((item) => ({
-    value: item.id,
-    label: (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span>{t('clarification.conversationNumber', { id: item.id })}</span>
-        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          {t('clarification.lastActive', { date: formatDateTime(item.lastTurnAt ?? '', { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }) })}
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          {t('clarification.createdAt', { date: formatDateTime(item.gmtCreate, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }) })}
-        </Typography.Text>
-      </span>
-    ),
-  }));
-
   return (
-    <div ref={panelRef} className={fullscreen ? 'aw-clarification-panel is-fullscreen' : 'aw-clarification-panel'} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div
-        data-testid="clarification-panel-header"
-        style={{
-          padding: fullscreen ? '12px 24px' : '10px 14px',
-          borderBottom: `1px solid ${CLARIFICATION_THEME.hairline}`,
-          flexShrink: 0,
-        }}
-      >
-        {fullscreen ? (
-          // 全屏：外层的「返回/退出全屏」与本面板控件融合为一行，永不换行。
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 8 }}>
+    <div ref={panelRef} className={fullscreen ? 'aw-clarification-panel is-fullscreen' : 'aw-clarification-panel'}>
+      <div data-testid="clarification-panel-header" className="aw-cl-head">
+        <div className="aw-cl-head-inner">
+          <div className="aw-cl-head-row">
             {headerPrefix}
-            <Button
-              size="middle"
-              icon={<UserSwitchOutlined />}
-              aria-label={t('clarification.switchAgent')}
-              disabled={isCreatingConversation}
-              style={{ flexShrink: 0 }}
-              onClick={() => {
-                userSelectedAgentRef.current = true;
-                setSelection(null);
-              }}
-            >
-              {t('clarification.switchAgent')}
-            </Button>
-            {agentNameNode(false)}
-            {/* 选项同时展示「最近」「创建」两个时间：下拉按内容自适应宽度，固定 320px 会把创建时间截断。 */}
-            <Select
-              data-testid="clarification-conversation-select"
-              aria-label={t('clarification.selectClarificationConversation')}
-              size="middle"
-              value={conversationId ?? undefined}
-              placeholder={t('clarification.selectConversation')}
-              loading={conversations.isLoading}
-              disabled={isCreatingConversation}
-              onChange={handleSelectConversation}
-              options={conversationSelectOptions}
-              popupMatchSelectWidth={false}
-              style={{ width: 400, maxWidth: '100%', flexShrink: 0 }}
-            />
-            <Button
-              size="middle"
-              icon={<PlusOutlined />}
-              style={{ flexShrink: 0 }}
-              onClick={handleCreateConversation}
-              loading={isCreatingConversation}
-              disabled={isCreatingConversation}
-            >
-              {t('clarification.newConversation')}
-            </Button>
-            {headerSuffix}
-          </div>
-        ) : (
-          // 停靠（窄面板）：固定两行——导航/身份一行、会话操作一行，
-          // 各自适应列（名称与会话选择 flex 收缩 + ellipsis），
-          // 任何名称长度都不会把控件挤变形或互相重叠。
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              {headerPrefix}
-              {agentNameNode(true)}
-              {headerSuffix}
+            <div className="aw-cl-who">
+              <span className="aw-cl-av" aria-hidden="true"><AgentInitial name={convData?.agentName} /></span>
+              <span className="nm" title={displayName}>{displayName}</span>
+              {executorOnline !== undefined && (
+                <span
+                  className={executorOnline ? 'aw-cl-online' : 'aw-cl-online off'}
+                  title={executorOnline ? t('clarification.executorOnline') : t('clarification.executorOffline')}
+                >
+                  <span className="dot" />
+                  {executorOnline ? t('clarification.executorOnline') : t('clarification.executorOffline')}
+                </span>
+              )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Button
-                size="small"
-                icon={<UserSwitchOutlined />}
-                aria-label={t('clarification.switchAgent')}
-                disabled={isCreatingConversation}
-                style={{ flexShrink: 0 }}
-                onClick={() => {
-                  userSelectedAgentRef.current = true;
-                  setSelection(null);
-                }}
-              >
-                {t('clarification.switchAgent')}
-              </Button>
-              {/* 停靠面板里的控件本身很窄，下拉仍要按内容展开才能读完两个时间。 */}
+            {!fullscreen && headerSuffix ? <div className="aw-cl-head-actions">{headerSuffix}</div> : null}
+          </div>
+          <div className="aw-cl-head-row">
+            {switchAgentButton}
+            <div className="aw-cl-session">
               <Select
                 data-testid="clarification-conversation-select"
                 aria-label={t('clarification.selectClarificationConversation')}
@@ -1407,34 +1353,35 @@ export function WorkitemClarificationPanel({
                 disabled={isCreatingConversation}
                 onChange={handleSelectConversation}
                 options={conversationSelectOptions}
+                optionLabelProp="selectedLabel"
                 popupMatchSelectWidth={false}
-                style={{ flex: '1 1 240px', minWidth: 120, maxWidth: '100%' }}
               />
-              <Button
-                size="small"
-                icon={<PlusOutlined />}
-                style={{ flexShrink: 0 }}
-                onClick={handleCreateConversation}
-                loading={isCreatingConversation}
-                disabled={isCreatingConversation}
-              >
-                {t('clarification.newConversation')}
-              </Button>
             </div>
-          </>
-        )}
+            <Button
+              type="text"
+              className="aw-cl-ghost"
+              icon={<AwStrokeIcon name="plus" />}
+              onClick={handleCreateConversation}
+              loading={isCreatingConversation}
+              disabled={isCreatingConversation}
+            >
+              {t('clarification.newConversation')}
+            </Button>
+            {fullscreen ? headerSuffix : null}
+          </div>
+        </div>
       </div>
 
-      <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+      <div className="aw-cl-scroll-wrap">
         <div
           ref={scrollRef}
           data-testid="clarification-message-scroll"
+          className="aw-cl-body"
           onScroll={handleMessageScroll}
-          style={{ height: '100%', overflow: 'auto', padding: fullscreen ? '20px 24px' : '8px 12px' }}
         >
           {/* 这层列节点必须在滚动容器内部：滚动元素仍是 scrollRef 那层，
               否则跟随底部/回到底部的滚动测量会落到不滚动的节点上。 */}
-          <div data-testid="clarification-content-column" style={fullscreenColumnStyle}>
+          <div data-testid="clarification-content-column" className="aw-cl-column" style={fullscreenColumnStyle}>
             {!conversationId ? (
               conversations.isError ? (
                 <ClarificationLoadError
@@ -1443,7 +1390,7 @@ export function WorkitemClarificationPanel({
                   onRetry={() => { conversations.refetch(); }}
                 />
               ) : (
-                <Empty description={t('clarification.noConversations')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                <div className="aw-cl-state"><strong>{t('clarification.noConversations')}</strong></div>
               )
             ) : conversationHistoryFailed ? (
               <ClarificationLoadError
@@ -1461,9 +1408,18 @@ export function WorkitemClarificationPanel({
                     onRetry={() => { conversation.refetch(); }}
                   />
                 )}
+                {isConversationLoading && turns.length === 0 && (
+                  <div data-testid="clarification-history-loading" className="aw-cl-state">
+                    {t('clarification.loadingHistory')}
+                  </div>
+                )}
                 {turns.length === 0 && conversation.isSuccess && !isConversationLoading
                   && !showReplyingIndicator && !showProcessingEvents && !awaitingAgentReply && (
-                  <Empty description={t('clarification.noHistory')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                  <div className="aw-cl-state">
+                    <span className="ic"><AwStrokeIcon name="msg" size={28} /></span>
+                    <strong>{t('clarification.noHistory')}</strong>
+                    {t('clarification.noHistoryHint', { name: displayName })}
+                  </div>
                 )}
                 {turns.map((turn, index) => (
                   <div key={turn.id} data-turn-id={turn.id}>
@@ -1502,24 +1458,24 @@ export function WorkitemClarificationPanel({
                 {turnHistory.browsingHistory && <Button onClick={scrollToBottomAndFollow}>{historyLatestLabel}</Button>}
                 {showProcessingEvents && (
                   // 「等待回复」提示由底部的 ReplyingIndicator 统一承担，避免双份动效。
-                  // 保证的是文字块样式一致：流式区与完成态 TurnBubble 共用 agentBlockStyle()，
-                  // 字号/行高/颜色不会在回复落地时跳变（延续 f608cd4a4 的意图）。
-                  // 尚未消除的差异：TurnBubble 多一行数字人名字灰标，流式区没有，
-                  // 因此回复落地时内容仍会整体下移约一行，不是像素级等同。
-                  <div style={{ marginBottom: 16, display: 'flex' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div
-                        data-testid="clarification-streaming-bubble"
-                        style={agentBlockStyle()}
-                      >
-                        <ConversationEventView
-                          nodes={withoutCoveredQuestions(timeline, allQuestionHistory)}
-                          isProcessing={false}
-                          artifacts={artifacts}
-                          onArtifactClick={setPreviewArtifact}
-                          foldScope={`clarification:${conversationId ?? 0}`}
-                        />
-                      </div>
+                  // 流式区与完成态 TurnBubble 共用 agentBlockStyle() 与同一行身份 meta，
+                  // 回复落地时字号/行高与纵向位置都不跳变（延续 f608cd4a4 的意图）。
+                  <div className="aw-cl-turn">
+                    <div className="aw-cl-turn-meta">
+                      <span className="aw-cl-av" aria-hidden="true"><AgentInitial name={convData?.agentName} /></span>
+                      <strong>{displayName}</strong>
+                    </div>
+                    <div
+                      data-testid="clarification-streaming-bubble"
+                      style={agentBlockStyle()}
+                    >
+                      <ConversationEventView
+                        nodes={withoutCoveredQuestions(timeline, allQuestionHistory)}
+                        isProcessing={false}
+                        artifacts={artifacts}
+                        onArtifactClick={setPreviewArtifact}
+                        foldScope={`clarification:${conversationId ?? 0}`}
+                      />
                     </div>
                   </div>
                 )}
@@ -1548,19 +1504,14 @@ export function WorkitemClarificationPanel({
         </div>
         {!followBottom && conversationId ? (
           <Button
+            className="aw-cl-tobottom"
             size="small"
-            shape="circle"
             aria-label={t('clarification.bottom')}
-            title={t('clarification.bottom')}
-            icon={<VerticalAlignBottomOutlined />}
+            icon={<AwStrokeIcon name="down" />}
             onClick={scrollToBottomAndFollow}
-            style={{
-              position: 'absolute', right: 16, bottom: 12,
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
-              backgroundColor: CLARIFICATION_THEME.surface,
-              borderColor: CLARIFICATION_THEME.hairline,
-            }}
-          />
+          >
+            {t('clarification.bottom')}
+          </Button>
         ) : null}
       </div>
 
@@ -1579,27 +1530,7 @@ export function WorkitemClarificationPanel({
             onReply={(reply) => handleReplyElicitation(displayedElicitation.requestId, reply)}
           />
         ) : (
-        <div style={{
-          padding: fullscreen ? '12px 24px' : '8px 12px',
-          position: 'relative', flexShrink: 0,
-        }}>
-          <ResizeHandle
-            direction="vertical"
-            showIndicator={false}
-            value={manualInputHeight ?? CLARIFICATION_INPUT_MIN_HEIGHT}
-            measureValue={() =>
-              inputWrapRef.current?.getBoundingClientRect().height
-              || manualInputHeight
-              || CLARIFICATION_INPUT_MIN_HEIGHT}
-            min={CLARIFICATION_INPUT_MIN_HEIGHT}
-            max={inputHeightMax}
-            measureMax={() => computeInputHeightMax(
-              panelRef.current?.getBoundingClientRect().height || 0,
-            )}
-            onChange={setInputHeight}
-            onDoubleClick={() => setInputHeight(null)}
-            aria-label={t('clarification.resizeInput')}
-          />
+        <div className="aw-cl-foot">
           <div
             data-testid="clarification-composer"
             style={{
@@ -1632,6 +1563,27 @@ export function WorkitemClarificationPanel({
               disabled={composerDisabled}
               onRemove={removePendingAttachment}
             />
+            <div className={composerDisabled ? 'aw-cl-input is-disabled' : 'aw-cl-input'}>
+            <span className="aw-cl-grip" aria-hidden="true" />
+            <div className="aw-cl-resize">
+              <ResizeHandle
+                direction="vertical"
+                showIndicator={false}
+                value={manualInputHeight ?? CLARIFICATION_INPUT_MIN_HEIGHT}
+                measureValue={() =>
+                  inputWrapRef.current?.getBoundingClientRect().height
+                  || manualInputHeight
+                  || CLARIFICATION_INPUT_MIN_HEIGHT}
+                min={CLARIFICATION_INPUT_MIN_HEIGHT}
+                max={inputHeightMax}
+                measureMax={() => computeInputHeightMax(
+                  panelRef.current?.getBoundingClientRect().height || 0,
+                )}
+                onChange={setInputHeight}
+                onDoubleClick={() => setInputHeight(null)}
+                aria-label={t('clarification.resizeInput')}
+              />
+            </div>
             <div ref={inputWrapRef} style={{ minWidth: 0, position: 'relative' }}>
               <SlashCommandPicker
                 commands={slashCommands}
@@ -1652,7 +1604,7 @@ export function WorkitemClarificationPanel({
                 disabled={composerDisabled}
                 placeholder={agentRestorePending ? t('clarification.restoring') : t('clarification.messagePlaceholder')}
                 height={manualInputHeight}
-                minHeight={Math.round(CLARIFICATION_INPUT_DEFAULT_ROWS * 16 * 1.7) + 26}
+                minHeight={72}
                 maxHeight={inputHeightMax}
               />
             </div>
@@ -1664,27 +1616,14 @@ export function WorkitemClarificationPanel({
             ) : null}
             <div
               data-testid="clarification-input-actions"
-              style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-              }}
+              className="aw-cl-input-row"
+              style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between' }}
             >
-              <div style={{
-                display: 'flex',
-                flex: '1 1 auto',
-                alignItems: 'center',
-                gap: 4,
-                minWidth: 0,
-                maxWidth: 'calc(100% - 112px)',
-              }}>
+              <div style={{ display: 'flex', flex: '1 1 auto', alignItems: 'center', gap: 4, minWidth: 0 }}>
                 <Button
-                  size="small"
                   type="text"
-                  icon={<PaperClipOutlined />}
+                  className="aw-cl-icon-btn"
+                  icon={<AwStrokeIcon name="paperclip" />}
                   aria-label={t('clarification.attachFile')}
                   title={t('clarification.attachFile')}
                   data-testid="clarification-attach"
@@ -1693,19 +1632,22 @@ export function WorkitemClarificationPanel({
                 />
                 <Select<SendMode>
                   size="small"
+                  variant="borderless"
+                  className="aw-cl-mode-select"
+                  popupMatchSelectWidth={false}
                   value={sendMode}
                   onChange={handleSendModeChange}
                   options={SEND_MODE_OPTIONS.map(option => ({ value: option.value, label: option.label }))}
                   aria-label={t('clarification.sendMode')}
                   data-testid="clarification-send-mode-select"
-                  style={{ width: 180, maxWidth: '100%' }}
                 />
               </div>
               {showReplyingIndicator && cancelSupported && convData?.processingTurnId != null ? (
                 <Button
+                  size="small"
+                  className="aw-cl-send"
                   danger
                   icon={<StopOutlined />}
-                  style={{ minWidth: 104 }}
                   onClick={handleCancelReply}
                   loading={cancelMutation.isPending}
                 >
@@ -1713,10 +1655,11 @@ export function WorkitemClarificationPanel({
                 </Button>
               ) : (
                 <Button
+                  size="small"
+                  className="aw-cl-send"
                   type="primary"
-                  icon={<SendOutlined />}
+                  icon={<AwStrokeIcon name="send" />}
                   aria-label={t('clarification.sendMessage')}
-                  style={{ minWidth: 104 }}
                   onClick={handleSend}
                   loading={isSubmittingCurrentConversation}
                   disabled={composerDisabled || hasBlockingAttachments || !canSendMessage}
@@ -1724,6 +1667,7 @@ export function WorkitemClarificationPanel({
                   {t('clarification.send')}
                 </Button>
               )}
+            </div>
             </div>
           </div>
         </div>
@@ -1781,25 +1725,18 @@ function TurnBubble({
   const isUser = turn.direction === 'IN' || turn.direction === 'INBOUND';
   const hasContent = !!turn.content && turn.content.trim().length > 0;
 
-  const statusTag = turn.status === 'CANCELED' ? (
-    <Tag
-      style={{
-        display: 'inline-block', marginTop: 6, fontSize: 13,
-        color: CLARIFICATION_THEME.textSecondary,
-        borderColor: CLARIFICATION_THEME.hairline,
-        backgroundColor: 'transparent',
-      }}
-    >
-      {t('clarification.stopped')}
-    </Tag>
-  ) : null;
+  const statusTag = turn.status === 'CANCELED' ? <Tag>{t('clarification.stopped')}</Tag> : null;
 
   const ownedContent = conversationNotice(turn.display?.content, 'content', t);
   const ownedError = conversationNotice(turn.display?.error, 'error', t);
   const errorText = turn.error ? (
-    <Typography.Text type="danger" style={{ display: 'block', fontSize: 13, marginTop: 4 }}>
+    <div style={{ color: 'var(--aw-error-deep)', fontSize: 12, marginTop: 4 }}>
       {ownedError ?? turn.error}
-    </Typography.Text>
+    </div>
+  ) : null;
+
+  const timeLabel = turn.gmtCreate ? (
+    <time title={formatDateTime(turn.gmtCreate, TIME_FULL)}>{formatDateTime(turn.gmtCreate, TIME_HM)}</time>
   ) : null;
 
   // 内容为空（AI 返回占位）时没有可复制的东西。
@@ -1813,51 +1750,37 @@ function TurnBubble({
 
   if (isUser) {
     return (
-      <div
-        className="aw-clarify-msg"
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          gap: 4,
-        }}
-      >
-        {renderCopyAction(t('clarification.copyMyMessage'))}
-        <div style={{ maxWidth: '80%' }}>
-          {/* 输入框已是 Markdown 编辑器，用户消息同样走 MarkdownView 渲染
-              （whiteSpace 由 MarkdownView 内部设为 normal，不继承气泡的 pre-wrap）。 */}
-          <div data-testid="clarification-user-bubble" style={userBubbleStyle()}>
-            {conversationId != null && turn.attachments && turn.attachments.length > 0 ? (
-              <SentAttachments
-                workitemId={workitemId}
-                conversationId={conversationId}
-                attachments={turn.attachments}
-              />
-            ) : null}
-            {/* 纯附件消息没有文字内容：附件块就是整条消息，不渲染空 Markdown。 */}
-            {hasContent ? <AutoConversationTurnContent base={`/api/workitems/${workitemId}/clarification-conversations/${conversationId}`} conversationId={conversationId!} turn={turn} className="aw-clarify-md" /> : null}
-            {statusTag}
-            {errorText}
-          </div>
+      <div className="aw-clarify-msg aw-cl-turn user">
+        {/* 输入框已是 Markdown 编辑器，用户消息同样走 MarkdownView 渲染
+            （whiteSpace 由 MarkdownView 内部设为 normal，不继承气泡的 pre-wrap）。 */}
+        <div data-testid="clarification-user-bubble" style={userBubbleStyle()}>
+          {conversationId != null && turn.attachments && turn.attachments.length > 0 ? (
+            <SentAttachments
+              workitemId={workitemId}
+              conversationId={conversationId}
+              attachments={turn.attachments}
+            />
+          ) : null}
+          {/* 纯附件消息没有文字内容：附件块就是整条消息，不渲染空 Markdown。 */}
+          {hasContent ? <AutoConversationTurnContent base={`/api/workitems/${workitemId}/clarification-conversations/${conversationId}`} conversationId={conversationId!} turn={turn} className="aw-clarify-md" /> : null}
+          {errorText}
+        </div>
+        <div className="aw-cl-turn-meta">
+          {statusTag}
+          {timeLabel}
+          {renderCopyAction(t('clarification.copyMyMessage'))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="aw-clarify-msg" style={{ marginBottom: 16 }}>
-      <div
-        style={{
-          fontSize: 13,
-          color: CLARIFICATION_THEME.textMuted,
-          marginBottom: 6,
-          display: 'flex',
-          alignItems: 'center',
-        }}
-      >
-        <span style={{ fontSize: 14, marginRight: 4 }}><RobotHeadIcon /></span>
-        <span style={{ flex: 1, minWidth: 0 }}>{agentName || 'AI'}</span>
+    <div className="aw-clarify-msg aw-cl-turn">
+      <div className="aw-cl-turn-meta">
+        <span className="aw-cl-av"><AgentInitial name={agentName} /></span>
+        <strong>{agentName || 'AI'}</strong>
+        {timeLabel}
+        {statusTag}
         {renderCopyAction(t('clarification.copyReply'))}
       </div>
       <div data-testid="clarification-agent-block" style={agentBlockStyle()}>
@@ -1874,8 +1797,7 @@ function TurnBubble({
                 onArtifactClick={onArtifactClick}
               />
             )
-            : <Typography.Text type="secondary">{t('clarification.noResponse')}</Typography.Text>}
-        {statusTag}
+            : <span style={{ color: 'var(--aw-text-3)' }}>{t('clarification.noResponse')}</span>}
         {errorText}
         {detailToggle}
       </div>

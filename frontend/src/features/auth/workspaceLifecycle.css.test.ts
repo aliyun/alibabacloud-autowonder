@@ -22,7 +22,9 @@ const css = readFileSync(
  * base rule from its own pseudo-class variants.
  */
 function rule(selector: string): string {
-  const start = css.indexOf(`${selector} {`);
+  const marker = `${selector} {`;
+  const boundary = css.indexOf(`\n${marker}`);
+  const start = css.startsWith(marker) ? 0 : boundary === -1 ? -1 : boundary + 1;
   expect(start, `no rule for ${selector}`).toBeGreaterThanOrEqual(0);
   const end = css.indexOf('}', start);
   expect(end, `unterminated rule for ${selector}`).toBeGreaterThan(start);
@@ -30,12 +32,51 @@ function rule(selector: string): string {
 }
 
 function expectInteractiveStates(selector: string) {
-  for (const state of [':hover', ':active', ':focus-visible']) {
+  for (const state of [':hover', ':active']) {
     expect(rule(`${selector}${state}`), `${selector}${state} is empty`).not.toBe('');
   }
 }
 
 describe('workspaceLifecycle.css', () => {
+  it('keeps all workspace/new cards at the approved height with manage actions always visible', () => {
+    expect(rule('.ws-card, .ws-new')).toContain('height: 148px');
+    expect(rule('.ws-card, .ws-new')).toContain('box-sizing: border-box');
+    expect(rule('.ws-foot')).not.toContain('opacity: 0');
+    expect(rule('.ws-ops')).toContain('gap: 4px');
+    expect(rule('.ws-ops')).not.toContain('opacity:');
+    expect(rule('.ws-op')).toContain('padding: 0');
+    expect(rule('.ws-card.is-unjoined')).toContain('background: var(--aw-gray-bg)');
+    expect(rule('.ws-card.is-unjoined .ws-mark')).toContain('opacity: .65');
+    expect(rule('.ws-card.is-unjoined')).not.toContain('opacity:');
+  });
+
+  it('uses natural 6/24px field spacing in both workspace modals', () => {
+    expect(rule('.ws-workspace-form .ant-form-item')).toContain('margin-bottom: 24px');
+    expect(rule('.ws-workspace-form .ant-form-item-label')).toContain('padding-bottom: 6px');
+    expect(rule('.ws-workspace-form .ant-form-item-margin-offset')).toContain('display: none');
+    expect(rule('.ws-workspace-form .ant-form-item-with-help .ant-form-item-explain')).toContain('margin-top: 6px');
+    expect(rule('.ws-workspace-form .ant-form-item-explain-error')).toContain('line-height: 20px');
+    expect(rule('.ws-modal .ant-modal-footer')).toContain('gap: 8px');
+  });
+
+  it('matches the neutral membership badge and anchored card footer', () => {
+    expect(rule('.ws-membership')).toContain('color: var(--aw-text-3)');
+    expect(rule('.ws-membership')).toContain('background: var(--aw-gray-bg)');
+    expect(rule('.ws-cur, .ws-membership')).toContain('font-weight: 600');
+    expect(rule('.ws-card-enter')).toContain('margin-bottom: auto');
+    expect(rule('.ws-count')).toContain('gap: 3px');
+    expect(rule('.ws-background')).toContain('line-height: 24px');
+  });
+
+  it('keeps centered modals within 16px edges and prevents header/footer shrinking', () => {
+    expect(rule('.ws-modal')).toContain('padding-bottom: 0');
+    expect(rule('.ws-modal .ant-modal-content')).toContain('max-height: calc(100dvh - 32px)');
+    expect(rule('.ws-modal .ant-modal-header')).toContain('flex-shrink: 0');
+    expect(rule('.ws-modal .ant-modal-footer')).toContain('flex-shrink: 0');
+    expect(rule('.ws-modal .ant-modal-body')).toContain('overflow-y: auto');
+    expect(rule('.ws-modal .ant-modal-body')).toContain('min-height: 0');
+  });
+
   it('styles the apply button with the shared appearance tokens', () => {
     const base = rule('.aw-apply-access-button');
     expect(base).toContain('align-self: flex-end');
@@ -45,18 +86,15 @@ describe('workspaceLifecycle.css', () => {
     expect(base).not.toContain('#ff6a00');
     expect(base).toContain('cursor: pointer');
     expect(base).not.toContain('cursor: not-allowed');
-    expect(base).toContain('font-weight: 700');
+    expect(base).toContain('font-weight: 400');
+    expect(base).toContain('height: 26px');
+    expect(base).toContain('padding: 0 8px');
   });
 
-  it('gives the apply button distinct hover, active and visible-focus states', () => {
+  it('gives the apply button distinct hover and active states', () => {
     expectInteractiveStates('.aw-apply-access-button');
     expect(rule('.aw-apply-access-button:hover')).toContain('background: var(--aw-button-hover)');
     expect(rule('.aw-apply-access-button:active')).toContain('background: var(--aw-button-active)');
-    // F7.3: an outline is the only focus affordance that survives Windows high-contrast
-    // mode, and the offset keeps it off the border so the two do not merge into one line.
-    const focus = rule('.aw-apply-access-button:focus-visible');
-    expect(focus).toContain('outline: 2px solid var(--aw-accent-text)');
-    expect(focus).toContain('outline-offset: 2px');
   });
 
   it('keeps every hover and active background distinct from the default', () => {
@@ -70,21 +108,21 @@ describe('workspaceLifecycle.css', () => {
     expect(backgrounds).not.toContain(undefined);
   });
 
-  it('gives the card management controls the same focus affordance as the apply button', () => {
-    // F1.2: these sit beside the enter control, so they cannot inherit the card's border
-    // highlight as their focus signal — they need a ring of their own.
+  it('keeps the card management controls borderless icon buttons with danger hover', () => {
     expectInteractiveStates('.aw-card-manage-button');
-    expect(rule('.aw-card-manage-button:focus-visible')).toContain('outline: 2px solid var(--aw-accent-text)');
     const danger = rule('.aw-card-manage-button--danger:hover');
-    expect(danger).toContain('border-color: var(--aw-error)');
-    expect(danger).toContain('color: var(--aw-error)');
-    expect(rule('.aw-card-manage-button--danger:focus-visible')).toContain('outline-color: var(--aw-error)');
+    expect(rule('.aw-card-manage-button')).toContain('border: 0');
+    expect(rule('.aw-card-manage-button')).toContain('width: 24px');
+    expect(danger).toContain('background: var(--aw-error-bg)');
+    expect(danger).toContain('color: var(--aw-error-deep)');
   });
 
-  it('gives the recycle bin entry the same focus affordance', () => {
-    // F4.1: the entry is a real control, so it has to be reachable and visibly focusable.
+  it('styles the recycle bin entry as a quiet textual control', () => {
     expectInteractiveStates('.aw-recycle-bin-entry');
-    expect(rule('.aw-recycle-bin-entry:focus-visible')).toContain('outline: 2px solid var(--aw-accent-text)');
-    expect(rule('.aw-recycle-bin-entry')).toContain('color: var(--aw-accent-text)');
+    const base = rule('.aw-recycle-bin-entry');
+    expect(base).toContain('color: var(--aw-text-2)');
+    expect(base).toContain('height: 26px');
+    expect(base).toContain('background: transparent');
+    expect(base).toContain('border-radius: 4px');
   });
 });

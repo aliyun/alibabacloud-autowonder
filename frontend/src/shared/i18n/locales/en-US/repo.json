@@ -9,26 +9,25 @@
     "repoName": "Repository name",
     "repoUrl": "Repository URL",
     "branch": "Default branch",
-    "peer": "Related repository",
+    "peer": "Peer repository",
     "relationType": "Relationship type",
     "source": "Source repository",
     "target": "Target repository"
   },
   "actions": {
-    "addRepo": "Add repository",
+    "addRepo": "New repository",
     "deleteRepo": "Delete repository",
-    "map": "Relationship map",
+    "create": "Create",
     "save": "Save",
     "cancel": "Cancel",
-    "confirm": "Confirm",
     "delete": "Delete",
     "back": "Back",
     "edit": "Edit",
     "backList": "Back to list",
-    "addRelation": "Add relationship",
+    "addRelation": "New relationship",
     "deleteRelation": "Delete relationship",
     "close": "Close",
-    "addRepoRelation": "Add repository relationship",
+    "addRepoRelation": "New repository relationship",
     "deleteRepoRelation": "Delete repository relationship",
     "editRepo": "Edit repository information",
     "saveRepo": "Save repository information",
@@ -51,7 +50,7 @@
     "scanConfirmed": "Scan conclusion confirmed and saved"
   },
   "errors": {
-    "addRepo": "Failed to add repository",
+    "addRepo": "Failed to create repository",
     "deleteRepo": "Failed to delete repository",
     "save": "Failed to save",
     "create": "Failed to create relationship",
@@ -70,6 +69,9 @@
     "typeRequired": "Select a relationship type",
     "nameInvalid": "Repository name must be a single directory segment. Do not include / or \\, use . or .., or enter an absolute path. For a namespace/repo-name identifier, enter the full identifier in the repository URL and use only the single directory segment as the name."
   },
+  "form": {
+    "nameHelp": "Letters, digits, hyphens and underscores only"
+  },
   "placeholders": {
     "urlExample": "https://github.com/example/repo or git@example.com:workspace/repo.git",
     "repoUrl": "Git repository URL",
@@ -78,16 +80,18 @@
     "source": "Select a source repository",
     "target": "Select a target repository",
     "type": "Select a relationship type",
-    "description": "Optional description"
+    "description": "Optional description",
+    "repoDescription": "One line describing what the repository is for",
+    "branchOptional": "Leave blank to leave unspecified"
   },
   "confirm": {
-    "deleteHint": "The repository and all its relationships will be removed. This cannot be undone.",
+    "deleteHint": "After deletion, digital workers can no longer access this repository; bindings and graph edges are removed too.",
     "deleteRelation": "Delete this relationship?",
-    "deleteRepo": "Delete repository “{{name}}”?"
+    "deleteRepo": "Delete repository {{name}}?"
   },
   "tabs": {
-    "info": "Basic information",
-    "relations": "Repository relationships",
+    "info": "Information",
+    "relations": "Relationships",
     "conclusion": "Scan conclusion",
     "frontendProjects": "Frontend sub-projects"
   },
@@ -176,26 +180,43 @@
     "fullscreen": "View fullscreen",
     "fit": "Fit to canvas",
     "empty": "No repositories or relationships yet",
-    "emptyHint": "Add repositories and relationships to see calls and dependencies here.",
+    "emptyHint": "Create repositories and relationships to see calls and dependencies here.",
     "details": "Relationship details",
     "source": "Source:",
     "target": "Target:",
     "type": "Type:",
+    "typeWithHint": "{{type}} · {{hint}}",
     "description": "Description:"
   },
   "hub": {
     "title": "Repositories",
-    "listHint": "Manage hosted repositories and access configuration",
-    "mapHint": "View and edit dependencies and calls between repositories"
+    "tabList": "Repositories",
+    "tabMap": "Relationship graph",
+    "hint": "Code repositories onboarded to the platform · Their relationships form a graph used for digital-worker dispatch and change-impact analysis"
   },
   "relation": {
     "frontend": "Frontend",
     "backend": "Backend",
-    "clientServer": "Client calls server",
-    "serverClient": "Server sends to client",
+    "clientServer": "Client–server",
+    "serverClient": "Server–client",
     "gateway": "Gateway",
     "dependency": "Dependency",
-    "service": "Service call",
-    "other": "Other"
+    "service": "Service",
+    "other": "Other",
+    "directionPrompt": "Direction: source repository → target repository.",
+    "hint": {
+      "frontend": "{{source}} is the frontend of {{target}}",
+      "backend": "{{source}} is the backend of {{target}}",
+      "clientServer": "{{source}} is the client and {{target}} is the server",
+      "serverClient": "{{source}} is the server and {{target}} is the client",
+      "gateway": "{{source}} is the gateway of {{target}}",
+      "dependency": "{{source}} depends on {{target}}",
+      "service": "{{source}} calls the service provided by {{target}}",
+      "other": "Other relationship between {{source}} and {{target}}"
+    }
+  },
+  "list": {
+    "total_one": "{{count}} repository in total",
+    "total_other": "{{count}} repositories in total"
   }
 }

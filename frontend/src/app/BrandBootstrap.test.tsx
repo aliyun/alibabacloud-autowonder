@@ -38,7 +38,7 @@ describe('BrandBootstrap', () => {
     expect(document.querySelector('img')).toBeNull();
     expect(document.documentElement.dataset.appearance).toBe('light');
     expect(document.documentElement.style.getPropertyValue('--aw-accent')).toBe('#64748b');
-    expect(document.documentElement.style.getPropertyValue('--aw-bg')).toBe('#eef2f5');
+    expect(document.documentElement.style.getPropertyValue('--aw-bg')).toBe('#f6f6f6');
   });
 
   it('applies the stored dark preference to the loading state', () => {
@@ -82,7 +82,7 @@ describe('BrandBootstrap', () => {
       expect(getItem.mock.results).toEqual([{ type: 'throw', value: unavailable }]);
       expect(screen.getByRole('status')).toBeInTheDocument();
       expect(document.documentElement.dataset.appearance).toBe('light');
-      expect(document.documentElement.style.getPropertyValue('--aw-bg')).toBe('#eef2f5');
+      expect(document.documentElement.style.getPropertyValue('--aw-bg')).toBe('#f6f6f6');
     } finally {
       getItem.mockRestore();
     }

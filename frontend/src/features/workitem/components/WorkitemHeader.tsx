@@ -2,9 +2,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
 import { Typography, Tooltip } from 'antd';
 import { ScheduledExecutionBadge } from './ScheduledExecutionBadge';
-import { WorkitemCreditsBadge } from './WorkitemCreditsBadge';
 import { ShareWorkitemButton } from './ShareWorkitemButton';
-import type { WorkitemUsageSummary } from '@/shared/types/workitem';
 
 const { Title } = Typography;
 
@@ -16,10 +14,9 @@ interface WorkitemHeaderProps {
   scheduledStartAt?: string | null;
   scheduledStartTriggeredAt?: string | null;
   gmtCreate?: string | null;
-  usage?: WorkitemUsageSummary | null;
 }
 
-export function WorkitemHeader({ title, workitemId, origin, scheduledStartAt, scheduledStartTriggeredAt, gmtCreate, usage }: WorkitemHeaderProps) {
+export function WorkitemHeader({ title, workitemId, origin, scheduledStartAt, scheduledStartTriggeredAt, gmtCreate }: WorkitemHeaderProps) {
   const { t } = useTranslation('workitem');
 
   return (
@@ -27,9 +24,10 @@ export function WorkitemHeader({ title, workitemId, origin, scheduledStartAt, sc
       <div className="aw-detail-title">
         <PageBackButton to="/workitems" label={t('detail.backToList')} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Tooltip title={title}>
-              <Title level={4} ellipsis style={{ margin: 0, fontSize: 22, lineHeight: 1.4, minWidth: 0, maxWidth: '100%' }}>{title}</Title>
+              {/* 原型 05 page-head 标题 16px/600；level=5 保住 heading role 供测试定位 */}
+              <Title level={5} ellipsis style={{ margin: 0, fontSize: 16, lineHeight: '24px', minWidth: 0, maxWidth: '100%' }}>{title}</Title>
             </Tooltip>
             <ScheduledExecutionBadge
               scheduledStartAt={scheduledStartAt}
@@ -40,7 +38,6 @@ export function WorkitemHeader({ title, workitemId, origin, scheduledStartAt, sc
           </div>
         </div>
         <div className="aw-workitem-header-tools">
-          <WorkitemCreditsBadge usage={usage} />
           {workitemId != null ? <ShareWorkitemButton workitemId={workitemId} title={title} /> : null}
         </div>
       </div>

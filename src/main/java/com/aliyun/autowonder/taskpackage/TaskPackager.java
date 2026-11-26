@@ -245,6 +245,7 @@ public class TaskPackager {
             policy.put("allowCommit", aggregateRepoPolicy(ctx, "allowCommit"));
             policy.put("allowPush", aggregateRepoPolicy(ctx, "allowPush"));
             policy.put("allowNetwork", aggregateRepoPolicy(ctx, "allowNetwork"));
+            if (ctx.isStageTimingEnabled()) policy.put("stageTimingEnabled", true);
             putEntry(zos, "policy.json", JSON.toJSONString(policy), fileDigests);
             if (ctx.getRepoMap() != null) {
                 putEntry(zos, "repo-map.json", JSON.toJSONString(ctx.getRepoMap()), fileDigests);

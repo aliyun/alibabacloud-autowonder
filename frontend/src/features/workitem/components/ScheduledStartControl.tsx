@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { Button, DatePicker, Modal, Space, message } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useUpdateScheduledStart } from '../hooks';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 
@@ -12,7 +13,7 @@ interface ScheduledStartControlProps {
   scheduledStartAt: string | null | undefined;
 }
 
-/** 详情页计划执行行：仅对已指派数字员工且存在计划时间的工单展示。 */
+/** 详情页计划执行条：仅对已指派数字员工且存在计划时间的工单展示。 */
 export function ScheduledStartControl({ workitemId, assigneeType, scheduledStartAt }: ScheduledStartControlProps) {
   const { t } = useTranslation('workitem');
   const [editOpen, setEditOpen] = useState(false);
@@ -23,6 +24,8 @@ export function ScheduledStartControl({ workitemId, assigneeType, scheduledStart
   if (assigneeType !== 'AGENT' || !scheduledStartAt) {
     return null;
   }
+
+  const overdue = dayjs(scheduledStartAt).isBefore(dayjs());
 
   const run = (action: string, call: () => Promise<unknown>) =>
     accessCommand('READ_WRITE', action, async () => {
@@ -44,11 +47,22 @@ export function ScheduledStartControl({ workitemId, assigneeType, scheduledStart
   };
 
   return (
-    <div style={{ marginTop: 8, fontSize: 12, color: 'var(--aw-muted)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span>{t('schedule.plannedStart', { time: formatDateTime(scheduledStartAt) })}</span>
+    <div className={`aw-schedule-bar${overdue ? ' is-overdue' : ''}`} data-testid="schedule-start-control">
+      <AwStrokeIcon name="clock" size={13} className="aw-schedule-bar-icon" />
+      <b>{overdue ? t('schedule.overdue') : t('schedule.planned')}</b>
+      <span className="aw-schedule-sep" aria-hidden="true" />
+      <span>{formatDateTime(scheduledStartAt)}</span>
+      <span className="aw-schedule-sep" aria-hidden="true" />
+      <span>{overdue ? t('schedule.notStarted') : t('schedule.autoStart')}</span>
+      <span className="aw-schedule-spacer" />
       <Space size={4}>
+        <Button type="text" size="small" className="aw-schedule-action is-primary" onClick={() => run(t('schedule.executeCommand'), () => mutation.mutateAsync({ executeNow: true }))}>
+          {t('schedule.executeNow')}
+        </Button>
         <Button
+          type="text"
           size="small"
+          className="aw-schedule-action"
           onClick={() => {
             setEditValue(dayjs(scheduledStartAt));
             setEditOpen(true);
@@ -56,10 +70,7 @@ export function ScheduledStartControl({ workitemId, assigneeType, scheduledStart
         >
           {t('schedule.edit')}
         </Button>
-        <Button size="small" onClick={() => run(t('schedule.executeCommand'), () => mutation.mutateAsync({ executeNow: true }))}>
-          {t('schedule.executeNow')}
-        </Button>
-        <Button size="small" danger onClick={() => run(t('schedule.cancelCommand'), () => mutation.mutateAsync({ scheduledStartAt: null }))}>
+        <Button type="text" size="small" className="aw-schedule-action is-danger" onClick={() => run(t('schedule.cancelCommand'), () => mutation.mutateAsync({ scheduledStartAt: null }))}>
           {t('schedule.cancel')}
         </Button>
       </Space>

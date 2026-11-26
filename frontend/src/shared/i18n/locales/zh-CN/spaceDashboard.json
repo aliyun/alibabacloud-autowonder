@@ -65,11 +65,13 @@
     "empty": "暂无数据",
     "more": "等 {{total}} 个空间",
     "moreTooltip": "并列共 {{total}} 个空间，仅展示前 {{shown}} 个：{{names}}",
-    "drilldown": "跳转到「{{name}}」洞察页"
+    "drilldown": "跳转到「{{name}}」洞察页",
+    "drilldownWithValue": "跳转到「{{name}}」洞察页 · {{value}}"
   },
   "range": {
     "delivery": "工单交付统计日期范围",
-    "cost": "成本分析统计日期范围"
+    "cost": "成本分析统计日期范围",
+    "custom": "自定义"
   },
   "state": {
     "error": "看板数据加载失败",

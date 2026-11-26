@@ -29,6 +29,8 @@ export interface WorkspaceInfo {
   name: string;
   description: string;
   background?: string | null;
+  memberCount?: number | null;
+  workitemCount?: number | null;
   /** org.version, echoed so the edit modal can submit it as the optimistic-lock expectation. */
   version?: number | null;
   accessLevel?: WorkspaceAccessLevel | null;
@@ -52,6 +54,9 @@ export interface WorkspaceListItem {
   name: string;
   description: string;
   membershipStatus: 'MEMBER' | 'NOT_MEMBER' | 'PENDING';
+  background?: string | null;
+  memberCount?: number | null;
+  workitemCount?: number | null;
   accessLevel: WorkspaceAccessLevel | null;
   pendingRequestId?: number | null;
   isOwner?: boolean | null;

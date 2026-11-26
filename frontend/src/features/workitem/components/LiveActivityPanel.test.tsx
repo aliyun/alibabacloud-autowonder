@@ -201,4 +201,17 @@ describe('LiveActivityPanel', () => {
     expect(screen.getByTestId('live-activity-current')).toHaveTextContent(action.summary!);
   });
 
+  it('keeps the compact health notice, latest action and updated stamp together', () => {
+    const action = buildAction({ actionType: 'MCP_CALL', summaryTarget: 'autowonder.get_dispatch_turn', summary: '调用轨迹' });
+    mockUseLiveActivity.mockReturnValue({
+      actions: [action], currentAction: action, lastUpdatedAt: '2026-09-02T10:00:00Z',
+      lastSeq: 1, truncated: false, awaitingRuntime: false, loading: false, error: null,
+      runtimeState: 'RECOVERING',
+    });
+    render(<LiveActivityPanel dispatchId={10} summaryOnly />);
+    expect(screen.getByTestId('live-activity-health')).toHaveTextContent('执行器正在恢复任务');
+    expect(screen.getByTestId('live-activity-current')).toHaveTextContent('MCP 调用 · autowonder.get_dispatch_turn');
+    expect(screen.getByTestId('live-activity-updated')).toHaveTextContent('最近更新于');
+  });
+
 });

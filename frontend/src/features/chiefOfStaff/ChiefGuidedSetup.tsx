@@ -1,21 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Badge, Button, Select, Tag } from 'antd';
+import { Alert, Badge, Button, Segmented, Tag } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { buildExecutorLaunchCommand } from '@/features/executor/api';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { copyTextToClipboard } from '@/shared/lib/clipboard';
 import * as api from './api';
-
-// Keep these menus above the guide card (1100) and below the guide dialog (1200).
-const guideSelectPopup = {
-  popupMatchSelectWidth: false,
-  styles: { popup: { root: { zIndex: 1150 } } },
-};
 
 export interface ChiefGuidedSetupProps {
   setup: api.SetupStatus;
   substep: number;
-  reviewing?: boolean;
   clientKind: string;
   onClientKindChange: (value: string) => void;
   os: 'posix' | 'windows';
@@ -31,13 +25,12 @@ export interface ChiefGuidedSetupProps {
 }
 
 /**
- * 引导中的 Chief 准备区：只渲染当前子步骤的目标控件，其他控件（历史、新会话、发送）
- * 在阶段 1 不出现，蒙版因此不需要拦截被遮挡的按钮。所有完成判断都来自真实接口与 setup 状态。
+ * 引导中的 Chief 准备区：子步 0 一次点击完成「补齐配置 + 生成 + 复制」，子步 1 自动探测上线。
+ * 所有完成判断都来自真实接口与 setup 状态，不靠点击次数推进。
  */
 export function ChiefGuidedSetup({
   setup,
   substep,
-  reviewing,
   clientKind,
   onClientKindChange,
   os,
@@ -54,24 +47,41 @@ export function ChiefGuidedSetup({
   const { t } = useTranslation('workspaceGuide');
   const [busy, setBusy] = useState(false);
   const [error, setInlineError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
-  const autoAdvanced = useRef<number | null>(null);
+  const autoSkipped = useRef(false);
+  // 只根据进入子步 0 时的执行器状态决定是否跳过；本次点击新建的执行器仍要走完复制流程。
+  const configuredAtEntry = useRef<boolean | null>(setup.executorConfigured);
+  useEffect(() => {
+    if (substep !== 0) {
+      configuredAtEntry.current = null;
+    } else if (configuredAtEntry.current === null) {
+      configuredAtEntry.current = setup.executorConfigured;
+    }
+    // 仅在切换子步时快照，忽略本子步内 completeSetup 带来的状态更新。
+  }, [substep]);
 
-  const allConfigured = setup.agentConfigured && setup.skillsConfigured
-    && setup.executorConfigured && setup.launchConfigured;
-  const satisfied = substep === 0 ? setup.executorConfigured : substep === 1 ? allConfigured : false;
+  // 已有执行器时子步 0 没有可做的决定，直接进入等待上线。
+  useEffect(() => {
+    if (substep !== 0 || configuredAtEntry.current !== true || command) {
+      autoSkipped.current = false;
+      return;
+    }
+    if (autoSkipped.current) {
+      return;
+    }
+    autoSkipped.current = true;
+    onAdvance();
+  }, [command, onAdvance, substep]);
 
   useEffect(() => {
-    if (reviewing || !satisfied) {
-      autoAdvanced.current = null;
+    if (substep !== 0) {
       return;
     }
-    if (autoAdvanced.current === substep) {
-      return;
-    }
-    autoAdvanced.current = substep;
-    onAdvance();
-  }, [onAdvance, reviewing, satisfied, substep]);
+    setCopied(false);
+    setCopyFailed(false);
+    setInlineError(null);
+  }, [substep]);
 
   function setError(message: string | null) {
     if (onSetupError) onSetupError(message);
@@ -90,112 +100,129 @@ export function ChiefGuidedSetup({
     }
   }
 
-  function completeSetup() {
+  function generateAndCopy() {
     void run(async () => {
-      const updated = await api.completeSetup(clientKind);
-      // Publishing the new setup must not also trigger this step's auto-advance effect.
-      autoAdvanced.current = substep;
-      await onSetupCompleted?.(updated);
-      onAdvance();
-    });
-  }
-
-  function generateCommand(advanceAfter: boolean) {
-    if (!setup.executorId) {
-      setError(t('setup.actionFailed'));
-      return;
-    }
-    void run(async () => {
-      const result = await buildExecutorLaunchCommand(setup.executorId!, { os });
-      onCommandChange(result.command);
-      if (advanceAfter) {
-        onAdvance();
+      setCopyFailed(false);
+      let executorId = setup.executorId;
+      if (!setup.executorConfigured) {
+        const updated = await api.completeSetup(clientKind);
+        await onSetupCompleted?.(updated);
+        executorId = updated.executorId;
       }
-    });
-  }
-
-  function copyCommand() {
-    if (!command) {
-      setError(t('setup.actionFailed'));
-      return;
-    }
-    const text = command;
-    void run(async () => {
-      const copied = await copyTextToClipboard(text);
-      if (copied) {
-        setCopyFailed(false);
-        onAdvance();
+      if (!executorId) {
+        throw new Error(t('setup.actionFailed'));
+      }
+      const result = await buildExecutorLaunchCommand(executorId, { os });
+      onCommandChange(result.command);
+      if (await copyTextToClipboard(result.command)) {
+        setCopied(true);
+        if (substep === 0) {
+          onAdvance();
+        }
       } else {
         setCopyFailed(true);
       }
     });
   }
 
-  return <section className="aw-chief-setup aw-chief-setup-guided" data-guide-setup aria-label={t('stage.configure.title')}>
-    <span className="aw-guide-secondary">{t('phaseProgress', { stage: 1, substep: substep + 1 })}</span>
-    <h3>{substep === 0 ? t('substep.client')
-      : substep === 1 ? t('substep.completeSetup')
-        : substep === 2 ? t('substep.hostOs')
-          : substep === 3 ? t('substep.generate')
-            : substep === 4 ? t('substep.copy')
-              : t('substep.waitOnline')}</h3>
+  function copyAgain() {
+    if (!command) {
+      return;
+    }
+    const text = command;
+    void run(async () => {
+      if (await copyTextToClipboard(text)) {
+        setCopyFailed(false);
+        setCopied(true);
+      } else {
+        setCopyFailed(true);
+      }
+    });
+  }
 
-    {substep === 0 && (setup.executorConfigured
-      ? <p>{t('setup.existingClient')}</p>
-      : <Select aria-label={t('setup.clientLabel')} value={clientKind} onChange={onClientKindChange}
-        {...guideSelectPopup}
-        options={[{ value: 'QODER_CLI', label: t('setup.clientQoder') },
-          { value: 'QODER_CN_CLI', label: t('setup.clientQoderCn') }]} />)}
-    {substep === 0 && !setup.executorConfigured
-      && <Button type="primary" onClick={onAdvance}>{t('setup.confirmClient')}</Button>}
-    {substep === 0 && setup.executorConfigured && <Tag>{t('setup.existingStep')}</Tag>}
+  const osLabel = os === 'windows' ? t('setup.windows') : t('setup.posix');
+  const commandBox = command
+    ? <div className="aw-chief-guide-command">
+      <Button type="text" icon={<CopyOutlined />} loading={busy}
+        aria-label={t('setup.copyIcon')} title={t('setup.copyIcon')} onClick={copyAgain} />
+      <pre>{command}</pre>
+    </div>
+    : null;
 
-    {substep === 1 && (allConfigured
-      ? <Tag>{t('setup.existingStep')}</Tag>
-      : <Button type="primary" loading={busy} onClick={completeSetup}>{t('setup.completeAction')}</Button>)}
+  return <section className="aw-chief-setup aw-chief-setup-guided" data-guide-setup
+    data-substep={substep}
+    aria-label={t(substep === 0 ? 'stageAccess.title' : 'stageWait.title')}>
+    <div className="aw-chief-setup-steps" aria-hidden="true">
+      {[t('setup.stepAccess'), t('setup.stepWait')].map((label, index) =>
+        <div key={label} className={`aw-chief-setup-step ${index < substep ? 'is-done' : index === substep ? 'is-on' : ''}`}>
+          <span className="aw-chief-setup-step-n">{index < substep ? <AwStrokeIcon name="check" /> : index + 1}</span>
+          {label}
+        </div>)}
+    </div>
 
-    {substep === 2 && <>
-      <p>{t('setup.chooseOs')}</p>
-      <Select aria-label={t('setup.osLabel')} value={os} onChange={onOsChange}
-        {...guideSelectPopup}
-        options={[{ value: 'posix', label: t('setup.posix') }, { value: 'windows', label: t('setup.windows') }]} />
-      <Button type="primary" onClick={onAdvance}>{t('setup.confirmOs')}</Button>
-    </>}
-
-    {substep === 3 && <Button type="primary" loading={busy} onClick={() => generateCommand(true)}>
-      {t('setup.generateAction')}
-    </Button>}
-
-    {substep === 4 && <>
-      {command
-        ? <div className="aw-chief-guide-command">
-          <Button type="text" icon={<CopyOutlined />} loading={busy}
-            aria-label={t('setup.copyIcon')} title={t('setup.copyIcon')} onClick={copyCommand} />
-          <pre>{command}</pre>
+    {substep === 0
+      ? <div className="aw-chief-setup-body">
+        <div className="aw-chief-setup-field">
+          <span className="aw-guide-secondary">{t('setup.clientLabel')}</span>
+          <Segmented aria-label={t('setup.clientLabel')} value={clientKind} disabled={setup.executorConfigured}
+            onChange={value => onClientKindChange(value as string)}
+            options={[{ value: 'QODER_CLI', label: t('setup.clientQoder') },
+              { value: 'QODER_CN_CLI', label: t('setup.clientQoderCn') }]} />
         </div>
-        : <Button loading={busy} onClick={() => generateCommand(false)}>{t('setup.generateAction')}</Button>}
-      <Button type="primary" loading={busy} disabled={!command} onClick={copyCommand}>{t('setup.copyAction')}</Button>
-      <p>{t('setup.copiedHint')}</p>
-      {copyFailed && <>
-        <Alert type="error" message={t('setup.copyFailed')} />
-        <Button onClick={onAdvance}>{t('manualCopied')}</Button>
-      </>}
-    </>}
-
-    {substep === 5 && <>
-      <p>{t('setup.waiting')} {!waitExpired && !reviewing && t('setup.autoCheckHint')}</p>
-      <div className="aw-chief-guide-check">
-        <Button loading={busy} onClick={onCheckStatus}>{t('setup.checkStatus')}</Button>
-        <span role="status">
-          <Badge status={waitExpired ? 'default' : 'processing'}
-            text={waitExpired ? t('setup.autoCheckPaused') : t('setup.autoChecking')} />
-        </span>
+        <div className="aw-chief-setup-field">
+          <span className="aw-guide-secondary">{t('setup.osLabel')}</span>
+          <Segmented aria-label={t('setup.osLabel')} value={os} onChange={value => onOsChange(value as 'posix' | 'windows')}
+            options={[{ value: 'posix', label: t('setup.posix') }, { value: 'windows', label: t('setup.windows') }]} />
+        </div>
+        <Button className="aw-chief-setup-primary" type="primary" block loading={busy} onClick={generateAndCopy}>
+          {busy ? t('setup.generatingCopy') : t('setup.generateCopyAction')}
+        </Button>
+        {commandBox}
+        {command && <div className="aw-chief-setup-foot">
+          {copied ? <Tag>{t('setup.copiedTag')}</Tag> : <Button size="small" onClick={copyAgain}>{t('setup.copyAction')}</Button>}
+          <span className="aw-chief-setup-wait"><span className="aw-chief-setup-pulse" />{t('setup.waitingToPaste')}</span>
+        </div>}
+        {copyFailed && <>
+          <Alert type="error" message={t('setup.copyFailed')} />
+          <Button onClick={onAdvance}>{t('manualCopied')}</Button>
+        </>}
+        {command && !copyFailed && <p className="aw-chief-setup-hint">{t('setup.pasteHint')}</p>}
       </div>
-      {waitExpired && <>
-        <Alert type="warning" message={t('setup.waitExpired')} />
-        <Button onClick={onResetWait}>{t('retry')}</Button>
-      </>}
-    </>}
+      : <div className="aw-chief-setup-body">
+        {command
+          ? <>
+            <div className="aw-guide-secondary">{t('setup.commandLabel', { os: osLabel })}</div>
+            {commandBox}
+            <div className="aw-chief-setup-foot">
+              {copied ? <Tag>{t('setup.copiedTag')}</Tag> : null}
+              <span className="aw-chief-setup-wait"><span className="aw-chief-setup-pulse" />{t('setup.waitingOnline')}</span>
+            </div>
+            {copyFailed && <Alert type="error" message={t('setup.copyFailed')} />}
+          </>
+          : <>
+            <div className="aw-chief-setup-field">
+              <span className="aw-guide-secondary">{t('setup.osLabel')}</span>
+              <Segmented aria-label={t('setup.osLabel')} value={os} onChange={value => onOsChange(value as 'posix' | 'windows')}
+                options={[{ value: 'posix', label: t('setup.posix') }, { value: 'windows', label: t('setup.windows') }]} />
+            </div>
+            <Alert type="warning"
+              message={t(setup.executorConfigured ? 'setup.commandMissingConfigured' : 'setup.commandMissing')} />
+            <Button className="aw-chief-setup-primary" type="primary" block loading={busy} onClick={generateAndCopy}>
+              {busy ? t('setup.generatingCopy') : t('setup.generateCopyAction')}
+            </Button>
+          </>}
+        <div className={`aw-chief-setup-status${waitExpired ? ' is-paused' : ''}`} role="status">
+          <Badge status={waitExpired ? 'default' : 'processing'}
+            text={waitExpired ? t('setup.probingPaused') : t('setup.probing')} />
+          <Button size="small" loading={busy} onClick={onCheckStatus}>{t('setup.checkStatus')}</Button>
+        </div>
+        {waitExpired
+          ? <>
+            <Alert type="warning" message={t('setup.waitExpired')} />
+            <Button onClick={onResetWait}>{t('retry')}</Button>
+          </>
+          : command ? <p className="aw-chief-setup-hint">{t('setup.commandRunningHint')}</p> : null}
+      </div>}
 
     {error && <Alert type="error" message={error} />}
   </section>;

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Alert, Button, Form, Input, InputNumber, Select, Space, Switch, Typography, message } from 'antd';
+import { Alert, Button, Form, Input, InputNumber, Select, Switch, Tooltip, Typography, message } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/shared/auth/store';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { ApiError } from '@/shared/types/common';
 import { getModelUpgradePolicy, updateModelUpgradePolicy, getExecutorModelCatalog } from './api';
 import type { ExecutorVO, ModelUpgradePolicy } from './api';
@@ -47,22 +48,26 @@ export function ModelUpgradePolicyEditor({ executor }: { executor: ExecutorVO })
       } else message.error(error instanceof ApiError ? error.message : t('modelUpgradePolicySaveFailed'));
     },
   });
-  return <section aria-label={t('modelUpgradePolicyLabel')}>
+  return <section className="executor-policy" aria-label={t('modelUpgradePolicyLabel')}>
     <Typography.Title level={5}>{t('modelUpgradePolicyLabel')}</Typography.Title>
     <Typography.Paragraph type="secondary">{t('modelUpgradePolicyEffective')}</Typography.Paragraph>
     {policyQuery.isError && <Alert type="error" showIcon message={t('modelUpgradePolicyReadFailed')}
       action={<Button onClick={() => policyQuery.refetch()}>{t('modelUpgradePolicyRetry')}</Button>} />}
     {policyQuery.data && <>
-      <Typography.Paragraph>{t('modelUpgradePolicyDefault', { model: options.find(option => option.value === policyQuery.data.model)?.label ?? policyQuery.data.model ?? executor.modelName ?? executor.model ?? t('notReported') })}</Typography.Paragraph>
+      <Typography.Paragraph className="executor-policy-default">{t('modelUpgradePolicyDefault', { model: options.find(option => option.value === policyQuery.data.model)?.label ?? policyQuery.data.model ?? executor.modelName ?? executor.model ?? t('notReported') })}</Typography.Paragraph>
       {unavailable && <Alert type="warning" showIcon message={t('modelUpgradePolicyUnavailable')} style={{ marginBottom: 16 }} />}
       <Form form={form} layout="vertical" disabled={!canEdit || save.isPending}
         onFinish={values => save.mutate(values.modelUpgradePolicy.enabled ? values.modelUpgradePolicy : { enabled: false, levels: (values.modelUpgradePolicy.levels ?? []).filter(level => Number.isInteger(level.entryCount) && level.entryCount >= 2 && level.model) })}>
-        <Form.Item label={t('modelUpgradePolicyLabel')} name={['modelUpgradePolicy', 'enabled']} valuePropName="checked" extra={t('modelUpgradePolicyHelp')}>
-          <Switch onChange={enabled => {
-            if (enabled && !form.getFieldValue(['modelUpgradePolicy', 'levels'])?.length)
-              form.setFieldValue(['modelUpgradePolicy', 'levels'], [{ entryCount: 2 }]);
-          }} />
-        </Form.Item>
+        <div className="executor-policy-switch">
+          <span className="executor-policy-switch-label">{t('modelUpgradePolicyLabel')}</span>
+          <Form.Item noStyle name={['modelUpgradePolicy', 'enabled']} valuePropName="checked">
+            <Switch size="small" aria-label={t('modelUpgradePolicyLabel')} onChange={enabled => {
+              if (enabled && !form.getFieldValue(['modelUpgradePolicy', 'levels'])?.length)
+                form.setFieldValue(['modelUpgradePolicy', 'levels'], [{ entryCount: 2 }]);
+            }} />
+          </Form.Item>
+        </div>
+        <p className="executor-policy-help">{t('modelUpgradePolicyHelp')}</p>
         <Form.List name={['modelUpgradePolicy', 'levels']} rules={[{ validator: async (_, levels) => {
           if (!form.getFieldValue(['modelUpgradePolicy', 'enabled'])) return;
           let previous = 1;
@@ -76,7 +81,7 @@ export function ModelUpgradePolicyEditor({ executor }: { executor: ExecutorVO })
           }
         } }]}>
           {(fields, { add, remove }, { errors }) => <>
-            {fields.map(field => <div key={field.key} style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'baseline' }}>
+            {fields.map(field => <div key={field.key} className="executor-policy-level">
               <Form.Item name={[field.name, 'entryCount']} label={t('modelUpgradePolicyEntryCount')}
                 style={{ flex: '0 1 130px' }} rules={policy?.enabled ? [{ required: true, type: 'integer', min: 2, message: t('modelUpgradePolicyValidation') }] : []}>
                 <InputNumber min={2} precision={0} style={{ width: '100%' }} />
@@ -86,19 +91,27 @@ export function ModelUpgradePolicyEditor({ executor }: { executor: ExecutorVO })
                 {provider ? <Select showSearch optionFilterProp="label" options={options} loading={catalog.isLoading}
                   placeholder={t('modelUpgradePolicySelect')} /> : <Input placeholder={t('modelUpgradePolicyModelPlaceholder')} />}
               </Form.Item>
-              <Button onClick={() => remove(field.name)}>{t('modelUpgradePolicyRemove')}</Button>
+              <div className="executor-policy-level-remove">
+                <Tooltip title={t('modelUpgradePolicyRemove')}>
+                  <Button type="text" size="small" danger className="aw-op-btn aw-op-btn--del" aria-label={t('modelUpgradePolicyRemove')}
+                    icon={<AwStrokeIcon name="trash" />} onClick={() => remove(field.name)} />
+                </Tooltip>
+              </div>
             </div>)}
-            <Button onClick={() => {
-              const levels = form.getFieldValue(['modelUpgradePolicy', 'levels']) ?? [];
-              add({ entryCount: Math.max(2, Number(levels.at(-1)?.entryCount ?? 1) + 1) });
-            }}>{t('modelUpgradePolicyAdd')}</Button>
             <Form.ErrorList errors={errors} />
+            <div className="executor-policy-actions">
+              <Button icon={<AwStrokeIcon name="plus" />} onClick={() => {
+                const levels = form.getFieldValue(['modelUpgradePolicy', 'levels']) ?? [];
+                add({ entryCount: Math.max(2, Number(levels.at(-1)?.entryCount ?? 1) + 1) });
+              }}>{t('modelUpgradePolicyAdd')}</Button>
+              <span className="executor-policy-actions-spacer" />
+              {canEdit && <>
+                <Button onClick={() => form.setFieldsValue({ modelUpgradePolicy: policyQuery.data!.modelUpgradePolicy ?? { enabled: false, levels: [] } })}>{t('modelUpgradePolicyCancel')}</Button>
+                <Button type="primary" htmlType="submit" loading={save.isPending}>{t('modelUpgradePolicySave')}</Button>
+              </>}
+            </div>
           </>}
         </Form.List>
-        {canEdit && <Space style={{ marginTop: 16 }}>
-          <Button onClick={() => form.setFieldsValue({ modelUpgradePolicy: policyQuery.data!.modelUpgradePolicy ?? { enabled: false, levels: [] } })}>{t('modelUpgradePolicyCancel')}</Button>
-          <Button type="primary" htmlType="submit" loading={save.isPending}>{t('modelUpgradePolicySave')}</Button>
-        </Space>}
       </Form>
     </>}
   </section>;

@@ -14,6 +14,11 @@
     "qoderDocs": "Qoder CLI Hooks documentation"
   },
   "all": "All",
+  "view": {
+    "grouped": "Grouped",
+    "list": "List",
+    "switch": "Switch between list and grouped views"
+  },
   "package": {
     "limit": "Up to 500 files; both the archive and extracted files must be no larger than 100 MB.",
     "selectPreview": "Select a file on the left to view its contents",
@@ -100,6 +105,11 @@
     "descriptionHint": "Helps uploaders and Agents calling MCP determine when to use this category.",
     "save": "Save category",
     "editHint": "Changing the name or description preserves existing capability category associations.",
+    "toggleGroup": "Collapse or expand {{name}}",
+    "editTitle": "Edit category",
+    "createTitle": "New category",
+    "pickHint": "Select a category on the left to edit it, or create one below.",
+    "cancelEdit": "Cancel editing",
     "target": "Target category",
     "savedTagFailed": "Capability saved, but its category could not be set: {{reason}}",
     "batchSaved_other": "Category set for {{count}} capabilities",
@@ -132,8 +142,11 @@
     "failureReason": "Connection failed: {{reason}}",
     "unknown": "Unknown error",
     "viewTools_other": "View {{count}} tools",
+    "toolsShort_other": "{{count}} tools",
     "tools_other": "MCP tools ({{count}})",
     "viewTools_one": "View {{count}} tool",
+    "toolsShort_one": "{{count}} tool",
+    "retest": "Retest",
     "tools_one": "MCP tools ({{count}})",
     "failures": {
       "SELECT_RUNTIME": "Select an online Runtime to test MCP",
@@ -166,7 +179,8 @@
   "deleteConfirm": "Delete this skill?",
   "deleteAction": "Delete capability",
   "delete": "Delete",
-  "title": "Capability library",
+  "title": "Capabilities",
+  "pageDescription": "Skills / MCP / hooks registry for digital workers: category management, batch tagging, connection tests and package details",
   "clearSelection": "Clear selection",
   "detailTitle": "Capability details",
   "close": "Close",

@@ -1,0 +1,45 @@
+/* 执行记录列表页 · 对齐原型 19-executions.html；设计令牌一律走 crystal.css var(--aw-*)。 */
+.executions-page {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 筛选行与表格之间不画分隔线。 */
+.executions-page .aw-toolbar {
+  border-bottom: none;
+}
+
+/* 原型 .aw-table th/td 不换行；标题列截断由 EllipsisText 处理。 */
+.aw-executions .ant-table-thead > tr > th,
+.aw-executions .ant-table-tbody > tr > td {
+  white-space: nowrap;
+}
+
+/* 原型整行可点开详情抽屉。 */
+.aw-executions .ant-table-tbody > tr {
+  cursor: pointer;
+}
+
+.aw-executions .ant-table-tbody > tr:hover > td {
+  background: var(--aw-gray-bg);
+}
+
+/* 原型 .time-cell：日期正文块 + 时间微字块（text-3）。 */
+.exec-time-cell .d {
+  display: block;
+}
+
+.exec-time-cell .t {
+  display: block;
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+/* 原型 .title-cell .row-title：标题链接正文色，hover 主色。 */
+.aw-executions .ant-table-tbody .exec-title-link {
+  color: var(--aw-text);
+}
+
+.aw-executions .ant-table-tbody .exec-title-link:hover {
+  color: var(--aw-primary);
+}

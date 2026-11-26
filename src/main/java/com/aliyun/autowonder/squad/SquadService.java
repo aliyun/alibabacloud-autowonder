@@ -219,10 +219,17 @@ public class SquadService {
             }
             sdlcStepsMap.put(sdlcId, toSdlcStepSummaries(sdlcStepDao.listBySdlc(sdlcId)));
         }
+        Set<Long> onlineAgentIds = new HashSet<>();
+        for (ExecutorDO e : executorDao.listByAgentIds(tenantId, agentIds)) {
+            if (e.getId() != null && executorRegistry.isOnline(e.getId())) {
+                onlineAgentIds.add(e.getAgentId());
+            }
+        }
         List<SquadMemberVO> result = new ArrayList<>();
         for (SquadMemberDO m : members) {
             SquadMemberVO vo = new SquadMemberVO();
             vo.setAgentId(m.getAgentId());
+            vo.setExecutorOnline(onlineAgentIds.contains(m.getAgentId()));
             AgentDO agent = agentMap.get(m.getAgentId());
             if (agent != null) {
                 vo.setAgentName(agent.getName());

@@ -44,7 +44,10 @@ required for a community build and runtime.
      upstream `docs/skills/` content into `skills/` during merge;
    - the root `.agents/` directory is part of the community distribution; both
      `skills/` and `.agents/` must be synced to the external GitHub repository
-     under `ai-sdlc/auto-wonder/`.
+     at the root of `aliyun/alibabacloud-autowonder`.
+   - preserve the Community-owned root `LICENSE`, `README.md`, `README.zh-CN.md`,
+     and their illustrations during master syncs. Bring any public license
+     changes back into Community before the next GitHub mirror.
 5. The root `e2e-tests/` directory is a community-owned verification boundary
    and is an explicit exception to rule 3. During an upstream sync, never copy,
    merge, cherry-pick, restore, or otherwise import `origin/master` E2E files or
@@ -316,8 +319,8 @@ Every sync that increments `VERSION` must produce a release file at
 - risks;
 - MR/PR links.
 
-The external GitHub copy must include `ai-sdlc/auto-wonder/VERSION` and
-`ai-sdlc/auto-wonder/releases/release_vX.Y.Z_YYYYMMDD.md` matching the
+The external GitHub copy must include `VERSION` and
+`releases/release_vX.Y.Z_YYYYMMDD.md` matching the
 community branch exactly. A missing or outdated `VERSION` in the external
 repository is a blocking sync defect.
 

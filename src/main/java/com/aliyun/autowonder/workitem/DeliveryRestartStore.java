@@ -134,10 +134,15 @@ public class DeliveryRestartStore {
 
     /** Recent restart rounds, newest first, for the delivery recovery state API. */
     public java.util.List<java.util.Map<String, Object>> listRounds(long tenantId, long workitemId, int limit) {
-        return jdbc.queryForList("SELECT restart_round, restart_token, status, stop_reason, dispatch_id, "
-                + "scheduled_start_at, requested_by, operator_type, gmt_create, gmt_modified "
-                + "FROM workitem_delivery_restart WHERE tenant_id=? AND workitem_id=? "
-                + "ORDER BY restart_round DESC LIMIT ?", tenantId, workitemId, limit);
+        // agent_id is the round's target worker (written on every allocation); agent_name lets
+        // the UI attribute rounds that never produced a dispatch. Read-only join, no state change.
+        return jdbc.queryForList("SELECT r.restart_round, r.restart_token, r.status, r.stop_reason, r.dispatch_id, "
+                + "r.scheduled_start_at, r.requested_by, r.operator_type, r.agent_id, a.name AS agent_name, "
+                + "r.gmt_create, r.gmt_modified "
+                + "FROM workitem_delivery_restart r "
+                + "LEFT JOIN agent a ON a.id = r.agent_id AND a.tenant_id = r.tenant_id "
+                + "WHERE r.tenant_id=? AND r.workitem_id=? "
+                + "ORDER BY r.restart_round DESC LIMIT ?", tenantId, workitemId, limit);
     }
 
     public Integer roundByToken(long tenantId, long workitemId, String restartToken) {

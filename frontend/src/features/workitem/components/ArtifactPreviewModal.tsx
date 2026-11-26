@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Modal, Tooltip } from 'antd';
-import { DownloadOutlined, FullscreenOutlined, FullscreenExitOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { FilePreview } from '@/shared/ui/FilePreview';
 import type { Artifact } from '@/shared/types/workitem';
 import { getArtifactDownloadUrl, getArtifactPreviewBlob } from '../api';
@@ -40,15 +40,16 @@ export function ArtifactPreviewModal({ open, artifact, onClose }: ArtifactPrevie
   const fullscreenLabel = t(fullscreen ? 'detail.exitFullscreen' : 'detail.fullscreen');
   const filename = artifact?.name ?? t('artifacts.preview');
   return <Modal title={<div className="aw-artifact-preview-title">
+    <AwStrokeIcon name="file" size={14} />
     <span className="aw-artifact-preview-name" title={filename}>{filename}</span>
     {downloadUrl && <Tooltip title={t('artifacts.download')}>
-      <Button size="middle" aria-label={t('artifacts.download')} icon={<DownloadOutlined />}
+      <Button size="middle" aria-label={t('artifacts.download')} icon={<AwStrokeIcon name="dl" />}
         href={downloadUrl} target="_blank" rel="noreferrer" />
     </Tooltip>}
     <Tooltip title={fullscreenLabel}>
       <Button size="middle"
         aria-label={fullscreenLabel} aria-pressed={fullscreen}
-        icon={fullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+        icon={<AwStrokeIcon name="fullscreen" />}
         onClick={() => setFullscreen(value => !value)} />
     </Tooltip>
   </div>} className={`aw-artifact-preview-modal${fullscreen ? ' is-fullscreen' : ''}`}

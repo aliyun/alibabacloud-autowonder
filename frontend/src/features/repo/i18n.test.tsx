@@ -29,16 +29,17 @@ it('updates the cached hub/list, open confirmation and create validation without
   renderRoute();
   expect(await screen.findByRole('link', { name: repo.name })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: `删除仓库 ${repo.name}` }));
-  expect(await screen.findByText(`确认删除仓库「${repo.name}」？`)).toBeInTheDocument();
+  expect(await screen.findByText(`确认删除仓库 ${repo.name}？`)).toBeInTheDocument();
   await act(() => i18n.changeLanguage('en-US'));
   expect(screen.getByRole('heading', { name: 'Repositories' })).toBeInTheDocument();
-  expect(screen.getByRole('tab', { name: 'Relationship map' })).toBeInTheDocument();
-  expect(screen.getByText(`Delete repository “${repo.name}”?`)).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'Relationship graph' })).toBeInTheDocument();
+  expect(screen.getByText(`Delete repository ${repo.name}?`)).toBeInTheDocument();
   expect(screen.getByText(repo.description)).toBeInTheDocument();
   expect(screen.getAllByText('Created').length).toBeGreaterThan(0);
-  expect(screen.getByText(new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(repo.gmtCreate)))).toBeInTheDocument();
+  expect(screen.getByText('7/1/2026')).toBeInTheDocument();
+  expect(screen.getByText('08:30')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Add repository' }));
+  fireEvent.click(screen.getByRole('button', { name: 'New repository' }));
   const name = screen.getByLabelText('Repository name');
   const url = screen.getByLabelText('Repository URL');
   fireEvent.change(name, { target: { value: 'bad/name' } });
@@ -84,21 +85,21 @@ it('preserves an open routed edit draft and updates displayed errors and delayed
 it('updates relation option labels and retains unknown codes and authored descriptions as literal text', async () => {
   server.use(http.get('/api/repos/relations', () => response([{ id: 8, fromRepoId: 1, toRepoId: 2, relationType: 'constructor', description: '<img>中文关系', aiSessionId: null, gmtCreate: repo.gmtCreate }, { id: 9, fromRepoId: 1, toRepoId: 2, relationType: 'CLIENT_SERVER', description: null, aiSessionId: null, gmtCreate: repo.gmtCreate }])));
   renderRoute('/repos/1');
-  fireEvent.click(await screen.findByRole('tab', { name: '仓库关系' }));
-  expect(await screen.findByText('客户端调用服务端')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /添加关系/ }));
+  fireEvent.click(await screen.findByRole('tab', { name: '关系' }));
+  expect(await screen.findByText('客户端-服务端')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /新增关系/ }));
   await act(() => i18n.changeLanguage('en-US'));
   expect(screen.getByText('constructor')).toBeInTheDocument();
   expect(screen.getByText('<img>中文关系')).toBeInTheDocument();
-  expect(screen.getByText('Client calls server')).toBeInTheDocument();
-  const dialog = screen.getByRole('dialog', { name: 'Add repository relationship' });
+  expect(screen.getByText('Client–server')).toBeInTheDocument();
+  const dialog = screen.getByRole('dialog', { name: 'New repository relationship' });
   fireEvent.mouseDown(within(dialog).getByLabelText('Relationship type'));
-  expect(await screen.findByText('Server sends to client')).toBeInTheDocument();
+  expect(await screen.findByText('Server–client')).toBeInTheDocument();
 });
 
 it.each([
   { rawError: null, expected: 'Repository added' },
-  { rawError: '', expected: 'Failed to add repository' },
+  { rawError: '', expected: 'Failed to create repository' },
   { rawError: '原始后端原因 <b>保持</b>', expected: '原始后端原因 <b>保持</b>' },
 ])('uses completion locale for delayed create feedback while preserving the raw backend reason ($rawError)', async ({ rawError, expected }) => {
   let finish!: () => void;
@@ -111,10 +112,10 @@ it.each([
     return rawError === null ? response(repo) : HttpResponse.json({ success: false, code: '10000', message: rawError, traceId: null, data: null });
   }));
   renderRoute();
-  fireEvent.click(await screen.findByRole('button', { name: '添加仓库' }));
+  fireEvent.click(await screen.findByRole('button', { name: '新建仓库' }));
   fireEvent.change(screen.getByLabelText('仓库名称'), { target: { value: '中文仓库' } });
   fireEvent.change(screen.getByLabelText('仓库地址'), { target: { value: 'git@example.com:group/repo.git' } });
-  fireEvent.click(screen.getByRole('button', { name: '确 定' }));
+  fireEvent.click(screen.getByRole('button', { name: '创 建' }));
   await waitFor(() => expect(finish).toBeTypeOf('function'));
   await act(() => i18n.changeLanguage('en-US'));
   await act(async () => finish());

@@ -37,6 +37,15 @@ public interface WorkspaceDao {
 
     List<WorkspaceDO> listByUser(@Param("userId") Long userId);
     List<WorkspaceMembershipDO> listMembershipsByUser(@Param("userId") Long userId);
+
+    /** Non-empty, server-derived card IDs; SQL also checks the caller's read authorization. */
+    List<WorkspaceCardCountDO> countMembersByWorkspaceIds(@Param("workspaceIds") Collection<Long> workspaceIds,
+                                                        @Param("userId") Long userId,
+                                                        @Param("systemAdmin") boolean systemAdmin);
+    List<WorkspaceCardCountDO> countWorkitemsByWorkspaceIds(@Param("workspaceIds") Collection<Long> workspaceIds,
+                                                          @Param("userId") Long userId,
+                                                          @Param("systemAdmin") boolean systemAdmin);
+
     int updateOwner(@Param("id") Long id,
                     @Param("oldOwnerId") Long oldOwnerId,
                     @Param("newOwnerId") Long newOwnerId,

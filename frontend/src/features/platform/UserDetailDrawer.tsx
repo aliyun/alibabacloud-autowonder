@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
   Button,
   Descriptions,
   Divider,
@@ -18,11 +17,12 @@ import {
   Typography,
   message,
 } from 'antd';
-import { CloseCircleFilled, ExclamationCircleFilled } from '@ant-design/icons';
+import { ExclamationCircleFilled } from '@ant-design/icons';
 import type { TFunction } from 'i18next';
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Table } from '@/shared/theme/ThemedTable';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
@@ -420,12 +420,10 @@ export function UserDetailDrawer({ userId, open, initialAction, onClose, onChang
       maskClosable
     >
       {detailQuery.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          icon={<CloseCircleFilled aria-hidden="true" />}
-          message={t('loadFailed')}
-          description={detailQuery.error instanceof Error ? detailQuery.error.message : t('retryLater')}
+        <NoticeTip
+          kind="error"
+          title={t('loadFailed')}
+          detail={detailQuery.error instanceof Error ? detailQuery.error.message : t('retryLater')}
           action={
             <Button size="small" onClick={() => detailQuery.refetch()} loading={detailQuery.isFetching}>
               {t('retry')}
@@ -457,10 +455,10 @@ export function UserDetailDrawer({ userId, open, initialAction, onClose, onChang
           <div>
             <Divider orientation="left" plain>{t('sectionWorkspaces')}</Divider>
             {status === 'DELETED' ? (
-              <Alert type="warning" showIcon message={t('workspaceDeletedHint')} />
+              <NoticeTip kind="warning" title={t('workspaceDeletedHint')} />
             ) : (
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                {status === 'DEACTIVATED' ? <Alert type="warning" showIcon message={t('workspaceDeactivatedHint')} /> : null}
+                {status === 'DEACTIVATED' ? <NoticeTip kind="warning" title={t('workspaceDeactivatedHint')} /> : null}
                 <Table<UserAdminWorkspace>
                   rowKey="workspaceId"
                   size="small"
@@ -484,10 +482,10 @@ export function UserDetailDrawer({ userId, open, initialAction, onClose, onChang
           <div>
             <Divider orientation="left" plain>{t('sectionIm')}</Divider>
             {status === 'DELETED' ? (
-              <Alert type="warning" showIcon message={t('imDeletedHint')} />
+              <NoticeTip kind="warning" title={t('imDeletedHint')} />
             ) : (
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                {status === 'DEACTIVATED' ? <Alert type="warning" showIcon message={t('imDeactivatedHint')} /> : null}
+                {status === 'DEACTIVATED' ? <NoticeTip kind="warning" title={t('imDeactivatedHint')} /> : null}
                 <Text type="secondary" style={{ fontSize: 12 }}>{t('imHint')}</Text>
                 <Space.Compact style={{ width: '100%' }}>
                   <Input
@@ -626,7 +624,7 @@ export function UserDetailDrawer({ userId, open, initialAction, onClose, onChang
         onCancel={() => setDeleteOpen(false)}
       >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          <Alert type="warning" showIcon message={t('deleteWarning')} />
+          <NoticeTip kind="warning" title={t('deleteWarning')} />
           <Paragraph style={{ marginBottom: 0 }}>{t('deleteRule1')}</Paragraph>
           <Paragraph style={{ marginBottom: 0 }}>{t('deleteRule2')}</Paragraph>
           <Text>{t('deleteConfirmPrompt', { username: detail?.username ?? EMPTY_TEXT })}</Text>
@@ -651,7 +649,7 @@ export function UserDetailDrawer({ userId, open, initialAction, onClose, onChang
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Paragraph style={{ marginBottom: 0 }}>{t('restoreConfirm', { username: detail?.username ?? EMPTY_TEXT })}</Paragraph>
           <Paragraph type="secondary" style={{ marginBottom: 0 }}>{t('restoreHint')}</Paragraph>
-          {restoreError ? <Alert type="error" showIcon message={restoreError} /> : null}
+          {restoreError ? <NoticeTip kind="error" title={restoreError} /> : null}
         </Space>
       </Modal>
     </Drawer>

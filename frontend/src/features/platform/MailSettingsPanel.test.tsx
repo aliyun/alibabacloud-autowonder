@@ -145,6 +145,7 @@ describe('MailSettingsPanel', () => {
     await userEvent.click(verificationSwitch);
 
     expect(await screen.findByText('关闭邮箱验证？')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认关闭' })).toHaveClass('ant-btn-dangerous');
     await userEvent.click(screen.getByRole('button', { name: '确认关闭' }));
 
     await waitFor(() => expect(putBody).not.toBeNull());
@@ -185,6 +186,7 @@ describe('MailSettingsPanel', () => {
     await userEvent.click(forceSwitch);
 
     expect(await screen.findByText('确认立即限制所有未验证用户？')).toBeInTheDocument();
+    expect(screen.getByText('此操作影响全部存量账号，请确认已通知相关用户并确认邮件通道可用。')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '确认开启，立即生效' }));
 
     await waitFor(() => expect(putBody).not.toBeNull());

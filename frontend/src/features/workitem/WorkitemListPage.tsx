@@ -1,23 +1,33 @@
 import { workitemDeleteReason } from './runtimeLabels';
 import { useSystemLabel } from '@/shared/i18n/systemLabels';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { PageHead } from '@/shared/ui/PageHead';
+import { Toolbar } from '@/shared/ui/Toolbar';
+import { TableCard, TableFooter } from '@/shared/ui/TableCard';
 import { Trans, useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
-import { formatDateTime } from '@/shared/i18n/format';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Tag, Space, Card, Segmented, Popconfirm, Tooltip, Input, AutoComplete, Typography, Popover, Empty, Modal, Spin, message } from 'antd';
+import { Button, Tag, Space, Segmented, Popconfirm, Tooltip, Input, AutoComplete, Typography, Popover, Empty, Modal, Spin, message } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { PlusOutlined, AppstoreOutlined, UnorderedListOutlined, DeleteOutlined, StarOutlined, StarFilled, ExclamationCircleFilled, CloseOutlined, CloseCircleFilled, SearchOutlined } from '@ant-design/icons';
+import { StatusTag, type StatusColorKey } from '@/shared/ui/StatusTag';
+import { TimeCell } from '@/shared/ui/TimeCell';
+import { AiIdentity } from '@/shared/ui/AiIdentity';
+import { EmptyState } from '@/shared/ui/EmptyState';
+import { ExclamationCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDeleteWorkitem, useWorkitemList, useWorkitemKanbanColumns, useToggleWatch, useWorkitemTagOptions, useTransitionWorkitem } from './hooks';
 import { WorkitemTagsCell } from './components/WorkitemTagsCell';
 import { EllipsisText } from '@/shared/ui/EllipsisText';
 import { WorkitemKanban } from './components/WorkitemKanban';
-import { WorkitemAdvancedFilter, type WorkitemAdvancedFilterDraft } from './components/WorkitemAdvancedFilter';
+import {
+  EMPTY_ADVANCED_FILTER,
+  WorkitemAdvancedFilter,
+  type WorkitemAdvancedFilterDraft,
+} from './components/WorkitemAdvancedFilter';
 import { WorkitemHealthBadge } from './components/WorkitemHealthBadge';
 import { HumanInterventionBadge } from './components/HumanInterventionBadge';
 import { ScheduledExecutionBadge } from './components/ScheduledExecutionBadge';
-import { workTypeMap, STATUS_COLUMNS, getPriorityMeta } from './constants';
+import { workTypeMap, STATUS_COLUMNS, STATUS_CATEGORY_TAG_COLOR, getPriorityMeta, statusCategoryOf } from './constants';
 import { displayNameWithoutId } from './nameDisplay';
 import { readWorkitemViewPreference, writeWorkitemViewPreference, type WorkitemViewMode } from './viewPreference';
 import { toCreatedTimeQuery } from './createdTimeFilter';
@@ -41,6 +51,7 @@ import { useAuthStore } from '@/shared/auth/store';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 
 import { useKanbanTransition } from './useKanbanTransition';
+import { NewWorkitemModal } from '@/features/workbench/components/NewWorkitemModal';
 
 type ViewMode = WorkitemViewMode;
 type Scope = WorkitemListScope;
@@ -52,6 +63,14 @@ const ALL_STATUS_KEYS = STATUS_COLUMNS.map(col => col.key as StatusCategory);
 
 const SCOPE_STORAGE_KEY = 'autowonder.workitems.scope';
 const LEGACY_PENDING_KEY = 'autowonder.workitems.onlyMyPendingDecision';
+
+/** priorityMap 的 antd 色名 → StatusTag 色板键。 */
+const PRIORITY_TAG_COLOR: Record<string, StatusColorKey> = {
+  red: 'red', orange: 'amber', blue: 'blue', default: 'gray',
+};
+
+/** 缺失值的占位符，语言无关。 */
+const MISSING = '-';
 
 function readScopePreference(): Scope {
   try {
@@ -100,23 +119,9 @@ function creatorCellText(record: Workitem): string {
   return displayNameWithoutId(record.creatorDisplayName, record.creatorName) || '-';
 }
 
-/** 日期+时间双行单元格，列表时间列共用。 */
-function renderDateTimeCell(value: string | null | undefined) {
-  if (!value) return '-';
-  const d = new Date(value);
-  const date = formatDateTime(d, { year: 'numeric', month: 'numeric', day: 'numeric' });
-  const time = formatDateTime(d, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-  return (
-    <div style={{ whiteSpace: 'nowrap' }}>
-      <div>{date}</div>
-      <div>{time}</div>
-    </div>
-  );
-}
-
-/** 表头单行显示，禁止逐字换行。 */
+/** 表头单行显示，禁止逐字换行；对齐遵循原型默认左对齐。 */
 function withNowrapHeader(columns: ColumnsType<Workitem>): ColumnsType<Workitem> {
-  return columns.map(column => ({ ...column, align: 'dataIndex' in column && column.dataIndex === 'title' ? 'left' : 'center', onHeaderCell: () => ({ style: { whiteSpace: 'nowrap', textAlign: 'center' } }) }));
+  return columns.map(column => ({ ...column, onHeaderCell: () => ({ style: { whiteSpace: 'nowrap' } }) }));
 }
 
 function WatchWorkitemButton({
@@ -135,9 +140,10 @@ function WatchWorkitemButton({
       <Button
         size="small"
         type="text"
+        className="aw-op-btn"
         data-testid="workitem-watch-toggle"
         aria-label={watched ? t('actions.unwatchAria') : t('actions.watchAria')}
-        icon={watched ? <StarFilled aria-hidden="true" className="aw-watch-active" /> : <StarOutlined aria-hidden="true" />}
+        icon={<AwStrokeIcon name="star" className={watched ? 'aw-watch-active' : undefined} />}
         loading={loading}
         onClick={(event) => {
           event.stopPropagation();
@@ -163,10 +169,11 @@ function DeleteWorkitemButton({
       <Tooltip title={workitemDeleteReason(record)}>
         <span>
           <Button
-            danger
+            type="text"
             size="small"
+            className="aw-op-btn aw-op-btn--del"
             aria-label={t('actions.delete')}
-            icon={<DeleteOutlined aria-hidden="true" />}
+            icon={<AwStrokeIcon name="trash" />}
             disabled
             onClick={(event) => event.stopPropagation()}
           />
@@ -185,10 +192,11 @@ function DeleteWorkitemButton({
       onConfirm={() => onDelete(record.id)}
     >
       <Button
-        danger
+        type="text"
         size="small"
+        className="aw-op-btn aw-op-btn--del"
         aria-label={t('actions.delete')}
-        icon={<DeleteOutlined aria-hidden="true" />}
+        icon={<AwStrokeIcon name="trash" />}
         loading={loading}
         onClick={(event) => event.stopPropagation()}
       />
@@ -225,6 +233,7 @@ export function WorkitemListPage() {
   const [keywordInput, setKeywordInput] = useState(keyword ?? '');
   const [tagInput, setTagInput] = useState(tag ?? '');
   const [columnSizes, setColumnSizes] = useState<Record<string, number>>({});
+  const [createOpen, setCreateOpen] = useState(false);
   const { data: tagOptions, isError: tagOptionsError } = useWorkitemTagOptions();
 
   useEffect(() => {
@@ -433,16 +442,18 @@ export function WorkitemListPage() {
   };
 
   const renderStatusTag = (statusName: string | null, record: Workitem) => {
-    const label = statusName ? systemLabel(record.statusLabelKey, statusName) : '-';
+    const label = statusName ? systemLabel(record.statusLabelKey, statusName) : MISSING;
     const configured = record.templateId != null && record.statusNodeId != null;
     const tag = (
-      <Tag
-        color={statusName ? 'processing' : undefined}
-        style={{ margin: 0, ...(configured ? { cursor: 'pointer' } : {}) }}
+      <StatusTag
+        label={label}
+        colorKey={STATUS_CATEGORY_TAG_COLOR[statusCategoryOf(record)] ?? 'gray'}
+        dot
         data-testid={`workitem-status-${record.id}`}
         role={configured ? 'button' : undefined}
         tabIndex={configured ? 0 : undefined}
         aria-label={configured ? t('list.transitionStatusAria', { name: label }) : undefined}
+        style={configured ? { cursor: 'pointer' } : undefined}
         onClick={configured ? (event) => {
           event.stopPropagation();
           openTransition(record);
@@ -453,9 +464,7 @@ export function WorkitemListPage() {
             openTransition(record);
           }
         } : undefined}
-      >
-        {label}
-      </Tag>
+      />
     );
     if (!configured) {
       return <Tooltip title={t('list.transitionNoWorkflow')}>{tag}</Tooltip>;
@@ -476,7 +485,10 @@ export function WorkitemListPage() {
   };
 
   const columns: ColumnsType<Workitem> = withNowrapHeader([
-    { title: 'ID', dataIndex: 'id', className: 'aw-column-numeric', width: 80 },
+    {
+      title: 'ID', dataIndex: 'id', className: 'aw-column-numeric', width: 80,
+      render: (id: number) => <span style={{ fontFamily: 'var(--aw-font-mono)', fontSize: 11, color: 'var(--aw-text-3)' }}>{id}</span>,
+    },
     {
       title: t('fields.title'), dataIndex: 'title', className: 'aw-column-title',
       render: (text: string, record: Workitem) => (
@@ -484,23 +496,28 @@ export function WorkitemListPage() {
           <EllipsisText lines={2} tooltip={text} placement="topLeft" style={{ flex: '1 1 auto', wordBreak: 'break-all' }}>
             <a onClick={() => navigate(`/workitems/${record.id}`)}>{text}</a>
           </EllipsisText>
-          <ScheduledExecutionBadge
-            scheduledStartAt={record.scheduledStartAt}
-            scheduledStartTriggeredAt={record.scheduledStartTriggeredAt}
-            origin={record.origin}
-            gmtCreate={record.gmtCreate}
-          />
+          <span style={{ display: 'inline-flex', alignItems: 'center', height: 18, flex: '0 0 auto' }}>
+            <ScheduledExecutionBadge
+              scheduledStartAt={record.scheduledStartAt}
+              scheduledStartTriggeredAt={record.scheduledStartTriggeredAt}
+              origin={record.origin}
+              gmtCreate={record.gmtCreate}
+            />
+          </span>
         </div>
       ),
     },
     {
       title: t('fields.type'), dataIndex: 'workType', width: 80,
-      render: (t: string) => <Tag color={workTypeMap[t]?.color}>{workTypeMap[t]?.label || t}</Tag>,
+      render: (type: string) => {
+        const meta = workTypeMap[type];
+        return <StatusTag label={meta?.label ?? type} colorKey={(meta?.color ?? 'gray') as StatusColorKey} />;
+      },
     },
     {
       title: t('fields.status'), dataIndex: 'statusName', width: 150,
       render: (s: string | null, record: Workitem) => (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
           {renderStatusTag(s, record)}
           <HumanInterventionBadge item={record} />
           <WorkitemHealthBadge item={record} />
@@ -511,7 +528,8 @@ export function WorkitemListPage() {
       title: t('fields.priority'), dataIndex: 'priority', width: 96,
       render: (p: number) => {
         const meta = getPriorityMeta(p);
-        return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>;
+        const colorKey = PRIORITY_TAG_COLOR[meta.color] ?? 'gray';
+        return <StatusTag label={meta.label} colorKey={colorKey} />;
       },
     },
     {
@@ -522,14 +540,13 @@ export function WorkitemListPage() {
       title: t('fields.assignee'), dataIndex: 'assigneeName', width: 120,
       render: (_: string | null, record: Workitem) => {
         const text = displayNameWithoutId(record.assigneeDisplayName, record.assigneeName);
-        return (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: '100%' }}>
-            {record.assigneeType === 'AGENT' ? <Tag color="purple" style={{ margin: 0 }}>AI</Tag> : null}
-            <EllipsisText tooltip={text ?? undefined}>
-              {text ?? t('assignee.unassigned')}
-            </EllipsisText>
-          </span>
+        if (!text) return <EllipsisText>{t('assignee.unassigned')}</EllipsisText>;
+        if (record.assigneeType === 'AGENT') return (
+          <Tooltip title={text} trigger={['hover', 'focus']}>
+            <span tabIndex={0} style={{ display: 'block', minWidth: 0 }}><AiIdentity name={text} aiBadge /></span>
+          </Tooltip>
         );
+        return <EllipsisText tooltip={text}>{text}</EllipsisText>;
       },
     },
     {
@@ -544,12 +561,12 @@ export function WorkitemListPage() {
     },
     {
       title: t('fields.created'), dataIndex: 'gmtCreate', className: 'aw-column-numeric', width: 108,
-      render: (value: string) => renderDateTimeCell(value),
+      render: (value: string) => <TimeCell value={value} />,
     },
     ...(scope === 'COMMENTED'
       ? [{
         title: t('fields.myLastCommentAt'), dataIndex: 'myLastCommentAt', className: 'aw-column-numeric', width: 132,
-        render: (value: string | null | undefined) => renderDateTimeCell(value),
+        render: (value: string | null | undefined) => <TimeCell value={value} />,
       } as ColumnsType<Workitem>[number]]
       : []),
     {
@@ -591,13 +608,13 @@ export function WorkitemListPage() {
   // 类型、状态与其它高级条件在同一弹窗内应用：一次写回全部条件，
   // 应用创建者条件后顶部范围的「我的」类筛选不再有意义，统一回到「全部」。
   const handleAdvancedFilterApply = (next: WorkitemAdvancedFilterDraft) => {
-    const { workType: nextWorkType, statusCategory: nextStatusCategory, ...advancedFilter } = next;
+    const { workType: nextWorkType, statusCategory: nextStatusCategory, ...advancedFilterPatch } = next;
     const patch: WorkitemListFilterPatch = {
-      advancedFilter,
+      advancedFilter: advancedFilterPatch,
       workType: nextWorkType,
       statusCategory: nextStatusCategory,
     };
-    if (advancedFilter.creatorIds.length > 0 && scope !== 'ALL') {
+    if (advancedFilterPatch.creatorIds.length > 0 && scope !== 'ALL') {
       writeScopePreference('ALL');
       applyFilters({ ...patch, scope: 'ALL' });
       return;
@@ -605,94 +622,147 @@ export function WorkitemListPage() {
     applyFilters(patch);
   };
 
+  const hasActiveFilters = !!workType || !!statusCategory || !!keyword || !!tag
+    || !!tagConditionsQuery || Object.keys(createdQuery).length > 0
+    || advancedFilter.creatorIds.length > 0 || advancedFilter.squadIds.length > 0
+    || advancedFilter.unassignedSquad;
+
+  const handleClearFilters = () => {
+    setKeywordInput('');
+    setTagInput('');
+    applyFilters({
+      workType: undefined,
+      statusCategory: undefined,
+      keyword: undefined,
+      tag: undefined,
+      advancedFilter: EMPTY_ADVANCED_FILTER,
+    });
+  };
+
+  const tableEmpty = (
+    <EmptyState
+      icon={hasActiveFilters ? <AwStrokeIcon name="filter" size={32} /> : <AwStrokeIcon name="file" size={32} />}
+      title={hasActiveFilters ? t('list.emptyFilteredTitle') : t('list.emptyTitle')}
+      subtext={hasActiveFilters ? t('list.emptyFilteredSubtext') : t('list.emptySubtext')}
+      action={hasActiveFilters ? (
+        <Button icon={<AwStrokeIcon name="refresh" />} onClick={handleClearFilters}>
+          {t('list.emptyFilteredAction')}
+        </Button>
+      ) : (
+        <Button type="primary" icon={<AwStrokeIcon name="plus" />}
+          onClick={() => accessCommand('READ_WRITE', t('actions.new'), () => setCreateOpen(true))}>
+          {t('list.emptyAction')}
+        </Button>
+      )}
+    />
+  );
+
   return (
-    <Card
-      className="aw-content-card aw-workitems"
-      title={<PageHeading title={t('list.title')} description={<Trans t={t} i18nKey="list.total" count={total} components={{ total: <span className="aw-heading-number">{total}</span> }} />} />}
-      extra={
-        <Space>
+    // 页面纵向填满 aw-content-frame：看板精确占据剩余高度，外层 frame 不再出现纵向滚动条（验收返修 14）
+    <section className="aw-workitems-page">
+      <PageHead
+        title={t('list.title')}
+        description={<Trans t={t} i18nKey="list.total" count={total} components={{ total: <span className="aw-heading-number">{total}</span> }} />}
+        actions={
+          <Space>
+            <Segmented
+              value={viewMode}
+              onChange={(v) => {
+                const next = v as ViewMode;
+                setViewMode(next);
+                writeWorkitemViewPreference(next);
+                setPage(1);
+              }}
+              options={[
+                { value: 'kanban', icon: <span role="img" aria-label={t('list.kanbanView')}><AwStrokeIcon name="kanban" /></span> },
+                { value: 'table', icon: <span role="img" aria-label={t('list.tableView')}><AwStrokeIcon name="table" /></span> },
+              ]}
+            />
+            <Button type="primary" icon={<AwStrokeIcon name="plus" />}
+              onClick={() => accessCommand('READ_WRITE', t('actions.new'), () => setCreateOpen(true))}>
+              {t('actions.new')}
+            </Button>
+          </Space>
+        }
+      />
+
+      {/* 工具行（验收返修 2/3）：快速范围 Segmented 左对齐；搜索与筛选控件右对齐，搜索框在筛选下拉之前 */}
+      <Toolbar
+        left={
           <Segmented
-            value={viewMode}
-            onChange={(v) => {
-              const next = v as ViewMode;
-              setViewMode(next);
-              writeWorkitemViewPreference(next);
-              setPage(1);
-            }}
-            options={[
-              { value: 'kanban', icon: <AppstoreOutlined aria-label={t('list.kanbanView')} /> },
-              { value: 'table', icon: <UnorderedListOutlined aria-label={t('list.tableView')} /> },
-            ]}
+            value={scope}
+            onChange={handleScopeChange}
+            options={scopeOptions}
+            aria-label={t('scope.label')}
+            style={{ maxWidth: '100%', overflowX: 'auto', flexShrink: 0 }}
           />
-          <Button type="primary" icon={<PlusOutlined aria-hidden="true" />}
-            onClick={() => accessCommand('READ_WRITE', t('actions.new'), () => navigate('/workitems/new'))}>
-            {t('actions.new')}
-          </Button>
-        </Space>
-      }
-    >
-      <Space wrap style={{ marginBottom: 16 }}>
-        <Segmented
-          value={scope}
-          onChange={handleScopeChange}
-          options={scopeOptions}
-          aria-label={t('scope.label')}
-        />
-        <Input.Search
-          value={keywordInput}
-          onChange={(event) => {
-            const next = event.target.value;
-            setKeywordInput(next);
-            // 清空输入框即撤销关键词条件，与搜索按钮提交保持同一语义
-            if (!next) {
-              applyFilters({ keyword: undefined });
-            }
-          }}
-          enterButton={<Button aria-label={t('list.searchWithExternalId')} icon={<SearchOutlined aria-hidden="true" />} />}
-          allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('list.clearSearch')} /> }}
-          placeholder={t('list.searchWithExternalId')}
-          onSearch={(v) => { setKeywordInput(v); applyFilters({ keyword: v || undefined }); }}
-          style={{ width: 260 }}
-        />
-        <AutoComplete
-          value={tagInput}
-          options={(tagOptions ?? []).map((value) => ({ value }))}
-          onChange={(value) => {
-            setTagInput(value);
-            if (!value) {
-              applyFilters({ tag: undefined });
-            }
-          }}
-          onSelect={(value) => {
-            setTagInput(value);
-            applyFilters({ tag: value });
-          }}
-          style={{ width: 160 }}
-        >
-          <Input.Search
-            enterButton={<Button aria-label={t('list.tagFilter')} icon={<SearchOutlined aria-hidden="true" />} />}
-            allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('list.clearTag')} /> }}
-            placeholder={t('list.tagFilter')}
-            onSearch={(v) => {
-              setTagInput(v ?? '');
-              applyFilters({ tag: v?.trim() || undefined });
+        }
+        right={<>
+          <Input
+            value={keywordInput}
+            aria-label={t('list.searchWithExternalId')}
+            allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('list.clearSearch')} /> }}
+            prefix={<AwStrokeIcon name="search" />}
+            placeholder={t('list.searchWithExternalId')}
+            onChange={(event) => {
+              const next = event.target.value;
+              setKeywordInput(next);
+              // 清空输入框即撤销关键词条件，与回车提交保持同一语义
+              if (!next) {
+                applyFilters({ keyword: undefined });
+              }
             }}
+            onPressEnter={(event) => {
+              const next = (event.target as HTMLInputElement).value;
+              setKeywordInput(next);
+              applyFilters({ keyword: next || undefined });
+            }}
+            style={{ width: 240, maxWidth: '100%', flex: '0 1 240px', minWidth: 160 }}
           />
-        </AutoComplete>
-        {tagOptionsError ? (
-          <Typography.Text type="warning" data-testid="workitem-tag-options-error">
-            {t('tags.loadFailed')}
-          </Typography.Text>
-        ) : null}
-        <WorkitemAdvancedFilter
-          applied={advancedFilter}
-          workType={workType}
-          statusCategory={statusCategory}
-          onApply={handleAdvancedFilterApply}
-        />
-      </Space>
+          <AutoComplete
+            className="aw-tag-filter"
+            value={tagInput}
+            options={(tagOptions ?? []).map((value) => ({ value }))}
+            onChange={(value) => {
+              setTagInput(value);
+              if (!value) {
+                applyFilters({ tag: undefined });
+              }
+            }}
+            onSelect={(value) => {
+              setTagInput(value);
+              applyFilters({ tag: value });
+            }}
+            style={{ width: 160, maxWidth: '100%', flex: '0 1 160px', minWidth: 120 }}
+          >
+            <Input
+              aria-label={t('list.tagFilter')}
+              allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('list.clearTag')} /> }}
+              prefix={<AwStrokeIcon name="tag" />}
+              placeholder={t('list.tagFilter')}
+              onPressEnter={(event) => {
+                const value = (event.target as HTMLInputElement).value;
+                setTagInput(value ?? '');
+                applyFilters({ tag: value?.trim() || undefined });
+              }}
+            />
+          </AutoComplete>
+          {tagOptionsError ? (
+            <Typography.Text type="warning" data-testid="workitem-tag-options-error">
+              {t('tags.loadFailed')}
+            </Typography.Text>
+          ) : null}
+          <WorkitemAdvancedFilter
+            applied={advancedFilter}
+            workType={workType}
+            statusCategory={statusCategory}
+            onApply={handleAdvancedFilterApply}
+          />
+        </>}
+      />
 
       {kanbanTransition.dialog}
+      <NewWorkitemModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <Modal
         open={!!pendingTransition}
         title={t('list.transitionConfirmTitle')}
@@ -703,7 +773,7 @@ export function WorkitemListPage() {
         onCancel={() => {
           if (!transitionMutation.isPending) setPendingTransition(null);
         }}
-        closeIcon={<CloseOutlined aria-hidden="true" />}
+        closeIcon={<AwStrokeIcon name="x" />}
         maskClosable={!transitionMutation.isPending}
         keyboard={!transitionMutation.isPending}
       >
@@ -743,23 +813,29 @@ export function WorkitemListPage() {
           }))}
         />
       ) : (
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={items}
-          loading={isLoading}
-          tableLayout="fixed"
-          scroll={{ x: 1200 }}
-          pagination={{
-            current: page,
-            pageSize: size,
-            total,
-            onChange: handlePageChange,
-            showSizeChanger: true,
-            showTotal: (itemTotal) => t('list.pagination', { count: itemTotal }),
-          }}
-        />
+        <TableCard
+          flush
+          className="aw-workitems"
+          footer={<TableFooter
+            total={total}
+            page={page}
+            pageSize={size}
+            onPageChange={handlePageChange}
+            onPageSizeChange={setSize}
+          />}
+        >
+          <Table
+            rowKey="id"
+            columns={columns}
+            dataSource={items}
+            loading={isLoading}
+            tableLayout="fixed"
+            scroll={{ x: 1200 }}
+            locale={{ emptyText: tableEmpty }}
+            pagination={false}
+          />
+        </TableCard>
       )}
-    </Card>
+    </section>
   );
 }

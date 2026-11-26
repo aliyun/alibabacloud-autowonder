@@ -88,4 +88,42 @@ describe('WorkitemCreateAttachments', () => {
 
     clickSpy.mockRestore();
   });
+
+  it('shows compact chips with size, full-name title and the selection count', () => {
+    const { container } = render(
+      <WorkitemCreateAttachments
+        files={[file('note.txt', 2048), file('b.txt')]}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('已选 2 / 10')).toBeInTheDocument();
+    const chips = container.querySelectorAll('.aw-file-chip');
+    expect(chips).toHaveLength(2);
+    const name = screen.getByText('note.txt');
+    expect(name).toHaveAttribute('title', 'note.txt');
+    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    expect(screen.getByText('4 B')).toBeInTheDocument();
+  });
+
+  it('hides the count when nothing is selected', () => {
+    render(<WorkitemCreateAttachments files={[]} onAdd={vi.fn()} onRemove={vi.fn()} />);
+    expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
+  });
+
+  it('replaces the quota hint with an inline alert when validation fails', () => {
+    render(
+      <WorkitemCreateAttachments
+        files={[file('a.txt')]}
+        error="附件已存在：A.TXT"
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('附件已存在：A.TXT');
+    expect(screen.queryByText('支持粘贴截图或选择文件；单个最大 5 MB，最多 10 个、总计 20 MB。')).not.toBeInTheDocument();
+    expect(screen.getByText('a.txt')).toBeInTheDocument();
+  });
 });

@@ -64,136 +64,78 @@ beforeEach(() => {
 });
 
 describe('ChiefGuidedSetup', () => {
-  it('lets an unconfigured executor choose the client and confirms the step', () => {
+  it('completes setup, generates, and copies in one click', async () => {
+    vi.mocked(api.completeSetup).mockResolvedValue({ ...baseSetup, executorConfigured: true });
+    vi.mocked(buildExecutorLaunchCommand).mockResolvedValue(launchCommand);
+    vi.mocked(copyTextToClipboard).mockResolvedValue(true);
     const { handlers } = renderGuided({ setup: { ...baseSetup, executorConfigured: false } });
-
-    expect(screen.getByRole('heading', { name: '选择执行客户端' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '执行客户端' })).toBeInTheDocument();
-    expect(screen.queryByText('已存在执行器，继续使用当前客户端。')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '确认选择' }));
-    expect(handlers.onAdvance).toHaveBeenCalledTimes(1);
-  });
-
-  it('reuses an existing executor and marks the step as automatically skipped', async () => {
-    const { handlers } = renderGuided();
-
-    expect(screen.getByText('已存在执行器，继续使用当前客户端。')).toBeInTheDocument();
-    expect(screen.getByText('已具备条件，已自动跳过')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '确认选择' })).not.toBeInTheDocument();
-    await waitFor(() => expect(handlers.onAdvance).toHaveBeenCalledTimes(1));
-  });
-
-  it('completes Chief setup and advances only after the request succeeds', async () => {
-    vi.mocked(api.completeSetup).mockResolvedValue({ ...baseSetup, skillsConfigured: true });
-    const { handlers } = renderGuided({ substep: 1, setup: { ...baseSetup, skillsConfigured: false } });
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('button', { name: '补齐配置' }));
+    expect(screen.getByRole('radio', { name: 'Qoder' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Qoder 中国版' })).toBeInTheDocument();
+    expect(screen.getByText('生成并复制命令')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '生成并复制命令' }));
 
     await waitFor(() => expect(api.completeSetup).toHaveBeenCalledWith('QODER_CLI'));
+    expect(buildExecutorLaunchCommand).toHaveBeenCalledWith(20, { os: 'posix' });
+    expect(handlers.onCommandChange).toHaveBeenCalledWith('launch-cmd');
+    await waitFor(() => expect(copyTextToClipboard).toHaveBeenCalledWith('launch-cmd'));
     expect(handlers.onAdvance).toHaveBeenCalledTimes(1);
   });
 
-  it('stays on the setup step with the error when completing setup fails', async () => {
+  it('reuses an existing executor and skips the first substep', async () => {
+    const { handlers } = renderGuided();
+
+    await waitFor(() => expect(handlers.onAdvance).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('radio', { name: 'Qoder' })).toBeDisabled();
+  });
+
+  it('changing the host OS updates the segmented control', () => {
+    const { handlers } = renderGuided({ setup: { ...baseSetup, executorConfigured: false } });
+
+    fireEvent.click(screen.getByText('Windows'));
+    expect(handlers.onOsChange).toHaveBeenCalledWith('windows');
+  });
+
+  it('stays on the step with the error when completing setup fails', async () => {
     vi.mocked(api.completeSetup).mockRejectedValue(new Error('draft requires review'));
-    const { handlers } = renderGuided({ substep: 1, setup: { ...baseSetup, skillsConfigured: false } });
+    const { handlers } = renderGuided({ setup: { ...baseSetup, executorConfigured: false } });
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('button', { name: '补齐配置' }));
+    await user.click(screen.getByRole('button', { name: '生成并复制命令' }));
 
     expect(await screen.findByText('draft requires review')).toBeInTheDocument();
+    expect(buildExecutorLaunchCommand).not.toHaveBeenCalled();
     expect(handlers.onAdvance).not.toHaveBeenCalled();
   });
 
   it('falls back to the localized failure message for non-Error rejections', async () => {
-    vi.mocked(api.completeSetup).mockRejectedValue('offline');
-    renderGuided({ substep: 1, setup: { ...baseSetup, skillsConfigured: false } });
+    vi.mocked(buildExecutorLaunchCommand).mockRejectedValue('offline');
+    const { handlers } = renderGuided({ command: 'launch-cmd' });
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('button', { name: '补齐配置' }));
+    await user.click(screen.getByRole('button', { name: '生成并复制命令' }));
 
     expect(await screen.findByText('操作未成功，请重试；仍停留在当前步骤。')).toBeInTheDocument();
-  });
-
-  it('skips an already configured setup step', async () => {
-    const { handlers } = renderGuided({ substep: 1 });
-
-    expect(screen.getByText('已具备条件，已自动跳过')).toBeInTheDocument();
-    await waitFor(() => expect(handlers.onAdvance).toHaveBeenCalledTimes(1));
-  });
-
-  it('selects the executor host OS and confirms the step', async () => {
-    const { handlers } = renderGuided({ substep: 2 });
-
-    expect(screen.getByText('请选择执行器所在电脑或服务器的系统')).toBeInTheDocument();
-    const select = screen.getByRole('combobox', { name: '执行器所在系统' });
-    fireEvent.mouseDown(select);
-    fireEvent.click(await screen.findByText('Windows'));
-    expect(handlers.onOsChange.mock.calls[0][0]).toBe('windows');
-    fireEvent.click(screen.getByRole('button', { name: '确认选择' }));
-    expect(handlers.onAdvance).toHaveBeenCalledTimes(1);
-  });
-
-  it('generates the launch command and advances only after success', async () => {
-    vi.mocked(buildExecutorLaunchCommand).mockResolvedValue(launchCommand);
-    const { handlers } = renderGuided({ substep: 3 });
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: '生成启动命令' }));
-
-    await waitFor(() => expect(buildExecutorLaunchCommand).toHaveBeenCalledWith(20, { os: 'posix' }));
-    expect(handlers.onCommandChange).toHaveBeenCalledWith('launch-cmd');
-    expect(handlers.onAdvance).toHaveBeenCalledTimes(1);
-  });
-
-  it('stays on the command step when generation fails', async () => {
-    vi.mocked(buildExecutorLaunchCommand).mockRejectedValue(new Error('generation failed'));
-    const { handlers } = renderGuided({ substep: 3 });
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: '生成启动命令' }));
-
-    expect(await screen.findByText('generation failed')).toBeInTheDocument();
     expect(handlers.onAdvance).not.toHaveBeenCalled();
   });
 
   it('reports a failure instead of generating without an executor', async () => {
-    const { handlers } = renderGuided({ substep: 3, setup: { ...baseSetup, executorId: null } });
+    vi.mocked(api.completeSetup).mockResolvedValue({ ...baseSetup, executorId: null, executorConfigured: true });
+    const { handlers } = renderGuided({ setup: { ...baseSetup, executorId: null, executorConfigured: false } });
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('button', { name: '生成启动命令' }));
+    await user.click(screen.getByRole('button', { name: '生成并复制命令' }));
 
     expect(await screen.findByText('操作未成功，请重试；仍停留在当前步骤。')).toBeInTheDocument();
     expect(buildExecutorLaunchCommand).not.toHaveBeenCalled();
     expect(handlers.onAdvance).not.toHaveBeenCalled();
   });
 
-  it('generates a missing command without leaving the copy step', async () => {
-    vi.mocked(buildExecutorLaunchCommand).mockResolvedValue({ ...launchCommand, command: 'late-cmd' });
-    const { handlers } = renderGuided({ substep: 4 });
-    const user = userEvent.setup();
-
-    await user.click(screen.getByRole('button', { name: '生成启动命令' }));
-
-    await waitFor(() => expect(handlers.onCommandChange).toHaveBeenCalledWith('late-cmd'));
-    expect(handlers.onAdvance).not.toHaveBeenCalled();
-  });
-
-  it.each(['复制命令', '一键复制完整命令'])('advances after copying the command with %s', async (label) => {
-    vi.mocked(copyTextToClipboard).mockResolvedValue(true);
-    const { handlers } = renderGuided({ substep: 4, command: 'launch-cmd' });
-    const user = userEvent.setup();
-
-    expect(screen.getByText('launch-cmd')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: label }));
-
-    await waitFor(() => expect(copyTextToClipboard).toHaveBeenCalledWith('launch-cmd'));
-    expect(handlers.onAdvance).toHaveBeenCalledTimes(1);
-  });
-
   it('offers a manual copy path when the clipboard write fails', async () => {
+    vi.mocked(buildExecutorLaunchCommand).mockResolvedValue(launchCommand);
     vi.mocked(copyTextToClipboard).mockResolvedValue(false);
-    const { handlers } = renderGuided({ substep: 4, command: 'launch-cmd' });
+    const { handlers } = renderGuided({ command: 'launch-cmd' });
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('button', { name: '复制命令' }));
@@ -204,40 +146,67 @@ describe('ChiefGuidedSetup', () => {
     expect(handlers.onAdvance).toHaveBeenCalledTimes(1);
   });
 
-  it('checks executor status on demand and never completes from the click alone', async () => {
-    const { handlers } = renderGuided({ substep: 5 });
+  it('marks the command as copied after a successful copy', async () => {
+    vi.mocked(copyTextToClipboard).mockResolvedValue(true);
+    renderGuided({ command: 'launch-cmd' });
     const user = userEvent.setup();
 
-    expect(screen.getByRole('heading', { name: '等待 Chief 执行器上线' })).toBeInTheDocument();
-    expect(screen.getByText(/检测到执行器在线后将自动进入下一步/)).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('后台自动探测中');
+    await user.click(screen.getByRole('button', { name: '复制命令' }));
+
+    expect(await screen.findByText('已复制')).toBeInTheDocument();
+    expect(screen.getByText('等待粘贴执行')).toBeInTheDocument();
+  });
+
+  it('waits online with the command, status, and a manual check', async () => {
+    const { handlers } = renderGuided({ substep: 1, command: 'launch-cmd' });
+    const user = userEvent.setup();
+
+    expect(screen.getByText('启动命令（macOS / Linux）')).toBeInTheDocument();
+    expect(screen.getByText('launch-cmd')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('正在探测执行器');
     await user.click(screen.getByRole('button', { name: '手动检查' }));
 
     expect(handlers.onCheckStatus).toHaveBeenCalledTimes(1);
     expect(handlers.onAdvance).not.toHaveBeenCalled();
-    expect(screen.queryByText(/暂未检测到执行器在线可用/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/暂未检测到执行器在线/)).not.toBeInTheDocument();
+  });
+
+  it('regenerates a missing command in the waiting substep without advancing', async () => {
+    vi.mocked(buildExecutorLaunchCommand).mockResolvedValue(launchCommand);
+    vi.mocked(copyTextToClipboard).mockResolvedValue(true);
+    const { handlers } = renderGuided({ substep: 1, command: null });
+    const user = userEvent.setup();
+
+    expect(screen.getByText('检测到已配置的执行器，当前不在线。重新生成启动命令，在原机器上重启即可继续。')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'macOS / Linux' })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: '生成并复制命令' }));
+
+    await waitFor(() => expect(handlers.onCommandChange).toHaveBeenCalledWith('launch-cmd'));
+    expect(buildExecutorLaunchCommand).toHaveBeenCalledWith(20, { os: 'posix' });
+    expect(copyTextToClipboard).toHaveBeenCalledWith('launch-cmd');
+    expect(handlers.onAdvance).not.toHaveBeenCalled();
   });
 
   it('shows the timeout notice and resets the wait window', async () => {
-    const { handlers, rerender } = renderGuided({ substep: 5, waitExpired: true });
+    const { handlers, rerender } = renderGuided({ substep: 1, command: 'launch-cmd', waitExpired: true });
     expect(screen.getByRole('status')).toHaveTextContent('自动探测已暂停');
     const user = userEvent.setup();
 
-    expect(screen.getByText(/暂未检测到执行器在线可用/)).toBeInTheDocument();
+    expect(screen.getByText(/暂未检测到执行器在线/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /重\s*试/ }));
     expect(handlers.onResetWait).toHaveBeenCalledTimes(1);
 
     act(() => {
       rerender(<ChiefGuidedSetup
         setup={baseSetup}
-        substep={5}
+        substep={1}
         clientKind="QODER_CLI"
         os="posix"
-        command={null}
+        command="launch-cmd"
         waitExpired={false}
         {...handlers}
       />);
     });
-    expect(screen.queryByText(/暂未检测到执行器在线可用/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/暂未检测到执行器在线/)).not.toBeInTheDocument();
   });
 });

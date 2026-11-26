@@ -1,9 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { Card, Avatar, Space, Typography, Spin, Empty } from 'antd';
-import { EyeOutlined } from '@ant-design/icons';
+import { Spin } from 'antd';
 import { useWatchers } from '../hooks';
-
-const { Text } = Typography;
+import { HumanInitial } from './SquadMembers';
 
 interface WatcherListProps {
   workitemId: number | string;
@@ -18,54 +16,27 @@ export function WatcherList({ workitemId }: WatcherListProps) {
   const { data: watchers = [], isLoading } = useWatchers(workitemId);
 
   return (
-    <Card
-      size="small"
-      data-testid="workitem-watcher-list"
-      title={watchers.length ? t('watchers.titleCount', { count: watchers.length }) : t('watchers.title')}
-      styles={{ body: { padding: '8px 12px' } }}
-    >
+    <div className="aw-task-group" data-testid="workitem-watcher-list">
+      <h3 className="aw-task-group-title">
+        {watchers.length ? t('watchers.titleCount', { count: watchers.length }) : t('watchers.title')}
+      </h3>
       {isLoading ? (
-        <div style={{ textAlign: 'center', padding: 16 }}>
-          <Spin size="small" />
-        </div>
+        <Spin size="small" />
       ) : watchers.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('watchers.empty')} style={{ margin: '12px 0' }} />
+        <p className="aw-task-empty">{t('watchers.empty')}</p>
       ) : (
-        <Space direction="vertical" style={{ width: '100%' }} size={8}>
+        <ul className="aw-task-list">
           {watchers.map((w) => (
-            <div
-              key={String(w.userId)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '8px',
-                borderRadius: 10,
-                background: 'var(--aw-panel)',
-                border: '1px solid var(--aw-border)',
-              }}
-            >
-              <Avatar
-                aria-label={t('watchers.avatar')}
-                size={32}
-                icon={<EyeOutlined />}
-                style={{
-                  backgroundColor: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))',
-                  color: 'var(--aw-warning)',
-                  border: '1px solid color-mix(in srgb, var(--aw-warning) 35%, var(--aw-border))',
-                  flexShrink: 0,
-                }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Text ellipsis style={{ fontSize: 13, fontWeight: 600, display: 'block' }}>{w.name}</Text>
-                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
-                  {t('watchers.identity', { id: w.displayId ?? w.userId })}
-                </Text>
+            <li key={String(w.userId)}>
+              <span className="aw-task-avatar" role="img" aria-label={t('watchers.avatar')}><HumanInitial name={w.name} /></span>
+              <div>
+                <div className="aw-task-name">{w.name}</div>
+                <div className="aw-task-secondary">{t('watchers.identity', { id: w.displayId ?? w.userId })}</div>
               </div>
-            </div>
+            </li>
           ))}
-        </Space>
+        </ul>
       )}
-    </Card>
+    </div>
   );
 }

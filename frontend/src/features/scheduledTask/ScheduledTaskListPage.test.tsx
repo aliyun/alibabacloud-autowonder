@@ -88,7 +88,7 @@ describe('ScheduledTaskListPage', () => {
     expect(screen.getByText('启用中')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '立即运行' })).toBeInTheDocument();
     expect(await screen.findByText('成功')).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element?.textContent === '共 41 个' && !Array.from(element.children).some(child => child.textContent === element.textContent))).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === '共 41 条' && !Array.from(element.children).some(child => child.textContent === element.textContent))).toBeInTheDocument();
     expect(await screen.findByText((_, element) => element?.textContent === '运行中 2' && !Array.from(element.children).some(child => child.textContent === element.textContent))).toBeInTheDocument();
   });
 
@@ -105,15 +105,15 @@ describe('ScheduledTaskListPage', () => {
       } });
     }));
     renderList('READ_WRITE');
-    await screen.findByText((_, element) => element?.textContent === '共 41 个' && !Array.from(element.children).some(child => child.textContent === element.textContent));
+    await screen.findByText((_, element) => element?.textContent === '共 41 条' && !Array.from(element.children).some(child => child.textContent === element.textContent));
     await user.click(screen.getByTitle('2'));
     await waitFor(() => expect(requests.at(-1)?.get('offset')).toBe('10'));
     await user.click(screen.getByText('我创建的'));
-    await screen.findByText((_, element) => element?.textContent === '共 1 个' && !Array.from(element.children).some(child => child.textContent === element.textContent));
+    await screen.findByText((_, element) => element?.textContent === '共 1 条' && !Array.from(element.children).some(child => child.textContent === element.textContent));
     expect(requests.at(-1)?.get('creatorId')).toBe('42');
     expect(requests.at(-1)?.get('offset')).toBe('0');
     await user.click(screen.getByText('全部'));
-    await screen.findByText((_, element) => element?.textContent === '共 41 个' && !Array.from(element.children).some(child => child.textContent === element.textContent));
+    await screen.findByText((_, element) => element?.textContent === '共 41 条' && !Array.from(element.children).some(child => child.textContent === element.textContent));
     await waitFor(() => expect(requests.at(-1)?.has('creatorId')).toBe(false));
   });
 
@@ -166,8 +166,8 @@ describe('ScheduledTaskListPage', () => {
     renderList('READ_WRITE');
 
     expect(await screen.findByText('凌晨回归')).toBeInTheDocument();
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['定时任务', '定时工单']);
-    expect(screen.getByRole('tab', { name: '定时任务' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['调度任务', '定时工单']);
+    expect(screen.getByRole('tab', { name: '调度任务' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('button', { name: '立即运行' })).toBeInTheDocument();
     expect(requests).toHaveLength(0);
   });
@@ -215,9 +215,9 @@ it('switches cached list and both tabs without resetting filters, page or querie
   await waitFor(() => expect(requests.at(-1)).toContain('offset=10'));
   const beforeSwitch = [...requests];
   await act(() => i18n.changeLanguage('en-US'));
-  expect(screen.getByRole('tab', { name: 'Scheduled tasks' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tab', { name: 'Schedules' })).toHaveAttribute('aria-selected', 'true');
   expect(screen.getByRole('button', { name: 'Run now' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Keyword filter')).toBeInTheDocument();
   expect(screen.getByText('Agent #11')).toBeInTheDocument();
   expect(screen.getByLabelText('Scheduled task scope')).toHaveTextContent('Created by me');
   expect(requests).toEqual(beforeSwitch);
@@ -228,7 +228,7 @@ it('switches cached list and both tabs without resetting filters, page or querie
   expect(window.localStorage.getItem(TAB_STORAGE_KEY)).toBe('workitems');
 });
 
-it.each([[0, '0 tasks'], [1, '1 task'], [2, '2 tasks']])('renders numeric English totals for %s tasks', async (count, label) => {
+it.each([[0, '0 records'], [1, '1 record'], [2, '2 records']])('renders numeric English totals for %s tasks', async (count, label) => {
   window.localStorage.removeItem(TAB_STORAGE_KEY);
   server.use(http.get('/api/scheduled-tasks', () => HttpResponse.json({ success: true, code: '0', data: { list: [], total: count } })), ...readHandlers());
   await act(() => i18n.changeLanguage('en-US'));
@@ -240,13 +240,12 @@ it.each([[0, '0 tasks'], [1, '1 task'], [2, '2 tasks']])('renders numeric Englis
 
 resetAfterEach(async () => { await act(() => i18n.changeLanguage('zh-CN')); });
 
-it.each(['zh-CN', 'en-US'])('final widget scheduled task clear preserves search button and server filter in %s', async locale => {
+it.each(['zh-CN', 'en-US'])('final widget scheduled task clear preserves enter search and server filter in %s', async locale => {
  window.localStorage.removeItem(TAB_STORAGE_KEY); const requests: URLSearchParams[] = [];
  server.use(http.get('/api/scheduled-tasks', ({ request }) => { requests.push(new URL(request.url).searchParams); return HttpResponse.json({ success: true, data: { list: [], total: 0 } }); }), ...readHandlers());
  await i18n.changeLanguage(locale); renderList('READ_WRITE');
  const input = screen.getByLabelText(locale === 'en-US' ? 'Keyword filter' : '关键词筛选');
- const search = screen.getByRole('button', { name: locale === 'en-US' ? 'Search' : '搜索' });
- await userEvent.type(input, '<raw>中文'); await userEvent.click(search);
+ await userEvent.type(input, '<raw>中文{enter}');
  await waitFor(() => expect(requests.at(-1)?.get('keyword')).toBe('<raw>中文'));
  await userEvent.click(screen.getByRole('button', { name: locale === 'en-US' ? 'Clear task search' : '清空任务搜索' }));
  await waitFor(() => expect(requests.at(-1)?.has('keyword')).toBe(false)); expect(input).toHaveValue(''); expect(requests.at(-1)?.get('offset')).toBe('0');

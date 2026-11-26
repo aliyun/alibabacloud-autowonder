@@ -394,7 +394,30 @@ public class ScheduledTaskTriggerService {
     private JSONObject frozenMemory(Long workspaceId, Long versionId) { JSONObject out = new JSONObject(true); if (memoryRefDao == null) return out; List<AgentMemoryRefDO> refs = memoryRefDao.listByVersion(versionId); if (refs == null) return out; int i=0; for (AgentMemoryRefDO ref : refs) { if (i >= 50 || ref == null || !Objects.equals(workspaceId, ref.getTenantId())) continue; MemoryDO memory = memoryDao.findById(ref.getMemoryId()); if (memory != null && Objects.equals(workspaceId, memory.getTenantId()) && "ADOPTED".equals(memory.getStatus()) && memory.getContentMd() != null) out.put("mem_" + i++, memory.getContentMd()); } return out; }
     private JSONObject frozenRoster(Long workspaceId, Long selfAgentId) { JSONArray digital = new JSONArray(); Set<Long> seen = new HashSet<>(); List<SquadMemberDO> memberships = squadMemberDao.listByAgent(selfAgentId); if (memberships != null) for (SquadMemberDO membership : memberships) { if (membership == null || !Objects.equals(workspaceId, membership.getTenantId())) continue; List<SquadMemberDO> mates = squadMemberDao.listBySquad(membership.getSquadId()); if (mates == null) continue; for (SquadMemberDO mate : mates) { if (mate == null || !Objects.equals(workspaceId, mate.getTenantId()) || Objects.equals(selfAgentId, mate.getAgentId()) || !seen.add(mate.getAgentId())) continue; AgentDO agent = agentDao.findById(mate.getAgentId()); if (agent == null || !Objects.equals(workspaceId, agent.getTenantId()) || agent.getOnlineVersionId() == null) continue; AgentVersionDO version = agentVersionDao.findById(agent.getOnlineVersionId()); if (version != null && Objects.equals(workspaceId, version.getTenantId())) digital.add(map("agentId", agent.getId(), "roleCode", version.getRoleCode(), "roleName", version.getRoleName())); } } return map("digitalTeammates", digital, "humanTeammates", new JSONArray()); }
     private JSONObject frozenSdlc(ScheduledTaskDO task) { AgentDO initial = agentDao.findById(task.getInitialAgentId()); if (initial == null || !Objects.equals(task.getWorkspaceId(), initial.getTenantId()) || initial.getOnlineVersionId() == null) return null; AgentVersionDO version = agentVersionDao.findById(initial.getOnlineVersionId()); return version == null || !Objects.equals(task.getWorkspaceId(), version.getTenantId()) ? null : frozenSdlc(version); }
-    private JSONObject frozenSdlc(AgentVersionDO version) { if (sdlcStepDao == null || version == null || version.getSdlcId() == null) return null; List<SdlcStepDO> rows = sdlcStepDao.listBySdlc(version.getSdlcId()); if (rows == null) return null; List<SdlcStepDO> valid = rows.stream().filter(s -> s != null && Objects.equals(version.getTenantId(), s.getTenantId())).sorted(Comparator.comparing(s -> s.getStepOrder() == null ? Integer.MAX_VALUE : s.getStepOrder())).toList(); if (valid.isEmpty()) return null; JSONArray steps = new JSONArray(); for (SdlcStepDO step : valid) { JSONObject item = map("id", String.valueOf(step.getId()), "name", step.getName(), "kind", step.getKind(), "required", step.getRequired() == null || step.getRequired(), "instruction", step.getInstructionMd(), "checklist", jsonArray(step.getChecklistJson()), "gatePolicy", jsonObject(step.getGatePolicyJson())); if (step.getTimeoutSeconds() != null) item.put("timeoutSeconds", step.getTimeoutSeconds()); if (step.getRetryBudget() != null) item.put("retryBudget", step.getRetryBudget()); steps.add(item); } return map("id", version.getSdlcId(), "workflow", "agent-internal-workflow", "currentStepId", valid.get(0).getId(), "steps", steps, "outputContract", map("reviewerHandoffRequired", false)); }
+    private JSONObject frozenSdlc(AgentVersionDO version) {
+        if (sdlcStepDao == null || version == null || version.getSdlcId() == null || version.getTenantId() == null) return null;
+        List<SdlcStepDO> rows = sdlcStepDao.listForExecution(version.getTenantId(), version.getSdlcId());
+        if (rows == null) return null;
+        List<SdlcStepDO> valid = rows.stream()
+                .filter(step -> step != null && Objects.equals(version.getTenantId(), step.getTenantId()))
+                .sorted(Comparator.comparing(step -> step.getStepOrder() == null ? Integer.MAX_VALUE : step.getStepOrder()))
+                .toList();
+        if (valid.isEmpty()) return null;
+        JSONArray steps = new JSONArray();
+        for (SdlcStepDO step : valid) {
+            JSONObject item = map("id", String.valueOf(step.getId()), "name", step.getName(), "kind", step.getKind(),
+                    "required", step.getRequired() == null || step.getRequired(), "instruction", step.getInstructionMd(),
+                    "checklist", jsonArray(step.getChecklistJson()), "gatePolicy", jsonObject(step.getGatePolicyJson()));
+            if (step.getTimeoutSeconds() != null) item.put("timeoutSeconds", step.getTimeoutSeconds());
+            if (step.getRetryBudget() != null) item.put("retryBudget", step.getRetryBudget());
+            steps.add(item);
+        }
+        SdlcStepDO first = valid.getFirst();
+        JSONObject workflow = map("id", version.getSdlcId(), "workflow", "agent-internal-workflow",
+                "currentStepId", first.getId(), "steps", steps, "outputContract", map("reviewerHandoffRequired", false));
+        if (first.isFlowStageTimingEnabled()) workflow.put("stageTimingEnabled", true);
+        return workflow;
+    }
     private static JSONArray jsonArray(String raw) { try { return raw == null || raw.isBlank() ? new JSONArray() : JSON.parseArray(raw); } catch (RuntimeException ignored) { return new JSONArray(); } }
     private static JSONObject jsonObject(String raw) { try { return raw == null || raw.isBlank() ? new JSONObject(true) : JSON.parseObject(raw); } catch (RuntimeException ignored) { return new JSONObject(true); } }
 

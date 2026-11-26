@@ -48,6 +48,42 @@ class AliyunOssObjectStorageTest {
     }
 
     @Test
+    void boundedGetRejectsLargeBodiesAndClosesTheStream() throws Exception {
+        OSS client = mock(OSS.class); OSSObject object = new OSSObject();
+        var response = mock(com.aliyun.oss.common.comm.ResponseMessage.class);
+        object.setResponse(response);
+        var closed = new java.util.concurrent.atomic.AtomicBoolean();
+        var input = new ByteArrayInputStream(new byte[20]) {
+            @Override public void close() { closed.set(true); }
+        };
+        object.setObjectContent(input); when(client.getObject("bucket", "key")).thenReturn(object);
+        var storage = new AliyunOssObjectStorage(client, client);
+        assertThrows(ObjectStorage.SizeLimitExceededException.class, () -> storage.get("bucket/key", 4));
+        verify(response).abort();
+        assertEquals(15, input.available());
+        assertTrue(closed.get());
+    }
+
+    @Test
+    void boundedGetRejectsOversizeMetadataEvenIfAbortFails() throws Exception {
+        OSS client = mock(OSS.class);
+        OSSObject object = new OSSObject();
+        var response = mock(com.aliyun.oss.common.comm.ResponseMessage.class);
+        org.mockito.Mockito.doThrow(new java.io.IOException("abort failed")).when(response).abort();
+        object.setResponse(response);
+        var metadata = new com.aliyun.oss.model.ObjectMetadata();
+        metadata.setContentLength(20);
+        object.setObjectMetadata(metadata);
+        var input = new ByteArrayInputStream(new byte[20]);
+        object.setObjectContent(input);
+        when(client.getObject("bucket", "key")).thenReturn(object);
+        var failure = assertThrows(ObjectStorage.SizeLimitExceededException.class,
+                () -> new AliyunOssObjectStorage(client, client).get("bucket/key", 4));
+        assertEquals(20, input.available());
+        assertEquals(1, failure.getSuppressed().length);
+    }
+
+    @Test
     void putUsesServiceClientWithoutCallingPublicClient() {
         OSS serviceClient = mock(OSS.class);
         OSS publicClient = mock(OSS.class);

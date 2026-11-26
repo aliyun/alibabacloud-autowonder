@@ -41,7 +41,7 @@ describe('WatcherList（真实 useWatchers 查询）', () => {
 
     expect(await screen.findByText('蔡何')).toBeInTheDocument();
     expect(screen.getByText('关注人 (1)')).toBeInTheDocument();
-    expect(screen.getByText('工号: 10000')).toBeInTheDocument();
+    expect(screen.getByText('ID 10000')).toBeInTheDocument();
     await waitFor(() => expect(requested).toContain('42'));
     expect(queryClient.getQueryData(['workitem', '42', 'watchers'])).toBeDefined();
   });

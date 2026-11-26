@@ -1,10 +1,13 @@
-import { CloseOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { workitemDeleteReason } from './runtimeLabels';
+import './workitemDetail.css';
+import './transitionModal.css';
+import { transitionDotColor } from './transition';
 import { useTranslation } from 'react-i18next';
 import { RecoveryControls } from './components/RecoveryControls';
 import { DispatchRequests } from './components/DispatchRequests';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Empty, List, Modal, Spin, Result, Button, Space, Tag, Typography } from 'antd';
+import { Empty, Input, Modal, Spin, Result, Button } from 'antd';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTemplateDetail } from '@/features/statemachine/hooks';
@@ -45,6 +48,7 @@ import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 import { allows } from '@/shared/auth/access';
 import { useAuthStore } from '@/shared/auth/store';
 import { CLARIFICATION_THEME } from './clarification/theme';
+import { TRANSITION_REASON_MAX_LENGTH } from './transitionLimits';
 import type { Artifact, CommentInteraction, Participant } from '@/shared/types/workitem';
 
 const CLARIFY_MIN_WIDTH = 320;
@@ -74,9 +78,14 @@ export function WorkitemDetailPage() {
   const [clarifyReminderSuppressed, setClarifyReminderSuppressed] = useState(isClarifyReminderSuppressed);
   const [assignHumanOpen, setAssignHumanOpen] = useState(false);
   const [transitionOpen, setTransitionOpen] = useState(false);
+  const [transitionTarget, setTransitionTarget] = useState<number | null>(null);
+  const [transitionReason, setTransitionReason] = useState('');
+  const [transitionExpected, setTransitionExpected] = useState<{ fromNodeId?: number | string; expectedVersion?: number }>({});
+  const transitionSubmitting = useRef(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const leftScrollRef = useRef<HTMLDivElement>(null);
+  const commentRef = useRef<HTMLDivElement>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   // Router 导航可以延后提交。同帧的全屏/会话上报必须累积到尚未提交的 URL，
   // 否则后一次上报会用旧 searchParams 覆盖前一次变更。
@@ -91,6 +100,9 @@ export function WorkitemDetailPage() {
   const rightPanelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setClarifyWidth(null);
+    setTransitionOpen(false);
+    setTransitionTarget(null);
+    setTransitionReason('');
   }, [id]);
 
   // 依赖 react-router 按 location.search 记忆化的 searchParams：交付进度在轮询，
@@ -171,10 +183,7 @@ export function WorkitemDetailPage() {
   if (isError) return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
       {owningWorkspace ? (
-        <OtherWorkspacePrompt
-          owning={owningWorkspace}
-          errorMessage={error?.message || undefined}
-        />
+        <OtherWorkspacePrompt owning={owningWorkspace} />
       ) : (
         <Result status="error" title={t('detail.loadFailed')} subTitle={error?.message || t('detail.retryLater')}
           extra={<Button onClick={() => navigate(-1)}>{t('detail.back')}</Button>} />
@@ -229,11 +238,29 @@ export function WorkitemDetailPage() {
   const transitionCandidates = (templateDetail?.nodes ?? [])
     .filter((node) => Number(node.id) !== currentStatusNodeId)
     .sort((a, b) => Number(recommendedNodeIds.has(Number(b.id))) - Number(recommendedNodeIds.has(Number(a.id))));
-  const handleTransition = (toNodeId: number) => {
+  const openTransition = () => accessCommand('READ_WRITE', t('actions.transition'), () => {
+    setTransitionTarget(null);
+    setTransitionReason('');
+    setTransitionExpected({ fromNodeId: workitem.statusNodeId ?? undefined, expectedVersion: workitem.version });
+    setTransitionOpen(true);
+  });
+  const handleTransition = () => {
+    if (transitionTarget == null || transitionSubmitting.current) return;
     accessCommand('READ_WRITE', t('actions.transition'), () => {
+      transitionSubmitting.current = true;
       transitionMutation.mutate(
-        { id, toNodeId },
-        { onSuccess: () => setTransitionOpen(false) },
+        {
+          id,
+          toNodeId: transitionTarget,
+          expected: {
+            ...transitionExpected,
+            reason: transitionReason.trim() ? transitionReason : undefined,
+          },
+        },
+        {
+          onSuccess: () => setTransitionOpen(false),
+          onSettled: () => { transitionSubmitting.current = false; },
+        },
       );
     });
   };
@@ -254,14 +281,15 @@ export function WorkitemDetailPage() {
   };
 
   return (
-    <div className="aw-split-page" style={{ display: 'flex', gap: 0, height: '100%', overflow: 'hidden' }}>
-      {/* Left Panel */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div className="aw-detail-page" style={{ height: '100%' }}>
+      {/* Left Panel：原型 05c 主栏为画布上的并列白卡（头部 / 需求与设计 / 评论&时间线） */}
+      <section className="aw-detail-main aw-wi-main">
         <div
           data-testid="workitem-scroll-region"
-          style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}
+          style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'visible', display: 'flex' }}
         >
-          <div ref={leftScrollRef} data-testid="workitem-left-scroll" style={{ flex: 1, minWidth: 0, minHeight: 0, padding: 24, paddingRight: 38, paddingBottom: 12, overflowY: 'auto' }}>
+          <div ref={leftScrollRef} data-testid="workitem-left-scroll" className="aw-detail-canvas" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
+          <section className="aw-detail-head-card" data-testid="workitem-head-card">
           <WorkitemHeader
             title={workitem.title}
             workitemId={workitem.id}
@@ -269,13 +297,9 @@ export function WorkitemDetailPage() {
             scheduledStartAt={workitem.scheduledStartAt}
             scheduledStartTriggeredAt={workitem.scheduledStartTriggeredAt}
             gmtCreate={workitem.gmtCreate}
-            usage={progress?.totalUsage ?? null}
           />
           <WorkitemMeta
-            workType={workitem.workType}
-            statusName={workitem.statusName ?? null}
-            statusLabelKey={workitem.statusLabelKey ?? null}
-            priority={workitem.priority}
+            workitemId={workitem.id}
             assigneeName={workitem.assigneeName ?? null}
             assigneeDisplayName={workitem.assigneeDisplayName ?? null}
             assigneeNameFallback={workitem.assigneeNameFallback}
@@ -298,6 +322,11 @@ export function WorkitemDetailPage() {
           />
           <RecoveryControls workitemId={id} renderActions={(deliveryControl) => <WorkitemActionBar
             deliveryControl={deliveryControl}
+            workType={workitem.workType}
+            statusName={workitem.statusName ?? null}
+            statusLabelKey={workitem.statusLabelKey ?? null}
+            statusCategory={workitem.statusCategory}
+            priority={workitem.priority}
             hasSdlc={hasSdlc}
             watched={!!workitem.watched}
             onToggleWatch={() => watchMutation.mutate({ id, watched: !!workitem.watched })}
@@ -308,7 +337,8 @@ export function WorkitemDetailPage() {
               t('detail.assignHumanCommand'),
               () => setAssignHumanOpen(true),
             )}
-            onTransition={() => accessCommand('READ_WRITE', t('actions.transition'), () => setTransitionOpen(true))}
+            onTransition={openTransition}
+            onAddComment={() => commentRef.current?.querySelector('textarea')?.focus()}
             onSyncExternal={() => accessCommand(
               'READ_WRITE',
               t('detail.syncCommand'),
@@ -320,6 +350,7 @@ export function WorkitemDetailPage() {
             deleteDisabled={workitem.deletable === false}
             deleteDisabledReason={workitemDeleteReason(workitem)}
           />} />
+          </section>
           <HumanInterventionAlert item={workitem} />
           <DispatchRequests workitemId={id} artifacts={artifacts} />
           <WorkitemContent
@@ -329,16 +360,17 @@ export function WorkitemDetailPage() {
             saving={updateContentMutation.isPending}
             readOnly={Boolean(workitem.externalCollaboration)}
             onSave={handleSaveContent}
-          />
-          <RequirementDocumentsCard
-            workitemId={id}
-            documents={requirementDocuments}
-            loading={requirementDocumentsLoading}
-            hasGeneratedContext={Boolean(clarification?.contentMd || prdSummary?.latestVersionNo)}
           >
-            {AI_CLARIFICATION_ENABLED ? <ClarificationResult clarification={clarification} /> : null}
-            {Boolean(prdSummary?.latestVersionNo) && <PrdContextPreview workitemId={id} />}
-          </RequirementDocumentsCard>
+            <RequirementDocumentsCard
+              workitemId={id}
+              documents={requirementDocuments}
+              loading={requirementDocumentsLoading}
+              hasGeneratedContext={Boolean(clarification?.contentMd || prdSummary?.latestVersionNo)}
+            >
+              {AI_CLARIFICATION_ENABLED ? <ClarificationResult clarification={clarification} /> : null}
+              {Boolean(prdSummary?.latestVersionNo) && <PrdContextPreview workitemId={id} />}
+            </RequirementDocumentsCard>
+          </WorkitemContent>
             <UnifiedTimeline
               key={id}
               items={timeline}
@@ -351,34 +383,36 @@ export function WorkitemDetailPage() {
               scrollContainerRef={leftScrollRef}
               loadedPageCount={loadedPageCount}
               renderInteractionActions={renderInteractionActions}
+              composer={(
+                <div ref={commentRef} data-testid="workitem-sticky-comment">
+                  <CommentInput
+                    key={id}
+                    workitemId={id}
+                    documents={requirementDocuments}
+                    participants={participants}
+                  />
+                </div>
+              )}
             />
           </div>
           <ScrollToEdgeButton containerRef={leftScrollRef} />
         </div>
-        <div data-testid="workitem-sticky-comment" style={{ flexShrink: 0, padding: '0 24px 16px', borderTop: '1px solid var(--aw-border)' }}>
-          <CommentInput
-            key={id}
-            workitemId={id}
-            documents={requirementDocuments}
-            participants={participants}
-          />
-        </div>
-      </div>
+      </section>
 
-      {/* Right Panel */}
+      {/* Right Panel：原型 05 右栏 380 轨道，透明底直接挂画布；澄清模式接管时恢复面板底色 */}
       <div
         ref={rightPanelRef}
         data-testid="workitem-right-panel"
+        className="aw-detail-aside"
         style={{
-          width: clarifyWidth != null ? `${clarifyWidth}px` : 'clamp(340px, 28vw, 420px)',
+          width: clarifyWidth != null ? `${clarifyWidth}px` : '380px',
           flexShrink: 0,
-          padding: 12,
-          background: CLARIFICATION_THEME.surface,
-          borderLeft: `1px solid ${CLARIFICATION_THEME.hairline}`,
           overflowY: 'auto',
           position: 'relative',
           display: panelMode === 'clarify' ? 'flex' : 'block',
           flexDirection: panelMode === 'clarify' ? 'column' : undefined,
+          background: panelMode === 'clarify' ? CLARIFICATION_THEME.surface : undefined,
+          borderLeft: panelMode === 'clarify' ? `1px solid ${CLARIFICATION_THEME.hairline}` : undefined,
         }}
       >
         {panelMode === 'clarify' ? (
@@ -439,12 +473,21 @@ export function WorkitemDetailPage() {
         onClose={() => setAssignHumanOpen(false)}
       />
       <Modal
-        closeIcon={<CloseOutlined aria-hidden="true" />}
+        className="aw-transition-modal"
+        width={420}
+        closeIcon={<AwStrokeIcon name="x" size={14} />}
         closable={{ 'aria-label': t('projection.close') }}
-        title={t('detail.transitionTitle')}
+        title={<span className="aw-transition-title"><AwStrokeIcon name="branch" size={14} />{t('detail.transitionTitle')}</span>}
         open={transitionOpen}
-        footer={null}
-        onCancel={() => setTransitionOpen(false)}
+        okText={t('transition.confirm')}
+        cancelText={t('detail.cancel')}
+        confirmLoading={transitionMutation.isPending}
+        okButtonProps={{ size: 'small', disabled: transitionTarget == null || templateLoading || transitionMutation.isPending }}
+        cancelButtonProps={{ size: 'small', disabled: transitionMutation.isPending }}
+        maskClosable={!transitionMutation.isPending}
+        keyboard={!transitionMutation.isPending}
+        onOk={handleTransition}
+        onCancel={() => { if (!transitionSubmitting.current) setTransitionOpen(false); }}
       >
         {!validTemplateId ? (
           <Empty description={t('detail.noTemplate')} />
@@ -453,39 +496,52 @@ export function WorkitemDetailPage() {
         ) : transitionCandidates.length === 0 ? (
           <Empty description={t('detail.noTransitions')} />
         ) : (
-          <List
-            dataSource={transitionCandidates}
-            renderItem={(node) => {
-              const recommended = recommendedNodeIds.has(Number(node.id));
-              return (
-                <List.Item
-                  actions={[
-                    <Button
-                      key="transition"
-                      type={recommended ? 'primary' : 'default'}
-                      loading={transitionMutation.isPending}
-                      disabled={transitionMutation.isPending}
-                      aria-label={t('detail.transitionTo', { name: node.name })}
-                      onClick={() => handleTransition(Number(node.id))}
-                    >
-                      {t('detail.transition')}
-                    </Button>,
-                  ]}
-                >
-                  <Space direction="vertical" size={4}>
-                    <Typography.Text strong>{node.name}</Typography.Text>
-                    {recommended
-                      ? <Tag color="blue">{t('detail.recommended')}</Tag>
-                      : <Tag>{t('detail.notRecommended')}</Tag>}
-                  </Space>
-                </List.Item>
-              );
-            }}
-          />
+          <>
+            <div className="aw-state-opts" role="radiogroup" aria-label={t('transition.choose')} aria-disabled={transitionMutation.isPending}
+              onKeyDown={(event) => {
+                const step = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 0;
+                if (!step || transitionMutation.isPending) return;
+                event.preventDefault();
+                const current = transitionCandidates.findIndex((node) => Number(node.id) === transitionTarget);
+                const next = (current + step + transitionCandidates.length) % transitionCandidates.length;
+                setTransitionTarget(Number(transitionCandidates[next].id));
+                event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+              }}>
+              {transitionCandidates.map((node, index) => {
+                const checked = transitionTarget === Number(node.id);
+                const focusable = transitionTarget == null ? index === 0 : checked;
+                return (
+                  <button key={node.id} type="button" role="radio" aria-checked={checked} aria-label={node.name}
+                    className={`aw-state-opt ${checked ? 'is-on' : ''}`} tabIndex={focusable ? 0 : -1}
+                    disabled={transitionMutation.isPending} onClick={() => setTransitionTarget(Number(node.id))}>
+                    <span className={`aw-state-dot is-${transitionDotColor(node)}`} aria-hidden="true" />
+                    <span className="aw-state-opt-name">{node.name}</span>
+                    <span className="aw-state-desc">
+                      {recommendedNodeIds.has(Number(node.id)) ? t('detail.recommended') : t('detail.notRecommended')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="aw-transition-reason">
+              <Input.TextArea
+                id="workitem-transition-reason"
+                variant="borderless"
+                aria-label={t('transition.reason')}
+                placeholder={t('transition.reasonPlaceholder')}
+                value={transitionReason}
+                disabled={transitionMutation.isPending}
+                onChange={(event) => setTransitionReason(event.target.value)}
+                maxLength={TRANSITION_REASON_MAX_LENGTH}
+                showCount
+                rows={3}
+              />
+            </div>
+          </>
         )}
       </Modal>
       <Modal
-        closeIcon={<CloseOutlined aria-hidden="true" />}
+        closeIcon={<AwStrokeIcon name="x" />}
         closable={{ 'aria-label': t('projection.close') }}
         title={t('actions.delete')}
         open={deleteOpen}
@@ -498,7 +554,7 @@ export function WorkitemDetailPage() {
         {t('detail.deleteDescription')}
       </Modal>
       <Modal
-        closeIcon={<CloseOutlined aria-hidden="true" />}
+        closeIcon={<AwStrokeIcon name="x" />}
         closable={{ 'aria-label': t('projection.close') }}
         title={t('tags.edit')}
         open={tagsOpen}

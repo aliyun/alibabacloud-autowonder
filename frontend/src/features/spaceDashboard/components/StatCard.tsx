@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Card, Tooltip } from 'antd';
-import { InfoCircleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 
 /** 单个指标卡：标题（可带口径 tooltip）、数值（可带单位）、底部说明。 */
 export function StatCard({ testId, label, value, unit, hint, tooltip }: {
@@ -11,17 +11,21 @@ export function StatCard({ testId, label, value, unit, hint, tooltip }: {
   hint?: ReactNode;
   tooltip?: string;
 }) {
+  const fullValue = typeof value === 'string' || typeof value === 'number'
+    ? `${value}${unit != null ? ` ${unit}` : ''}`
+    : undefined;
+
   return (
-    <Card className="space-dashboard-stat" data-testid={testId} styles={{ body: { padding: '14px 16px 13px' } }}>
+    <Card className="space-dashboard-stat" data-testid={testId} styles={{ body: { padding: '14px 16px' } }}>
       <div className="space-dashboard-stat-label">
-        <span>{label}</span>
+        <span title={label}>{label}</span>
         {tooltip != null && (
           <Tooltip title={tooltip}>
-            <InfoCircleOutlined className="space-dashboard-stat-info" aria-label={tooltip} />
+            <span role="img" aria-label={tooltip} className="space-dashboard-stat-info"><AwStrokeIcon name="info" size={12} /></span>
           </Tooltip>
         )}
       </div>
-      <div className="space-dashboard-stat-value">
+      <div className="space-dashboard-stat-value" title={fullValue}>
         {value}
         {unit != null && <span className="space-dashboard-stat-unit">{unit}</span>}
       </div>

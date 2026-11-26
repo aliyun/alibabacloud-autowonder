@@ -21,7 +21,7 @@ class CopySourceSnapshotTest {
     }
 
     private static CopySourceSnapshot.SdlcSnapshot sdlc() {
-        return new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", "流程描述", "REQ", "ENABLED", 1, 501L,
+        return new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", "流程描述", "REQ", "ENABLED", 1, false, 501L,
                 List.of(new CopySourceSnapshot.StepSnapshot(501L, 0, "分析", "TASK", "instr", null, null,
                         true, 600, 2, "ANALYZE", "AGENT", "AW_PM", "IN_PROGRESS", "NEXT", "STOP")));
     }
@@ -68,6 +68,19 @@ class CopySourceSnapshotTest {
                 baseSnapshot.sdlcs(), baseSnapshot.capabilities(), baseSnapshot.envVars(),
                 baseSnapshot.executors(), baseSnapshot.missingDependencies());
         assertNotEquals(base, otherAgent.snapshotRef());
+    }
+
+    @Test
+    void workflowNameCannotImpersonateTheTimingFlag() {
+        String enabled = workflowRef("标准流程", true);
+        assertNotEquals(enabled, workflowRef("标准流程|stageTimingEnabled", false));
+        assertNotEquals(enabled, workflowRef("标准流程", false));
+        assertEquals(CopySourceSnapshot.sha256("squad:5|开发小队;sdlc:21|标准流程"), workflowRef("标准流程", false));
+    }
+
+    private static String workflowRef(String name, boolean timing) {
+        var flow = new CopySourceSnapshot.SdlcSnapshot(21L, name, null, null, "ENABLED", 0, timing, null, List.of());
+        return new CopySourceSnapshot(squad(), List.of(), List.of(flow), List.of(), List.of(), List.of(), List.of()).snapshotRef();
     }
 
     @Test

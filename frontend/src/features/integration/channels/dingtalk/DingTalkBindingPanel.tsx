@@ -2,14 +2,16 @@ import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
 import { getAgentRoleLabel } from '@/features/agent/constants';
 import { useMemo, useState } from 'react';
-import { Button, Card, Popconfirm, Space, Tag, Typography, message } from 'antd';
+import { Button, Popconfirm, Space, Tooltip, Typography, message } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { PlusOutlined } from '@ant-design/icons';
+import { SectionCard } from '@/shared/ui/SectionCard';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import { listAgents } from '@/features/agent/api';
 import { EllipsisText } from '@/shared/ui/EllipsisText';
-import { DingTalkBindingDrawer } from './DingTalkBindingDrawer';
+import { StatusTag } from '@/shared/ui/StatusTag';
+import { DingTalkBindingModal } from './DingTalkBindingDrawer';
 import {
   deleteDingTalkBinding,
   listDingTalkBindings,
@@ -18,14 +20,16 @@ import {
 } from './dingtalkApi';
 import { GroupBindingDetailDrawer, type GroupBindingDetailModel } from '../GroupBindingDetailDrawer';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+import { useAuthStore } from '@/shared/auth/store';
 
 const transportLabelKeys = new Map([['STREAM', 'stream'], ['HTTP_CALLBACK', 'http']] as const);
 const SHARED_MODE = 'SHARED';
 
-export function DingTalkBindingPanel() {
+export function DingTalkBindingPanel({ platformReady = true }: { platformReady?: boolean }) {
   const { t } = useTranslation(['integration', 'agent']);
   const queryClient = useQueryClient();
   const runAccessCommand = useAccessCommand();
+  const isPlatformAdmin = useAuthStore((s) => s.user?.isAdmin === true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create');
   const [editing, setEditing] = useState<DingTalkBinding | null>(null);
@@ -100,6 +104,21 @@ export function DingTalkBindingPanel() {
     return t('noCallback');
   }
 
+  function diagnosticTone(record: DingTalkBinding) {
+    if (record.bindingMode === SHARED_MODE) {
+      return record.lastError ? 'red' as const : 'green' as const;
+    }
+    if (record.transportMode === 'STREAM') {
+      if (record.streamStatus === 'CONNECTED') return 'green' as const;
+      if (record.streamStatus === 'CONNECTING') return 'amber' as const;
+      if (record.streamStatus === 'FAILED' || record.lastError) return 'red' as const;
+      return 'gray' as const;
+    }
+    if (record.lastError) return 'red' as const;
+    if (record.lastSuccessAt) return 'green' as const;
+    return 'gray' as const;
+  }
+
   function toDetailModel(record: DingTalkBinding): GroupBindingDetailModel {
     const transportKey = transportLabelKeys.get(record.transportMode as TransportMode);
     return {
@@ -117,22 +136,19 @@ export function DingTalkBindingPanel() {
     {
       title: t('groupIdOrMode'),
       key: 'group',
-      width: 260,
       render: (_, record) => (
         <Space direction="vertical" size={2} style={{ minWidth: 0, maxWidth: '100%' }}>
           <EllipsisText tooltip={record.bindingMode === SHARED_MODE ? record.groupId ?? t('notAvailable') : record.appKey} style={{ maxWidth: 250 }}>
             <Typography.Text code>{record.bindingMode === SHARED_MODE ? (record.groupId || t('notAvailable')) : record.appKey}</Typography.Text>
           </EllipsisText>
-          <Tag color={record.bindingMode === SHARED_MODE ? 'blue' : 'default'} style={{ marginInlineEnd: 0 }}>
-            {record.bindingMode === SHARED_MODE ? t('sharedMode') : t('legacyMode')}
-          </Tag>
+          <StatusTag label={record.bindingMode === SHARED_MODE ? t('sharedMode') : t('legacyMode')} colorKey={record.bindingMode === SHARED_MODE ? 'blue' : 'outline'} size="sm" />
         </Space>
       ),
     },
     {
       title: t('linkedAgent'),
       dataIndex: 'agentId',
-      width: 220,
+      width: 170,
       render: (agentId: number) => {
         const label = agentNameById.get(agentId) || `#${agentId}`;
         return <EllipsisText tooltip={label}>{label}</EllipsisText>;
@@ -141,19 +157,29 @@ export function DingTalkBindingPanel() {
     {
       title: t('status'),
       dataIndex: 'status',
-      width: 100,
+      width: 170,
       render: (status: DingTalkBinding['status']) => {
         const label = status === 'ENABLED' ? t('statusEnabled')
           : status === 'DISABLED' ? t('statusDisabled') : status;
-        const color = status === 'ENABLED' ? 'green' : status === 'DISABLED' ? 'default' : 'red';
-        return <Tag color={color}>{label}</Tag>;
+        return <StatusTag label={label} colorKey={status === 'ENABLED' ? 'green' : status === 'DISABLED' ? 'gray' : 'red'} dot={status === 'ENABLED'} />;
       },
+    },
+    {
+      title: t('health'),
+      key: 'health',
+      width: 170,
+      render: (_, record) => (
+        <StatusTag
+          label={diagnosticLabel(record)}
+          colorKey={diagnosticTone(record)}
+          dot={diagnosticTone(record) === 'green'}
+        />
+      ),
     },
     {
       title: t('actions'),
       key: 'actions',
-      width: 180,
-      fixed: 'right',
+      width: 150,
       render: (_, record) => (
         <Space size={4}>
           <Button type="link" size="small" onClick={() => setDetail(record)}>{t('detail')}</Button>
@@ -173,11 +199,17 @@ export function DingTalkBindingPanel() {
     },
   ];
 
+  const newBindingButton = (
+    <Button type="primary" icon={<AwStrokeIcon name="plus" />} aria-label={t('newBinding')}
+      disabled={!platformReady} onClick={openCreate}>{t('newBinding')}</Button>
+  );
+
   return (
-    <Card title={t('dingTitle')} extra={
-      <Button type="primary" icon={<PlusOutlined aria-hidden="true" />} aria-label={t('newBinding')} onClick={openCreate}>{t('newBinding')}</Button>
+    <SectionCard className="integration-panel" title={t('dingTitle')} extra={
+      platformReady ? newBindingButton
+        : <Tooltip title={isPlatformAdmin ? t('platformNotReadyHint') : t('platformNotReadyContactAdmin')}><span>{newBindingButton}</span></Tooltip>
     }>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>{t('dingDescription')}</Typography.Paragraph>
+      <div className="integration-hint integration-hint--in-panel">{t('dingDescription')}</div>
       <Table
         scroll={{ x: 900 }}
         rowKey="id"
@@ -187,7 +219,7 @@ export function DingTalkBindingPanel() {
         pagination={false}
         locale={{ emptyText: t('dingEmpty') }}
       />
-      <DingTalkBindingDrawer
+      <DingTalkBindingModal
         open={drawerOpen}
         mode={drawerMode}
         record={editing}
@@ -207,6 +239,6 @@ export function DingTalkBindingPanel() {
         onDelete={() => { if (detail) deleteMutation.mutate(detail.id); }}
         deleteLoading={deleteMutation.isPending}
       />
-    </Card>
+    </SectionCard>
   );
 }

@@ -1,0 +1,5 @@
+/* 新建工单页（阿里云控制台参考）：表单列收窄不满铺内容区 */
+.aw-create-form { max-width: 600px; }
+/* antd 出现校验信息时注入 .ant-form-item-margin-offset 并内联 margin-bottom:-16px 抵消项的 16px 下边距，
+   导致下一字段标签紧贴错误文案；按 auth/ws 表单先例 display:none 归零该偏移恢复 16px 字段间隙 */
+html .aw-create-form .ant-form-item-margin-offset { display: none; }

@@ -3,12 +3,21 @@
   flex-direction: column;
 }
 
-.hub-page-tabs .ant-tabs-nav {
-  margin-bottom: 16px;
-}
+/* list-tabs 指标统一收敛在 crystal.css 的 .aw-list-tabs（原型 15/16）。 */
 
 .hub-tab-label {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+}
+
+/* 原型 06 Tab 徽标 = aw-badge 胶囊（11px 字 / 16px 高）；antd 默认 19px 圆形偏大。 */
+html .hub-tab-label .ant-badge-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 16px;
+  border-radius: 8px;
+  box-shadow: none;
 }

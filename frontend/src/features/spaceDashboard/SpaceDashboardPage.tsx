@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Button, Skeleton } from 'antd';
-import { InfoCircleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useTranslation } from 'react-i18next';
 import dayjs, { type Dayjs } from 'dayjs';
 import { formatNumber } from '@/shared/i18n/format';
@@ -36,6 +36,7 @@ function completedEntries(items: SpaceDashboardCompletedRank[]): RankEntry[] {
     id: item.workspaceId,
     name: item.workspaceName,
     value: formatInteger(item.value),
+    num: item.value,
   }));
 }
 
@@ -44,6 +45,7 @@ function creditsEntries(items: SpaceDashboardCreditsRank[]): RankEntry[] {
     id: item.workspaceId,
     name: item.workspaceName,
     value: formatCredits(item.value),
+    num: item.value,
   }));
 }
 
@@ -57,9 +59,9 @@ export function SpaceDashboardPage() {
 
   // 两个版块各用一个偏好键，窗口互相独立；最长 181 天由 hook 与后端共同保证。
   const [deliveryRange, setDeliveryRange] = useInsightDateRange(
-    'spaceDashboard.delivery.dates', defaultDateRange, 181, dayjs(), dayjs().subtract(180, 'day'));
+    'spaceDashboard.delivery.dates', defaultDateRange, 181, dayjs(), dayjs().subtract(1, 'day').subtract(180, 'day'));
   const [costRange, setCostRange] = useInsightDateRange(
-    'spaceDashboard.cost.dates', defaultDateRange, 181, dayjs(), dayjs().subtract(180, 'day'));
+    'spaceDashboard.cost.dates', defaultDateRange, 181, dayjs(), dayjs().subtract(1, 'day').subtract(180, 'day'));
   const [workTypes, setWorkTypes] = useState<DashboardWorkType[]>([...DASHBOARD_WORK_TYPES]);
 
   const deliveryStart = deliveryRange[0].format('YYYY-MM-DD');
@@ -127,7 +129,7 @@ export function SpaceDashboardPage() {
   return (
     <div className="space-dashboard-page" aria-busy={isFetching} data-testid="space-dashboard-page">
       <div className="space-dashboard-scope" data-testid="space-dashboard-scope">
-        <InfoCircleOutlined className="space-dashboard-scope-icon" aria-hidden="true" />
+        <AwStrokeIcon name="info" size={14} className="space-dashboard-scope-icon" />
         <div>
           <strong>
             {data.platformAdmin
@@ -141,7 +143,7 @@ export function SpaceDashboardPage() {
       </div>
 
       <DashboardSection title={t('section.agents')} subtitle={t('section.agentsSubtitle')}>
-        <div className="space-dashboard-grid">
+        <div className="space-dashboard-grid space-dashboard-grid-four">
           <StatCard testId="stat-workspace-count" label={t('agents.workspaceCount')}
             value={formatInteger(data.agents.workspaceCount)} hint={t('agents.workspaceHint')} />
           <StatCard testId="stat-agent-count" label={t('agents.agentCount')}
@@ -177,13 +179,15 @@ export function SpaceDashboardPage() {
             value={formatInteger(data.delivery.inProgressCount)}
             hint={t('delivery.inProgressHint')}
             tooltip={t('delivery.inProgressTooltip')} />
+        </div>
+        <div className="space-dashboard-ranks">
           <WorkspaceRankCard testId="rank-top-completed" title={t('delivery.topCompleted')}
             entries={completedEntries(data.delivery.topCompleted)} total={data.delivery.topCompletedTotal}
-            emptyText={t('rank.empty')} hint={t('delivery.rankHint')}
+            emptyText={t('rank.empty')} hint={t('delivery.rankHint')} tone="high"
             onSelect={(id) => { void handleOpenWorkspace(id); }} />
           <WorkspaceRankCard testId="rank-bottom-completed" title={t('delivery.bottomCompleted')}
             entries={completedEntries(data.delivery.bottomCompleted)} total={data.delivery.bottomCompletedTotal}
-            emptyText={t('rank.empty')} hint={t('delivery.rankZeroHint')}
+            emptyText={t('rank.empty')} hint={t('delivery.rankZeroHint')} tone="low"
             onSelect={(id) => { void handleOpenWorkspace(id); }} />
         </div>
       </DashboardSection>
@@ -211,13 +215,15 @@ export function SpaceDashboardPage() {
               ? t('cost.perWorkitemUnavailableHint')
               : t('cost.perWorkitemHint', { done: formatInteger(data.cost.completedWorkitemCount) })}
             tooltip={t('cost.perWorkitemTooltip')} />
+        </div>
+        <div className="space-dashboard-ranks">
           <WorkspaceRankCard testId="rank-top-credits" title={t('cost.topCredits')}
             entries={creditsEntries(data.cost.topCredits)} total={data.cost.topCreditsTotal}
-            emptyText={t('rank.empty')} hint={t('cost.rankHint')}
+            emptyText={t('rank.empty')} hint={t('cost.rankHint')} tone="high"
             onSelect={(id) => { void handleOpenWorkspace(id); }} />
           <WorkspaceRankCard testId="rank-bottom-credits" title={t('cost.bottomCredits')}
             entries={creditsEntries(data.cost.bottomCredits)} total={data.cost.bottomCreditsTotal}
-            emptyText={t('rank.empty')} hint={t('cost.rankZeroHint')}
+            emptyText={t('rank.empty')} hint={t('cost.rankZeroHint')} tone="low"
             onSelect={(id) => { void handleOpenWorkspace(id); }} />
         </div>
       </DashboardSection>

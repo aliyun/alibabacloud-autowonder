@@ -18,11 +18,9 @@
   "empty": "暂无通知",
   "details": "通知详情",
   "viewDetail": "详情",
+  "moreActions": "更多操作",
   "openRelated": "前往处理",
   "noBody": "无正文",
-  "type": "通知类型",
-  "time": "时间",
-  "related": "关联对象",
   "unknownRef": "未知类型",
   "close": "关闭",
   "submittedWorkitem": "新工单",
@@ -74,12 +72,12 @@
   "reminderLoading": "正在加载通知…",
   "reminderLoadFailed": "通知内容加载失败",
   "reminderRetry": "重试",
-  "browserNotifications": "浏览器通知",
   "browserPermissionDefault": "尚未授权，点击后按浏览器提示申请",
   "browserPermissionGranted": "当前浏览器已允许通知",
   "browserPermissionDenied": "通知已被阻止，请在浏览器站点设置中修改",
   "browserPermissionUnsupported": "当前环境不支持浏览器通知，站内提醒仍可使用",
   "enableBrowserNotifications": "启用浏览器通知",
   "notificationNotFound": "通知不存在或已被删除",
-  "detailLoadFailed": "通知详情加载失败"
+  "detailLoadFailed": "通知详情加载失败",
+  "pageDesc": "入口：顶栏铃铛（未读红点，30 秒轮询）点击直接进入本页 · 共 {{total}} 条 · 未读 {{unread}}"
 }

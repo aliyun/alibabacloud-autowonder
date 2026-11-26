@@ -56,7 +56,7 @@ describe('personal account and MCP language boundary', () => {
     await language('en-US');
     expect(screen.getByRole('heading', { name: 'Personal settings' })).toBeInTheDocument();
     expect(screen.getByLabelText('Nickname')).toHaveValue('raw');
-    await userEvent.click(screen.getByRole('tab', { name: 'IM identity' }));
+    await userEvent.click(screen.getByRole('tab', { name: /IM identity/ }));
     const input = await screen.findByLabelText('Feishu user ID');
     await userEvent.clear(input); await userEvent.type(input, 'draft-id');
     const calls = identities.mock.calls.length;
@@ -64,9 +64,9 @@ describe('personal account and MCP language boundary', () => {
     expect(screen.getByRole('button', { name: '发送测试' })).toBeDisabled();
     await language('en-US'); expect(screen.getByText('Save your Feishu user ID before testing')).toBeInTheDocument();
     expect(identities).toHaveBeenCalledTimes(calls); expect(router.state.location.search).toBe('?keep=raw&tab=im');
-    await userEvent.click(screen.getByRole('tab', { name: 'Change password' })); expect(await screen.findByLabelText('Current password')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'Delete account' })); expect(await screen.findByRole('button', { name: 'Delete account' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'MCP tokens' })); expect(await screen.findByRole('button', { name: 'New token' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: /Change password/ })); expect(await screen.findByLabelText('Current password')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: /Delete account/ })); expect(await screen.findByRole('button', { name: 'Delete account' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: /MCP tokens/ })); expect(await screen.findByRole('button', { name: 'New token' })).toBeInTheDocument();
   }, 20000);
   it('refreshes only visible profile errors while retaining drafts and pristine phone', async () => {
     mount(<BasicProfilePanel />);
@@ -123,10 +123,13 @@ describe('personal account and MCP language boundary', () => {
   });
   it('retains expanded raw schemas while capability labels and plural counts change', async () => {
     const tools = vi.spyOn(mcpApi, 'listMcpTools');
-    const { container } = mount(<McpTokenSettingsPanel />); await userEvent.click(screen.getByRole('tab', { name: '工具' }));
+    const { container } = mount(<McpTokenSettingsPanel />); await userEvent.click(screen.getByText('工具', { selector: '.ant-segmented-item-label' }));
+    await userEvent.click(await screen.findByRole('button', { name: /工单管理/ }));
+    const toolRow = (await screen.findByText('autowonder.get_workitem')).closest('tr') as HTMLElement;
+    await userEvent.click(within(toolRow).getByRole('button', { name: '展开行' }));
     const schema = await screen.findByText('workspaceId'); const calls = tools.mock.calls.length;
     await language('en-US'); expect(screen.getByText('Work item management')).toBeInTheDocument(); expect(screen.getByText('1 tool')).toBeInTheDocument();
-    expect(screen.getByText('workspaceId')).toBe(schema); expect(screen.getAllByText('原文<img src=x>')).toHaveLength(2); expect(screen.getByText('raw-schema')).toBeInTheDocument(); expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('workspaceId')).toBe(schema); expect(screen.getAllByText('原文<img src=x>')).toHaveLength(1); expect(screen.getByText('raw-schema')).toBeInTheDocument(); expect(container.querySelector('img')).toBeNull();
     await language('zh-CN'); expect(screen.getByText('workspaceId')).toBe(schema); expect(tools).toHaveBeenCalledTimes(calls);
   });
   it('keeps token draft errors, one-time secrets, encoded URLs and exact copied bytes across switches', async () => {
@@ -160,12 +163,16 @@ describe('personal account and MCP language boundary', () => {
       { name: 'autowonder.other_workitem', description: 'second', inputSchema: { type: 'object', properties: { 'raw.field': { type: 'array', items: { type: 'object', properties: { nested: { type: 'string', description: 'raw nested' } } } } } } },
       { name: 'unknown.raw', description: 'unknown raw', inputSchema: { type: 'object', properties: {} } },
     ])));
-    mount(<McpTokenSettingsPanel />); await userEvent.click(screen.getByRole('tab', { name: '工具' }));
+    mount(<McpTokenSettingsPanel />); await userEvent.click(screen.getByText('工具', { selector: '.ant-segmented-item-label' }));
+    await userEvent.click(await screen.findByRole('button', { name: /工单管理/ }));
     const row = await screen.findByRole('row', { name: /autowonder.other_workitem/ });
-    await userEvent.click(within(row).getByRole('button', { name: '展开行' })); const field = await screen.findByText('raw.field[].nested');
+    await userEvent.click(within(row).getByRole('button', { name: '展开行' }));
+    const field = await screen.findByText('nested');
+    expect(screen.getByText('raw.field')).toBeInTheDocument();
+    expect(screen.getByTitle('raw.field.nested')).toBe(field);
     await language('en-US'); expect(within(row).getByRole('button', { name: 'Collapse row' })).toBeInTheDocument();
-    expect(screen.getByText('raw.field[].nested')).toBe(field); expect(screen.getByText('2 tools')).toBeInTheDocument(); expect(screen.getByText('Other capabilities')).toBeInTheDocument();
-    await language('zh-CN'); expect(within(row).getByRole('button', { name: '收起行' })).toBeInTheDocument(); expect(screen.getByText('raw.field[].nested')).toBe(field);
+    expect(screen.getByText('nested')).toBe(field); expect(screen.getByText('2 tools')).toBeInTheDocument(); expect(screen.getByText('Other capabilities')).toBeInTheDocument();
+    await language('zh-CN'); expect(within(row).getByRole('button', { name: '收起行' })).toBeInTheDocument(); expect(screen.getByText('nested')).toBe(field);
   });
   it('formats token timestamps in the current locale while keeping their instant', async () => {
     const date = '2026-09-30T10:00:00Z';

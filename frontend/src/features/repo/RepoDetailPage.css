@@ -1,0 +1,57 @@
+/* 仓库详情页级样式（页面级文件，只引用 crystal.css 真实令牌）。 */
+
+/* ===== 页头：返回 + 仓库名，操作按钮右置（对齐 agent 详情页头部） ===== */
+.aw-repo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+
+.aw-repo-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--aw-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ===== Tabs：文字与标题左对齐，底线通栏，页头→正文间距由 nav 承担 ===== */
+.aw-repo-tabs > .ant-tabs-nav { margin-bottom: 16px; }
+html .aw-repo-tabs > .ant-tabs-nav::before { border-bottom-color: var(--aw-border); }
+html .aw-repo-tabs > .ant-tabs-nav .ant-tabs-nav-list { gap: 24px; }
+html .aw-repo-tabs > .ant-tabs-nav .ant-tabs-tab { padding-inline: 0; }
+html .aw-repo-tabs > .ant-tabs-nav .ant-tabs-tab + .ant-tabs-tab { margin-inline-start: 0; }
+
+/* ===== 信息 Tab 只读态：键上值下的两列栅格，直接铺在页面上，不再套白底描边框 ===== */
+.aw-repo-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 40px;
+}
+
+.aw-repo-meta-item { min-width: 0; }
+.aw-repo-meta-item--wide { grid-column: 1 / -1; }
+
+.aw-repo-meta-label {
+  margin-bottom: 2px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+}
+
+.aw-repo-meta-value {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--aw-text);
+  overflow-wrap: anywhere;
+}
+
+.aw-repo-meta-value--mono { font-family: var(--aw-mono); font-size: 12px; }
+.aw-repo-meta-value--url { word-break: break-all; }
+
+/* ===== 编辑态内联表单：单列定宽，避免输入框横贯整个画布 ===== */
+.aw-repo-form { max-width: 600px; }

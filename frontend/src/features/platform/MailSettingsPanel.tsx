@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Form, Input, Modal, Radio, Select, Space, Switch, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Form, Input, Modal, Radio, Select, Space, Switch, Tag, message } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocale } from '@/shared/i18n/LocaleProvider';
 import { formatDateTime } from '@/shared/i18n/format';
@@ -17,8 +17,6 @@ import {
   type SaveMailSettingsPayload,
   type UpdateEmailVerificationPolicyPayload,
 } from './mailSettingsApi';
-
-const { Text } = Typography;
 
 type MailFormValues = {
   host: string;
@@ -47,7 +45,7 @@ export function MailSettingsPanel() {
   const [form] = Form.useForm<MailFormValues>();
   const queryClient = useQueryClient();
   const [testRecipient, setTestRecipient] = useState('');
-  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [suffixes, setSuffixes] = useState<string[]>();
   const [disableConfirmOpen, setDisableConfirmOpen] = useState(false);
   const [forceConfirmOpen, setForceConfirmOpen] = useState(false);
@@ -134,19 +132,24 @@ export function MailSettingsPanel() {
   const runTest = async () => {
     if (saving || testing) return;
     if (!testRecipient.trim()) {
-      setTestMessage(t('mail.invalid'));
+      setTestResult({ ok: false, text: t('mail.invalid') });
       return;
     }
     setTesting(true);
-    setTestMessage(null);
+    setTestResult(null);
     try {
       const payload = buildPayload();
       const result = await testMailSettings({ ...payload, recipient: testRecipient.trim() });
       if (result.success) clearStoredPassword(payload.password);
-      setTestMessage(result.success ? t('mail.testPassed') : `${t('mail.testFailed')} (${result.failureCode ?? '-'})`);
+      setTestResult({
+        ok: result.success,
+        text: result.success
+          ? t('mail.testPassed')
+          : t('mail.testFailedWithCode', { code: result.failureCode ?? '-' }),
+      });
       await queryClient.invalidateQueries({ queryKey: MAIL_SETTINGS_QUERY_KEY });
     } catch (error) {
-      setTestMessage(apiMessage(error, t('mail.invalid')));
+      setTestResult({ ok: false, text: apiMessage(error, t('mail.invalid')) });
     } finally {
       setTesting(false);
     }
@@ -210,25 +213,30 @@ export function MailSettingsPanel() {
   }
 
   return (
-    <div>
+    <div className="aw-mail-settings">
       <Card
-        title={t('mail.title')}
+        className="aw-platform-message-card"
+        title={(
+          <div className="aw-config-card-title">
+            <span>{t('mail.title')}</span>
+            <div className="aw-config-tags" aria-live="polite">
+              <Tag color={settings?.activeConfigured ? 'green' : undefined} className={settings?.activeConfigured ? undefined : 'aw-tag-gray'}>
+                {settings?.activeConfigured ? t('mail.configured') : t('mail.notConfigured')}
+              </Tag>
+              <Tag color={settings?.activeTested ? 'green' : 'orange'}>
+                {settings?.activeTested ? t('mail.tested') : t('mail.notTested')}
+              </Tag>
+            </div>
+          </div>
+        )}
         extra={<Button type="primary" onClick={save} loading={saving} disabled={testing}>{t('mail.save')}</Button>}
         style={{ marginBottom: 12 }}
       >
-        <Text type="secondary">{t('mail.hint')}</Text>
-        <div style={{ marginTop: 12 }}>
-          <Tag color={settings?.activeConfigured ? 'green' : 'default'}>
-            {settings?.activeConfigured ? t('mail.configured') : t('mail.notConfigured')}
-          </Tag>
-          <Tag color={settings?.activeTested ? 'green' : 'gold'}>
-            {settings?.activeTested ? t('mail.tested') : t('mail.notTested')}
-          </Tag>
-        </div>
+        <p className="mail-hint">{t('mail.hint')}</p>
         <Form
           form={form}
           layout="vertical"
-          style={{ marginTop: 16 }}
+          className="mail-form"
           onValuesChange={(changed) => {
             // 不加密与密码认证互斥：任一方向变化都自动联动，保证保存载荷合法。
             if (changed.security === 'NONE') {
@@ -239,7 +247,7 @@ export function MailSettingsPanel() {
             }
           }}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0 16px' }}>
+          <div className="mail-form-grid">
             <Form.Item label={t('mail.host')} name="host" rules={[{ required: true, message: t('mail.invalid') }]}>
               <Input />
             </Form.Item>
@@ -274,7 +282,7 @@ export function MailSettingsPanel() {
             <Alert type="warning" showIcon message={t('mail.plainWarning')} style={{ marginBottom: 16 }} />
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0 16px' }}>
+          <div className="mail-form-grid">
             <Form.Item label={t('mail.fromAddress')} name="fromAddress" rules={[{ required: true, type: 'email', message: t('mail.invalid') }]}>
               <Input />
             </Form.Item>
@@ -284,13 +292,13 @@ export function MailSettingsPanel() {
           </div>
 
           <Form.Item label={t('mail.authMode')} name="authMode">
-            <Radio.Group>
+            <Radio.Group className="mail-auth-group">
               <Radio value="PASSWORD">{t('mail.authPassword')}</Radio>
               <Radio value="NONE">{t('mail.authNone')}</Radio>
             </Radio.Group>
           </Form.Item>
           {!noAuth && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0 16px' }}>
+            <div className="mail-form-grid">
               <Form.Item label={t('mail.username')} name="username" rules={[{ required: true, message: t('mail.invalid') }]}>
                 <Input />
               </Form.Item>
@@ -299,63 +307,62 @@ export function MailSettingsPanel() {
               </Form.Item>
             </div>
           )}
-          {!noAuth && <Text type="secondary">{t('mail.passwordHint')}</Text>}
+          {!noAuth && <p className="mail-hint mail-hint-tight">{t('mail.passwordHint')}</p>}
 
-          <div style={{ marginTop: 16 }}>
-            <label htmlFor="mail-test-recipient" style={{ display: 'block', marginBottom: 8 }}>{t('mail.testRecipient')}</label>
-            <Space.Compact style={{ width: '100%', maxWidth: 580 }}>
+          <div className="mail-test-block">
+            <h4>{t('mail.testTitle')}</h4>
+            <Space.Compact className="mail-test-combo" style={{ width: '100%', maxWidth: 580 }}>
               <Input
-                id="mail-test-recipient"
+                aria-label={t('mail.testRecipient')}
+                placeholder={t('mail.testRecipient')}
                 type="email"
                 value={testRecipient}
                 onChange={(event) => setTestRecipient(event.target.value)}
               />
               <Button htmlType="button" onClick={runTest} loading={testing} disabled={saving}>{t('mail.sendTest')}</Button>
             </Space.Compact>
-            <div style={{ marginTop: 8 }}>
-              <Text type="secondary">{t('mail.testHint')}</Text>
-            </div>
-            {testMessage && <Alert style={{ marginTop: 8 }} type="info" showIcon message={testMessage} />}
-            {testedAtText && (
-              <div style={{ marginTop: 8 }}>
-                <Text type="secondary">{t('mail.testAt', { time: testedAtText })}</Text>
-              </div>
+            <p className="mail-test-hint">{t('mail.testHint')}</p>
+            {testResult && (
+              <Alert className="mail-test-alert" type={testResult.ok ? 'success' : 'error'} showIcon message={testResult.text} />
             )}
+            {testedAtText && <div className="mail-test-time">{t('mail.testAt', { time: testedAtText })}</div>}
           </div>
         </Form>
       </Card>
 
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
-          <div>
-            <h3 style={{ margin: '0 0 8px' }}>{t('mail.verificationTitle')}</h3>
-            <Text type="secondary">{t('mail.verificationHint')}</Text>
+      <Card className="aw-platform-message-card" style={{ marginBottom: 12 }}>
+        <div className="mail-policy-row">
+          <div className="mail-policy-copy">
+            <h3>{t('mail.verificationTitle')}</h3>
+            <p className="mail-policy-hint">{t('mail.verificationHint')}</p>
           </div>
-          <Space>
-            <Text type="secondary">
+          <div className="mail-switch-wrap">
+            <span className="mail-switch-state">
               {policy?.verificationEnabled ? t('mail.verificationOn') : t('mail.verificationOff')}
-            </Text>
+            </span>
             <Switch
+              size="small"
               aria-label={t('mail.verificationTitle')}
               checked={policy?.verificationEnabled ?? false}
               disabled={policySaving || !policy}
               onChange={toggleVerification}
             />
-          </Space>
+          </div>
         </div>
       </Card>
 
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
-          <div>
-            <h3 style={{ margin: '0 0 8px' }}>{t('mail.suffixTitle')}</h3>
-            <Text type="secondary">{t('mail.suffixHint')}</Text>
+      <Card className="aw-platform-message-card" style={{ marginBottom: 12 }}>
+        <div className="mail-policy-row">
+          <div className="mail-policy-copy">
+            <h3>{t('mail.suffixTitle')}</h3>
+            <p className="mail-policy-hint">{t('mail.suffixHint')}</p>
           </div>
-          <Space>
-            <Text type="secondary">
+          <div className="mail-switch-wrap">
+            <span className="mail-switch-state">
               {policy?.suffixRestrictionEnabled ? t('mail.verificationOn') : t('mail.verificationOff')}
-            </Text>
+            </span>
             <Switch
+              size="small"
               aria-label={t('mail.suffixTitle')}
               checked={policy?.suffixRestrictionEnabled ?? false}
               disabled={policySaving || !policy}
@@ -364,10 +371,10 @@ export function MailSettingsPanel() {
                 allowedSuffixes: parsedSuffixes,
               })}
             />
-          </Space>
+          </div>
         </div>
-        <div style={{ marginTop: 16 }}>
-          <label htmlFor="mail-suffixes" style={{ display: 'block', marginBottom: 8 }}>{t('mail.suffixLabel')}</label>
+        <div className="mail-suffix-field">
+          <label htmlFor="mail-suffixes" className="mail-field-label">{t('mail.suffixLabel')}</label>
           <Select
             id="mail-suffixes"
             mode="tags"
@@ -378,29 +385,30 @@ export function MailSettingsPanel() {
             style={{ width: '100%' }}
             placeholder={t('mail.suffixPlaceholder')}
           />
-          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="mail-inline-actions">
             <Button htmlType="button" onClick={saveSuffix} loading={policySaving}>{t('mail.suffixSave')}</Button>
           </div>
         </div>
       </Card>
 
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
-          <div>
-            <h3 style={{ margin: '0 0 8px' }}>{t('mail.forceTitle')}</h3>
-            <Text type="danger">{t('mail.forceHint')}</Text>
+      <Card className="aw-platform-message-card">
+        <div className="mail-policy-row">
+          <div className="mail-policy-copy">
+            <h3>{t('mail.forceTitle')}</h3>
+            <p className="mail-policy-danger">{t('mail.forceHint')}</p>
           </div>
-          <Space>
-            <Text type="secondary">
+          <div className="mail-switch-wrap">
+            <span className="mail-switch-state">
               {policy?.forceExistingEnabled ? t('mail.forceOn') : t('mail.forceOff')}
-            </Text>
+            </span>
             <Switch
+              size="small"
               aria-label={t('mail.forceTitle')}
               checked={policy?.forceExistingEnabled ?? false}
               disabled={policySaving || !policy?.verificationEnabled}
               onChange={toggleForce}
             />
-          </Space>
+          </div>
         </div>
       </Card>
 
@@ -409,6 +417,7 @@ export function MailSettingsPanel() {
         title={t('mail.disableConfirmTitle')}
         okText={t('mail.disableConfirmOk')}
         cancelText={t('mail.cancel')}
+        okButtonProps={{ danger: true }}
         onCancel={() => setDisableConfirmOpen(false)}
         onOk={async () => {
           setDisableConfirmOpen(false);
@@ -431,6 +440,7 @@ export function MailSettingsPanel() {
         }}
       >
         <p>{t('mail.forceConfirmContent')}</p>
+        <Alert type="error" showIcon message={t('mail.forceConfirmAlert')} style={{ marginTop: 12 }} />
       </Modal>
     </div>
   );

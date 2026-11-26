@@ -58,6 +58,14 @@ public class DeliveryOverviewService {
         private Date createdAt;
     }
 
+    /** 区间内完成工单取数行，每工单一行，时间来自最近一次进入 DONE 的事件。 */
+    @Getter
+    @Setter
+    public static class DeliveredWorkitem {
+        private long id;
+        private Date deliveredAt;
+    }
+
     /** 区间内新建工单明细取数行；名称与 mapping 的 resultType 对齐。 */
     @Getter
     @Setter
@@ -93,7 +101,7 @@ public class DeliveryOverviewService {
 
         List<CreatedWorkitem> createdRows = dao.listCreatedWorkitems(
                 tenantId, atStart(start), atStart(end.plusDays(1)));
-        long deliveredCount = dao.countDeliveredWorkitems(
+        List<DeliveredWorkitem> deliveredRows = dao.listDeliveredWorkitems(
                 tenantId, atStart(start), atStart(end.plusDays(1)));
         long previousCount = dao.countDeliveredWorkitems(
                 tenantId, atStart(previousStart), atStart(start));
@@ -105,7 +113,7 @@ public class DeliveryOverviewService {
         vo.setDataThrough(today.toString());
         vo.setDaysInRange(daysInRange);
         vo.setCreated(buildCreated(start, daysInRange, createdRows));
-        vo.setDelivered(buildDelivered(deliveredCount, daysInRange, previousStart, previousEnd, previousCount));
+        vo.setDelivered(buildDelivered(start, daysInRange, deliveredRows, previousStart, previousEnd, previousCount));
         return vo;
     }
 
@@ -171,6 +179,14 @@ public class DeliveryOverviewService {
             LocalDate date = row.getCreatedAt().toInstant().atZone(ZONE).toLocalDate();
             counts.merge(date, 1L, Long::sum);
         }
+        DeliveryOverviewVO.Created created = new DeliveryOverviewVO.Created();
+        created.setCount(rows.size());
+        created.setDaily(buildDaily(start, daysInRange, counts));
+        return created;
+    }
+
+    private static List<DeliveryOverviewVO.DailyCount> buildDaily(LocalDate start, int daysInRange,
+                                                                 Map<LocalDate, Long> counts) {
         List<DeliveryOverviewVO.DailyCount> daily = new ArrayList<>(daysInRange);
         for (int i = 0; i < daysInRange; i++) {
             LocalDate date = start.plusDays(i);
@@ -179,17 +195,22 @@ public class DeliveryOverviewService {
             bucket.setCount(counts.getOrDefault(date, 0L));
             daily.add(bucket);
         }
-        DeliveryOverviewVO.Created created = new DeliveryOverviewVO.Created();
-        created.setCount(rows.size());
-        created.setDaily(daily);
-        return created;
+        return daily;
     }
 
-    private static DeliveryOverviewVO.Delivered buildDelivered(long count, int daysInRange,
+    private static DeliveryOverviewVO.Delivered buildDelivered(LocalDate start, int daysInRange,
+                                                               List<DeliveredWorkitem> rows,
                                                                LocalDate previousStart, LocalDate previousEnd,
                                                                long previousCount) {
+        Map<LocalDate, Long> counts = new HashMap<>();
+        for (DeliveredWorkitem row : rows) {
+            LocalDate date = row.getDeliveredAt().toInstant().atZone(ZONE).toLocalDate();
+            counts.merge(date, 1L, Long::sum);
+        }
+        long count = rows.size();
         DeliveryOverviewVO.Delivered delivered = new DeliveryOverviewVO.Delivered();
         delivered.setCount(count);
+        delivered.setDaily(buildDaily(start, daysInRange, counts));
         delivered.setDailyAverage(Math.round(count * 10.0 / daysInRange) / 10.0);
         DeliveryOverviewVO.Period period = new DeliveryOverviewVO.Period();
         period.setStartDate(previousStart.toString());

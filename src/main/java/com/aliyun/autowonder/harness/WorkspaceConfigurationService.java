@@ -611,6 +611,7 @@ public class WorkspaceConfigurationService {
         copyRequest.setName(current.getName() + instanceSuffix);
         copyRequest.setDescription(current.getDescription());
         copyRequest.setWorkType(current.getWorkType());
+        copyRequest.setStageTimingEnabled(current.isStageTimingEnabled());
         SdlcVO copy = sdlcService.create(copyRequest, workspaceId, userId);
         if (current.getSteps() != null) {
             for (StepVO step : current.getSteps()) {

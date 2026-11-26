@@ -125,12 +125,15 @@ it('updates the actual cached executions route while retaining filters, page and
   expect(within(dialog).getByRole('heading', { name: '执行结果' })).toBe(markdown);
   expect(within(dialog).getByText('No artifacts')).toBeInTheDocument();
   expect(within(dialog).getByRole('button', { name: 'View Agent' })).toBeEnabled();
-  expect(within(dialog).getAllByText('Succeeded')).toHaveLength(2);
+  // 抽屉头部状态标签 + 时间线步骤 + 键值区状态行共三处
+  expect(within(dialog).getAllByText('Succeeded')).toHaveLength(3);
   expect(screen.getAllByText('<b>自定义工单</b>')[0].querySelector('b')).toBeNull();
   expect(within(dialog).getByText('#312 <b>自定义工单</b>').querySelector('b')).toBeNull();
   expect(within(dialog).getByText('<i>自定义 Agent</i>').querySelector('i')).toBeNull();
-  const cell = screen.getByText('<em>原始执行器</em>', { selector: 'td' }).closest('tr')!;
-  expect(within(cell).getByText('7/11/2026, 14:22:00')).toBeInTheDocument();
+  // 执行器名以身份组件渲染（表格与抽屉各一处），时间列拆为日期/时间两行
+  const cell = screen.getAllByText('<em>原始执行器</em>')[0].closest('tr')!;
+  expect(within(cell).getByText('7/11/2026')).toBeInTheDocument();
+  expect(within(cell).getByText('14:22:00')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
   await act(async () => { await user.click(screen.getAllByRole('combobox')[1]); });
   const statusOption = await screen.findByText('Succeeded', { selector: '.ant-select-item-option-content' });
@@ -164,7 +167,7 @@ it('updates an independently mounted failed drawer and keeps raw errors and arti
   const rawError = within(dialog).getByText('<b>服务器原始错误</b>');
   await act(async () => { await i18n.changeLanguage('en-US'); });
   expect(within(dialog).getByText('Error')).toBeInTheDocument();
-  expect(within(dialog).getAllByText('Failed')).toHaveLength(2);
+  expect(within(dialog).getAllByText('Failed')).toHaveLength(3);
   expect(within(dialog).getByText('Pending')).toBeInTheDocument();
   expect(within(dialog).getByText('Acknowledged')).toBeInTheDocument();
   expect(within(dialog).getByText('1 artifact')).toBeInTheDocument();
@@ -176,28 +179,28 @@ it('updates an independently mounted failed drawer and keeps raw errors and arti
   await act(async () => { await i18n.changeLanguage('zh-CN'); });
   expect(within(dialog).getByText('错误')).toBeInTheDocument();
   expect(within(dialog).getByText('产物 (1)')).toBeInTheDocument();
-  expect(within(dialog).getAllByText('失败')).toHaveLength(2);
+  expect(within(dialog).getAllByText('失败')).toHaveLength(3);
 });
 
 // Catch stale module-load translations and inherited-object lookup as a known status.
 it('resolves finite status metadata in the current language with safe raw unknown fallback', async () => {
   const known = [
-    ['PENDING', '待处理', 'Pending', 'default'], ['PACKAGING', '打包中', 'Packaging', 'default'],
-    ['DISPATCHED', '已派发', 'Dispatched', 'default'], ['ACKED', '已确认', 'Acknowledged', 'default'],
-    ['RUNNING', '运行中', 'Running', 'orange'], ['SUCCEEDED', '成功', 'Succeeded', 'success'],
-    ['FAILED', '失败', 'Failed', 'error'], ['TIMEOUT', '已超时', 'Timed out', 'default'], ['CANCELED', '已取消', 'Canceled', 'default'],
+    ['PENDING', '待处理', 'Pending', 'gray'], ['PACKAGING', '打包中', 'Packaging', 'blue'],
+    ['DISPATCHED', '已派发', 'Dispatched', 'blue'], ['ACKED', '已确认', 'Acknowledged', 'blue'],
+    ['RUNNING', '运行中', 'Running', 'blue'], ['SUCCEEDED', '成功', 'Succeeded', 'green'],
+    ['FAILED', '失败', 'Failed', 'red'], ['TIMEOUT', '已超时', 'Timed out', 'amber'], ['CANCELED', '已取消', 'Canceled', 'gray'],
   ];
   for (const [locale, labelIndex] of [['zh-CN', 1], ['en-US', 2]] as const) {
     await i18n.changeLanguage(locale);
     for (const row of known) expect(statusMeta(row[0])).toEqual({ label: row[labelIndex], color: row[3] });
     for (const status of ['FUTURE_STATUS', 'constructor', '__proto__', 'toString', '<b>未知状态</b>']) {
-      expect(statusMeta(status)).toEqual({ label: status, color: 'default' });
+      expect(statusMeta(status)).toEqual({ label: status, color: 'gray' });
     }
   }
 });
 
 it.each(['constructor', '__proto__', 'toString'])('keeps inherited code %s as raw fallback', status => {
-  expect(statusMeta(status)).toEqual({ label: status, color: 'default' });
+  expect(statusMeta(status)).toEqual({ label: status, color: 'gray' });
 });
 
 describe('ExecutionListPage', () => {

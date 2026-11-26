@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { Alert, Button, Empty, Spin } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useRealtimeCost, useRealtimeDashboard } from './hooks';
 import RealtimeCostPanel from './RealtimeCostPanel';
 import OverviewPanel from './OverviewPanel';
@@ -50,7 +50,7 @@ export default function RealtimeDashboard() {
           action={(
             <Button
               size="small"
-              icon={<ReloadOutlined aria-hidden="true" />}
+              icon={<AwStrokeIcon name="refresh" />}
               onClick={() => { void refetch(); }}
             >
               {t('realtime.retry')}

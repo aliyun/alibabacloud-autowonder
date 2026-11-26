@@ -122,7 +122,7 @@ describe('RepoMapPage', () => {
     );
     renderPage();
     // 页面标题已上移到 /repos hub 的 Tab 栏，卡片内只保留操作按钮。
-    expect(await screen.findByRole('button', { name: /添加关系/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /新增关系/ })).toBeInTheDocument();
     expect(screen.queryByText('仓库关系图')).not.toBeInTheDocument();
   });
 
@@ -157,7 +157,7 @@ describe('RepoMapPage', () => {
     );
     renderPage();
     expect(await screen.findByText('暂无仓库或关系数据')).toBeInTheDocument();
-    expect(screen.getByText('添加仓库并创建关系后，这里会展示调用与依赖关系。')).toBeInTheDocument();
+    expect(screen.getByText('新建仓库并创建关系后，这里会展示调用与依赖关系。')).toBeInTheDocument();
   });
 
   it('adds placeholder nodes for relation endpoints missing from repo list', async () => {
@@ -297,26 +297,27 @@ describe('RepoMapPage', () => {
       http.get('/api/repos/relations', () => HttpResponse.json({ success: true, data: [{ ...bilingualRelation, id: 1, relationType: 'SERVICE' }] })),
     );
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const page = (panel: string, text: string) => (
-      <ConfigProvider theme={{ token: { colorBgContainer: panel, colorText: text } }}>
+    const page = (panel: string, text: string, layout: string) => (
+      <ConfigProvider theme={{ token: { colorBgContainer: panel, colorText: text, colorBgLayout: layout, colorTextTertiary: text } }}>
         <QueryClientProvider client={client}><MemoryRouter><RepoMapPage /></MemoryRouter></QueryClientProvider>
       </ConfigProvider>
     );
-    const { rerender } = render(page('#1b2329', '#f1f3f5'));
+    const { rerender } = render(page('#1b2329', '#f1f3f5', '#101418'));
     const latest = () => graphOptions.at(-1) as { data: { nodes: Array<{ style: { labelFill: string; fill: string; stroke: string } }>; edges: Array<{ style: { labelFill: string; labelBackgroundFill: string } }> } };
     await waitFor(() => expect(latest()?.data.nodes[0].style.labelFill).toBe('#f1f3f5'));
-    expect(latest().data.edges[0].style.labelBackgroundFill).toBe('#1b2329');
-    rerender(page('#ffffff', '#182435'));
+    expect(latest().data.edges[0].style.labelFill).toBe('#f1f3f5');
+    expect(latest().data.edges[0].style.labelBackgroundFill).toBe('#101418');
+    rerender(page('#ffffff', '#182435', '#f6f6f6'));
     await waitFor(() => expect(latest().data.nodes[0].style.labelFill).toBe('#182435'));
     expect(latest().data.nodes[0].style.fill).toBe('#ffffff');
-    expect(latest().data.edges[0].style.labelBackgroundFill).toBe('#ffffff');
+    expect(latest().data.edges[0].style.labelBackgroundFill).toBe('#f6f6f6');
     expect(graphInstances[0].destroyCalls).toBe(1);
   });
 
   it('offers explicit client and server relation types', () => {
     expect(RELATION_TYPES).toEqual(expect.arrayContaining([
-      expect.objectContaining({ value: 'CLIENT_SERVER', label: '客户端调用服务端' }),
-      expect.objectContaining({ value: 'SERVER_CLIENT', label: '服务端下发客户端' }),
+      expect.objectContaining({ value: 'CLIENT_SERVER', label: '客户端-服务端' }),
+      expect.objectContaining({ value: 'SERVER_CLIENT', label: '服务端-客户端' }),
     ]));
   });
 
@@ -338,17 +339,17 @@ describe('RepoMapPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /全屏查看/ }));
     await userEvent.click(screen.getByRole('button', { name: '放大关系图' }));
     await act(async () => graph.events.get('edge:click')?.({ target: { id: 'edge-8' } }));
-    await userEvent.click(screen.getByRole('button', { name: /添加关系/ }));
-    const draft = within(screen.getByRole('dialog', { name: '添加仓库关系' })).getByLabelText('描述');
+    await userEvent.click(screen.getByRole('button', { name: /新增关系/ }));
+    const draft = within(screen.getByRole('dialog', { name: '新增仓库关系' })).getByLabelText('描述');
     fireEvent.change(draft, { target: { value: '<em>草稿</em>' } });
     const fitCount = graph.fitViewCalls;
     const zoom = graph.zoom;
     const options = graphOptions[0] as { plugins: Array<{ getContent: (event: unknown, items: unknown[]) => Promise<HTMLElement> }> };
     const shownTooltip = await options.plugins[0].getContent({}, [{ data: { relationType: 'CLIENT_SERVER' } }]);
-    expect(shownTooltip.textContent).toBe('客户端调用服务端');
+    expect(shownTooltip.textContent).toBe('客户端-服务端');
     await act(() => i18n.changeLanguage('en-US'));
     expect(screen.getByRole('button', { name: 'Zoom in relationship map' })).toBeInTheDocument();
-    await waitFor(() => expect(graph.edges[0].style?.labelText).toBe('Client calls server'));
+    await waitFor(() => expect(graph.edges[0].style?.labelText).toBe('Client–server'));
     expect(graphInstances).toHaveLength(1);
     expect(graph.destroyCalls).toBe(0);
     expect(graph.nodes[0].style).toMatchObject({ x: 777, y: 333 });
@@ -356,19 +357,19 @@ describe('RepoMapPage', () => {
     expect(graph.fitViewCalls).toBe(fitCount);
     expect(graph.layoutCalls).toBe(0);
     expect(screen.getByTestId('repo-map-frame')).toHaveAttribute('data-fullscreen', 'true');
-    expect(within(screen.getByRole('dialog', { name: 'Add repository relationship' })).getByLabelText('Description')).toBe(draft);
+    expect(within(screen.getByRole('dialog', { name: 'New repository relationship' })).getByLabelText('Description')).toBe(draft);
     expect(draft).toHaveValue('<em>草稿</em>');
     const details = screen.getByRole('dialog', { name: 'Relationship details' });
     expect(within(details).getByText(rawName)).toBeInTheDocument();
     expect(within(details).getByText(rawDescription)).toBeInTheDocument();
-    expect(within(details).getByText('Client calls server')).toBeInTheDocument();
-    expect(shownTooltip.textContent).toBe('Client calls server');
-    expect((await options.plugins[0].getContent({}, [{ data: { relationType: 'CLIENT_SERVER' } }])).textContent).toBe('Client calls server');
+    expect(within(details).getByText(/Client–server/)).toBeInTheDocument();
+    expect(shownTooltip.textContent).toBe('Client–server');
+    expect((await options.plugins[0].getContent({}, [{ data: { relationType: 'CLIENT_SERVER' } }])).textContent).toBe('Client–server');
     const rawTooltip = await options.plugins[0].getContent({}, [{ data: { name: rawName } }]);
     expect(rawTooltip.textContent).toBe(rawName);
     expect(rawTooltip.children).toHaveLength(0);
     await act(() => i18n.changeLanguage('zh-CN'));
-    await waitFor(() => expect(graph.edges[0].style?.labelText).toBe('客户端调用服务端'));
+    await waitFor(() => expect(graph.edges[0].style?.labelText).toBe('客户端-服务端'));
     expect(graph.destroyCalls).toBe(0);
     expect(draft).toHaveValue('<em>草稿</em>');
   });
@@ -403,18 +404,18 @@ describe('RepoMapPage', () => {
       }),
     );
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '添加关系' }));
+    fireEvent.click(await screen.findByRole('button', { name: '新增关系' }));
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
     expect(await screen.findByText('请选择来源仓库')).toBeInTheDocument();
     await act(() => i18n.changeLanguage('en-US'));
     await waitFor(() => expect(screen.getAllByText('Select a source repository').length).toBeGreaterThan(0));
-    const dialog = screen.getByRole('dialog', { name: 'Add repository relationship' });
+    const dialog = screen.getByRole('dialog', { name: 'New repository relationship' });
     fireEvent.mouseDown(within(dialog).getByLabelText('Source repository'));
     fireEvent.click(await screen.findByText('repo-a'));
     fireEvent.mouseDown(within(dialog).getByLabelText('Target repository'));
     fireEvent.click((await screen.findAllByText('repo-b')).at(-1)!);
     fireEvent.mouseDown(within(dialog).getByLabelText('Relationship type'));
-    fireEvent.click(await screen.findByText('Client calls server'));
+    fireEvent.click(await screen.findByText('Client–server'));
     fireEvent.change(within(dialog).getByLabelText('Description'), { target: { value: '<b>关系草稿</b>' } });
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
     await waitFor(() => expect(finish).toBeTypeOf('function'));
@@ -449,10 +450,10 @@ describe('RepoMapPage', () => {
     );
 
     renderPage('READ_ONLY');
-    await userEvent.click(await screen.findByRole('button', { name: /添加关系/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /新增关系/ }));
 
-    expect(errorSpy).toHaveBeenCalledWith('当前为只读权限，添加仓库关系需要读写权限');
-    expect(screen.queryByRole('dialog', { name: /添加仓库关系/ })).not.toBeInTheDocument();
+    expect(errorSpy).toHaveBeenCalledWith('当前为只读权限，新增仓库关系需要读写权限');
+    expect(screen.queryByRole('dialog', { name: /新增仓库关系/ })).not.toBeInTheDocument();
     errorSpy.mockRestore();
   });
 
@@ -462,7 +463,7 @@ describe('RepoMapPage', () => {
     await waitFor(() => expect(graphInstances).toHaveLength(1));
     await act(async () => graphInstances[0].events.get('edge:click')?.({ target: { id: 'edge-8' } }));
     await userEvent.click(screen.getByRole('button', { name: locale === 'en-US' ? 'Delete relationship' : '删除关系' }));
-    await screen.findByText(locale === 'en-US' ? 'Delete this relationship?' : '确认删除此关系？');
+    await screen.findByText(locale === 'en-US' ? 'Delete this relationship?' : '确认删除该关系？');
     expect(screen.queryByRole('img', { name: 'exclamation-circle' })).not.toBeInTheDocument();
     expect(document.querySelector('.ant-popconfirm .anticon-exclamation-circle')).not.toBeNull();
     expect(screen.getByText('<raw>关系')).toBeInTheDocument();

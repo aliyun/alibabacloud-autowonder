@@ -75,6 +75,56 @@ export const RELATION_TYPES = [
   { value: 'OTHER', get label() { return i18n.t('repo:relation.other'); } },
 ] as const;
 
+export type RelationHintKey =
+  | 'relation.hint.frontend'
+  | 'relation.hint.backend'
+  | 'relation.hint.clientServer'
+  | 'relation.hint.serverClient'
+  | 'relation.hint.gateway'
+  | 'relation.hint.dependency'
+  | 'relation.hint.service'
+  | 'relation.hint.other';
+
+const RELATION_HINT_KEYS: Record<string, RelationHintKey> = {
+  FRONTEND: 'relation.hint.frontend',
+  BACKEND: 'relation.hint.backend',
+  CLIENT_SERVER: 'relation.hint.clientServer',
+  SERVER_CLIENT: 'relation.hint.serverClient',
+  GATEWAY: 'relation.hint.gateway',
+  DEPENDENCY: 'relation.hint.dependency',
+  SERVICE: 'relation.hint.service',
+  OTHER: 'relation.hint.other',
+};
+
+/** 关系类型的方向说明键（repo 命名空间）；文案统一以「源仓库 → 目标仓库」描述。 */
+export function relationHintKey(value: string | null | undefined): RelationHintKey | null {
+  return value ? RELATION_HINT_KEYS[value] ?? null : null;
+}
+
+/** 图谱边与详情类型 Tag 共用同一套关系类型色。 */
+export const RELATION_COLORS: Record<string, string> = {
+  FRONTEND: '#1890ff',
+  BACKEND: '#52c41a',
+  CLIENT_SERVER: '#1677ff',
+  SERVER_CLIENT: '#fa8c16',
+  GATEWAY: '#faad14',
+  DEPENDENCY: '#722ed1',
+  SERVICE: '#13c2c2',
+  OTHER: '#8c8c8c',
+};
+
+/** Tag 用浅底深字：文字取同色系深色，保证白底可读。 */
+export const RELATION_TAG_COLORS: Record<string, { fg: string; bg: string }> = {
+  FRONTEND: { fg: '#0958d9', bg: 'rgba(24, 144, 255, 0.12)' },
+  BACKEND: { fg: '#237804', bg: 'rgba(82, 196, 26, 0.14)' },
+  CLIENT_SERVER: { fg: '#0958d9', bg: 'rgba(22, 119, 255, 0.12)' },
+  SERVER_CLIENT: { fg: '#ad4e00', bg: 'rgba(250, 140, 22, 0.14)' },
+  GATEWAY: { fg: '#ad6800', bg: 'rgba(250, 173, 20, 0.16)' },
+  DEPENDENCY: { fg: '#531dab', bg: 'rgba(114, 46, 209, 0.12)' },
+  SERVICE: { fg: '#006d75', bg: 'rgba(19, 194, 194, 0.14)' },
+  OTHER: { fg: '#595959', bg: 'rgba(140, 140, 140, 0.14)' },
+};
+
 export async function listRepos(params: { page: number; size: number }): Promise<Repo[]> {
   const resp = await apiClient.get<Repo[]>('/api/repos', { params });
   return resp.data;

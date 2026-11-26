@@ -1,0 +1,95 @@
+/* ============ 原型 05 ⑨ Trace 时间线（.tr 双栏） ============ */
+.runtime-trace-summary { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding-bottom:10px; font-size:12px; }
+.runtime-trace-summary .ant-tag { margin:0; }
+.runtime-trace-summary-meta { margin-left:auto; font-size:11px; color:var(--aw-text-3); }
+.runtime-trace-panes { margin-top:4px; border:1px solid var(--aw-border); border-radius:6px; }
+.runtime-trace-panes button { font:inherit; text-align:left; cursor:pointer; }
+.runtime-trace-panes .ant-tag { flex:none; margin:0; height:18px; padding:0 6px; font-size:11px; line-height:16px; }
+.runtime-trace-time { min-width:0; padding:8px; border-right:1px solid var(--aw-border); background:var(--aw-gray-bg); }
+.runtime-trace-detail { min-width:0; padding:12px 14px; background:var(--aw-panel); }
+.runtime-trace-tl { display:grid; grid-template-columns:minmax(0, 1fr); align-content:start; gap:6px; }
+.runtime-trace-tl svg { flex:none; color:var(--aw-text-3); }
+
+/* Runtime 与 SDLC 分组 */
+.runtime-trace-grp { display:flex; align-items:center; gap:6px; width:100%; padding:4px; border:0; border-radius:4px; background:none; font-size:11px; font-weight:600; color:var(--aw-text-2); }
+.runtime-trace-grp:hover { background:var(--aw-panel); }
+.runtime-trace-cnt { margin-left:auto; font-weight:400; color:var(--aw-text-3); }
+.runtime-trace-ev { display:flex; align-items:center; gap:6px; width:100%; min-width:0; padding:3px 4px 3px 20px; border:0; border-radius:4px; background:none; font-size:11px; color:var(--aw-text-2); }
+.runtime-trace-ev code { font-family:var(--aw-font-mono); }
+.runtime-trace-ev:hover, .runtime-trace-ev.is-selected { background:var(--aw-primary-weak); color:var(--aw-primary); }
+.runtime-trace-ev-reason { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--aw-error); }
+
+/* 会话卡 */
+.runtime-trace-sess { display:block; width:100%; padding:7px 9px; border:1px solid var(--aw-border); border-radius:6px; background:var(--aw-panel); color:var(--aw-text); }
+.runtime-trace-sess:hover, .runtime-trace-sess.is-selected { border-color:var(--aw-primary); }
+.runtime-trace-sess-r1 { display:flex; align-items:center; gap:6px; min-width:0; font-size:12px; font-weight:600; }
+.runtime-trace-sess-id { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--aw-font-mono); font-size:11px; font-weight:400; color:var(--aw-text-3); }
+.runtime-trace-sess-r2 { display:block; margin-top:3px; font-size:11px; color:var(--aw-text-3); overflow-wrap:anywhere; }
+.runtime-trace-kids { display:grid; grid-template-columns:minmax(0, 1fr); gap:6px; margin:6px 0 0 10px; padding-left:8px; border-left:1px solid var(--aw-border); }
+.runtime-trace-bound { display:block; width:100%; padding:1px 2px; border:0; background:none; font-size:11px; color:var(--aw-warning-deep); overflow-wrap:anywhere; }
+.runtime-trace-bound:hover, .runtime-trace-bound.is-selected { color:var(--aw-primary); }
+
+/* Turn 卡 */
+.runtime-trace-tc { min-width:0; border:1px solid var(--aw-border); border-radius:6px; background:var(--aw-panel); }
+.runtime-trace-tc.is-selected { border-color:var(--aw-primary); }
+.runtime-trace-th { display:flex; align-items:stretch; }
+.runtime-trace-tchev { flex:none; display:flex; align-items:center; justify-content:center; width:22px; padding:0; border:0; border-radius:6px 0 0 6px; background:none; }
+.runtime-trace-tchev:hover svg { color:var(--aw-primary); }
+.runtime-trace-turn { flex:1; min-width:0; display:grid; gap:2px; padding:6px 8px 6px 0; border:0; background:none; color:var(--aw-text); }
+.runtime-trace-tr1 { display:flex; align-items:center; gap:6px; min-width:0; font-size:12px; }
+.runtime-trace-tr1 > b { font-weight:600; }
+.runtime-trace-tr1 > .runtime-trace-dur { margin-left:auto; font-size:11px; }
+.runtime-trace-turn:hover .runtime-trace-tr1 > b, .runtime-trace-tc.is-selected .runtime-trace-tr1 > b { color:var(--aw-primary); }
+.runtime-trace-tr2 { display:flex; align-items:center; gap:6px; min-width:0; font-size:11px; color:var(--aw-text-3); }
+.runtime-trace-sub { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--aw-text-2); }
+.runtime-trace-steps { flex:none; margin-left:auto; }
+.runtime-trace-dot { flex:none; width:6px; height:6px; border-radius:50%; background:var(--aw-success); }
+.runtime-trace-dot.is-run { background:var(--aw-primary); }
+.runtime-trace-dot.is-warn { background:var(--aw-warning); }
+.runtime-trace-dot.is-error { background:var(--aw-error); }
+.runtime-trace-fail { flex:none; height:16px; padding:0 5px; border-radius:4px; background:var(--aw-error-bg); font-size:11px; line-height:16px; color:var(--aw-error-deep); }
+.runtime-trace-tb { padding:2px 4px 6px; }
+
+/* 步骤行 */
+.runtime-trace-obs { display:flex; align-items:center; gap:6px; width:100%; min-width:0; padding:3px 4px; border:0; border-radius:4px; background:none; font-size:11px; color:var(--aw-text-2); }
+.runtime-trace-obs:hover { background:var(--aw-gray-bg); }
+.runtime-trace-obs.is-selected { background:var(--aw-primary-weak); color:var(--aw-primary); }
+.runtime-trace-obs.is-muted { color:var(--aw-text-3); }
+.runtime-trace-obs.is-error, .runtime-trace-obs.is-error .runtime-trace-su { color:var(--aw-error); }
+.runtime-trace-panes .runtime-trace-obs .ant-tag { min-width:30px; text-align:center; }
+.runtime-trace-nm { flex:0 1 auto; min-width:0; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.runtime-trace-su { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--aw-text-3); }
+.runtime-trace-dur { flex:none; margin-left:auto; color:var(--aw-text-3); }
+.runtime-trace-obs-children { margin-left:10px; padding-left:4px; border-left:1px solid var(--aw-border); }
+
+/* 右侧详情 */
+.runtime-trace-dh { display:flex; align-items:center; gap:8px; min-width:0; }
+.runtime-trace-dt { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:600; color:var(--aw-text); }
+.runtime-trace-dmeta { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:6px; font-size:11px; color:var(--aw-text-3); }
+.runtime-trace-dmeta b { font-weight:400; color:var(--aw-text-2); }
+.runtime-trace-kinds { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
+.runtime-trace-section { margin-top:14px; }
+.runtime-trace-h { display:flex; align-items:baseline; gap:6px; margin-bottom:6px; font-size:12px; font-weight:600; color:var(--aw-text); overflow-wrap:anywhere; }
+.runtime-trace-x { margin-left:auto; font-size:11px; font-weight:400; color:var(--aw-text-3); }
+.runtime-trace-pre { max-height:240px; margin:0; padding:7px 8px; overflow:auto; border:1px solid var(--aw-border); border-radius:4px; background:var(--aw-gray-bg); font-family:var(--aw-font-mono); font-size:11px; line-height:16px; color:var(--aw-text-2); white-space:pre-wrap; word-break:break-word; }
+.runtime-trace-pre.is-full { max-height:none; }
+.runtime-trace-span { margin-top:10px; }
+.runtime-trace-span-head { display:flex; align-items:center; gap:6px; min-width:0; font-size:12px; }
+.runtime-trace-span-head > strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.runtime-trace-files { max-height:240px; overflow:auto; border:1px solid var(--aw-border); border-radius:4px; }
+.runtime-trace-fg { position:sticky; top:0; display:flex; gap:6px; padding:5px 8px 3px; background:var(--aw-panel); font-size:11px; font-weight:600; color:var(--aw-text-2); }
+.runtime-trace-fg > .runtime-trace-x { margin-left:0; }
+.runtime-trace-file { display:flex; align-items:center; gap:10px; width:100%; padding:4px 8px; border:0; background:none; font-size:11px; color:var(--aw-text); }
+.runtime-trace-file:hover { background:var(--aw-primary-faint); }
+.runtime-trace-file-nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--aw-font-mono); }
+.runtime-trace-file-sz { flex:none; color:var(--aw-text-3); }
+.runtime-trace-file-act { flex:none; color:var(--aw-primary); }
+.runtime-trace-kv { display:grid; grid-template-columns:84px 1fr; gap:6px 12px; margin:10px 0 0; font-size:12px; }
+.runtime-trace-kv > div { display:contents; }
+.runtime-trace-kv dt { color:var(--aw-text-3); }
+.runtime-trace-kv dd { min-width:0; margin:0; overflow-wrap:anywhere; color:var(--aw-text); }
+.runtime-trace-kv dd.is-mono { font-family:var(--aw-font-mono); font-size:11px; }
+.runtime-trace-ph { display:flex; align-items:center; gap:8px; min-width:0; margin-bottom:8px; }
+.runtime-trace-ph-nm { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--aw-font-mono); font-size:12px; font-weight:600; color:var(--aw-text); }
+html .runtime-trace-back.ant-btn { flex:none; height:26px; padding:0 8px; border-radius:4px; font-size:12px; }
+.runtime-trace-ph > .runtime-trace-x { margin-left:0; }

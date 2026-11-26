@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Space, Tooltip } from 'antd';
-import {
-  CloseOutlined, DownloadOutlined, FullscreenExitOutlined, FullscreenOutlined, GlobalOutlined,
-} from '@ant-design/icons';
+import { FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useTranslation } from 'react-i18next';
 import { FilePreview } from '@/shared/ui/FilePreview';
 import { ResizeHandle } from '@/shared/ui/ResizeHandle';
@@ -62,7 +61,7 @@ export function ArtifactPreviewDrawer({ artifact, onClose }: {
       )}
       <header className="aw-clarify-artifact-header">
         <div className="aw-clarify-artifact-address">
-          <GlobalOutlined aria-hidden="true" />
+          <AwStrokeIcon name="globe" />
           <span>{artifact.name}</span>
         </div>
         <Space size={2} className="aw-clarify-artifact-actions">
@@ -81,7 +80,7 @@ export function ArtifactPreviewDrawer({ artifact, onClose }: {
                 type="text"
                 size="small"
                 aria-label={t('artifacts.download')}
-                icon={<DownloadOutlined />}
+                icon={<AwStrokeIcon name="dl" />}
                 href={downloadUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -93,7 +92,7 @@ export function ArtifactPreviewDrawer({ artifact, onClose }: {
               type="text"
               size="small"
               aria-label={t('artifacts.closePreview')}
-              icon={<CloseOutlined />}
+              icon={<AwStrokeIcon name="x" />}
               onClick={onClose}
             />
           </Tooltip>

@@ -41,6 +41,8 @@ describe('RuntimeTraceDrawer', () => {
 
     render(<RuntimeTraceDrawer node={{ key: 'dispatch:44', dispatchId: 44, agentName: '开发', status: 'SUCCEEDED' }} processGraph={{ nodes: [], edges: [] }} onClose={() => {}} />);
     const drawer = await screen.findByTestId('runtime-trace-drawer');
+    expect(await within(drawer).findByRole('button', { name: /^Turn turn:1 的/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(drawer).queryByText('Observed Thinking')).not.toBeInTheDocument();
     fireEvent.click(await within(drawer).findByText(/Turn turn:1/));
     await waitFor(() => expect(turnRequests).toBe(1));
     expect(within(drawer).getByText('exact system prompt')).toBeInTheDocument();
@@ -181,7 +183,7 @@ describe('RuntimeTraceDrawer usage display', () => {
 
     render(<RuntimeTraceDrawer node={node} processGraph={{ nodes: [], edges: [] }} onClose={() => {}} />);
     const drawer = await screen.findByTestId('runtime-trace-drawer');
-    await waitFor(() => expect(within(drawer).getByText(/会话 s1/)).toBeInTheDocument());
+    await waitFor(() => expect(within(drawer).getByRole('button', { name: /会话\s*s1/ })).toBeInTheDocument());
     expect(within(drawer).queryByText(/tokens/)).not.toBeInTheDocument();
     expect(within(drawer).queryByText(/credits/)).not.toBeInTheDocument();
     expect(within(drawer).queryByText(/💰/)).not.toBeInTheDocument();
@@ -200,7 +202,7 @@ describe('RuntimeTraceDrawer usage display', () => {
 
     render(<RuntimeTraceDrawer node={node} processGraph={{ nodes: [], edges: [] }} onClose={() => {}} />);
     const drawer = await screen.findByTestId('runtime-trace-drawer');
-    await waitFor(() => expect(within(drawer).getByText(/会话 s1/)).toBeInTheDocument());
+    await waitFor(() => expect(within(drawer).getByRole('button', { name: /会话\s*s1/ })).toBeInTheDocument());
     expect(within(drawer).queryByText(/credits/)).not.toBeInTheDocument();
     expect(within(drawer).queryByText(/tokens/)).not.toBeInTheDocument();
     expect(within(drawer).queryByText(/💰/)).not.toBeInTheDocument();
@@ -240,7 +242,7 @@ describe('RuntimeTraceDrawer independent pane scrolling', () => {
     render(<RuntimeTraceDrawer node={{ key: 'dispatch:46', dispatchId: 46, agentName: '开发', status: 'SUCCEEDED' }} processGraph={{ nodes: [], edges: [] }} onClose={() => {}} />);
 
     const panes = await screen.findByTestId('runtime-trace-panes');
-    expect(panes).toHaveStyle({ display: 'grid', minHeight: '0', overflow: 'hidden' });
+    expect(panes).toHaveStyle({ display: 'grid', gridTemplateColumns: 'minmax(240px, 30%) 1fr', minHeight: '0', overflow: 'hidden' });
     expect(screen.getByTestId('runtime-trace-timeline-pane')).toHaveStyle({ overflow: 'auto' });
     expect(screen.getByTestId('runtime-trace-detail-pane')).toHaveStyle({ overflow: 'auto' });
     expect(document.querySelector('.ant-drawer-body')).toHaveStyle({ display: 'flex', flexDirection: 'column', minHeight: '0', overflow: 'hidden' });

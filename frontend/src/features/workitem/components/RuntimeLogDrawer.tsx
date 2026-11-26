@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Drawer, Input, Space, Switch, Typography } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { ReloadOutlined, LoadingOutlined, SearchOutlined, InfoCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import { LoadingOutlined, InfoCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { aggregateRuntimeMessages, type RuntimeLogRow } from './runtimeLogMessages';
 import { RuntimeTerminal } from './RuntimeTerminal';
 import { getRuntimeLog } from '../api';
@@ -67,20 +68,33 @@ export function RuntimeLogPanel({ dispatchId, terminal = false, enabled = true, 
 
   const rows: RuntimeLogRow[] = useMemo(() => !terminal && aggregate ? aggregateRuntimeMessages(events) : events, [events, aggregate, terminal]);
   const filtered = useMemo(() => rows.filter(event => !query || JSON.stringify(event).toLowerCase().includes(query.toLowerCase())), [rows, query]);
-  return <div>
-    <Space wrap style={{ marginBottom: 16 }}>
-      <Typography.Text type="secondary">{t('runtimeLog.windowHint')}</Typography.Text>
-      <Button disabled={!nextBeforeId || loading} onClick={() => setBeforeId(nextBeforeId)}>{t('runtimeLog.earlierWindow')}</Button>
-      {beforeId != null && <Button onClick={() => setBeforeId(undefined)}>{t('runtimeLog.latestWindow')}</Button>}
-      <Input.Search enterButton={<Button aria-label={t('runtimeLog.search')} icon={<SearchOutlined aria-hidden="true" />} />} aria-label={t('runtimeLog.search')} placeholder={t('runtimeLog.search')} allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('runtimeLog.clearSearch')} /> }} value={query} onChange={e => setQuery(e.target.value)} style={{ width: 'min(300px, 100%)' }} />
+  const searchInput = <Input aria-label={t('runtimeLog.search')} placeholder={t('runtimeLog.search')} prefix={<AwStrokeIcon name="search" />} allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('runtimeLog.clearSearch')} /> }} value={query} onChange={e => setQuery(e.target.value)} size={embedded ? 'small' : undefined} style={{ width: embedded ? 220 : 'min(300px, 100%)' }} />;
+  const summary = <>{t('runtimeLog.refreshSummary', { count: events.length })}{updated ? t('runtimeLog.updated', { time: formatDateTime(updated, { timeStyle: 'medium' }) }) : ''}</>;
+  // 分窗分页：每次最多拉取一个窗口，搜索只作用于当前窗口。
+  const windowPager = (compact: boolean) => <>
+    {compact ? null : <Typography.Text type="secondary">{t('runtimeLog.windowHint')}</Typography.Text>}
+    <Button size={compact ? 'small' : undefined} type={compact ? 'text' : undefined} disabled={!nextBeforeId || loading} onClick={() => setBeforeId(nextBeforeId)}>{t('runtimeLog.earlierWindow')}</Button>
+    {beforeId != null && <Button size={compact ? 'small' : undefined} type={compact ? 'text' : undefined} onClick={() => setBeforeId(undefined)}>{t('runtimeLog.latestWindow')}</Button>}
+  </>;
+  return <div className={embedded ? 'runtime-log-panel is-embedded' : undefined}>
+    {embedded ? <div className="runtime-log-toolbar">
+      {searchInput}
+      {windowPager(true)}
+      {!terminal && <Switch size="small" checked={aggregate} onChange={setAggregate} checkedChildren={t('runtimeLog.aggregate')} unCheckedChildren={t('runtimeLog.raw')} />}
+      <label className="runtime-log-autoref"><Switch size="small" checked={auto} onChange={setAuto} aria-label={t(auto ? 'runtimeLog.auto' : 'runtimeLog.paused')} /><span>{t(auto ? 'runtimeLog.auto' : 'runtimeLog.paused')}</span></label>
+      <Button type="text" size="small" aria-label={t('runtimeLog.refresh')} icon={<AwStrokeIcon name="refresh" />} loading={loading ? { icon: <LoadingOutlined aria-hidden="true" /> } : false} onClick={() => refresh.current()}>{t('runtimeLog.refresh')}</Button>
+      <span className="runtime-log-summary">{summary}</span>
+    </div> : <Space wrap style={{ marginBottom: 16 }}>
+      {searchInput}
+      {windowPager(false)}
       {!terminal && <Switch checked={aggregate} onChange={setAggregate} checkedChildren={t('runtimeLog.aggregate')} unCheckedChildren={t('runtimeLog.raw')} />}
       <Switch checked={auto} onChange={setAuto} checkedChildren={t('runtimeLog.auto')} unCheckedChildren={t('runtimeLog.paused')} />
-      <Button aria-label={t('runtimeLog.refresh')} icon={<ReloadOutlined aria-hidden="true" />} loading={loading ? { icon: <LoadingOutlined aria-hidden="true" /> } : false} onClick={() => refresh.current()}>{t('runtimeLog.refresh')}</Button>
-      <Typography.Text type="secondary">{t('runtimeLog.refreshSummary', { count: events.length })}{updated ? t('runtimeLog.updated', { time: formatDateTime(updated, { timeStyle: 'medium' }) }) : ''}</Typography.Text>
-    </Space>
+      <Button aria-label={t('runtimeLog.refresh')} icon={<AwStrokeIcon name="refresh" />} loading={loading ? { icon: <LoadingOutlined aria-hidden="true" /> } : false} onClick={() => refresh.current()}>{t('runtimeLog.refresh')}</Button>
+      <Typography.Text type="secondary">{summary}</Typography.Text>
+    </Space>}
     {!embedded && <Alert type="info" icon={<InfoCircleFilled aria-hidden="true" />} showIcon message={t(terminal ? 'runtimeLog.terminalHint' : 'runtimeLog.hint')} style={{ marginBottom: 12 }} />}
-    {error && <Alert type="error" icon={<CloseCircleFilled aria-hidden="true" />} showIcon message={error.message ?? t('runtimeLog.loadFailed')} style={{ marginBottom: 12 }} />}
-    {terminal ? <><RuntimeTerminal events={events} query={query} height={embedded ? 'clamp(220px, calc(100dvh - 480px), 650px)' : undefined} /><DispatchGuidanceInput key={dispatchId} dispatchId={dispatchId} /></> : <Table dataSource={[...filtered].reverse()} loading={loading && !events.length} size="small"
+    {error && <Alert type="error" icon={<CloseCircleFilled aria-hidden="true" />} showIcon message={error.message ?? t('runtimeLog.loadFailed')} style={embedded ? { margin: '8px 16px' } : { marginBottom: 12 }} />}
+    {terminal ? <><RuntimeTerminal events={events} query={query} compact={embedded} height={embedded ? 'clamp(220px, calc(100dvh - 360px), 720px)' : undefined} /><DispatchGuidanceInput key={dispatchId} dispatchId={dispatchId} /></> : <Table dataSource={[...filtered].reverse()} loading={loading && !events.length} size="small"
       rowKey={event => event.eventId ?? `${event.seq}-${event.eventType}`}
       pagination={{ pageSize, showSizeChanger: true, pageSizeOptions: [20, 50, 100], onChange: (_p, ps) => setPageSize(ps), showTotal: total => t('runtimeLog.total', { count: total }) }}
       columns={[

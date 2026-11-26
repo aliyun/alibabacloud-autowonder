@@ -1,0 +1,440 @@
+/* Page 18 geometry stays local; PlatformShell owns the centered 1080px column. */
+.aw-branding-config {
+  min-width: 0;
+  color: var(--aw-text);
+}
+
+.aw-branding-config > .aw-page-head {
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.aw-branding-config .aw-branding-hint {
+  margin-bottom: 12px;
+}
+
+.aw-branding-config .aw-branding-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.aw-branding-config .aw-branding-grid > .ant-card {
+  min-width: 0;
+  background: var(--aw-panel);
+  border-color: var(--aw-border);
+  border-radius: 8px;
+  box-shadow: var(--aw-shadow-card);
+}
+
+.aw-branding-config .aw-branding-grid > .ant-card > .ant-card-head {
+  min-height: 0;
+  padding: 12px 16px;
+}
+
+.aw-branding-config .aw-branding-grid .ant-card-head-title {
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.aw-branding-config .aw-branding-grid > .ant-card > .ant-card-body {
+  padding: 14px 16px;
+}
+
+.aw-branding-config .aw-branding-grid .ant-form-item {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.aw-branding-config .aw-branding-grid .ant-form-item-extra {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-branding-config .aw-branding-basic-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.aw-branding-config .aw-branding-logo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.aw-branding-config .aw-branding-logo-box {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--aw-border);
+  border-radius: 4px;
+  background: var(--aw-panel);
+}
+
+.aw-branding-config .aw-branding-logo-box img {
+  max-width: 72px;
+  max-height: 72px;
+  object-fit: contain;
+}
+
+.aw-branding-config .aw-branding-logo-actions {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.aw-branding-config .aw-branding-logo-hint {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-branding-config .aw-branding-accent-hint {
+  margin-bottom: 12px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-branding-config .aw-branding-theme-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.aw-branding-config .aw-branding-presets {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.aw-branding-config .aw-branding-presets .ant-radio-button-wrapper {
+  min-height: 36px;
+  height: auto;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: normal;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  border-inline-start-width: 1px;
+  border-radius: 6px;
+  background: var(--aw-field);
+}
+
+.aw-branding-config .aw-branding-presets .ant-radio-button-wrapper::before {
+  display: none;
+}
+
+.aw-branding-config .aw-branding-preset-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aw-branding-config .aw-branding-preset-label > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.aw-branding-config .aw-branding-preset-dot {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+
+.aw-branding-config .aw-branding-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aw-branding-config .aw-branding-color-row input[type="color"] {
+  width: 96px;
+  height: 36px;
+  padding: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.aw-branding-config .aw-branding-color-row input[type="color"]:disabled {
+  cursor: not-allowed;
+}
+
+.aw-branding-config .aw-branding-color-hex {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--aw-font-mono);
+}
+
+.aw-branding-config .aw-branding-save-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 4px;
+}
+
+.aw-branding-config .aw-platform-message-panels {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.aw-branding-config .aw-platform-message-card,
+.aw-branding-config .aw-platform-feature-card {
+  min-width: 0;
+  border-radius: 8px;
+  border-color: var(--aw-border);
+  background: var(--aw-panel);
+}
+
+.aw-branding-config .aw-platform-message-card > .ant-card-head {
+  min-height: 0;
+  padding: 12px 16px;
+}
+
+.aw-branding-config .aw-platform-message-card .ant-card-head-title,
+.aw-branding-config .aw-platform-feature-head > .ant-typography:first-child {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.aw-branding-config .aw-platform-message-card > .ant-card-body,
+.aw-branding-config .aw-platform-feature-card > .ant-card-body {
+  padding: 16px;
+}
+
+.aw-branding-config .aw-platform-group-content {
+  display: grid;
+  gap: 16px;
+}
+
+.aw-branding-config .aw-platform-message-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.aw-branding-config .aw-platform-feature-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.aw-branding-config .aw-platform-feature-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.aw-branding-config .aw-platform-message-card .ant-btn {
+  height: 32px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.aw-branding-config .aw-im-form .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+.aw-branding-config .aw-im-form .ant-form-item-label > label {
+  height: auto;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.aw-branding-config .aw-im-form .ant-input {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.aw-branding-config .aw-im-form .ant-input-affix-wrapper {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.aw-branding-config .aw-im-form .ant-input-affix-wrapper > input.ant-input {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.aw-branding-config .aw-im-form .ant-input-affix-wrapper .ant-input-suffix > .ant-btn {
+  height: 22px;
+  padding: 0 4px;
+}
+
+.aw-branding-config .aw-im-form .ant-form-item-explain,
+.aw-branding-config .aw-im-form .ant-form-item-extra {
+  min-height: 0;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--aw-text-3);
+  overflow-wrap: anywhere;
+}
+
+.aw-platform-channel-modal .ant-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.aw-platform-channel-modal .ant-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.aw-platform-channel-modal .ant-modal-footer .ant-btn {
+  height: 32px;
+  margin-inline-start: 0;
+  font-size: 12px;
+}
+
+.aw-platform-channel-modal .aw-channel-switch-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--aw-error);
+  border-radius: 6px;
+  background: var(--aw-error-bg);
+  color: var(--aw-error-deep);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.aw-admin-add-modal .ant-modal-content {
+  padding: 0;
+  border-radius: 8px;
+  box-shadow: var(--aw-shadow-modal);
+}
+
+.aw-admin-add-modal .ant-modal-header {
+  margin-bottom: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--aw-border);
+}
+
+.aw-admin-add-modal .ant-modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.aw-admin-add-modal .ant-modal-body {
+  padding: 14px 18px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.aw-admin-add-modal .ant-modal-footer {
+  margin-top: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--aw-border);
+}
+
+.aw-admin-add-modal .ant-btn {
+  height: 32px;
+  font-size: 12px;
+}
+
+.aw-admin-add-modal .ant-select {
+  font-size: 12px;
+}
+
+.aw-admin-add-modal .ant-select-selector {
+  min-height: 32px;
+}
+
+.aw-admin-add-modal .ant-select-selection-overflow {
+  max-height: 112px;
+  overflow-y: auto;
+  max-width: 100%;
+}
+
+.aw-admin-add-modal .ant-select-selection-overflow-item,
+.aw-admin-add-modal .aw-admin-selected-tag {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.aw-admin-add-modal .aw-admin-selected-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.aw-admin-add-modal .aw-admin-tag-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-admin-add-modal .aw-admin-selected-tag .ant-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+}
+
+.aw-admin-add-modal .aw-admin-add-results {
+  max-height: 144px;
+  overflow-y: auto;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.aw-admin-add-modal .aw-admin-add-results li,
+.aw-admin-add-modal .ant-alert-description {
+  overflow-wrap: anywhere;
+}
+
+.aw-admin-add-modal .aw-admin-add-results li[data-result='success'] {
+  color: var(--aw-success);
+}
+
+.aw-admin-add-modal .aw-admin-add-results li[data-result='failed'],
+.aw-admin-add-modal .aw-admin-add-results li[data-result='unknown'] {
+  color: var(--aw-error);
+}
+
+.aw-admin-add-modal .aw-admin-add-results li[data-result='uncertain'] {
+  color: var(--aw-warning);
+}
+
+@media (max-width: 700px) {
+  .aw-branding-config > .aw-page-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .aw-branding-config > .aw-page-head > .aw-page-actions {
+    margin-left: 0;
+    align-self: flex-start;
+  }
+
+  .aw-branding-config .aw-branding-basic-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+}

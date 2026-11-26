@@ -1,12 +1,16 @@
 /* Crystal Edge shared component contract. Page code uses tokens, never theme-specific colors. */
-:root{--aw-bg:#171e23;--aw-panel:#1b2329;--aw-sidebar:#222a31;--aw-raised:#263039;--aw-field:#1a232a;--aw-border:#34404a;--aw-text:#f1f3f5;--aw-muted:#a3adb9;--aw-accent:#f97316;--aw-accent-rgb:249,115,22;--aw-accent-text:#f97316;--aw-primary:#f97316;--aw-primary-ink:#171e23;--aw-glass:rgba(32,43,53,.88);color-scheme:dark}
+:root{--aw-bg:#171e23;--aw-panel:#1b2329;--aw-sidebar:#222a31;--aw-raised:#263039;--aw-field:#1a232a;--aw-border:#34404a;--aw-text:#f1f3f5;--aw-muted:#b9c4ce;--aw-text-2:#b9c4ce;--aw-text-3:#8d99a6;--aw-text-disabled:#5d6a76;--aw-accent:#0064c8;--aw-accent-rgb:0,100,200;--aw-accent-text:#339dff;--aw-primary:#339dff;--aw-primary-hover:#5cadff;--aw-primary-active:#2e8ff0;--aw-primary-ink:#0d1620;--aw-primary-weak:rgba(51,157,255,.14);--aw-primary-faint:rgba(51,157,255,.08);--aw-gray-bg:#263039;--aw-canvas:#171e23;--aw-header-bg:#263039;--aw-error:#ff938f;--aw-error-deep:#ffb0ad;--aw-error-bg:rgba(255,147,143,.14);--aw-warning:#f5cc58;--aw-warning-deep:#ffdd6e;--aw-warning-bg:rgba(245,204,88,.14);--aw-success:#49d8a2;--aw-success-deep:#7fe0bc;--aw-success-bg:rgba(73,216,162,.14);--aw-ai:#9d8cff;--aw-ai-bg:rgba(157,140,255,.16);--aw-link:#339dff;--aw-font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono","Courier New",monospace;--aw-shadow-card:0 1px 2px rgba(0,0,0,.04);--aw-shadow-menu:0 4px 8px rgba(0,0,0,.16);--aw-shadow-modal:0 8px 24px rgba(0,0,0,.16);--aw-glass:rgba(32,43,53,.88);color-scheme:dark}
 :root[data-appearance=light]{color-scheme:light}
-body{margin:0;background:var(--aw-bg);color:var(--aw-text)}
+body{margin:0;background:var(--aw-bg);color:var(--aw-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Helvetica,Arial,sans-serif;font-size:13px;line-height:20px;-webkit-font-smoothing:antialiased}
+::selection{background:#cce0f5}
+html[data-appearance=dark] ::selection{background:rgba(51,157,255,.35)}
+a{color:var(--aw-link);text-decoration:none}
+a:hover{color:var(--aw-primary-hover)}
 *{box-sizing:border-box}
 .appearance-option{display:flex;align-items:center;justify-content:space-between;gap:22px;min-width:82px}
 .appearance-option .anticon{color:var(--aw-accent-text)}
 html .appearance-switch{width:36px;padding:0;flex-shrink:0}
-html .ant-btn{font-weight:500;transition:background-color .16s ease,border-color .16s ease,color .16s ease;box-shadow:none}
+html .ant-btn{font-weight:400;transition:background-color .16s ease,border-color .16s ease,color .16s ease;box-shadow:none}
 html[data-appearance=dark] .ant-btn:not(.ant-btn-text):not(.ant-btn-link){background-image:radial-gradient(ellipse at 50% 28%,rgba(255,255,255,.04),transparent 75%);box-shadow:inset 0 1px 0 #ffffff0d}
 html[data-appearance=light] .ant-btn{background-image:none;box-shadow:none}
 html .ant-btn-default:not(:disabled):not(.ant-btn-dangerous):hover{background-color:var(--aw-button-hover);color:var(--aw-text);border-color:var(--aw-muted)}
@@ -16,28 +20,113 @@ html .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous):hover{background-co
 html .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous):active{background:var(--aw-primary-active)}
 html .ant-btn:disabled,html .ant-btn.ant-btn-loading{box-shadow:none;background-image:none}
 html .ant-btn-primary:disabled{background:var(--aw-raised);border-color:var(--aw-border);color:var(--aw-muted);opacity:.6}
-html :is(button,a,input:not(.ant-input),textarea:not(.ant-input),[role=combobox]):focus-visible{outline:2px solid var(--aw-accent-text);outline-offset:3px}
-html :is(.ant-select-dropdown,.ant-dropdown-menu,.ant-picker-dropdown .ant-picker-panel-container){background:var(--aw-glass);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);border:1px solid color-mix(in srgb,var(--aw-border) 65%,var(--aw-text));border-radius:11px;box-shadow:inset 0 1px 0 #ffffff18,0 10px 24px #00000020}
+/* 原型 .btn.ai：智能建单入口为中性按钮 + AI 紫文字（须排在按钮 hover 规则之后，同权重后置生效） */
+html .ant-btn.aw-btn-ai:not(:disabled):not(.ant-btn-dangerous){color:var(--aw-ai)}
+html .ant-btn.aw-btn-ai:not(:disabled):not(.ant-btn-dangerous):hover{color:var(--aw-ai)}
+/* 用户定稿：按钮一律不显示 focus-visible 主题色描边（覆盖 antd Button 内建 genFocusStyle，原生 button 同样适用） */
+html :is(.ant-btn, button):not(:disabled):focus-visible{outline:none}
+html :is(a,input:not(.ant-input),textarea:not(.ant-input),[role=combobox]):focus-visible{outline:2px solid var(--aw-accent-text);outline-offset:3px}
+/* 原型 .menu 契约：弹层实色面板（浅色白底）+ 1px 边框 + 常规投影；Crystal 玻璃拟态已废弃 */
+html :is(.ant-select-dropdown,.ant-dropdown-menu,.ant-picker-dropdown .ant-picker-panel-container){background:var(--aw-panel);border:1px solid var(--aw-border);border-radius:8px;box-shadow:var(--aw-shadow-menu)}
+/* 公共 tip 契约：message toast 紧凑宽度，长文案换行而非拉满屏宽（对齐 Multica／阿里云控制台观感） */
+html .ant-message .ant-message-notice-content{max-width:min(420px,calc(100vw - 48px));white-space:normal;word-break:break-word}
+/* 公共 tip 契约：NoticeTip 内联提示条——实心图标对齐首行文字、与内容区同宽、统一双行排版 */
+html .aw-notice-tip{display:flex;align-items:flex-start;gap:6px;padding:8px 12px;border-radius:6px}
+html .aw-notice-tip .ant-alert-icon{font-size:14px;line-height:20px;height:20px;margin:0;display:inline-flex;align-items:center}
+html .aw-notice-tip .ant-alert-message{font-size:13px;line-height:20px;font-weight:500;margin-bottom:2px;color:var(--aw-text)}
+html .aw-notice-tip .ant-alert-description{font-size:12px;line-height:18px;margin-top:2px;color:var(--aw-text-2)}
+/* 兜底：未走 NoticeTip 的原生 Alert 也收敛到同一紧凑几何（antd 双行默认 20/24 内距、24px 图标、16px 标题）
+ * 用 :where() 压低特异性，页面级自定义 Alert 样式仍可覆盖 */
+html :where(.ant-alert){padding:8px 12px;border-radius:6px}
+html :where(.ant-alert) .ant-alert-icon{font-size:14px;line-height:20px;height:20px;display:inline-flex;align-items:center}
+/* 单行 Alert 文案换行时 antd 默认整块垂直居中，图标会浮在两行之间；改为图标与首行文字对齐（同原型 .aw-alert） */
+html .ant-alert{align-items:flex-start}
+html .ant-alert .ant-alert-icon{line-height:20px;height:20px;display:inline-flex;align-items:center}
+html :where(.ant-alert) .ant-alert-message{font-size:13px;line-height:20px;font-weight:500}
+html :where(.ant-alert) .ant-alert-description{font-size:12px;line-height:18px}
+/* antd 双行提示的标题下外边距是 8px，与正文 2px 上外边距折叠后行隔过大；同特异性之下的页面级自定义仍在其后覆盖 */
+.ant-alert-with-description .ant-alert-message{margin-bottom:2px}
 html .ant-dropdown-menu-item,html .ant-select-item{border-radius:6px}
 html .ant-dropdown-menu-item-selected,html .ant-select-item-option-selected:not(.ant-select-item-option-disabled){background:rgba(var(--aw-accent-rgb),.14);color:var(--aw-text)}
 html .ant-select-selector{background:var(--aw-field)}
-html .ant-segmented{border:1px solid var(--aw-border);background:var(--aw-field);padding:3px}
-html .ant-segmented :is(.ant-segmented-item-selected,.ant-segmented-thumb){box-shadow:none}
-html .ant-tag{border-radius:6px;line-height:24px;margin-inline-end:0;padding-inline:9px}
-html .ant-table-thead>tr>th{text-align:center}
-html .ant-table-tbody>tr>td{vertical-align:middle}
-html .ant-pagination .ant-pagination-item-active{background:rgba(var(--aw-accent-rgb),.13);border-color:var(--aw-accent-text)}
+html .ant-input-prefix{margin-inline-end:4px;color:var(--aw-text-3)}
+html .ant-input-prefix .anticon{font-size:14px}
+html .ant-input-prefix .aw-stroke-icon{width:14px;height:14px}
+/* 原型 02+ 顶栏铃铛：6px error 圆点（不显示数字角标）；36px 命中区下圆点贴铃铛右上角 */
+.aw-bell-btn{position:relative}
+.aw-bell-dot{position:absolute;top:8px;right:9px;width:6px;height:6px;border-radius:50%;background:var(--aw-error)}
+html .ant-segmented{background:var(--aw-gray-bg);padding:2px}
+html .ant-segmented .ant-segmented-item-label{padding:0 12px;line-height:26px;height:26px;font-size:12px;display:inline-flex;align-items:center;justify-content:center}
+html .ant-segmented :is(.ant-segmented-item-selected,.ant-segmented-thumb){background:var(--aw-panel);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+html .ant-segmented .ant-segmented-item-selected{color:var(--aw-text)}
+html .ant-segmented .ant-segmented-item-selected .ant-segmented-item-label{font-weight:600}
+/* 原型 .segmented button svg：13px；active 项 svg 主色；icon 项的 antd icon 容器 flex 居中（否则 svg 落在基线上偏上 2px） */
+html .ant-segmented .ant-segmented-item-icon{display:flex;align-items:center}
+html .ant-segmented .ant-segmented-item-icon svg{display:block}
+html .ant-segmented .aw-stroke-icon{width:13px;height:13px}
+html .ant-segmented .ant-segmented-item-selected .aw-stroke-icon{color:var(--aw-primary)}
+html[data-appearance=dark] .ant-segmented{background:#151b21}
+html[data-appearance=dark] .ant-segmented :is(.ant-segmented-item-selected,.ant-segmented-thumb){background:#2c3640;box-shadow:none}
+html .ant-tag{border-radius:4px;line-height:20px;margin-inline-end:0;padding-inline:8px;font-size:12px}
+html .ant-table-wrapper.ant-table-wrapper .ant-table-thead>tr>th{text-align:left;padding:8px 12px;line-height:18px}
+html .ant-table-tbody>tr>td{vertical-align:middle;line-height:18px}
+/* 表格内文字链接沿用表格字阶（原型 .op-link=--aw-fs-table 12px），不被 antd 按钮 13px 放大。 */
+html .ant-table-tbody .ant-btn.ant-btn-link{font-size:12px}
+html[data-appearance=light] .ant-table-tbody>tr>td{border-bottom-color:#f0f0f0}
+html .ant-pagination{font-size:12px;color:var(--aw-text-2);column-gap:4px}
+html .ant-pagination.ant-pagination .ant-pagination-item{min-width:26px;height:26px;line-height:24px;font-size:12px;font-weight:400;border-radius:4px;border-color:transparent;background:transparent}
+html .ant-pagination.ant-pagination .ant-pagination-item a{padding:0 8px;color:var(--aw-text-2)}
+html .ant-pagination.ant-pagination .ant-pagination-item:not(.ant-pagination-item-active):hover{background:var(--aw-gray-bg);border-color:transparent}
+html .ant-pagination.ant-pagination .ant-pagination-item:not(.ant-pagination-item-active):hover a{color:var(--aw-text)}
+html .ant-pagination.ant-pagination .ant-pagination-item-active{background:var(--aw-primary);border-color:var(--aw-primary)}
+html .ant-pagination.ant-pagination .ant-pagination-item-active:hover{background:var(--aw-primary-hover);border-color:var(--aw-primary-hover)}
+html .ant-pagination.ant-pagination .ant-pagination-item-active a,html .ant-pagination.ant-pagination .ant-pagination-item-active:hover a{color:var(--aw-primary-ink)}
 .aw-offset-pagination{display:flex;justify-content:flex-end;flex-wrap:wrap;row-gap:8px;margin-top:16px}
+html .ant-table-tbody>tr{transition:background .12s}
 html .ant-table-content{scrollbar-width:thin;scrollbar-color:var(--aw-border) transparent}
-.aw-shell{background:var(--aw-bg)}
-.aw-shell .ant-layout-sider{background:var(--aw-sidebar)}
+/* 外壳骨架（原型 prototype.css Shell 区）：antd Layout/Sider 已被 div.aw-shell/aside.aw-sider 替代 */
+.aw-shell{background:var(--aw-bg);display:flex;height:100vh;min-width:0;overflow:hidden}
+.aw-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.aw-content{flex:1;min-height:0;overflow-y:auto;padding:12px;background:var(--aw-canvas)}
 .aw-brand{color:var(--aw-text)}
-.aw-workitems .ant-table-tbody>tr:nth-child(even)>td{background:color-mix(in srgb,var(--aw-raised) 50%,var(--aw-panel))}
-.aw-workitems .ant-table-tbody>tr:hover>td{background:var(--aw-raised)}
+.aw-workitems .ant-table-tbody>tr:hover>td{background:var(--aw-gray-bg)}
 .aw-workitems .ant-table-tbody .aw-column-numeric{font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;font-variant-numeric:tabular-nums}
-.aw-workitems .ant-table-tbody .aw-column-title a{color:var(--aw-text)}
-.aw-workitems .ant-table-tbody .aw-column-title a:hover{color:var(--aw-accent-text)}
-.aw-workitems .ant-card-extra>.ant-space{gap:16px!important}
+.aw-workitems .ant-table-tbody .aw-column-title a{color:var(--aw-link)}
+.aw-workitems .ant-table-tbody .aw-column-title a:hover{color:var(--aw-primary-hover)}
+/* 看板（原型 04/04b）：列头独立分区，列体 pad 8 / gap 8，卡与列圆角对齐 r-ctrl/r-card；列等高拉伸，空泳道与有单泳道底部对齐（验收返修 9）；列头去分割线且与列体零间隔，减少无谓线框（验收返修 13） */
+.aw-kanban .aw-kb-col{background:var(--aw-gray-bg);border:1px solid var(--aw-border);border-radius:8px;transition:background .15s,border-color .15s;display:flex;flex-direction:column}
+.aw-kanban .aw-kb-col-head{padding:10px 12px 4px;display:flex;align-items:center;gap:8px}
+.aw-kanban .aw-kb-col-title{font-size:13px;font-weight:600;color:var(--aw-text);display:flex;align-items:center;gap:6px}
+.aw-kanban .aw-kb-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.aw-kanban .aw-kb-col-body{padding:0 8px 8px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.aw-kanban .aw-kb-col.drop-target{border:1px dashed var(--aw-primary);background:var(--aw-primary-weak)}
+.aw-kanban .aw-kb-col.hot{border-color:color-mix(in srgb,var(--aw-warning) 45%,var(--aw-border));background:color-mix(in srgb,var(--aw-warning) 7%,var(--aw-gray-bg))}
+.aw-kanban .aw-kb-card.ant-card{background:var(--aw-panel);border-color:var(--aw-border);border-radius:6px;box-shadow:var(--aw-shadow-card);transition:border-color .15s,box-shadow .15s,transform .15s,opacity .15s}
+.aw-kanban .aw-kb-card.ant-card:hover{border-color:color-mix(in srgb,var(--aw-border) 70%,var(--aw-text-3));box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.aw-kanban .aw-kb-card.hot.ant-card{border-color:color-mix(in srgb,var(--aw-warning) 55%,var(--aw-border))}
+.aw-kanban .aw-kb-card.hot.ant-card:hover{border-color:var(--aw-warning)}
+.aw-kanban .aw-kb-card.dragging{border-color:var(--aw-primary);box-shadow:var(--aw-shadow-modal);transform:rotate(1.5deg) scale(1.03);opacity:.92;cursor:grabbing;position:relative;z-index:2}
+.aw-kb-count{font-size:11px;color:var(--aw-text-3);background:var(--aw-panel);border:1px solid var(--aw-border);border-radius:8px;padding:0 6px;line-height:16px;flex-shrink:0}
+.aw-kb-mybadge{font-size:11px;font-weight:600;color:var(--aw-warning-deep);background:var(--aw-warning-bg);border-radius:4px;padding:0 6px;line-height:18px;flex-shrink:0}
+/* 看板卡内业务标签收紧（验收返修 10）：行高 16、内距 6、字号 11 */
+.aw-kanban .aw-kb-card .ant-tag{line-height:16px;padding-inline:6px;font-size:11px}
+.aw-kb-more{display:block;width:100%;text-align:center;font-size:12px;color:var(--aw-text-3);padding:6px 0 8px}
+.aw-kb-more:hover{color:var(--aw-primary)!important;background:transparent!important}
+/* 工单列表页纵向填满内容框（验收返修 14）：看板精确占据剩余高度，外层 frame 不再出现纵向滚动条，泳道底部贴内容区 */
+.aw-workitems-page{height:100%;min-height:0;display:flex;flex-direction:column}
+.aw-workitems-page>.ant-spin-nested-loading{flex:1;min-height:0;display:flex;flex-direction:column}
+.aw-workitems-page>.ant-spin-nested-loading>.ant-spin-container{flex:1;min-height:0;display:flex;flex-direction:column}
+.aw-workitems-page .aw-kanban{flex:1}
+/* 模式 A 页头汇总徽标（原型 10c） */
+.aw-sum-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--aw-text-2)}
+.aw-sum-badge+.aw-sum-badge{margin-left:14px}
+.aw-sum-badge b{font-weight:600;color:var(--aw-text)}
+.aw-sum-badge.b-ok b{color:var(--aw-success-deep)}
+.aw-sum-badge.b-warn b{color:var(--aw-warning-deep)}
+/* 模式 B 表单页（原型 11） */
+.aw-crumb{font-size:12px;font-weight:400;color:var(--aw-text-3);margin-left:8px}
+.aw-form-steps{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.aw-form-steps .aw-step-chip{display:inline-flex;align-items:center;font-size:11px;color:var(--aw-text-2);background:var(--aw-gray-bg);border:1px solid var(--aw-border);border-radius:4px;padding:0 6px;line-height:18px}
 .aw-branding{min-width:920px;color:var(--aw-text)}
 .aw-branding .ant-card{background:var(--aw-panel);border-color:var(--aw-border);border-radius:12px}
 .aw-branding .ant-card-head-title{font-size:16px}
@@ -54,13 +143,18 @@ html .ant-table-content{scrollbar-width:thin;scrollbar-color:var(--aw-border) tr
 
 .aw-initial-mark{background:var(--aw-primary);color:var(--aw-primary-ink)}
 .aw-watch-active{color:var(--aw-accent-text)}
+/* 列表关注高亮用琥珀（原型 40 .op-icons button.on）；须压过 antd `.ant-btn .ant-btn-icon > svg{color:inherit}` */
+html .aw-op-btn .ant-btn-icon > svg.aw-watch-active{color:var(--aw-warning-deep)}
 
 /* Status colors stay independent of the customer accent. */
-html .ant-tag:is(.ant-tag-blue,.ant-tag-processing){--aw-tag-ink:var(--aw-info)}
-html .ant-tag:is(.ant-tag-green,.ant-tag-success){--aw-tag-ink:var(--aw-success)}
-html .ant-tag:is(.ant-tag-red,.ant-tag-error){--aw-tag-ink:var(--aw-error)}
-html .ant-tag:is(.ant-tag-orange,.ant-tag-warning){--aw-tag-ink:var(--aw-warning)}
-html .ant-tag:is(.ant-tag-blue,.ant-tag-processing,.ant-tag-green,.ant-tag-success,.ant-tag-red,.ant-tag-error,.ant-tag-orange,.ant-tag-warning){color:var(--aw-tag-ink);background:color-mix(in srgb,var(--aw-tag-ink) 8%,var(--aw-panel));border-color:color-mix(in srgb,var(--aw-tag-ink) 24%,var(--aw-panel))}
+html .ant-tag:is(.ant-tag-blue,.ant-tag-processing){--aw-tag-ink:var(--aw-accent-text);--aw-tag-bg:var(--aw-primary-weak)}
+html .ant-tag:is(.ant-tag-green,.ant-tag-success){--aw-tag-ink:var(--aw-success-deep);--aw-tag-bg:var(--aw-success-bg)}
+html .ant-tag:is(.ant-tag-red,.ant-tag-error){--aw-tag-ink:var(--aw-error-deep);--aw-tag-bg:var(--aw-error-bg)}
+html .ant-tag:is(.ant-tag-orange,.ant-tag-warning){--aw-tag-ink:var(--aw-warning-deep);--aw-tag-bg:var(--aw-warning-bg)}
+html[data-appearance=dark] .ant-tag:is(.ant-tag-blue,.ant-tag-processing){--aw-tag-ink:#9ccbff}
+html .ant-tag:is(.ant-tag-blue,.ant-tag-processing,.ant-tag-green,.ant-tag-success,.ant-tag-red,.ant-tag-error,.ant-tag-orange,.ant-tag-warning){color:var(--aw-tag-ink);background:var(--aw-tag-bg);border-color:transparent}
+/* 原型 .tag.gray：灰底胶囊（--aw-gray-bg + text-2，无边框），页面用 aw-tag-gray 类声明 */
+html .ant-tag.aw-tag-gray{color:var(--aw-text-2);background:var(--aw-gray-bg);border-color:transparent}
 
 /* Common surfaces and density for every route, dialog and nested panel. */
 html .ant-card{border-color:var(--aw-border)}
@@ -68,21 +162,57 @@ html .ant-card-head{color:var(--aw-text)}
 html .ant-card-head-title{font-weight:600}
 html .ant-card-hoverable:hover{border-color:color-mix(in srgb,var(--aw-border),var(--aw-accent) 25%);box-shadow:0 4px 14px #0000000a}
 html :is(.ant-modal-content,.ant-drawer-content,.ant-popover-inner){border:1px solid var(--aw-border)}
-html .ant-form-item-label>label{font-weight:500}
-html .ant-tabs-ink-bar{border-radius:3px}
+/* 全局返回钮：24×24 图标钮 + 12px chevron（2026-11-12 用户定稿由原型 11/13 的 28×28 收小），双类名压过 antd css-in-js */
+html .aw-back-btn.ant-btn.ant-btn{width:24px;height:24px;min-width:24px;padding:0}
+html .aw-back-btn.ant-btn .anticon{font-size:12px}
+html .aw-back-btn.ant-btn .aw-stroke-icon{width:12px;height:12px}
+/* 原型 11 模式 B：标签字重 400、帮助文案 11/text-3（字号/颜色/行距走 appearance.ts Form token） */
+html .ant-form-item-label>label{font-weight:400}
+html .ant-form-item .ant-form-item-extra{min-height:0;margin-top:4px;font-size:11px;line-height:18px;color:var(--aw-text-3)}
+/* 用户定稿（2026-11-12）：全站表单校验错误文案字号 12px（antd 默认 13px；行距 20px 对齐 auth/ws 表单先例；选择器需压过 antd `:where()(.ant-form-item)(.ant-form-item-explain)` 的 (0,2,0)） */
+html .ant-form-item .ant-form-item-explain{font-size:12px;line-height:20px}
+html .ant-tabs-ink-bar{border-radius:1px}
+/* 原型 aw-tabs：激活项主色 + 600 字重（antd Tabs 无字重 token，走 CSS） */
+html .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn{font-weight:600}
+/* 原型 15/16 list-tabs：行距 14、tab 内距 8/14、项间距 2；1px 底线由 antd nav::before 提供，不再叠加 border */
+.aw-list-tabs .ant-tabs-nav{margin-bottom:14px}
+html .aw-list-tabs > .ant-tabs-nav::before{border-bottom-color:var(--aw-border)}
+.aw-list-tabs .ant-tabs-nav-list{gap:2px}
+.aw-list-tabs .ant-tabs-tab{padding:8px 14px;margin:0}
+.aw-list-tabs .ant-tabs-tab+.ant-tabs-tab{margin:0}
+/* 原型 03/10/15/16 op-icons：表格行内 24×24 无边框图标钮，图标 14、text-3；del 悬停 error 色系 */
+html .aw-op-btn.ant-btn.ant-btn{width:24px;height:24px;min-width:24px;padding:0;border-radius:4px;color:var(--aw-text-3)}
+html .aw-op-btn.ant-btn .anticon{font-size:14px}
+html .aw-op-btn.ant-btn .aw-stroke-icon{width:14px;height:14px}
+html .aw-op-btn.ant-btn.ant-btn:not(:disabled):hover{background:var(--aw-gray-bg);color:var(--aw-text)}
+html .aw-op-btn--del.ant-btn.ant-btn:not(:disabled):hover{background:var(--aw-error-bg);color:var(--aw-error-deep)}
 html .ant-collapse{border-color:var(--aw-border);background:var(--aw-panel)}
 html .ant-collapse-content{background:var(--aw-panel);border-color:var(--aw-border)}
 html .ant-descriptions-bordered .ant-descriptions-view{border-color:var(--aw-border)}
 html :is(.ant-layout-content,.ant-drawer-body,.ant-modal-body,pre){scrollbar-width:thin;scrollbar-color:var(--aw-border) transparent}
-html .ant-input::placeholder,html textarea::placeholder{color:var(--aw-muted);opacity:.7}
+html .ant-input::placeholder,html textarea::placeholder{color:var(--aw-text-disabled);opacity:1}
+/* Chrome autofill paints a tint that starts after the affix wrapper padding, leaving a misaligned blank strip; repaint with the field token instead. */
+html input:-webkit-autofill,html input:-webkit-autofill:hover,html input:-webkit-autofill:focus,html input:-webkit-autofill:active,html textarea:-webkit-autofill,html textarea:-webkit-autofill:hover,html textarea:-webkit-autofill:focus,html select:-webkit-autofill{-webkit-text-fill-color:var(--aw-text);caret-color:var(--aw-text);box-shadow:0 0 0 1000px var(--aw-field) inset;transition:background-color 9999s ease-out,color 9999s ease-out}
 
 /* Scheduling lists retain readable headers when desktop windows narrow. */
 .aw-scheduled-list .ant-table-thead > tr > th { white-space: nowrap; }
+/* 定时任务两个 tab 的表格直贴筛选行，去掉工具栏下边线。 */
+.aw-toolbar:has(+ .aw-scheduled-list) { border-bottom: 0; }
 
-.aw-page-header { height: 60px; box-sizing: border-box; padding: 0 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--aw-border); background: var(--aw-panel); color: var(--aw-text); min-width: 0; }
+.aw-page-header { height: 48px; box-sizing: border-box; padding: 0 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 4px; border-bottom: 1px solid var(--aw-border); background: var(--aw-panel); color: var(--aw-text); min-width: 0; }
 .aw-page-header:has(.aw-sidebar-toggle) { padding-left: 4px; }
 .aw-page-header-context { display: flex; align-items: center; min-width: 0; flex: 1; overflow: hidden; }
-.aw-page-header-actions { display: flex; align-items: center; gap: 8px; min-width: 0; flex-shrink: 0; }
+.aw-page-header-actions { display: flex; align-items: center; gap: 2px; min-width: 0; flex-shrink: 0; }
+html .aw-page-header-actions .ant-btn .aw-stroke-icon, html .aw-page-header-actions .aw-bell-btn { color: var(--aw-text-2); }
+html .aw-page-header-actions .ant-btn:hover .aw-stroke-icon, html .aw-page-header-actions .aw-bell-btn:hover { color: var(--aw-text); }
+/* Chief 入口与普通图标同色：单色图标跟随按钮文字色，hover 同步加深。 */
+html .aw-page-header-actions .ant-btn .aw-chief-icon { color: var(--aw-text-2); }
+html .aw-page-header-actions .ant-btn:hover .aw-chief-icon { color: var(--aw-text); }
+/* 面板打开时才回到主色弱底 + 主色图标（原型 35 一节）。 */
+html .aw-page-header-actions .ant-btn.aw-chief-entry-open { background: var(--aw-primary-weak); }
+html .aw-page-header-actions .ant-btn.aw-chief-entry-open .aw-chief-icon { color: var(--aw-accent-text); }
+html .aw-page-header-actions .ant-btn.aw-chief-entry-open:hover .aw-chief-icon { color: var(--aw-accent-text); }
+/* 每个顶栏图标/徽标保持 36×36 点击区域（master 无障碍命中区），视觉由上方 48px 紧凑顶栏 + 2px 间距承担。 */
 .aw-page-header-actions > :is(button[aria-label], a[aria-label], .ant-badge) {
   width: 36px;
   height: 36px;
@@ -94,28 +224,29 @@ html .ant-input::placeholder,html textarea::placeholder{color:var(--aw-muted);op
   justify-content: center;
 }
 .aw-page-header-actions > .ant-btn-icon-only .anticon { font-size: 18px; }
+/* 头像可见圆 28px 居中在 36px 命中区里（左右各 4px），左侧补 6px 后与铃铛间距和对齐图标一致。 */
+.aw-page-header-actions > .aw-user-avatar { margin-left: 6px; }
 
 .aw-user-avatar { transition: filter 160ms ease; }
 .aw-user-avatar:hover { filter: brightness(1.08); }
 .aw-user-avatar:active { filter: brightness(.95); }
-.aw-user-avatar:focus-visible { outline: 2px solid var(--aw-accent-text); outline-offset: 3px; }
 
 .aw-detail-title { display: flex; align-items: center; gap: 12px; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 
-.aw-workitem-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 0; margin-bottom: 4px; min-width: 0; }
-.aw-workitem-actions > * { flex-shrink: 0; }
-/* Delivery state and its standard button share one group; no decorative box wraps the button. */
-.aw-workitem-actions > .aw-delivery-toggle { flex-shrink: 1; max-width: 100%; margin-left: auto; }
+/* 原型 05 op-bar：底边框分隔（meta-row 不再画分隔线，分隔职责在操作条）；padding-bottom 12 无顶距（原型同） */
+.aw-workitem-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 0 12px; margin-bottom: 12px; min-width: 0; border-bottom: 1px solid var(--aw-border); }
+.aw-workitem-primary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.aw-workitem-action-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.aw-workitem-action-tags .ant-tag { margin: 0; }
 .aw-delivery-toggle { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px 8px; min-width: 0; color: var(--aw-muted); font-size: 12px; line-height: 1.5; }
 .aw-delivery-toggle-state { min-width: 0; overflow-wrap: anywhere; }
 .aw-delivery-toggle > .ant-btn,
 .aw-delivery-toggle > .aw-delivery-toggle-action { flex-shrink: 0; }
 .aw-delivery-toggle-action { display: inline-flex; border-radius: 8px; }
-.aw-delivery-toggle-action:focus-visible { outline: 2px solid var(--aw-accent-text); outline-offset: 2px; }
 
 /* The sidebar layout owns the page surface; feature cards own only their contents. */
-.aw-content-frame { height: 100%; min-width: 0; padding: 24px; overflow: auto; border: 1px solid var(--aw-border); border-radius: 12px; background: var(--aw-panel); }
-.aw-content-frame:has(> .aw-split-page) { padding: 0; overflow: hidden; }
+.aw-content-frame { height: 100%; min-width: 0; padding: 20px 24px; overflow: auto; border: 1px solid var(--aw-border); border-radius: 8px; background: var(--aw-panel); }
+.aw-content-frame + .aw-content-frame { margin-top: 12px; }
 .aw-page-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
 .aw-page-heading-copy { flex: 1 1 240px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
 .aw-page-heading h1 { margin: 0; color: var(--aw-text); font-size: 24px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; max-width: 100%; }
@@ -128,10 +259,81 @@ html .aw-content-card > .ant-card-head .ant-card-head-title { padding: 0; white-
 html .aw-content-card > .ant-card-head .aw-page-heading { margin-bottom: 0; }
 html .aw-content-card > .ant-card-body { padding: 0; }
 .aw-content-frame .ant-space-item > .aw-page-heading { margin-bottom: 0; }
-.aw-content-frame .aw-detail-title > .ant-typography,
-.aw-content-frame .aw-detail-title .ant-typography { font-size: 24px; line-height: 1.4; font-weight: 600; }
 
 .aw-heading-number { color: var(--aw-accent-text); font-weight: 600; }
+
+/* ============ 原型页面骨架组件（PageHead/SectionCard/StatCard/Toolbar/TableCard/SplitPage/PlatformShell） ============ */
+.aw-page-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+/* 页头→正文视觉间距统一 18px：紧随页头的工具栏/Tabs 去掉自带顶部留白，避免与页头下边距叠加 */
+.aw-page-head + .aw-toolbar { padding-top: 0; }
+html .aw-page-head + .ant-tabs > .ant-tabs-nav .ant-tabs-tab { padding-top: 0; }
+.aw-page-head-copy { flex: 1 1 240px; min-width: 0; }
+.aw-page-title { margin: 0; color: var(--aw-text); font-size: 16px; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; max-width: 100%; }
+.aw-page-desc { margin-top: 2px; color: var(--aw-text-3); font-size: 12px; font-weight: 400; line-height: 18px; overflow-wrap: anywhere; }
+.aw-page-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+
+.aw-card { background: var(--aw-panel); border: 1px solid var(--aw-border); border-radius: 8px; box-shadow: var(--aw-shadow-card); min-width: 0; }
+.aw-card-head { padding: 12px 16px; border-bottom: 1px solid var(--aw-border); display: flex; align-items: center; gap: 8px; }
+.aw-card-title { font-size: 14px; font-weight: 600; color: var(--aw-text); }
+.aw-card-extra { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.aw-card-body { padding: 16px; }
+.aw-card-body-flush { padding: 0; }
+/* 原型 05 / 14：灰底画布上按块分卡，卡间 12px；子块自带的 inline 上下外边距会和 gap 叠加，统一交给 gap 管理 */
+.aw-detail-canvas { display: flex; flex-direction: column; gap: 12px; }
+.aw-detail-canvas > * { margin-top: 0 !important; margin-bottom: 0 !important; flex-shrink: 0; }
+.aw-detail-head-card { min-width: 0; padding: 16px 20px; border: 1px solid var(--aw-border); border-radius: 8px; background: var(--aw-panel); }
+/* 原型 11 模式 B 表单页：全局 content-frame 即表单卡；紧凑表单头（返回钮+16px 标题+右置面包屑）+ 分隔线左对齐操作条 */
+.aw-form-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.aw-form-title { font-size: 16px; font-weight: 600; color: var(--aw-text); }
+.aw-form-crumb { margin-left: auto; font-size: 12px; color: var(--aw-text-3); }
+.aw-form-foot { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--aw-border); margin-top: 4px; }
+
+.aw-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--aw-border); margin-bottom: 4px; }
+.aw-toolbar-gap { flex: 1; }
+/* 原型 13 面板内档：panel-body 内的筛选行 14/16 留白，与下方表格无分隔线 */
+.aw-toolbar-in-card { padding: 14px 16px; margin-bottom: 0; border-bottom: 0; }
+
+.aw-stat-card { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.aw-stat-label { font-size: 12px; color: var(--aw-text-3); }
+.aw-stat-value { font-size: 24px; font-weight: 600; line-height: 30px; letter-spacing: .3px; color: var(--aw-text); }
+.aw-stat-unit { font-size: 13px; color: var(--aw-text-3); font-weight: 400; margin-left: 4px; }
+.aw-stat-foot { font-size: 11px; color: var(--aw-text-3); display: flex; gap: 10px; flex-wrap: wrap; }
+
+.aw-table-footer { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 12px; color: var(--aw-text-3); }
+.aw-table-pager { margin-left: auto; display: flex; align-items: center; }
+
+.aw-split { display: flex; gap: 16px; align-items: flex-start; }
+.aw-split-main { flex: 1; min-width: 0; }
+.aw-split-aside { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+
+/* 原型 05 工单详情：frameless 双栏（左=页框主栏，右=380 轨道直接挂画布）。
+   保留现行滚动模型：左栏内滚 + sticky 评论，右栏自身滚动（display/overflow 为测试钉住的内联样式）；
+   右栏间距 12 由 RightPanel 内部 Space 承担。 */
+.aw-detail-page { display: flex; gap: 16px; height: 100%; min-height: 0; overflow: hidden; }
+.aw-detail-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.aw-detail-aside { flex-shrink: 0; overflow-y: auto; position: relative; }
+
+/* 原型 05 .section 契约：详情页内的 antd Card 统一 section 几何
+   （头 12/16 + 底部分隔线 + 标题 14/600，体 14/16）。显式 inline body padding 的卡不受影响。 */
+html .aw-detail-page .ant-card { background: var(--aw-panel); border: 1px solid var(--aw-border); border-radius: 8px; box-shadow: none; }
+html .aw-detail-page .ant-card > .ant-card-head { min-height: 0; padding: 12px 16px; border-bottom: 1px solid var(--aw-border); }
+html .aw-detail-page .ant-card > .ant-card-head .ant-card-head-title { padding: 0; font-size: 14px; font-weight: 600; white-space: normal; }
+html .aw-detail-page .ant-card > .ant-card-body { padding: 14px 16px; }
+/* 任务信息折叠区（原型 .section.collapsed）：白卡边框 + 头 12/16 + 标题 14/600；
+   展开的 body 与 section-body 同几何。内嵌子卡降级为无框子区块。 */
+html .aw-detail-page .aw-rail-collapse { background: var(--aw-panel); border: 1px solid var(--aw-border); border-radius: 8px; }
+html .aw-detail-page .aw-rail-collapse > .ant-collapse-item { border-bottom: 0; }
+html .aw-detail-page .aw-rail-collapse .ant-collapse-header { padding: 12px 16px; font-size: 14px; font-weight: 600; color: var(--aw-text); }
+html .aw-detail-page .aw-rail-collapse .ant-collapse-content-box { padding: 14px 16px; }
+html .aw-detail-page .aw-rail-collapse .ant-card { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+html .aw-detail-page .aw-rail-collapse .ant-card > .ant-card-head { padding: 8px 0; border-bottom: 0; }
+html .aw-detail-page .aw-rail-collapse .ant-card > .ant-card-head .ant-card-head-title { font-size: 12px; font-weight: 600; color: var(--aw-text-2); }
+html .aw-detail-page .aw-rail-collapse .ant-card > .ant-card-body { padding: 0 0 4px; }
+
+.aw-platform-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--aw-canvas); }
+.aw-platform-shell .aw-page-header { padding: 0 24px; }
+.ws-wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding: 24px 24px 48px; box-sizing: border-box; }
+
 .aw-workspace-menu .ant-dropdown-menu-title-content { min-width: 0; }
 
 /* Keep actions together without squeezing page titles into a vertical strip. */
@@ -155,15 +357,41 @@ html .aw-content-card > .ant-card-head .ant-card-extra { max-width: 100%; margin
 
 .aw-workitem-header-tools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px 12px; flex-shrink: 0; max-width: 40%; }
 .aw-workitem-header-tools [data-testid="workitem-credits-badge"] { font-weight: 400; }
-.aw-workitem-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--aw-border); color: var(--aw-muted); font-size: 13px; line-height: 1.6; }
+/* 原型 05 meta-row：12px 标签 text-3 + 值 text-2，分隔线归 op-bar */
+.aw-workitem-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 8px; color: var(--aw-text-3); font-size: 12px; line-height: 1.6; }
 .aw-workitem-meta > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.aw-workitem-meta b { color: var(--aw-text-2); font-weight: 400; margin-left: 4px; }
+.aw-workitem-meta b.aw-meta-mono { font-family: var(--aw-font-mono); }
 .aw-workitem-meta .ant-tag { max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: 12px; line-height: 22px; }
+/* 原型 12 run-meta：值加粗 600（工单 meta 是 400，两页不同档） */
+.aw-run-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--aw-text-3); font-size: 12px; line-height: 1.6; margin-bottom: 14px; }
+.aw-run-meta > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.aw-run-meta b { color: var(--aw-text-2); font-weight: 600; }
+.aw-run-meta b.aw-meta-mono { font-family: var(--aw-font-mono); }
+/* 原型 12/13/14/15 概要栅格：标签在上、值在下（desc-grid 两列 / id-grid 三列共用子项样式） */
+.aw-desc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 24px; }
+.aw-dk { font-size: 11px; color: var(--aw-text-3); margin-bottom: 2px; }
+.aw-dv { font-size: 12px; color: var(--aw-text); overflow-wrap: anywhere; }
+.aw-dv.aw-desc-mono { font-family: var(--aw-font-mono); }
+/* 原型 13 id-grid：三列身份属性栅格（子项复用 aw-dk/aw-dv） */
+.aw-id-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 24px; }
+/* 原型 14 基本信息栅格：四列按内容宽度排布，整行项跨满 */
+.aw-desc-grid--c4 { grid-template-columns: repeat(4, auto); gap: 12px 32px; justify-content: start; }
+.aw-desc-item--full { grid-column: 1 / -1; }
 .aw-workitem-tags-cell .aw-workitem-tags-edit { opacity: 0; transition: opacity .15s; }
 .aw-workitem-tags-cell:hover .aw-workitem-tags-edit,
 .aw-workitem-tags-cell:focus-within .aw-workitem-tags-edit,
 .aw-workitem-tags-cell .aw-workitem-tags-edit:focus-visible { opacity: 1; }
+/* 原型 04d 标签编辑微钮：18×18、text-3 浅色、11px 图标（验收返修 04d-4） */
+html .aw-workitem-tags-cell .aw-workitem-tags-edit.ant-btn { width: 18px; height: 18px; min-width: 18px; padding: 0; color: var(--aw-text-3); }
+html .aw-workitem-tags-cell .aw-workitem-tags-edit.ant-btn .aw-stroke-icon { width: 11px; height: 11px; }
+html .aw-workitem-tags-cell .aw-workitem-tags-edit.ant-btn:not(:disabled):hover { color: var(--aw-text); background: var(--aw-gray-bg); }
 .aw-workitem-intervention.ant-alert { padding: 10px 12px; align-items: center; }
 .aw-workitem-intervention .ant-alert-icon { font-size: 16px; margin-inline-end: 8px; }
 .aw-workitem-intervention .ant-alert-content { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
 .aw-workitem-intervention .ant-alert-message { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .aw-workitem-intervention .ant-alert-description { font-size: 13px; line-height: 1.6; color: var(--aw-muted); }
+/* 原型 14 lock-note：warn 底胶囊条，warn-deep 文案，图标 14 间距 6 */
+.aw-lock-note.ant-alert { background: var(--aw-warning-bg); border: 0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; align-items: center; }
+.aw-lock-note .ant-alert-icon { font-size: 14px; margin-inline-end: 6px; color: var(--aw-warning-deep); }
+.aw-lock-note .ant-alert-message { margin: 0; font-size: 12px; color: var(--aw-warning-deep); overflow-wrap: anywhere; }

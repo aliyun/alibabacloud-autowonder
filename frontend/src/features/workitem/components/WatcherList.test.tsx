@@ -32,7 +32,7 @@ describe('WatcherList', () => {
     expect(screen.getByText('关注人 (2)')).toBeInTheDocument();
     expect(screen.getByText('蔡何')).toBeInTheDocument();
     expect(screen.getByText('张三')).toBeInTheDocument();
-    expect(screen.getByText('工号: 10000')).toBeInTheDocument();
+    expect(screen.getByText('ID 10000')).toBeInTheDocument();
   });
 
   it('shows an empty state when nobody is watching', () => {
@@ -51,6 +51,6 @@ describe('WatcherList', () => {
 
     render(<WatcherList workitemId="42" />);
 
-    expect(screen.getByText('工号: 55')).toBeInTheDocument();
+    expect(screen.getByText('ID 55')).toBeInTheDocument();
   });
 });

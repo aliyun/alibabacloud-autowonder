@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { useEffect, useState } from 'react';
-import { CLARIFICATION_THEME } from './theme';
 
 export type ReplyingIndicatorStyle = 'dots' | 'spinner' | 'cursor';
 
@@ -39,26 +38,11 @@ function defaultPick(n: number): number {
   return Math.floor(Math.random() * n);
 }
 
-const replyIndicatorCss = `
-@keyframes aw-clarify-dot-bounce {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-  40% { transform: translateY(-4px); opacity: 1; }
-}
-@keyframes aw-clarify-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-@keyframes aw-clarify-cursor-blink {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
-}
-`;
-
 interface ReplyingIndicatorProps {
   agentName?: string;
 }
 
-/** 模型未结束回复期间的动态状态行：三种样式 + 文案池，每 5 秒随机轮换且不连续重复。 */
+/** 模型未结束回复期间的动态状态行：文案池每 5 秒随机轮换且不连续重复；样式值照常轮换（data-indicator-style），视觉统一为原型的三点。 */
 export function ReplyingIndicator({ agentName }: ReplyingIndicatorProps) {
   const { t } = useTranslation('workitem');
   const [style, setStyle] = useState<ReplyingIndicatorStyle>('dots');
@@ -74,48 +58,9 @@ export function ReplyingIndicator({ agentName }: ReplyingIndicatorProps) {
   }, []);
 
   return (
-    <div
-      className="aw-replying-indicator"
-      data-testid="clarification-replying-indicator"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', fontSize: 14,
-        color: CLARIFICATION_THEME.textMuted,
-      }}
-    >
-      <style>{replyIndicatorCss}</style>
-      {style === 'dots' ? (
-        <span style={{ display: 'inline-flex', gap: 3 }} aria-hidden>
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              style={{
-                width: 5, height: 5, borderRadius: '50%',
-                backgroundColor: CLARIFICATION_THEME.textMuted,
-                animation: `aw-clarify-dot-bounce 1.2s infinite ${i * 0.2}s`,
-              }}
-            />
-          ))}
-        </span>
-      ) : null}
-      {style === 'spinner' ? (
-        <span
-          aria-hidden
-          style={{
-            width: 12, height: 12, borderRadius: '50%',
-            // 2px 控件环用 controlBorder（10%）而不是 hairline（6%）：后者是分割线级别的
-            // 淡度，画在 2px 圆环上几乎看不见。
-            borderWidth: 2, borderStyle: 'solid', borderColor: CLARIFICATION_THEME.controlBorder,
-            borderTopColor: CLARIFICATION_THEME.textMuted,
-            animation: 'aw-clarify-spin 0.8s linear infinite',
-          }}
-        />
-      ) : null}
-      <span>
-        {agentName ? `${agentName} ` : ''}{t(textKey)}{style === 'cursor' ? <span
-          aria-hidden
-          style={{ animation: 'aw-clarify-cursor-blink 1s step-end infinite' }}
-        >▍</span> : null}
-      </span>
+    <div className="aw-cl-replying aw-replying-indicator" data-testid="clarification-replying-indicator" data-indicator-style={style}>
+      <span className="dots" aria-hidden><span /><span /><span /></span>
+      <span>{agentName ? `${agentName} ` : ''}{t(textKey)}</span>
     </div>
   );
 }

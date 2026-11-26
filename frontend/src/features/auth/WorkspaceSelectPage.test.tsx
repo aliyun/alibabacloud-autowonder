@@ -1,8 +1,9 @@
 import { i18n } from '@/shared/i18n';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { RouteGuard } from '@/app/RouteGuard';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
@@ -85,6 +86,7 @@ function renderPageWithLocation() {
 describe('WorkspaceSelectPage', () => {
   beforeEach(() => {
     useAuthStore.getState().clear();
+    server.use(http.get('/api/notifications/unread-count', () => HttpResponse.json({ success: true, data: 0 })));
   });
 
   it.each(['name', 'description'] as const)('shows the complete long %s on hover', async (field) => {
@@ -115,6 +117,100 @@ describe('WorkspaceSelectPage', () => {
     await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent('/profile/settings'));
   });
 
+  it.each([
+    { selected: true, count: 4 },
+    { selected: true, count: 0 },
+    { selected: false, count: 4 },
+  ])('uses the real notification action with selected=$selected and unread=$count', async ({ selected, count }) => {
+    useAuthStore.getState().setTokens('test-access', 'test-refresh');
+    useAuthStore.getState().setUser({ id: 7, username: 'alice', nickname: '爱丽丝', email: '' });
+    if (selected) useAuthStore.getState().setCurrentWorkspace(MANAGEABLE_WORKSPACE, 'READ_WRITE');
+    mockMine([MANAGEABLE_WORKSPACE]);
+    let unreadRequests = 0;
+    server.use(http.get('/api/notifications/unread-count', () => {
+      unreadRequests += 1;
+      return HttpResponse.json({ success: true, code: '0', data: count });
+    }));
+    renderPageWithLocation();
+    await screen.findByTestId('workspace-card-1');
+    const header = document.querySelector<HTMLElement>('.aw-page-header-actions')!;
+    const actions = Array.from(header.children);
+    expect(actions.map(action => action.getAttribute('aria-label'))).toEqual([
+      // Chief 入口由 Tooltip 包裹在 span 上，aria-label 位于内部按钮。
+      null, '帮助中心', '切换语言', '切换外观', '通知中心', '用户菜单',
+    ]);
+    expect(within(header).getByRole('button', { name: '打开 Chief' })).toBeInTheDocument();
+    expect(within(header).getByRole('link', { name: '帮助中心' })).toHaveAttribute('href', '/help');
+    const bell = within(header).getByRole('button', { name: '通知中心' });
+    expect(bell.querySelector('[data-glyph="bell"]')).not.toBeNull();
+    if (selected) await waitFor(() => expect(unreadRequests).toBe(1));
+    else expect(unreadRequests).toBe(0);
+    if (selected && count > 0) await waitFor(() => expect(bell.querySelector('.aw-bell-dot')).not.toBeNull());
+    else expect(bell.querySelector('.aw-bell-dot')).toBeNull();
+    expect(bell).toHaveTextContent('');
+    await act(async () => { await i18n.changeLanguage('en-US'); });
+    try {
+      expect(within(header).getByRole('button', { name: 'Notifications' })).toBe(bell);
+      bell.focus();
+      await userEvent.keyboard('{Enter}');
+      await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(/^\/notifications$/));
+      expect(useAuthStore.getState().isAuthenticated()).toBe(true);
+      expect(useAuthStore.getState().currentWorkspace?.id ?? null).toBe(selected ? 1 : null);
+      expect(unreadRequests).toBe(selected ? 1 : 0);
+    } finally {
+      await act(async () => { await i18n.changeLanguage('zh-CN'); });
+    }
+  });
+
+  it.each([true, false])('preserves the notification workspace route guard for authenticated users with selected=%s', async (selected) => {
+    useAuthStore.getState().setTokens('test-access', 'test-refresh');
+    useAuthStore.getState().setUser({ id: 7, username: 'alice', nickname: '', email: '' });
+    if (selected) useAuthStore.getState().setCurrentWorkspace(MANAGEABLE_WORKSPACE, 'READ_WRITE');
+    mockMine([MANAGEABLE_WORKSPACE]);
+    server.use(http.get('/api/notifications/unread-count', () => HttpResponse.json({ success: true, data: 0 })));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/workspaces']}>
+          <Routes>
+            <Route path="/workspaces" element={<RouteGuard requireWorkspace={false}><WorkspaceSelectPage /></RouteGuard>} />
+            <Route path="/notifications" element={<RouteGuard><span data-testid="guarded-notification-route" /></RouteGuard>} />
+          </Routes>
+          <LocationProbe />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: '通知中心' }));
+    if (selected) {
+      expect(await screen.findByTestId('guarded-notification-route')).toBeInTheDocument();
+      expect(screen.getByTestId('location-path')).toHaveTextContent(/^\/notifications$/);
+    } else {
+      expect(await screen.findByTestId('workspace-select-grid')).toBeInTheDocument();
+      expect(screen.getByTestId('location-path')).toHaveTextContent(/^\/workspaces(\?|$)/);
+      expect(screen.queryByTestId('guarded-notification-route')).not.toBeInTheDocument();
+    }
+    expect(useAuthStore.getState().isAuthenticated()).toBe(true);
+  });
+
+  it('shows supplied real zero counts and opens background without switching', async () => {
+    mockMine([{ ...MANAGEABLE_WORKSPACE, memberCount: 2, workitemCount: 0 }, { id: 2, name: '空背景', description: '', canManage: false }]);
+    renderPage();
+    const shell = await screen.findByTestId('workspace-card-shell-1');
+    expect(within(shell).getByText('2 名成员')).toBeInTheDocument();
+    expect(within(shell).getByText('0 个工单')).toBeInTheDocument();
+    await userEvent.click(within(shell).getByRole('button', { name: '查看工作空间背景 星云工坊' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('云原生研发')).toBeInTheDocument();
+    expect(useAuthStore.getState().currentWorkspace).toBeNull();
+    await userEvent.click(within(dialog).getByRole('button', { name: buttonName('关闭') }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const empty = screen.getByTestId('workspace-card-shell-2');
+    expect(empty.querySelector('.ws-count')).toBeNull();
+    await userEvent.click(within(empty).getByRole('button', { name: '查看工作空间背景 空背景' }));
+    expect(await screen.findByText('尚未填写工作空间背景')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).queryByRole('button', { name: buttonName('编辑') })).not.toBeInTheDocument();
+  });
+
   it('renders workspace cards with shared appearance tokens', async () => {
     useAuthStore.getState().setCurrentWorkspace({ id: 1, name: '星云工坊', description: '研发工作空间' }, 'READ_ONLY');
     server.use(
@@ -135,22 +231,18 @@ describe('WorkspaceSelectPage', () => {
 
     expect(await screen.findByText('云效集成平台')).toBeInTheDocument();
     expect(screen.getAllByText('星云工坊').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('workspace-select-grid')).toHaveStyle({
-      display: 'grid',
-    });
-    expect(screen.getByTestId('workspace-card-shell-1')).toHaveStyle({
-      background: 'var(--aw-panel)',
-      borderColor: 'var(--aw-accent-text)',
-      boxShadow: '0 0 0 1px var(--aw-accent-text)',
-    });
-    // F1.2: the shell owns the chrome, the inner control only owns the click. The border reset is
-    // asserted as 0px because jsdom drops a `border: none` shorthand entirely; see cardEnterStyle.
-    expect(screen.getByTestId('workspace-card-1')).toHaveStyle({
-      background: 'transparent',
-      border: '0px',
-      width: '100%',
-    });
-    expect(screen.getByTestId('workspace-create-card')).toBeInTheDocument();
+    // 原型 09：卡片视觉（3 列栅格、hover 主色边框、hover 浮现操作）在
+    // workspaceLifecycle.css，jsdom 只能钉类名与结构。
+    expect(screen.getByTestId('workspace-select-grid')).toHaveClass('ws-grid');
+    const activeShell = screen.getByTestId('workspace-card-shell-1');
+    expect(activeShell).toHaveClass('ws-card', 'ws-card--current');
+    expect(screen.getByTestId('workspace-card-2').closest('.ws-card')).not.toHaveClass('ws-card--current');
+    expect(screen.getByTestId('workspace-card-1')).toHaveClass('ws-card-enter');
+    // 「当前」徽标内联于标题行，不再是绝对定位角标。
+    const currentBadge = within(activeShell).getByText('当前');
+    expect(currentBadge).toHaveClass('ws-cur');
+    expect(currentBadge.closest('.ws-title')).not.toBeNull();
+    expect(screen.getByTestId('workspace-create-card')).toHaveClass('ws-new');
   });
 
   it('stores the access level returned when switching workspace', async () => {
@@ -339,7 +431,7 @@ describe('WorkspaceSelectPage', () => {
     expect(screen.getByText('共 1 个工作空间')).not.toBeVisible();
   });
 
-  it('opens the create-workspace form inside the mine pane', async () => {
+  it('opens the create-workspace form in the shared modal', async () => {
     const user = userEvent.setup();
     server.use(
       http.get('/api/workspaces/mine', () => HttpResponse.json({
@@ -355,8 +447,123 @@ describe('WorkspaceSelectPage', () => {
 
     await user.click(await screen.findByTestId('workspace-create-card'));
 
-    expect(screen.getByText('工作空间名称')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('输入工作空间名称')).toBeInTheDocument();
+    // 创建卡会先探测建空间权限再打开弹窗，等待异步探测完成。
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.closest('.ws-modal')).not.toBeNull();
+    expect(within(dialog).getByPlaceholderText('输入工作空间名称')).toBeInTheDocument();
+    expect(screen.getByTestId('workspace-create-card')).toBeInTheDocument();
+    expect(document.querySelector('.ws-form')).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: buttonName('创建') }));
+    expect(await within(dialog).findByText('工作空间名称不能为空')).toBeInTheDocument();
+    expect(dialog.querySelector('form')).toHaveClass('ws-workspace-form');
+  });
+
+  it('cancels creation without writing and resets the draft on reopening', async () => {
+    let createCalls = 0;
+    mockMine([]);
+    server.use(http.post('/api/workspaces', () => {
+      createCalls += 1;
+      return HttpResponse.json({ success: true, data: MANAGEABLE_WORKSPACE });
+    }));
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('workspace-create-card'));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('工作空间名称'), '未保存草稿');
+    await user.click(within(dialog).getByRole('button', { name: buttonName('取消') }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(createCalls).toBe(0);
+    await user.click(screen.getByTestId('workspace-create-card'));
+    expect(within(await screen.findByRole('dialog')).getByLabelText('工作空间名称')).toHaveValue('');
+    expect(createCalls).toBe(0);
+  });
+
+  it('keeps a rejected create draft and localizes field errors without writing', async () => {
+    let createCalls = 0;
+    mockMine([]);
+    server.use(http.post('/api/workspaces', () => {
+      createCalls += 1;
+      return HttpResponse.json({ success: false, code: '11003', message: '空间重名', data: null });
+    }));
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('workspace-create-card'));
+    // 创建卡先探测建空间权限再打开弹窗，负载高时探测会晚于点击返回。
+    const dialog = await screen.findByRole('dialog');
+    const name = within(dialog).getByLabelText('工作空间名称');
+    await user.type(name, '   ');
+    await user.click(within(dialog).getByRole('button', { name: buttonName('创建') }));
+    expect(await within(dialog).findByText('工作空间名称不能为空')).toBeInTheDocument();
+    expect(createCalls).toBe(0);
+    try {
+      await act(async () => { await i18n.changeLanguage('en-US'); });
+      expect(await within(dialog).findByText('Enter a workspace name')).toBeInTheDocument();
+      expect(name).toHaveValue('   ');
+      expect(createCalls).toBe(0);
+    } finally {
+      await act(async () => { await i18n.changeLanguage('zh-CN'); });
+    }
+    await user.clear(name);
+    await user.type(name, '重名草稿');
+    await user.click(within(dialog).getByRole('button', { name: buttonName('创建') }));
+    expect(await screen.findByText('空间重名')).toBeInTheDocument();
+    expect(createCalls).toBe(1);
+    expect(name).toHaveValue('重名草稿');
+    expect(dialog).toBeInTheDocument();
+    expect(useAuthStore.getState().currentWorkspace).toBeNull();
+    expect(within(dialog).getByRole('button', { name: buttonName('创建') })).toBeEnabled();
+  });
+
+  it('creates once under duplicate submissions, refetches and switches into the result', async () => {
+    const bodies: unknown[] = [];
+    let mineCalls = 0;
+    let switchCalls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    server.use(
+      http.get('/api/workspaces/mine', () => {
+        mineCalls += 1;
+        return HttpResponse.json({ success: true, data: bodies.length ? [MANAGEABLE_WORKSPACE] : [] });
+      }),
+      http.post('/api/workspaces', async ({ request }) => {
+        bodies.push(await request.json());
+        await gate;
+        return HttpResponse.json({ success: true, data: MANAGEABLE_WORKSPACE });
+      }),
+      http.post('/api/workspaces/1/switch', () => {
+        switchCalls += 1;
+        return HttpResponse.json({ success: true, data: { accessToken: 'created-workspace-token', accessLevel: 'ADMIN' } });
+      }),
+    );
+    renderPageWithLocation();
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId('workspace-create-card'));
+    // 创建卡先探测建空间权限再打开弹窗，负载高时探测会晚于点击返回。
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('工作空间名称'), '星云工坊');
+    await user.type(within(dialog).getByLabelText('工作空间描述'), '创建描述');
+    await user.type(within(dialog).getByLabelText('工作空间背景'), '原文背景');
+    const mineBefore = mineCalls;
+    try {
+      await act(async () => {
+        fireEvent.submit(dialog.querySelector('form')!);
+        fireEvent.submit(dialog.querySelector('form')!);
+      });
+      await waitFor(() => expect(bodies).toHaveLength(1));
+      expect(bodies[0]).toEqual({ name: '星云工坊', description: '创建描述', background: '原文背景' });
+      expect(within(dialog).getByRole('button', { name: buttonName('取消') })).toBeDisabled();
+      expect(switchCalls).toBe(0);
+    } finally {
+      release();
+    }
+    await waitFor(() => expect(useAuthStore.getState().currentWorkspace?.id).toBe(1));
+    expect(useAuthStore.getState().accessToken).toBe('created-workspace-token');
+    expect(useAuthStore.getState().accessLevel).toBe('ADMIN');
+    expect(bodies).toHaveLength(1);
+    expect(switchCalls).toBe(1);
+    expect(mineCalls).toBeGreaterThan(mineBefore);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('location-path')).toHaveTextContent(/^\/$/));
   });
 
   it('shows the empty state with a create card when the user has no workspaces', async () => {
@@ -372,8 +579,9 @@ describe('WorkspaceSelectPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('暂无已加入的工作空间，请创建一个')).toBeInTheDocument();
-    expect(screen.getByTestId('workspace-create-card')).toBeInTheDocument();
+    expect(await screen.findByTestId('workspace-create-card')).toHaveClass('ws-new--full');
+    expect(screen.getByTestId('workspace-select-grid').children).toHaveLength(1);
+    expect(screen.queryByText('暂无已加入的工作空间，请创建一个')).not.toBeInTheDocument();
     expect(screen.queryByTestId('workspace-card-1')).not.toBeInTheDocument();
   });
 
@@ -465,11 +673,13 @@ describe('WorkspaceSelectPage', () => {
     expect(enter).not.toContainElement(manageArea);
     expect(enter).not.toContainElement(screen.getByTestId('edit-workspace-1'));
     expect(enter).not.toContainElement(screen.getByTestId('delete-workspace-1'));
-    expect(manageArea.parentElement).toBe(enter.parentElement);
-    // In normal flow under the enter control rather than absolutely positioned over it, so it
-    // neither covers the card nor swallows its clicks (acceptance #18).
-    expect(manageArea).not.toHaveStyle({ position: 'absolute' });
-    expect(manageArea).toHaveStyle({ display: 'flex', justifyContent: 'flex-end' });
+    const footer = manageArea.parentElement!;
+    expect(footer).toHaveClass('ws-foot');
+    expect(footer.parentElement).toBe(enter.parentElement);
+    expect(manageArea).toHaveClass('ws-ops');
+    expect(enter.querySelector('button')).toBeNull();
+    expect(screen.getByTestId('edit-workspace-1').querySelector('svg')).toHaveAttribute('width', '14');
+    expect(screen.getByTestId('delete-workspace-1').querySelector('svg')).toHaveAttribute('height', '14');
 
     await user.click(screen.getByTestId('edit-workspace-1'));
     expect(await screen.findByText('编辑「星云工坊」')).toBeInTheDocument();

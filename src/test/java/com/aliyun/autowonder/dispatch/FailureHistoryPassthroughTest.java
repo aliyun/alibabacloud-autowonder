@@ -299,7 +299,8 @@ class FailureHistoryPassthroughTest {
         when(eventDao.listByDispatch(1L, 100L)).thenReturn(List.of(roundEvent, terminal));
         when(eventDao.listByDispatchInArrivalOrder(1L, 100L)).thenReturn(List.of(roundEvent, terminal));
 
-        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao);
+        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao,
+                new RuntimeTraceUsageFallback(mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class)));
         RuntimeTraceVO trace = service.get(1L, 100L);
 
         RuntimeTraceVO.Event roundEventView = trace.getEvents().get(0);
@@ -357,7 +358,8 @@ class FailureHistoryPassthroughTest {
         when(eventDao.listByDispatch(1L, 101L)).thenReturn(List.of(terminal));
         when(eventDao.listByDispatchInArrivalOrder(1L, 101L)).thenReturn(List.of(terminal));
 
-        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao);
+        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao,
+                new RuntimeTraceUsageFallback(mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class)));
         RuntimeTraceVO trace = service.get(1L, 101L);
 
         assertNull(trace.getEvents().get(0).getDetail().get("failureHistory"));

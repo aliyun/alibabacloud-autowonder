@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { init, use } from 'echarts/core';
 import { LineChart, BarChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent, AriaComponent } from 'echarts/components';
+import { LabelLayout } from 'echarts/features';
 import { SVGRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
 import { metricValue, type DeliveryReport, type Metric } from './types';
 import { smoothTrend } from './trend';
 import { axisRange, bucketPoint, labelDensity, tooltipRange, type LabelDensity } from './range';
 
-use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, AriaComponent, SVGRenderer]);
+use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, AriaComponent, LabelLayout, SVGRenderer]);
 const LABEL_TOP = 'top' as const;
 const AXIS_TRIGGER = 'axis' as const;
 const numeric = (value: unknown): number | null => typeof value === 'number' ? value : null;
@@ -46,7 +47,7 @@ export function DeliveryChart({ report, metric }: { report: DeliveryReport; metr
       const hoursMax = Math.ceil(paddedHours / hoursStep) * hoursStep;
       const bar = metric === 'delivered' || metric === 'workhours';
       const base = { name: t(metric), type: bar ? 'bar' as const : 'line' as const, data: points,
-        barMaxWidth: hours ? 20 : 34, symbolSize: 6, connectNulls: false, itemStyle: { color: hours ? regularColor : colors[metric] },
+        barMaxWidth: hours ? 20 : 22, symbolSize: 6, connectNulls: false, itemStyle: { color: hours ? regularColor : colors[metric], borderRadius: 2 },
         lineStyle: { width: 2 }, label: { show: density.showValue, position: LABEL_TOP, color: hours ? css.getPropertyValue('--aw-text').trim() : text,
           fontSize: density.valueFontSize, distance: hours ? 10 : 5,
           formatter: (p: { value?: unknown }) => format(numeric(p.value)) } };
@@ -78,8 +79,8 @@ export function DeliveryChart({ report, metric }: { report: DeliveryReport; metr
       };
       chart.setOption({
         animation: false, aria: { enabled: true },
-        grid: hours ? { top: 16, left: 40, right: 20, bottom: 38, containLabel: false }
-          : { top: 28, left: 18, right: 30, bottom: 30, containLabel: true },
+        grid: hours ? { top: 16, left: 40, right: 20, bottom: 38 }
+          : { top: 28, left: 18, right: 30, bottom: 30, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
         legend: { show: false },
         tooltip: { trigger: AXIS_TRIGGER, confine: true, formatter: tooltipFormatter },
         xAxis: { type: 'category', boundaryGap: !hours, data: weeks.map(axisRange),

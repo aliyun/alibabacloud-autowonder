@@ -9,26 +9,25 @@
     "repoName": "仓库名称",
     "repoUrl": "仓库地址",
     "branch": "默认分支",
-    "peer": "关联仓库",
+    "peer": "对端仓库",
     "relationType": "关系类型",
-    "source": "来源仓库",
+    "source": "源仓库",
     "target": "目标仓库"
   },
   "actions": {
-    "addRepo": "添加仓库",
+    "addRepo": "新建仓库",
     "deleteRepo": "删除仓库",
-    "map": "关系图",
+    "create": "创建",
     "save": "保存",
     "cancel": "取消",
-    "confirm": "确定",
     "delete": "删除",
     "back": "返回",
     "edit": "编辑",
     "backList": "返回列表",
-    "addRelation": "添加关系",
+    "addRelation": "新增关系",
     "deleteRelation": "删除关系",
     "close": "关闭",
-    "addRepoRelation": "添加仓库关系",
+    "addRepoRelation": "新增仓库关系",
     "deleteRepoRelation": "删除仓库关系",
     "editRepo": "编辑仓库信息",
     "saveRepo": "保存仓库信息",
@@ -51,7 +50,7 @@
     "scanConfirmed": "扫描结论已确认落库"
   },
   "errors": {
-    "addRepo": "添加仓库失败",
+    "addRepo": "新建仓库失败",
     "deleteRepo": "删除仓库失败",
     "save": "保存失败",
     "create": "创建失败",
@@ -70,6 +69,9 @@
     "typeRequired": "请选择关系类型",
     "nameInvalid": "仓库名称必须为单级目录名，不能包含 / 或 \\、. 或 ..、绝对路径。如填写的是 namespace/repo-name 形式的标识，请将完整标识填在仓库地址中，仓库名称只填单级目录名"
   },
+  "form": {
+    "nameHelp": "仅限字母、数字、中划线与下划线"
+  },
   "placeholders": {
     "urlExample": "https://github.com/example/repo 或 git@example.com:workspace/repo.git",
     "repoUrl": "Git 仓库地址",
@@ -78,16 +80,18 @@
     "source": "选择来源仓库",
     "target": "选择目标仓库",
     "type": "选择关系类型",
-    "description": "可选描述"
+    "description": "可选描述",
+    "repoDescription": "一句话说明仓库用途",
+    "branchOptional": "留空则不指定"
   },
   "confirm": {
-    "deleteHint": "删除后仓库及其所有关系将一并移除，此操作不可恢复。",
-    "deleteRelation": "确认删除此关系？",
-    "deleteRepo": "确认删除仓库「{{name}}」？"
+    "deleteHint": "删除后数字员工将无法访问该仓库，绑定关系与图谱连线一并移除。",
+    "deleteRelation": "确认删除该关系？",
+    "deleteRepo": "确认删除仓库 {{name}}？"
   },
   "tabs": {
-    "info": "基础信息",
-    "relations": "仓库关系",
+    "info": "信息",
+    "relations": "关系",
     "conclusion": "扫描结论",
     "frontendProjects": "前端子项目"
   },
@@ -175,26 +179,42 @@
     "fullscreen": "全屏查看",
     "fit": "适应画布",
     "empty": "暂无仓库或关系数据",
-    "emptyHint": "添加仓库并创建关系后，这里会展示调用与依赖关系。",
+    "emptyHint": "新建仓库并创建关系后，这里会展示调用与依赖关系。",
     "details": "关系详情",
     "source": "来源:",
     "target": "目标:",
     "type": "类型:",
+    "typeWithHint": "{{type}} · {{hint}}",
     "description": "描述:"
   },
   "hub": {
     "title": "仓库",
-    "listHint": "管理托管仓库与访问配置",
-    "mapHint": "查看与编辑仓库之间的依赖与调用关系"
+    "tabList": "仓库列表",
+    "tabMap": "关系图谱",
+    "hint": "接入平台的代码仓库 · 仓库之间的关系构成图谱，供数字员工派工与变更影响分析使用"
   },
   "relation": {
     "frontend": "前端",
     "backend": "后端",
-    "clientServer": "客户端调用服务端",
-    "serverClient": "服务端下发客户端",
+    "clientServer": "客户端-服务端",
+    "serverClient": "服务端-客户端",
     "gateway": "网关",
     "dependency": "依赖",
-    "service": "服务调用",
-    "other": "其他"
+    "service": "服务",
+    "other": "其他",
+    "directionPrompt": "关系方向：源仓库 → 目标仓库。",
+    "hint": {
+      "frontend": "{{source}} 是 {{target}} 的前端",
+      "backend": "{{source}} 是 {{target}} 的后端",
+      "clientServer": "{{source}} 是客户端，{{target}} 是服务端",
+      "serverClient": "{{source}} 是服务端，{{target}} 是客户端",
+      "gateway": "{{source}} 是 {{target}} 的网关",
+      "dependency": "{{source}} 依赖 {{target}}",
+      "service": "{{source}} 调用 {{target}} 提供的服务",
+      "other": "{{source}} 与 {{target}} 的其他关系"
+    }
+  },
+  "list": {
+    "total_other": "共 {{count}} 条"
   }
 }

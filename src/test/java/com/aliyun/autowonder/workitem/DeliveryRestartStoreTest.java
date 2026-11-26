@@ -44,6 +44,8 @@ class DeliveryRestartStoreTest {
         jdbc.execute("CREATE TABLE workitem_event (id BIGINT AUTO_INCREMENT PRIMARY KEY, "
                 + "tenant_id BIGINT, workitem_id BIGINT, event_type VARCHAR(64), actor_type VARCHAR(16), "
                 + "actor_ref BIGINT, detail_json VARCHAR(1024))");
+        jdbc.execute("CREATE TABLE agent (id BIGINT PRIMARY KEY, tenant_id BIGINT NOT NULL, "
+                + "name VARCHAR(128) NOT NULL)");
         store = new DeliveryRestartStore(jdbc);
     }
 
@@ -202,7 +204,18 @@ class DeliveryRestartStoreTest {
         assertEquals(2, rounds.size());
         assertEquals(2, ((Number) rounds.get(0).get("restart_round")).intValue());
         assertEquals(1, ((Number) rounds.get(1).get("restart_round")).intValue());
+        assertEquals(40013L, ((Number) rounds.get(0).get("agent_id")).longValue());
         assertEquals(1, store.listRounds(100L, 500L, 1).size());
+    }
+
+    @Test
+    void listRoundsResolvesAgentNameForRoundsWithoutDispatch() {
+        allocate(null, null);
+        jdbc.update("INSERT INTO agent (id, tenant_id, name) VALUES (40013, 100, 'AW测试工程师')");
+
+        Map<String, Object> round = store.listRounds(100L, 500L, 10).get(0);
+
+        assertEquals("AW测试工程师", round.get("agent_name"));
     }
 
     @Test

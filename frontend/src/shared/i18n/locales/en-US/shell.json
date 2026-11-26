@@ -1,5 +1,6 @@
 {
   "nav": {
+    "title": "Navigation menu",
     "delivery": "Delivery",
     "overview": "Overview",
     "workbench": "Workbench",
@@ -9,6 +10,7 @@
     "recycled": "Recycle bin",
     "agentsGroup": "Agents",
     "agents": "Employees",
+    "squads": "Squads",
     "executors": "Executors",
     "knowledge": "Knowledge",
     "repos": "Repositories",
@@ -23,25 +25,28 @@
     "backups": "Project configuration backups",
     "environment": "Environment variables",
     "settings": "System settings",
+    "settingsHub": "Settings",
+    "groupDeliveryConfig": "Configuration",
+    "groupWorkspace": "Workspace & access",
+    "groupCompliance": "Compliance",
+    "attention": {
+      "pendingReview": "{{value}} versions awaiting review",
+      "pendingReviewItem": "{{label}}, {{value}} versions awaiting review",
+      "initIncomplete": "Setup incomplete"
+    },
     "insightsGroup": "Insights",
     "insights": "Data insights",
     "audit": "Audit logs",
     "evolution": "Self-improvement",
     "learn": "Learn",
-    "about": "About"
-  },
-  "navMode": {
-    "label": "Navigation view",
-    "compact": "Focused",
-    "full": "Complete"
+    "about": "About",
+    "collapse": "Collapse",
+    "expand": "Expand"
   },
   "banner": {
-    "explanation": "The Chief of Staff platform agent coordinates your project: it accepts and breaks down work items, dispatches agents to deliver together, and builds team memory. Configure an executor and keep it online to automate work item delivery.",
-    "capabilities": "Platform agent capabilities",
-    "notConfigured": "The Chief of Staff platform agent has no executor configured",
+    "notConfigured": "Consider setting up the Chief of Staff platform agent",
     "offline": "All executors for the Chief of Staff platform agent are offline",
-    "details": "Details",
-    "dismiss": "Dismiss system notice",
-    "configure": "Configure executors"
+    "notConfiguredHint": "With an executor configured and started, Chief picks up work items, breaks down requirements, and coordinates agents to deliver.",
+    "offlineHint": "Restart an executor to resume automatic intake and collaborative delivery."
   }
 }

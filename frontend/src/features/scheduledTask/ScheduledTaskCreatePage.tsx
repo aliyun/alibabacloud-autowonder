@@ -1,12 +1,12 @@
 import { i18n } from '@/shared/i18n';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
-import { useTranslation } from 'react-i18next';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { Trans, useTranslation } from 'react-i18next';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
+import { AiIdentity } from '@/shared/ui/AiIdentity';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useEffect, useRef, useState } from 'react';
 import type { ClipboardEvent as ReactClipboardEvent, DragEvent as ReactDragEvent } from 'react';
-import { Alert, Button, Card, Collapse, Form, Input, message, Select, Space, Upload } from 'antd';
-import { InboxOutlined } from '@ant-design/icons';
+import { Alert, Button, Form, Input, message, Select, Upload } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import type { UploadFile } from 'antd/es/upload/interface';
@@ -23,13 +23,16 @@ import {
   type DocumentSelectionContext,
   type DocumentSelectionVerdict,
 } from '@/shared/lib/documentUpload';
+import { formatBytes } from '@/features/skill/skillPackage';
 import { useCreateScheduledTask, useUploadScheduledTaskDocuments } from './hooks';
 import { normalizeRunPolicy, RunPolicyEditor } from './components/RunPolicyEditor';
 import { ScheduleEditor } from './components/ScheduleEditor';
 import { transitionScheduledTask } from './api';
 import type { CreateScheduledTaskBody } from './types';
+import './ScheduledTaskForm.css';
 
 const { TextArea } = Input;
+const POLICY_FIELDS = ['sessionMode', 'overlapPolicy', 'misfirePolicy', 'startDeadlineSeconds', 'affinityTimeoutSeconds'];
 interface CreateFormValues { name: string; instructionMd: string; squadId: number; initialAgentId: number; scheduleType: 'ONCE' | 'CRON'; runAtDate?: Dayjs; runAtTime?: Dayjs; cronExpression?: string; sessionMode: 'ISOLATED' | 'CONTINUOUS'; overlapPolicy: 'SKIP' | 'QUEUE' | 'ALLOW'; misfirePolicy: 'SKIP_ALL' | 'FIRE_LATEST' | 'FIRE_ALL'; startDeadlineSeconds?: number; affinityTimeoutSeconds?: number; initialStatus?: 'ACTIVE' | 'PAUSED'; }
 export function initialStatusForCreate(requestedStatus: 'ACTIVE' | 'PAUSED', documentCount: number) {
   return documentCount > 0 && requestedStatus === 'ACTIVE' ? 'PAUSED' : requestedStatus;
@@ -66,6 +69,8 @@ export function ScheduledTaskCreatePage() {
   // rc-upload hands the whole selection to every beforeUpload call, so caching by batch identity
   // validates a multi-file drop once (all-or-nothing, like the workitem card) and reports one message.
   const documentBatchRef = useRef<{ batch: readonly File[]; verdict: DocumentSelectionVerdict; reported: boolean } | null>(null);
+  const [policyOpen, setPolicyOpen] = useState(false);
+  const sessionMode = Form.useWatch('sessionMode', form); const overlapPolicy = Form.useWatch('overlapPolicy', form); const misfirePolicy = Form.useWatch('misfirePolicy', form); const startDeadlineSeconds = Form.useWatch('startDeadlineSeconds', form);
   const squadId = Form.useWatch('squadId', form); const createTask = useCreateScheduledTask(); const uploadDocuments = useUploadScheduledTaskDocuments();
   const { data: squadsPage } = useQuery({ queryKey: ['squads', 'scheduled-task-selector'], queryFn: () => listSquads({ pageNum: 1, pageSize: 100 }) });
   const { data: members = [], isLoading: membersLoading } = useQuery({ queryKey: ['squads', squadId, 'members'], queryFn: () => getSquadMembers(squadId!), enabled: Boolean(squadId) });
@@ -150,15 +155,60 @@ export function ScheduledTaskCreatePage() {
       navigate(`/scheduled-tasks/${task.id}`);
     } catch { /* shared interceptor preserves the form for retry */ }
   });
-  return <Card className="aw-content-card" title={<PageHeading title={<span className="aw-detail-title"><PageBackButton to="/scheduled-tasks" label={t('actions.backToList')} /><span>{t('create.title')}</span></span>} />}><Form form={form} layout="vertical" onFinish={submit} initialValues={{ scheduleType: 'CRON', schedulePreset: 'daily', cronExpression: '0 0 2 * * *', sessionMode: 'ISOLATED', overlapPolicy: 'SKIP', misfirePolicy: 'SKIP_ALL', startDeadlineSeconds: 300, affinityTimeoutSeconds: 0, initialStatus: 'ACTIVE' }}>
-    <Form.Item name="name" label={t('form.name')} rules={[{ required: true, message: t('validation.nameRequired') }]}><Input maxLength={200} placeholder={t('form.namePlaceholder')} /></Form.Item>
-    <Form.Item name="instructionMd" label={t('form.instruction')} rules={[{ required: true, message: t('validation.instructionRequired') }]}><TextArea rows={6} placeholder={t('form.instructionPlaceholder')} /></Form.Item>
-    <Form.Item name="squadId" label={t('form.squad')} rules={[{ required: true, message: t('validation.squadRequired') }]}><Select showSearch optionFilterProp="label" options={(squadsPage?.list ?? []).map((squad) => ({ value: squad.id, label: squad.name }))} onChange={() => form.setFieldValue('initialAgentId', undefined)} placeholder={t('form.squadPlaceholder')} /></Form.Item>
-    <Form.Item name="initialAgentId" label={t('form.initialAgent')} rules={[{ required: true, message: t('validation.agentRequired') }]}><Select loading={membersLoading} disabled={!squadId} onChange={setSelectedAgentId} options={members.map((member) => ({ value: member.agentId, label: member.agentName }))} placeholder={t('form.agentPlaceholder')} /></Form.Item>
-    {(() => { const selectedMember = members.find((member) => member.agentId === Number(selectedAgentId)); return selectedMember ? <Alert type="info" showIcon message={t('create.agentWorkflow', { agent: selectedMember.agentName, workflow: selectedMember.sdlcName || t('create.noWorkflow') })} description={selectedMember.sdlcSteps?.length ? selectedMember.sdlcSteps.map((step) => `${step.stepOrder}. ${step.name}`).join(' → ') : undefined} style={{ marginBottom: 16 }} /> : null; })()}
-    <Form.Item label={t('form.timezone')}><Input value="Asia/Shanghai" disabled /></Form.Item><ScheduleEditor timezone="Asia/Shanghai" />
-    <Collapse items={[{ key: 'policy', label: t('form.policySection'), children: <RunPolicyEditor /> }]} />
-    <Form.Item label={t('form.documents')} style={{ marginTop: 24 }} extra={t('form.documentsHelp')}><div data-testid="scheduled-task-document-dropzone" aria-label={t('form.documentsAria')} tabIndex={0} onPaste={handlePaste} onDropCapture={handleDropGuard} style={{ outline: 'none' }}><Upload.Dragger multiple accept={DOCUMENT_ACCEPT_ATTRIBUTE} beforeUpload={beforeUpload} fileList={files} onChange={({ fileList }) => setFiles(fileList)}><p className="ant-upload-drag-icon"><InboxOutlined aria-hidden="true" /></p><p className="ant-upload-text">{t('form.documentsPrompt')}</p></Upload.Dragger></div></Form.Item>
-    <Space><Button type="primary" htmlType="submit" loading={createTask.isPending} onClick={() => form.setFieldValue('initialStatus', 'ACTIVE')}>{t('actions.createEnable')}</Button><Button htmlType="submit" loading={createTask.isPending} onClick={() => form.setFieldValue('initialStatus', 'PAUSED')}>{t('actions.savePaused')}</Button><Button onClick={() => navigate('/scheduled-tasks')}>{t('actions.cancel')}</Button></Space>
-  </Form></Card>;
+  const selectedMember = members.find((member) => member.agentId === Number(selectedAgentId));
+  const submitAs = (status: 'ACTIVE' | 'PAUSED') => { form.setFieldValue('initialStatus', status); form.submit(); };
+  const sessionLabels: Record<string, string> = { ISOLATED: t('session.isolated'), CONTINUOUS: t('session.continuous') };
+  const overlapLabels: Record<string, string> = { SKIP: t('overlap.skip'), QUEUE: t('overlap.queue'), ALLOW: t('overlap.allow') };
+  const misfireLabels: Record<string, string> = { SKIP_ALL: t('misfire.skipAll'), FIRE_LATEST: t('misfire.fireLatest'), FIRE_ALL: t('misfire.fireAll') };
+  const policySummary = t('create.policySummary', { session: sessionLabels[sessionMode] ?? '', overlap: overlapLabels[overlapPolicy] ?? '', misfire: misfireLabels[misfirePolicy] ?? '', seconds: startDeadlineSeconds ?? '' });
+  const openPolicyOnError = ({ errorFields }: { errorFields: { name: (string | number)[] }[] }) => {
+    if (errorFields.some((field) => POLICY_FIELDS.includes(String(field.name[0])))) setPolicyOpen(true);
+  };
+  return <>
+    <div className="aw-form-head">
+      <PageBackButton to="/scheduled-tasks" label={t('actions.backToList')} />
+      <span className="aw-form-title">{t('create.title')}</span>
+    </div>
+    <Form form={form} className="aw-sched-form" layout="vertical" onFinish={submit} onFinishFailed={openPolicyOnError} initialValues={{ scheduleType: 'CRON', schedulePreset: 'daily', cronExpression: '0 0 2 * * *', sessionMode: 'ISOLATED', overlapPolicy: 'SKIP', misfirePolicy: 'SKIP_ALL', startDeadlineSeconds: 300, affinityTimeoutSeconds: 0, initialStatus: 'ACTIVE' }}>
+      <div className="aw-sched-sec">
+        <div className="aw-sched-sec-title">{t('create.sections.content')}</div>
+        <Form.Item name="name" label={t('form.name')} rules={[{ required: true, message: t('validation.nameRequired') }]}><Input maxLength={200} showCount placeholder={t('form.namePlaceholder')} /></Form.Item>
+        <Form.Item name="instructionMd" label={t('form.instruction')} extra={t('form.instructionHelp')} rules={[{ required: true, message: t('validation.instructionRequired') }]}><TextArea rows={6} /></Form.Item>
+      </div>
+      <div className="aw-sched-sec">
+        <div className="aw-sched-sec-title">{t('create.sections.executor')}</div>
+        <div className="aw-sched-grid">
+          <Form.Item name="squadId" label={t('form.squad')} rules={[{ required: true, message: t('validation.squadRequired') }]}><Select showSearch optionFilterProp="label" options={(squadsPage?.list ?? []).map((squad) => ({ value: squad.id, label: squad.name }))} onChange={() => form.setFieldValue('initialAgentId', undefined)} placeholder={t('form.squadPlaceholder')} /></Form.Item>
+          <Form.Item name="initialAgentId" label={t('form.initialAgent')} rules={[{ required: true, message: t('validation.agentRequired') }]}><Select loading={membersLoading} disabled={!squadId} onChange={setSelectedAgentId} options={members.map((member) => ({ value: member.agentId, label: <AiIdentity name={member.agentName} avatar icon size="sm" /> }))} placeholder={t('form.agentPlaceholder')} /></Form.Item>
+        </div>
+        {selectedMember ? <div className="aw-sched-flow" data-flow>
+          {selectedMember.sdlcName
+            ? <Trans t={t} i18nKey="create.flowLine" values={{ workflow: selectedMember.sdlcName }} components={{ k: <span className="fl-k" />, b: <b /> }} />
+            : <span className="fl-k">{t('create.noWorkflow')}</span>}
+          {selectedMember.sdlcSteps?.length ? <span className="fl-steps">{selectedMember.sdlcSteps.map((step) => <span key={step.stepOrder} className="cs">{t('create.stepChip', { order: step.stepOrder, name: step.name })}</span>)}</span> : null}
+        </div> : null}
+      </div>
+      <div className="aw-sched-sec">
+        <div className="aw-sched-sec-title">{t('create.sections.schedule')}</div>
+        <ScheduleEditor timezone="Asia/Shanghai" />
+      </div>
+      <div className="aw-sched-sec">
+        <button type="button" className="aw-sched-sec-title" aria-expanded={policyOpen} aria-controls="scheduled-task-policy" onClick={() => setPolicyOpen((open) => !open)}>
+          <span>{t('create.sections.policy')}</span><AwStrokeIcon name="chev-d" size={12} />
+          {policyOpen ? null : <span className="aw-sched-sec-sum">{policySummary}</span>}
+        </button>
+        <div id="scheduled-task-policy" className="aw-sched-grid" hidden={!policyOpen}><RunPolicyEditor /></div>
+      </div>
+      <div className="aw-sched-sec">
+        <div className="aw-sched-sec-title">{t('form.documents')}<span className="aw-sched-opt">{t('create.optional')}</span></div>
+        <Form.Item extra={t('form.documentsHelp')}><div data-testid="scheduled-task-document-dropzone" aria-label={t('form.documentsAria')} tabIndex={0} onPaste={handlePaste} onDropCapture={handleDropGuard} style={{ outline: 'none' }}><Upload.Dragger className="aw-sched-dragger" multiple accept={DOCUMENT_ACCEPT_ATTRIBUTE} beforeUpload={beforeUpload} fileList={files} onChange={({ fileList }) => setFiles(fileList)} itemRender={(_node, file, _list, { remove }) => <div className="aw-sched-file"><AwStrokeIcon name="doc" size={13} /><span className="nm" title={file.name}>{file.name}</span><span className="fs">{formatBytes(file.originFileObj?.size ?? file.size ?? 0)}</span><button type="button" className="fx" aria-label={t('form.removeDocument', { name: file.name })} onClick={remove}><AwStrokeIcon name="x" size={13} /></button></div>}><AwStrokeIcon name="upload" size={20} /><span className="aw-sched-drop-text">{t('form.documentsPrompt')}</span></Upload.Dragger></div></Form.Item>
+        {files.length ? <Alert className="aw-sched-doc-note" type="warning" showIcon message={t('create.docPauseNote')} /> : null}
+      </div>
+    </Form>
+    <div className="aw-form-foot">
+      <Button type="primary" loading={createTask.isPending} onClick={() => submitAs('ACTIVE')}>{t('actions.createEnable')}</Button>
+      <Button loading={createTask.isPending} onClick={() => submitAs('PAUSED')}>{t('actions.savePaused')}</Button>
+      <Button onClick={() => navigate('/scheduled-tasks')}>{t('actions.cancel')}</Button>
+    </div>
+  </>;
 }

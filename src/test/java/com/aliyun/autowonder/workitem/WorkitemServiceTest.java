@@ -1632,6 +1632,50 @@ class WorkitemServiceTest {
     }
 
     @Test
+    void streamedProgressKeepsUnscopedPausesAndUsesOnlyObservedActivity() {
+        WorkitemDO workitem = new WorkitemDO();
+        workitem.setId(100L);
+        workitem.setTenantId(7L);
+        workitem.setSdlcId(10L);
+        workitem.setAssigneeType("AGENT");
+        workitem.setAssigneeRef(41L);
+        when(workitemDao.findById(100L)).thenReturn(workitem);
+        when(sdlcResolver.resolveSdlcId(7L, 41L)).thenReturn(10L);
+        var stage = step(101L, 10L, 1, "Build");
+        when(sdlcStepDao.findById(101L)).thenReturn(stage);
+        when(sdlcStepDao.listBySdlc(10L)).thenReturn(List.of(stage));
+        when(agentDao.findById(41L)).thenReturn(agent(41L, "worker"));
+        when(dispatchDao.listByWorkitem(7L, 100L)).thenReturn(List.of(
+                dispatch(301L, 101L, 41L, DispatchStatus.FAILED, 0L, 100_000L, null)));
+
+        var summary = runtimeEvent(6, 301, 41, "step.timing", 1, "Build", 85_000, null);
+        summary.setDetailJson("""
+                {"timing":{"version":1,"segmentId":"first","elapsedMs":4000,
+                           "externalWaitMs":3000,"processingMs":0,"unknownMs":1000}}
+                """);
+        stubProgressEvents(List.of(
+                runtimeEvent(1, 301, 41, "step.started", 1, "Build", 1000, null),
+                runtimeEvent(2, 301, 41, "session.interrupted", null, null, 4000, null),
+                runtimeEvent(3, 301, 41, "session.resumed", null, null, 8000, null),
+                runtimeEvent(4, 301, 41, "agent.tool_result", null, null, 11_000, null),
+                runtimeEvent(5, 301, 99, "agent.tool_result", null, null, 12_000, null),
+                summary));
+
+        var progress = service.getDeliveryProgress(100L, 7L);
+        var timing = progress.getExecutions().getFirst().getStepTimings().getFirst();
+        assertEquals(11_000L, timing.getDurationMs());
+        assertEquals(4000L, timing.getOtherWaitMs());
+        assertEquals(3000L, timing.getExternalWaitMs());
+        assertEquals(88_000L, timing.getUnobservedTailMs());
+        assertEquals(10_000L, progress.getAgents().getFirst().getSteps().getFirst().getDurationMs());
+
+        summary.setDetailJson("{\"timing\":{\"version\":99}}");
+        var legacy = service.getDeliveryProgress(100L, 7L);
+        assertEquals(99_000L, legacy.getExecutions().getFirst().getStepTimings().getFirst().getDurationMs());
+        assertEquals(99_000L, legacy.getAgents().getFirst().getSteps().getFirst().getDurationMs());
+    }
+
+    @Test
     void executionTimingsUseTheHistoricalFlowAndSeparateRetries() {
         WorkitemDO workitem = new WorkitemDO();
         workitem.setId(100L); workitem.setTenantId(7L); workitem.setSdlcId(20L);
@@ -2609,7 +2653,9 @@ class WorkitemServiceTest {
         when(dispatchDao.listByWorkitem(7L, 100L)).thenReturn(List.of(running));
         stubProgressEvents(List.of(
                 runtimeEvent(1L, 302L, 41L, "step.started", 1, "需求分析与评论", 70_000L, "开始"),
-                runtimeEvent(2L, 302L, 41L, "step.failed", 1, "需求分析与评论", 90_000L, "missing completion request")
+                runtimeEvent(2L, 302L, 41L, "step.failed", 1, "需求分析与评论", 90_000L, "missing completion request"),
+                runtimeEvent(3L, 302L, 41L, "step.timing", 1, "需求分析与评论", 91_000L, null),
+                runtimeEvent(4L, 302L, 41L, "operation.timing", 1, "需求分析与评论", 92_000L, null)
         ));
         when(presenceManager.isExecutorOnline(51L)).thenReturn(true);
         when(agentDao.findById(41L)).thenReturn(agent(41L, "AW全栈开发"));

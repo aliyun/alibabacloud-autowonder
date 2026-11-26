@@ -7,6 +7,7 @@ import com.aliyun.autowonder.common.error.ErrorCode;
 import com.aliyun.autowonder.repo.RepoService;
 import com.aliyun.autowonder.repo.dto.RepoVO;
 import com.aliyun.autowonder.sdlc.SdlcService;
+import com.aliyun.autowonder.sdlc.dto.CreateSdlcRequest;
 import com.aliyun.autowonder.sdlc.dto.SdlcVO;
 import com.aliyun.autowonder.sdlc.dto.StepVO;
 import com.aliyun.autowonder.sdlc.dto.UpdateStepRequest;
@@ -378,6 +379,7 @@ class WorkspaceConfigurationServiceTest {
         SdlcVO shared = new SdlcVO();
         shared.setId(400L);
         shared.setName("共享全栈流程");
+        shared.setStageTimingEnabled(true);
         StepVO sharedStep = new StepVO();
         sharedStep.setId(900L);
         sharedStep.setSdlcId(400L);
@@ -416,7 +418,9 @@ class WorkspaceConfigurationServiceTest {
                 "snapshotId", second.get("snapshotId"), "snapshotHash", second.get("snapshotHash")));
         assertEquals("SUCCEEDED", secondRun.get("status"));
 
-        verify(sdlcService, org.mockito.Mockito.times(1)).create(any(), eq(11L), eq(110L));
+        ArgumentCaptor<CreateSdlcRequest> created = ArgumentCaptor.forClass(CreateSdlcRequest.class);
+        verify(sdlcService).create(created.capture(), eq(11L), eq(110L));
+        assertTrue(created.getValue().isStageTimingEnabled());
         ArgumentCaptor<UpdateStepRequest> captor = ArgumentCaptor.forClass(UpdateStepRequest.class);
         verify(sdlcService, org.mockito.Mockito.times(2))
                 .updateStep(eq(800L), eq(900L), captor.capture(), eq(11L), eq(110L));

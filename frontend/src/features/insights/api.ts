@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/api/client';
-import type { InsightMetrics, InsightAuditPage, InsightWorker, TimeRange, HumanAgentParticipation, HumanAgentSlowTail, MemberDeliveryReport, StageDurationReport } from './types';
+import type { InsightMetrics, InsightAuditPage, InsightWorker, TimeRange, HumanAgentParticipation, HumanAgentSlowTail, MemberDeliveryReport, StageDurationReport, StageDurationPlan, StageDurationAgentVersion } from './types';
 
 export async function getInsightMetrics(params: {
   workerId?: number;
@@ -31,19 +31,56 @@ export async function getInsightAudit(params: {
   return resp.data;
 }
 
+export async function getStageWorkers(excludeCanceled = false): Promise<InsightWorker[]> {
+  const resp = await apiClient.get<InsightWorker[]>('/api/insights/stage-duration/workers', { params: { exclude_canceled_workitems: excludeCanceled } });
+  return resp.data;
+}
+
 export async function getInsightWorkers(): Promise<InsightWorker[]> {
   const resp = await apiClient.get<InsightWorker[]>('/api/insights/workers');
   return resp.data;
 }
 
-export async function getStageDuration(params: {
+export interface StageDurationQuery {
   startDate: string;
   endDate: string;
   squadId?: number;
-  sdlcId?: number;
-}): Promise<StageDurationReport> {
-  const resp = await apiClient.get<StageDurationReport>('/api/insights/stage-duration', {
-    params: { start_date: params.startDate, end_date: params.endDate, squad_id: params.squadId, sdlc_id: params.sdlcId },
+  sdlcId?: number | string;
+  agentId?: string | number;
+  agentVersionId?: number;
+  status?: string;
+  excludeCanceled?: boolean;
+  groupBy?: 'stage' | 'agent_version' | 'sdlc_snapshot';
+  maxDispatchId?: number | null;
+}
+
+function stageDurationParams(params: StageDurationQuery) {
+  return {
+    start_date: params.startDate, end_date: params.endDate, squad_id: params.squadId, sdlc_id: params.sdlcId,
+    agent_id: params.agentId, group_by: params.groupBy, agent_version_id: params.agentVersionId, status: params.status,
+    exclude_canceled_workitems: params.excludeCanceled,
+    ...(params.maxDispatchId == null ? {} : { max_dispatch_id: params.maxDispatchId }),
+  };
+}
+
+export async function getStageDuration(params: StageDurationQuery): Promise<StageDurationReport> {
+  const resp = await apiClient.get<StageDurationReport>('/api/insights/stage-duration', { params: stageDurationParams(params) });
+  return resp.data;
+}
+
+export async function getStageDurationPlan(params: StageDurationQuery): Promise<StageDurationPlan> {
+  const resp = await apiClient.get<StageDurationPlan>('/api/insights/stage-duration/plan', { params: stageDurationParams(params) });
+  return resp.data;
+}
+
+export async function getStageVersions(agentId: string, excludeCanceled = false): Promise<StageDurationAgentVersion[]> {
+  const resp = await apiClient.get<StageDurationAgentVersion[]>('/api/insights/stage-duration/versions', { params: { agent_id: agentId, exclude_canceled_workitems: excludeCanceled } });
+  return resp.data;
+}
+
+export async function getStageVersionSamples(agentId: string, versionIds: string[], range: { startDate: string; endDate: string }, excludeCanceled = false): Promise<StageDurationReport> {
+  const resp = await apiClient.get<StageDurationReport>('/api/insights/stage-duration/version-samples', {
+    params: { agent_id: agentId, version_ids: versionIds.join(','), start_date: range.startDate, end_date: range.endDate, exclude_canceled_workitems: excludeCanceled },
   });
   return resp.data;
 }

@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Modal } from 'antd';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
 import { WorkitemDetailPage } from './WorkitemDetailPage';
@@ -181,8 +182,8 @@ function mockClarifyEndpoints() {
 }
 
 function renderPage(id = '1') {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/workitems/${id}`]}>
         <Routes>
@@ -192,6 +193,32 @@ function renderPage(id = '1') {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...result, queryClient };
+}
+
+async function openWorkitemMenu() {
+  await userEvent.click(await screen.findByRole('button', { name: '更多工单操作' }));
+  return screen.findByRole('menu');
+}
+
+async function clickWorkitemMenuItem(name: string) {
+  const menu = await openWorkitemMenu();
+  await userEvent.click(within(menu).getByRole('menuitem', { name }));
+}
+
+// 提及候选的高亮会把命中片段包进 <span>，可访问名被拆开，按 title（完整名称）定位。
+async function findMentionItem(name: RegExp) {
+  return waitFor(() => {
+    const match = screen.getAllByRole('menuitem').find((item) => name.test(item.getAttribute('title') ?? ''));
+    if (!match) throw new Error(`mention item not found: ${name}`);
+    return match;
+  });
+}
+
+function pending<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => { resolve = res; });
+  return { promise, resolve };
 }
 
 // jsdom 没有 PointerEvent 构造器，fireEvent.pointer* 会丢失坐标，用 MouseEvent 派生 pointer 事件
@@ -206,6 +233,7 @@ describe('WorkitemDetailPage', () => {
   });
 
   afterEach(() => {
+    Modal.destroyAll();
     vi.unstubAllGlobals();
   });
 
@@ -327,7 +355,7 @@ describe('WorkitemDetailPage', () => {
     renderPage();
 
     expect(await screen.findByTestId('requirement-documents-card')).toBeInTheDocument();
-    expect(screen.getAllByText('需求/设计文档').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('需求与设计').length).toBeGreaterThan(0);
     expect(await screen.findByText('spec.md')).toBeInTheDocument();
     expect(screen.getAllByText(/128 B/).length).toBeGreaterThan(0);
   });
@@ -562,7 +590,10 @@ describe('WorkitemDetailPage', () => {
     renderPage();
 
     await waitFor(() => expect(document.querySelector('.aw-workitem-meta')).toHaveTextContent('创建者: 导入人'));
-    expect(screen.getByRole('button', { name: /重新指派/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '再次交付' })).toBeInTheDocument();
+    const menu = await openWorkitemMenu();
+    expect(within(menu).getByRole('menuitem', { name: '重新指派' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '更多工单操作' }));
     await userEvent.click(await screen.findByRole('button', { name: '任务信息' }));
     expect(await screen.findByText('外部协作')).toBeInTheDocument();
     expect(screen.getByText('需求提出人（001）')).toBeInTheDocument();
@@ -583,8 +614,8 @@ describe('WorkitemDetailPage', () => {
     renderPage();
 
     await userEvent.click(await screen.findByRole('button', { name: '任务信息' }));
-    await waitFor(() => expect(screen.getAllByText('成员').length).toBeGreaterThan(0));
-    await userEvent.click(screen.getByRole('tab', { name: '真人参与者' }));
+    await waitFor(() => expect(screen.getByRole('tablist', { name: '成员' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('tab', { name: '真人' }));
     expect(await screen.findByText('张三')).toBeInTheDocument();
   });
 
@@ -765,9 +796,10 @@ describe('WorkitemDetailPage', () => {
     server.use(...setupHandlers());
     renderPage();
 
-    expect(await screen.findByTestId('workitem-content-section')).toHaveStyle('border-radius: 8px');
-    expect(screen.getByTestId('workitem-timeline-section')).toHaveStyle('border-radius: 8px');
-    expect(screen.getByTestId('workitem-right-panel')).toHaveStyle('width: clamp(340px, 28vw, 420px)');
+    expect(await screen.findByTestId('workitem-content-section')).toHaveClass('aw-wi-section', 'aw-wi-collapsible');
+    expect(screen.getByTestId('workitem-timeline-section')).toHaveClass('aw-wi-section');
+    expect(screen.getByTestId('workitem-head-card')).toHaveClass('aw-detail-head-card');
+    expect(screen.getByTestId('workitem-right-panel')).toHaveStyle('width: 380px');
   });
 
   it('applies clarify width on the right panel container and bottom-anchors the clarify box', async () => {
@@ -831,8 +863,33 @@ describe('WorkitemDetailPage', () => {
 
     // 副标题元信息区间距已迁到 crystal.css 的 .aw-workitem-meta（margin-top: 12px），
     // vitest 不加载 CSS 文件（css 未开启），改为断言类名装配；评论区间距仍是内联样式可直接断言。
-    expect((await screen.findByText(/优先级:/)).parentElement).toHaveClass('aw-workitem-meta');
+    await screen.findByRole('heading', { name: '跨境支付重构' });
+    expect(document.querySelector('.aw-workitem-meta')).toBeInTheDocument();
+    expect(within(screen.getByTestId('workitem-action-tags')).getByText('高')).toBeInTheDocument();
     expect(screen.getByTestId('workitem-comment-input')).toHaveStyle('margin-top: 14px');
+  });
+
+  it('only focuses the existing textarea when adding a comment and creates nothing', async () => {
+    const create = vi.fn(() => HttpResponse.json({ success: true, code: '0', data: null }));
+    server.use(
+      ...setupHandlers(),
+      http.post('/api/workitems/1/comments', create),
+      http.post('/api/workitems/1/clarification-conversations', create),
+      http.post('/api/workitems', create),
+    );
+    renderPage();
+    const composer = await screen.findByPlaceholderText('输入评论，键入 @ 选择成员...');
+    fireEvent.change(composer, { target: { value: '已有草稿不应被提交或清空' } });
+    const add = screen.getByRole('button', { name: '添加评论' });
+    await userEvent.click(add);
+    expect(composer).toHaveFocus();
+    expect(composer).toHaveValue('已有草稿不应被提交或清空');
+    expect(screen.getByPlaceholderText('输入评论，键入 @ 选择成员...')).toBe(composer);
+    expect(within(screen.getByTestId('workitem-sticky-comment')).getAllByRole('textbox')).toEqual([composer]);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await userEvent.click(add);
+    expect(composer).toHaveFocus();
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('uses a multiline autosizing composer for comments', async () => {
@@ -845,7 +902,7 @@ describe('WorkitemDetailPage', () => {
     await user.click(composer);
     expect(composer).toHaveAttribute('rows', '3');
     expect(composer).toHaveStyle({
-      lineHeight: '22px',
+      lineHeight: '20px',
       letterSpacing: '0',
       whiteSpace: 'pre-wrap',
       overflowWrap: 'break-word',
@@ -859,12 +916,10 @@ describe('WorkitemDetailPage', () => {
 
     const composer = await screen.findByPlaceholderText('输入评论，键入 @ 选择成员...');
     await user.type(composer, '@');
-    const option = await screen.findByRole('menuitem', { name: /Coder-01/ });
+    const option = await findMentionItem(/Coder-01/);
 
-    expect(within(option).getByText('@Coder-01')).toHaveStyle({
-      padding: '0px 4px',
-      fontWeight: '600',
-    });
+    expect(within(option).getByText('Coder-01')).toBeInTheDocument();
+    expect(option).toHaveAttribute('title', 'Coder-01');
     await user.click(option);
     expect(composer).toHaveValue('@Coder-01 ');
     expect(screen.queryByTestId('comment-input-highlight-layer')).not.toBeInTheDocument();
@@ -884,7 +939,7 @@ describe('WorkitemDetailPage', () => {
     composer.setSelectionRange(7, 7);
     fireEvent.keyUp(composer);
 
-    await user.click(await screen.findByRole('menuitem', { name: /Coder-01/ }));
+    await user.click(await findMentionItem(/Coder-01/));
 
     expect(composer).toHaveValue('第一行\n@Coder-01 第二行');
     expect(composer.selectionStart).toBe('@Coder-01 '.length + '第一行\n'.length);
@@ -957,7 +1012,7 @@ describe('WorkitemDetailPage', () => {
     await user.type(composer, '@');
     await user.click(await screen.findByRole('menuitem', { name: /Coder-01/ }));
     await user.type(composer, '先检查并发边界');
-    await user.click(screen.getByRole('button', { name: /发送/ }));
+    await user.click(screen.getByRole('button', { name: /^发\s?送$/ }));
 
     await waitFor(() => expect(requestBody).toEqual({
       contentMd: '@Coder-01 先检查并发边界', targetAgentIds: [100],
@@ -981,9 +1036,9 @@ describe('WorkitemDetailPage', () => {
 
     const composer = await screen.findByPlaceholderText('输入评论，键入 @ 选择成员...');
     await user.type(composer, '@张');
-    await user.click(await screen.findByRole('menuitem', { name: /张三/ }));
+    await user.click(await findMentionItem(/张三/));
     await user.type(composer, '请确认验收口径');
-    await user.click(screen.getByRole('button', { name: /发送/ }));
+    await user.click(screen.getByRole('button', { name: /^发\s?送$/ }));
 
     await waitFor(() => expect(requestBody).toEqual({
       contentMd: '@张三 请确认验收口径', targetAgentIds: [], targetHumanIds: [200],
@@ -1027,7 +1082,7 @@ describe('WorkitemDetailPage', () => {
     await user.keyboard('{ArrowDown}{Enter}');
     await waitFor(() => expect(composer).toHaveValue('@Coder-02 '));
     await user.type(composer, '请看这里');
-    await user.click(screen.getByRole('button', { name: /发送/ }));
+    await user.click(screen.getByRole('button', { name: /^发\s?送$/ }));
 
     await waitFor(() => expect(requestBody).toEqual({
       contentMd: '@Coder-02 请看这里', targetAgentIds: [101],
@@ -1065,9 +1120,9 @@ describe('WorkitemDetailPage', () => {
 
     const composer = await screen.findByPlaceholderText('输入评论，键入 @ 选择成员...');
     await user.type(composer, '@冲突');
-    await user.click(await screen.findByRole('menuitem', { name: /AW代码冲突解决工程师/ }));
+    await user.click(await findMentionItem(/AW代码冲突解决工程师/));
     await user.type(composer, '看下冲突');
-    await user.click(screen.getByRole('button', { name: /发送/ }));
+    await user.click(screen.getByRole('button', { name: /^发\s?送$/ }));
 
     await waitFor(() => expect(requestBody).toEqual({
       contentMd: '@AW代码冲突解决工程师 看下冲突', targetAgentIds: [40037],
@@ -1121,44 +1176,45 @@ describe('WorkitemDetailPage', () => {
     expect(requestBody).toBeUndefined();
     expect(composer).toHaveValue('第一行\n第二行');
 
-    await user.click(screen.getByRole('button', { name: /发送/ }));
+    await user.click(screen.getByRole('button', { name: /^发\s?送$/ }));
     await waitFor(() => expect(requestBody).toEqual({
       contentMd: '第一行\n第二行', targetAgentIds: [],
     }));
   });
 
-  it('keeps the comment send button visually aligned with the multiline composer', async () => {
+  it('places the compact comment send button on the composer action row', async () => {
     server.use(...setupHandlers());
     renderPage();
 
     expect(await screen.findByTestId('workitem-comment-input')).toHaveStyle({
       alignItems: 'stretch',
     });
-    const sendButton = await screen.findByRole('button', { name: /发送/ });
-    expect(sendButton).toHaveStyle({
-      alignSelf: 'stretch',
-      height: 'auto',
-    });
-    expect(sendButton).not.toHaveStyle({
-      minHeight: '86px',
-    });
+    const sendButton = await screen.findByRole('button', { name: /^发\s?送$/ });
+    expect(sendButton).toHaveClass('ant-btn-sm', 'aw-cm-input-send');
+    expect(sendButton.closest('.aw-cm-input-row')).not.toBeNull();
   });
 
-  it('aligns the action row with the requirement description card', async () => {
+  it('assembles primary actions, three trailing tags, and delivery control only in the overflow menu', async () => {
     server.use(...setupHandlers());
     renderPage();
 
-    // 对齐间距在 crystal.css 的 .aw-workitem-actions（padding: 12px 0）上，组件只负责挂类名；
-    // vitest 不加载 CSS 文件（css 未开启），这里改为断言类名装配。
-    // 对齐间距在 crystal.css 的 .aw-workitem-actions（padding: 12px 0）上，组件只负责挂类名；
-    // vitest 不加载 CSS 文件（css 未开启），这里改为断言类名装配。
-    const delivery = await screen.findByTestId('delivery-toggle');
     const actionBar = await screen.findByTestId('workitem-action-bar');
     expect(actionBar).toHaveClass('aw-workitem-actions');
-    // 交付开关是操作栏内的最后一个轻量组，状态文字与标准按钮同组，不含额外装饰容器。
-    expect(actionBar.lastElementChild).toBe(delivery);
-    expect(within(delivery).getByText('交付已开启')).toBeInTheDocument();
-    expect(within(delivery).getByRole('button', { name: '关闭交付' })).toBeInTheDocument();
+    const tags = screen.getByTestId('workitem-action-tags');
+    expect(actionBar.lastElementChild).toBe(tags);
+    expect(tags.children).toHaveLength(3);
+    expect(Array.from(tags.children).map((tag) => tag.textContent)).toEqual(['需求', '开发中', '高']);
+    expect(within(actionBar).getByRole('button', { name: '再次交付' })).toBeInTheDocument();
+    expect(screen.queryByTestId('delivery-toggle')).not.toBeInTheDocument();
+    expect(within(actionBar).queryByText('交付已开启')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '关闭交付' })).not.toBeInTheDocument();
+
+    const menu = await openWorkitemMenu();
+    await within(menu).findByRole('menuitem', { name: '关闭交付' });
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '重新指派', '指派给真人', '立即对账', '关闭交付', '删除工单',
+    ]);
+    // 这里只验证 DOM 装配与入口，不把 jsdom 结果当作视觉验收。
   });
 
   it('edits and saves the workitem title and markdown content', async () => {
@@ -1198,12 +1254,14 @@ describe('WorkitemDetailPage', () => {
     expect(await screen.findByText('重构支付并补充风控')).toBeInTheDocument();
   });
 
-  it('transitions status through available template transition', async () => {
-    let requestedBody: Record<string, unknown> | null = null;
+  it('transitions status only once after confirmation with the original reason and optimistic context', async () => {
+    const requestedBodies: unknown[] = [];
+    const response = pending<void>();
     server.use(
       ...setupHandlers(),
       http.post('/api/workitems/1/transition', async ({ request }) => {
-        requestedBody = await request.json() as Record<string, unknown>;
+        requestedBodies.push(await request.json());
+        await response.promise;
         return HttpResponse.json({
           success: true, code: '0', message: '', traceId: null,
           data: { ...mockWorkitem, statusNodeId: '2', statusName: '验证中', statusCategory: 'IN_PROGRESS', version: 4 },
@@ -1212,11 +1270,190 @@ describe('WorkitemDetailPage', () => {
     );
 
     renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: '流转状态' }));
+    const dialog = await screen.findByRole('dialog', { name: '流转状态' });
+    const target = await within(dialog).findByRole('radio', { name: '验证中' });
+    await userEvent.click(target);
+    const reason = within(dialog).getByRole('textbox', { name: '流转备注' });
+    const originalReason = '  请验证支付\n并检查风控  ';
+    fireEvent.change(reason, { target: { value: originalReason } });
+    expect(requestedBodies).toEqual([]);
+    const confirm = within(dialog).getByRole('button', { name: '确认流转' });
+    // 同一帧连点也不能穿透 useRef 提交锁。
+    act(() => { fireEvent.click(confirm); fireEvent.click(confirm); });
 
-    await userEvent.click(await screen.findByRole('button', { name: /流转状态/ }));
-    await userEvent.click(await screen.findByRole('button', { name: '流转到验证中' }));
+    await waitFor(() => expect(requestedBodies).toEqual([{
+      toNodeId: 2, fromNodeId: '1', expectedVersion: 3, reason: originalReason,
+    }]));
+    expect(confirm).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: /^取\s*消$/ })).toBeDisabled();
+    expect(target).toBeDisabled();
+    expect(reason).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: /^取\s*消$/ }));
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(confirm);
+    expect(dialog).toBeInTheDocument();
+    expect(requestedBodies).toHaveLength(1);
 
-    expect(requestedBody).toEqual({ toNodeId: 2 });
+    await act(async () => { response.resolve(); });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '流转状态' })).not.toBeInTheDocument());
+    expect(requestedBodies).toHaveLength(1);
+  });
+
+  it('selects one target at a time without submitting and keeps non-recommended template nodes available', async () => {
+    const transition = vi.fn(() => HttpResponse.json({ success: true, code: '0', data: mockWorkitem }));
+    server.use(
+      http.get('/api/status-templates/1', () => HttpResponse.json({
+        success: true, code: '0', data: {
+          ...mockTemplateDetail,
+          nodes: [...mockTemplateDetail.nodes, { ...mockTemplateDetail.nodes[1], id: 3, name: '已完成', code: 'done', category: 'DONE' }],
+        },
+      })),
+      http.post('/api/workitems/1/transition', transition),
+      ...setupHandlers(),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: '流转状态' }));
+    const dialog = await screen.findByRole('dialog', { name: '流转状态' });
+    expect(within(dialog).queryByRole('radio', { name: '开发中' })).not.toBeInTheDocument();
+    const recommended = await within(dialog).findByRole('radio', { name: '验证中' });
+    const other = within(dialog).getByRole('radio', { name: '已完成' });
+    expect(within(dialog).getByText('推荐流转')).toBeInTheDocument();
+    expect(within(dialog).getByText('非推荐流转')).toBeInTheDocument();
+    expect(recommended).not.toBeChecked();
+    expect(other).not.toBeChecked();
+    expect(dialog.querySelector('.ant-radio')).toBeNull();
+    expect(other.querySelector('.aw-state-dot')).toHaveClass('is-green');
+    expect(recommended.querySelector('.aw-state-dot')).toHaveClass('is-blue');
+    await userEvent.click(recommended);
+    expect(recommended).toBeChecked();
+    await userEvent.click(other);
+    expect(other).toBeChecked();
+    expect(recommended).not.toBeChecked();
+    await userEvent.keyboard('{ArrowUp}');
+    expect(recommended).toBeChecked();
+    expect(recommended).toHaveFocus();
+    expect(transition).not.toHaveBeenCalled();
+  });
+
+  it('requires only a target, treats remarks as optional and cancels without a transition request', async () => {
+    const transition = vi.fn(() => HttpResponse.json({ success: true, code: '0', data: mockWorkitem }));
+    server.use(...setupHandlers(), http.post('/api/workitems/1/transition', transition));
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: '流转状态' }));
+    const dialog = await screen.findByRole('dialog', { name: '流转状态' });
+    const reason = await within(dialog).findByRole('textbox', { name: '流转备注' });
+    const confirm = within(dialog).getByRole('button', { name: '确认流转' });
+    expect(reason.tagName).toBe('TEXTAREA');
+    expect(reason).not.toBeRequired();
+    expect(reason).toHaveAttribute('placeholder', '流转备注（选填）：说明原因，将写入时间线…');
+    expect(confirm).toBeDisabled();
+    fireEvent.change(reason, { target: { value: '已有备注但未选节点' } });
+    expect(confirm).toBeDisabled();
+    await userEvent.click(await within(dialog).findByRole('radio', { name: '验证中' }));
+    expect(confirm).toBeEnabled();
+    fireEvent.change(reason, { target: { value: ' \n\t ' } });
+    expect(confirm).toBeEnabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: /^取\s*消$/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '流转状态' })).not.toBeInTheDocument());
+    expect(transition).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: '流转状态' }));
+    const reopened = await screen.findByRole('dialog', { name: '流转状态' });
+    expect(within(reopened).getByRole('radio', { name: '验证中' })).not.toBeChecked();
+    expect(within(reopened).getByRole('textbox', { name: '流转备注' })).toHaveValue('');
+    expect(transition).not.toHaveBeenCalled();
+  });
+
+  it('transitions without a reason field when remarks are blank', async () => {
+    const requestedBodies: unknown[] = [];
+    server.use(
+      ...setupHandlers(),
+      http.post('/api/workitems/1/transition', async ({ request }) => {
+        requestedBodies.push(await request.json());
+        return HttpResponse.json({ success: true, code: '0', data: { ...mockWorkitem, version: 4 } });
+      }),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: '流转状态' }));
+    const dialog = await screen.findByRole('dialog', { name: '流转状态' });
+    await userEvent.click(await within(dialog).findByRole('radio', { name: '验证中' }));
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '流转备注' }), { target: { value: '  ' } });
+    await userEvent.click(within(dialog).getByRole('button', { name: '确认流转' }));
+
+    await waitFor(() => expect(requestedBodies).toEqual([{ toNodeId: 2, fromNodeId: '1', expectedVersion: 3 }]));
+  });
+
+  it('preserves the target and original remarks on failure and closes only after a successful retry', async () => {
+    const requestedBodies: unknown[] = [];
+    const firstResponse = pending<void>();
+    server.use(
+      ...setupHandlers(),
+      http.post('/api/workitems/1/transition', async ({ request }) => {
+        requestedBodies.push(await request.json());
+        if (requestedBodies.length === 1) {
+          await firstResponse.promise;
+          return HttpResponse.json({ success: false, code: '13009', message: '状态已变更，请刷新后重试', data: null }, { status: 409 });
+        }
+        return HttpResponse.json({ success: true, code: '0', data: { ...mockWorkitem, statusNodeId: '2', version: 4 } });
+      }),
+    );
+    const { queryClient } = renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: '流转状态' }));
+    const dialog = await screen.findByRole('dialog', { name: '流转状态' });
+    const target = await within(dialog).findByRole('radio', { name: '验证中' });
+    const reason = within(dialog).getByRole('textbox', { name: '流转备注' });
+    await userEvent.click(target);
+    fireEvent.change(reason, { target: { value: '  保留失败备注\n原文  ' } });
+    await userEvent.click(within(dialog).getByRole('button', { name: '确认流转' }));
+    await waitFor(() => expect(requestedBodies).toHaveLength(1));
+    await act(async () => { firstResponse.resolve(); });
+
+    await waitFor(() => expect(queryClient.getMutationCache().getAll().find((mutation) => mutation.state.status === 'error')?.state.error)
+      .toMatchObject({ message: '状态已变更，请刷新后重试' }));
+    await waitFor(() => expect(reason).toBeEnabled());
+    expect(dialog).toBeInTheDocument();
+    expect(target).toBeChecked();
+    expect(reason).toHaveValue('  保留失败备注\n原文  ');
+    expect(within(dialog).getByRole('button', { name: /^取\s*消$/ })).toBeEnabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: '确认流转' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '流转状态' })).not.toBeInTheDocument());
+    expect(requestedBodies).toEqual([
+      { toNodeId: 2, fromNodeId: '1', expectedVersion: 3, reason: '  保留失败备注\n原文  ' },
+      { toNodeId: 2, fromNodeId: '1', expectedVersion: 3, reason: '  保留失败备注\n原文  ' },
+    ]);
+  });
+
+  it('uses the from-node and version captured at modal opening even after the workitem refreshes', async () => {
+    let workitem = mockWorkitem;
+    const requestedBodies: unknown[] = [];
+    server.use(
+      http.get('/api/workitems/1', () => HttpResponse.json({ success: true, code: '0', data: workitem })),
+      http.post('/api/workitems/1/transition', async ({ request }) => {
+        requestedBodies.push(await request.json());
+        return HttpResponse.json({ success: true, code: '0', data: workitem });
+      }),
+      ...setupHandlers().filter((handler) => handler.info.path !== '/api/workitems/1'),
+    );
+    const { queryClient } = renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: '流转状态' }));
+    const dialog = await screen.findByRole('dialog', { name: '流转状态' });
+    await userEvent.click(await within(dialog).findByRole('radio', { name: '验证中' }));
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '流转备注' }), { target: { value: '刷新期间的原始备注' } });
+
+    workitem = { ...mockWorkitem, statusNodeId: '3', statusName: '评审中', version: 9 };
+    await act(async () => { await queryClient.refetchQueries({ queryKey: ['workitem', '1'], exact: true }); });
+    await waitFor(() => expect(screen.getByTestId('workitem-action-tags')).toHaveTextContent('评审中'));
+    expect(within(dialog).getByRole('radio', { name: '验证中' })).toBeChecked();
+    expect(within(dialog).getByRole('textbox', { name: '流转备注' })).toHaveValue('刷新期间的原始备注');
+    expect(requestedBodies).toEqual([]);
+    await userEvent.click(within(dialog).getByRole('button', { name: '确认流转' }));
+    await waitFor(() => expect(requestedBodies).toEqual([{
+      toNodeId: 2, fromNodeId: '1', expectedVersion: 3, reason: '刷新期间的原始备注',
+    }]));
   });
 
   it('surfaces the out-of-template transition warning from the server', async () => {
@@ -1232,8 +1469,11 @@ describe('WorkitemDetailPage', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /流转状态/ }));
-    await userEvent.click(await screen.findByRole('button', { name: '流转到验证中' }));
+    await userEvent.click(await screen.findByRole('button', { name: '流转状态' }));
+    const dialog = await screen.findByRole('dialog', { name: '流转状态' });
+    await userEvent.click(await within(dialog).findByRole('radio', { name: '验证中' }));
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '流转备注' }), { target: { value: '人工确认流转' } });
+    await userEvent.click(within(dialog).getByRole('button', { name: '确认流转' }));
 
     expect(await screen.findByText('该流转不在模板推荐范围内')).toBeInTheDocument();
   });
@@ -1253,9 +1493,9 @@ describe('WorkitemDetailPage', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /立即对账/ }));
+    await clickWorkitemMenuItem('立即对账');
 
-    expect(syncRequested).toBe(true);
+    await waitFor(() => expect(syncRequested).toBe(true));
     expect(await screen.findByText('同步完成：新增 0，更新 1，评论 2')).toBeInTheDocument();
   });
 
@@ -1274,7 +1514,7 @@ describe('WorkitemDetailPage', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /删除工单/ }));
+    await clickWorkitemMenuItem('删除工单');
     const dialog = await screen.findByRole('dialog', { name: '删除工单' });
     await userEvent.click(within(dialog).getByRole('button', { name: /删\s*除/ }));
 
@@ -1295,7 +1535,7 @@ describe('WorkitemDetailPage', () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /删除工单/ }));
+    await clickWorkitemMenuItem('删除工单');
     const dialog = await screen.findByRole('dialog', { name: '删除工单' });
     await userEvent.click(within(dialog).getByRole('button', { name: /删\s*除/ }));
 
@@ -1320,9 +1560,42 @@ describe('WorkitemDetailPage', () => {
 
     renderPage();
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /删除工单/ })).toBeDisabled();
-    });
+    const menu = await openWorkitemMenu();
+    const label = within(menu).getByText('删除工单');
+    const action = label.closest('[role="menuitem"]');
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(label.tagName).toBe('SPAN');
+    expect(label).toHaveAttribute('tabindex', '0');
+    act(() => { label.focus(); });
+    expect(label).toHaveFocus();
+    expect(await screen.findByRole('tooltip', { name: '工单正在执行中，请等待完成或结束后再删除' })).toBeInTheDocument();
+    await userEvent.click(label);
+    expect(screen.queryByRole('dialog', { name: '删除工单' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { label: '关闭交付', closed: false, cancel: /^返\s*回$/ },
+    { label: '重新开启交付', closed: true, cancel: /^返\s*回$/ },
+    { label: '删除工单', closed: false, cancel: /^取\s*消$/ },
+  ])('cancels the dangerous $label menu confirmation without any write', async ({ label, closed, cancel }) => {
+    const writes = vi.fn(() => HttpResponse.json({ success: true, code: '0', data: null }));
+    server.use(
+      http.get('/api/workitems/1/recovery', () => HttpResponse.json({ success: true, code: '0', data: { closed, canReopen: true, executions: [] } })),
+      http.post('/api/workitems/1/recovery', writes),
+      http.delete('/api/workitems/1', writes),
+      ...setupHandlers(),
+    );
+    renderPage();
+    const menu = await openWorkitemMenu();
+    const action = await within(menu).findByRole('menuitem', { name: label });
+    await userEvent.click(action);
+    const dialog = await screen.findByRole('dialog', { name: label });
+    expect(writes).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole('button', { name: cancel }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: label })).not.toBeInTheDocument());
+    expect(writes).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: '跨境支付重构' })).toBeInTheDocument();
+    if (closed) expect(await within(await openWorkitemMenu()).findByRole('menuitem', { name: '重新开启交付' })).toBeInTheDocument();
   });
 
   it('highlights a newly mentioned human once participants refresh after sending', async () => {
@@ -1365,9 +1638,9 @@ describe('WorkitemDetailPage', () => {
 
     const composer = await screen.findByPlaceholderText('输入评论，键入 @ 选择成员...');
     await user.type(composer, '@李');
-    await user.click(await screen.findByRole('menuitem', { name: /李四/ }));
+    await user.click(await findMentionItem(/李四/));
     await user.type(composer, '请确认排期');
-    await user.click(screen.getByRole('button', { name: /发送/ }));
+    await user.click(screen.getByRole('button', { name: /^发\s?送$/ }));
 
     await waitFor(() => expect(participantsCallCount).toBeGreaterThanOrEqual(2));
     expect(await screen.findByText('@李四')).toHaveStyle({
@@ -1399,7 +1672,7 @@ describe('WorkitemDetailPage', () => {
     await user.type(composer, '@王五');
 
     await waitFor(() => expect(lastQuery).toBe('王五'));
-    expect(await screen.findByRole('menuitem', { name: /王五工程师/ })).toBeInTheDocument();
+    expect(await findMentionItem(/王五工程师/)).toBeInTheDocument();
   });
 
   it('ignores mention candidates without a name instead of crashing the workitem page', async () => {
@@ -1448,13 +1721,13 @@ describe('WorkitemDetailPage', () => {
 
     const composer = await screen.findByPlaceholderText('输入评论，键入 @ 选择成员...');
     await user.type(composer, '@王五');
-    await user.click(await screen.findByRole('menuitem', { name: /王五工程师/ }));
+    await user.click(await findMentionItem(/王五工程师/));
     expect(composer).toHaveValue('@王五工程师 ');
 
     // Selecting clears the query, so mentionCandidates falls back to the default
     // (王五工程师-free) result set — the target id must still survive further typing.
     await user.type(composer, '请确认排期');
-    await user.click(screen.getByRole('button', { name: /发送/ }));
+    await user.click(screen.getByRole('button', { name: /^发\s?送$/ }));
 
     await waitFor(() => expect(requestBody).toEqual({
       contentMd: '@王五工程师 请确认排期', targetAgentIds: [], targetHumanIds: [500],
@@ -1477,31 +1750,33 @@ describe('WorkitemDetailPage', () => {
     expect(await screen.findByText('补充风控口径')).toBeInTheDocument();
   });
 
-  it('keeps scroll controls inside the content region above the sticky comment composer', async () => {
+  it('keeps the comment composer at the end of the timeline card inside the scroll region', async () => {
     server.use(...setupHandlers());
     renderPage();
 
-    const stickyBar = await screen.findByTestId('workitem-sticky-comment');
-    expect(stickyBar).toHaveStyle({ flexShrink: '0' });
-
+    const composer = await screen.findByTestId('workitem-sticky-comment');
     const commentInput = screen.getByTestId('workitem-comment-input');
-    expect(stickyBar.contains(commentInput)).toBe(true);
+    expect(composer.contains(commentInput)).toBe(true);
+
+    const timeline = screen.getByTestId('workitem-timeline-section');
+    expect(timeline.contains(composer)).toBe(true);
+    expect(composer.closest('.aw-review-composer')).not.toBeNull();
 
     const scrollArea = screen.getByTestId('workitem-left-scroll');
     const scrollRegion = screen.getByTestId('workitem-scroll-region');
-    expect(scrollRegion).toHaveStyle({ position: 'relative', flex: '1', minHeight: '0', overflow: 'hidden' });
+    expect(scrollRegion).toHaveStyle({ position: 'relative', flex: '1', minHeight: '0', overflow: 'visible' });
     expect(scrollRegion.contains(scrollArea)).toBe(true);
-    expect(scrollRegion.contains(commentInput)).toBe(false);
-    expect(stickyBar.previousElementSibling).toBe(scrollRegion);
-    expect(scrollArea).toHaveStyle({ overflowY: 'auto', paddingRight: '38px' });
+    expect(scrollArea.contains(timeline)).toBe(true);
+    expect(scrollArea).toHaveClass('aw-detail-canvas');
+    expect(scrollArea).toHaveStyle({ overflowY: 'auto' });
   });
 
   it('uses parent-relative height on root container to prevent viewport clipping', async () => {
     server.use(...setupHandlers());
     renderPage();
 
-    const stickyBar = await screen.findByTestId('workitem-sticky-comment');
-    const rootContainer = stickyBar.parentElement!.parentElement!;
+    const composer = await screen.findByTestId('workitem-sticky-comment');
+    const rootContainer = composer.closest('.aw-detail-page');
     expect(rootContainer).toHaveStyle({ height: '100%' });
 
     const scrollArea = screen.getByTestId('workitem-left-scroll');
@@ -1525,7 +1800,7 @@ describe('WorkitemDetailPage', () => {
 
     const composer = await screen.findByPlaceholderText('输入评论，键入 @ 选择成员...');
     await user.type(composer, '测试发送清空');
-    await user.click(screen.getByRole('button', { name: /发送/ }));
+    await user.click(screen.getByRole('button', { name: /^发\s?送$/ }));
 
     await waitFor(() => expect(requestBody).toEqual({ contentMd: '测试发送清空', targetAgentIds: [] }));
     expect(composer).toHaveValue('');
@@ -1571,7 +1846,7 @@ describe('WorkitemDetailPage', () => {
     const user = userEvent.setup();
 
     await screen.findByRole('heading', { name: '跨境支付重构' });
-    await user.click(screen.getByRole('button', { name: /指派给真人/ }));
+    await clickWorkitemMenuItem('指派给真人');
 
     const select = await screen.findByLabelText('指派给');
     await user.click(select);
@@ -1597,8 +1872,8 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
   }
 
   function renderPageAt(entry: string) {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return render(
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const result = render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[entry]}>
           <Routes>
@@ -1616,6 +1891,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
+    return { ...result, queryClient };
   }
 
   function currentSearch() {
@@ -1655,6 +1931,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
   });
 
   afterEach(() => {
+    Modal.destroyAll();
     vi.unstubAllGlobals();
   });
 
@@ -1744,8 +2021,8 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
           agents: [
             { agentId: 8, agentName: 'Agent-History', status: 'active', durationMs: null, steps: [] },
           ],
-          // credits 徽标把「进度已落地」变成可观察信号：断言候选名单前先等它出现，
-          // 否则可能在进度到达之前就查过选人屏，回归断言会空转
+          // 在独立 QueryClient 中确认进度到达后再检查选人屏，
+          // 避免进度尚未落地时回归断言空转；不再依赖已移除的页头徽标。
           totalUsage: { credits: 12.5 },
         },
       })),
@@ -1763,9 +2040,9 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
       ...mockClarifyEndpoints(),
       ...setupHandlers().filter((h) => h.info.path !== '/api/workitems/1/delivery-progress'),
     );
-    renderPageAt('/workitems/1');
+    const { queryClient } = renderPageAt('/workitems/1');
     await screen.findByRole('heading', { name: '跨境支付重构' });
-    await screen.findByTestId('workitem-credits-badge');
+    await waitFor(() => expect(queryClient.getQueryData(['workitem', '1', 'delivery-progress'])).toMatchObject({ totalUsage: { credits: 12.5 } }));
 
     await userEvent.click(screen.getByRole('button', { name: /AI 需求澄清/ }));
     const selectionColumn = await screen.findByTestId('clarification-selection-column');
@@ -1775,9 +2052,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
     await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
     fireEvent.mouseDown(comboboxes[0]);
     fireEvent.click(await screen.findByText('交付小队'));
-    await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[1]);
-    fireEvent.click(await screen.findByText('Agent-A (AW_FS_DEV)'));
+    fireEvent.click(await screen.findByText('Agent-A'));
 
     // 选定数字人会自动全屏，两件事都得进 URL，否则刷新回来退化成窄面板 + 重新选人
     await waitFor(() => expect(currentSearch()).toContain('agent=1'));
@@ -1810,7 +2085,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
     // 会话正文只在恢复落定后才可能渲染（选人屏是早返回），所以它就是落定的信号
     expect(await screen.findByText('刷新前的澄清结论')).toBeInTheDocument();
     expect(screen.queryByTestId('clarification-selection-column')).toBeNull();
-    expect(screen.queryByText('选择小队和数字员工')).toBeNull();
+    expect(screen.queryByText(/选择一名数字员工/)).toBeNull();
 
     // 恢复源没被自己的写回抹掉：URL 仍是同一个工单的同一条澄清会话
     expect(currentSearch()).toContain('agent=2');
@@ -1848,19 +2123,23 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
       ...setupHandlers().filter((h) => h.info.path !== '/api/workitems/1/delivery-progress'),
     );
 
-    renderPageAt('/workitems/1?panel=clarify&fullscreen=1&agent=2&conversation=101');
+    const { queryClient } = renderPageAt('/workitems/1?panel=clarify&fullscreen=1&agent=2&conversation=101');
 
     // 恢复落定：会话正文可见、输入区可用，随即写入草稿
     expect(await screen.findByText('刷新前的澄清结论')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('clarification-composer-mirror')).not.toBeDisabled());
     await typeClarifyDraft('进度落地不该清掉这段草稿');
     expect(screen.getByTestId('clarification-composer-mirror')).toHaveValue('进度落地不该清掉这段草稿');
-    expect(screen.queryByTestId('workitem-credits-badge')).toBeNull();
+    expect(queryClient.getQueryData(['workitem', '1', 'delivery-progress'])).toBeUndefined();
 
-    // 迟到的进度带着别的数字人与用量落地（credits 徽标出现即证明这一帧已到）
+    // 进度带着别的数字人与用量迟到：直接确认本例的缓存已收到它，再检查恢复状态。
     await waitFor(() => expect(releaseProgress).not.toBeNull());
-    releaseProgress!();
-    await screen.findByTestId('workitem-credits-badge');
+    await act(async () => {
+      releaseProgress!();
+      await waitFor(() => expect(queryClient.getQueryData(['workitem', '1', 'delivery-progress'])).toMatchObject({
+        agents: [{ agentId: 9, agentName: 'Agent-New' }], totalUsage: { credits: 12.5 },
+      }));
+    });
 
     expect(screen.getByText('刷新前的澄清结论')).toBeInTheDocument();
     expect(screen.getByTestId('clarification-composer-mirror')).toHaveValue('进度落地不该清掉这段草稿');
@@ -1915,7 +2194,7 @@ describe('WorkitemDetailPage start-delivery clarify reminder (工单 53315 / 548
           && h.info.path !== '/api/workitems/1/requirement-documents',
       ),
     );
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     return render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/workitems/1']}>
@@ -2033,10 +2312,10 @@ describe('WorkitemDetailPage start-delivery clarify reminder (工单 53315 / 548
     expect(currentSearch()).not.toContain('panel=clarify');
   });
 
-  it('does not remind once an SDLC is bound and the button reads 重新指派', async () => {
+  it('does not remind once an SDLC is bound via the primary delivery entry', async () => {
     renderReminderPage({ sdlcId: '10' });
 
-    await userEvent.click(await screen.findByRole('button', { name: /重新指派/ }));
+    await userEvent.click(await screen.findByRole('button', { name: '再次交付' }));
 
     expect(await screen.findByText(DELIVERY_MODAL_MARKER)).toBeInTheDocument();
     expect(screen.queryByText('建议先完成需求澄清')).toBeNull();

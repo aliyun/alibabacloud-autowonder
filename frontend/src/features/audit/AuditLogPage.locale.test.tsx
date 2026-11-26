@@ -70,7 +70,7 @@ describe('AuditLogPage v2 locale boundary', () => {
 
     expect(await screen.findByText('当前筛选 23 条')).toBeInTheDocument();
     expect(screen.getByText('审计日志')).toBeInTheDocument();
-    expect(screen.getByText('工作空间内人工与数字员工的操作留痕')).toBeInTheDocument();
+    expect(await screen.findByText(/工作空间内人工与数字员工的操作留痕/)).toBeInTheDocument();
     for (const name of ['时间', '操作人', '模块 / 操作', '风险', '对象', '触发 / 事件', '摘要']) {
       expect(screen.getAllByText(name).length).toBeGreaterThan(0);
     }
@@ -91,7 +91,7 @@ describe('AuditLogPage v2 locale boundary', () => {
     await language('en-US');
 
     expect(screen.getByText('Audit logs')).toBeInTheDocument();
-    expect(screen.getByText('Audit trail of human and digital-worker operations in this workspace')).toBeInTheDocument();
+    expect(screen.getByText(/Audit trail of human and digital-worker operations in this workspace/)).toBeInTheDocument();
     for (const name of ['Time', 'Actor', 'Module / Action', 'Risk', 'Target', 'Trigger / Event', 'Summary']) {
       expect(screen.getAllByText(name).length).toBeGreaterThan(0);
     }

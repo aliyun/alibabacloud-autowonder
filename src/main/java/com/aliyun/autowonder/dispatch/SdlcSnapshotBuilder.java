@@ -43,9 +43,10 @@ final class SdlcSnapshotBuilder {
         result.put("workflow", "agent-internal-workflow");
         result.put("currentStepId", String.valueOf(stepId));
         List<Map<String, Object>> document = new ArrayList<>();
-        List<SdlcStepDO> definitions = steps.listBySdlc(current.getSdlcId());
+        List<SdlcStepDO> definitions = steps.listForExecution(tenantId, current.getSdlcId());
         for (SdlcStepDO step : definitions == null ? List.<SdlcStepDO>of() : definitions) {
             if (step == null || !Long.valueOf(tenantId).equals(step.getTenantId())) continue;
+            if (step.isFlowStageTimingEnabled() && stepId.equals(step.getId())) result.put("stageTimingEnabled", true);
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", String.valueOf(step.getId()));
             row.put("name", step.getName());

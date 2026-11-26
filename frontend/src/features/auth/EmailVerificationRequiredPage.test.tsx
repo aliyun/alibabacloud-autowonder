@@ -58,8 +58,8 @@ describe('EmailVerificationRequiredPage', () => {
         <Route path="/email-verification" element={<EmailVerificationRequiredPage />} />
       </Routes></MemoryRouter>
     </QueryClientProvider>);
-    await userEvent.type(await screen.findByLabelText('用户名'), 'alice');
-    await userEvent.type(screen.getByLabelText('密码', { selector: 'input' }), 'test-password');
+    await userEvent.type(await screen.findByLabelText(/^用户名/), 'alice');
+    await userEvent.type(screen.getByLabelText(/^密码/, { selector: 'input' }), 'test-password');
     await userEvent.click(screen.getByRole('button', { name: /登\s*录/ }));
     const username = await screen.findByLabelText('登录用户名');
     expect(username).toHaveValue('alice');

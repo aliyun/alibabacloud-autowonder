@@ -25,7 +25,7 @@ public class PlatformBrandingService {
     public static final String DEFAULT_DEPLOYMENT_VERSION = "x.x.x";
 
     private static final Set<String> THEME_KEYS = Set.of(
-            "aliyun-orange", "ocean-blue", "jade-green", "indigo", "rose",
+            "alicloud-blue", "aliyun-orange", "ocean-blue", "jade-green", "indigo", "rose",
             "cyan", "amber", "violet", "graphite", "teal");
     private static final Map<String, String> LOGO_EXTENSIONS = Map.of(
             "image/png", ".png",

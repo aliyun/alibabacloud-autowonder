@@ -6,14 +6,16 @@
   padding: 10px 12px;
   margin: 8px 0;
   overflow-x: auto;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .aw-clarify-md code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 14px;
-  font-weight: 500;
+  font-family: var(--aw-font-mono);
+  font-size: 12px;
+  background: var(--aw-gray-bg);
+  border-radius: 4px;
+  padding: 0 4px;
 }
 
 /* 代码块内的 code 不再叠一层底色，字重也退回常规——加粗只服务于正文里的内联 code */
@@ -34,7 +36,7 @@
 .aw-clarify-md table {
   border-collapse: collapse;
   margin: 8px 0;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .aw-clarify-md th,
@@ -101,54 +103,241 @@
   }
 }
 
-.aw-clarification-panel { min-width: 0; color: var(--aw-text); background: var(--aw-panel); }
-.aw-clarification-panel .aw-clarify-md { font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; }
-.aw-clarification-panel textarea.ant-input { font-size: 16px; line-height: 1.7; padding: 12px; background: var(--aw-field); }
-.aw-clarification-panel summary { line-height: 1.7; }
-.aw-clarification-panel.is-fullscreen > :first-child { background: var(--aw-raised); }
+/* ===== 05d 澄清面板（aw-cl-* 对应原型 cl-*） ===== */
+.aw-clarification-panel { min-width: 0; display: flex; flex-direction: column; height: 100%; color: var(--aw-text); background: var(--aw-panel); }
+.aw-clarification-panel .aw-clarify-md { font-size: 13px; line-height: 22px; overflow-wrap: anywhere; color: var(--aw-text); }
+.aw-clarification-panel .aw-clarify-md p { margin: 0 0 8px; }
+.aw-clarification-panel .aw-clarify-md p:last-child { margin-bottom: 0; }
+.aw-clarification-panel .aw-clarify-md ul,
+.aw-clarification-panel .aw-clarify-md ol { margin: 0 0 8px; padding-left: 20px; }
+.aw-clarification-panel .aw-clarify-md li + li { margin-top: 2px; }
+.aw-clarification-panel .aw-clarify-md h1,
+.aw-clarification-panel .aw-clarify-md h2,
+.aw-clarification-panel .aw-clarify-md h3,
+.aw-clarification-panel .aw-clarify-md h4 { font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+.aw-clarification-panel .aw-clarify-md :is(h1, h2, h3, h4):first-child { margin-top: 0; }
 
-.aw-clarification-panel .aw-clarify-thinking .aw-clarify-md { font-size: 15px; }
+.aw-cl-head { flex-shrink: 0; border-bottom: 1px solid var(--aw-border); padding: 0 16px; }
+.aw-cl-head-row { display: flex; align-items: center; gap: 8px; min-height: 44px; min-width: 0; }
+.aw-cl-head-row + .aw-cl-head-row { min-height: 0; padding-bottom: 8px; }
+.aw-cl-head-row > .aw-cl-back { margin-left: -6px; }
+.aw-cl-title { font-size: 14px; font-weight: 600; line-height: 20px; }
+.aw-cl-who { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.aw-cl-who .nm { font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-cl-av { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--aw-ai-bg); color: var(--aw-ai); font-size: 11px; font-weight: 600; line-height: 1; }
+.aw-cl-av.lg { width: 28px; height: 28px; font-size: 12px; }
+.aw-cl-online { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--aw-success-deep); flex-shrink: 0; white-space: nowrap; }
+.aw-cl-online.off { color: var(--aw-text-3); }
+.aw-cl-online .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.aw-cl-head-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+html .aw-cl-icon-btn.ant-btn { width: 26px; height: 26px; min-width: 26px; padding: 0; border-radius: 4px; color: var(--aw-text-2); }
+html .aw-cl-icon-btn.ant-btn:not(:disabled):hover { background: var(--aw-gray-bg); color: var(--aw-text); }
+html .aw-cl-ghost.ant-btn { height: 26px; padding: 0 8px; font-size: 12px; border-radius: 4px; color: var(--aw-text-2); flex-shrink: 0; }
+html .aw-cl-ghost.ant-btn:not(:disabled):hover { background: var(--aw-gray-bg); color: var(--aw-text); }
+.aw-cl-session { flex: 1; min-width: 0; }
+html .aw-cl-session .ant-select { width: 100%; }
+html .aw-cl-session .ant-select-single { height: 26px; font-size: 12px; }
+html .aw-cl-session .ant-select-selector { border-radius: 4px; padding: 0 8px; }
+.aw-cl-session-label { display: flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.aw-cl-session-label .s { color: var(--aw-text-3); overflow: hidden; text-overflow: ellipsis; }
+.aw-cl-menu-item .t { display: block; font-size: 12px; line-height: 18px; color: var(--aw-text); }
+.ant-select-item-option-selected .aw-cl-menu-item .t { color: var(--aw-primary); font-weight: 600; }
+.aw-cl-menu-item .s { display: block; font-size: 11px; line-height: 16px; color: var(--aw-text-3); }
 
-/* 问题卡片动效（工单 56330）：出现 / 消失 / 收起 / 展开用同一套轻量风格。
-   这些类只由澄清面板（collapsible）渲染出的卡片挂上，其他两处复用不受影响。 */
-.aw-elicitation-card {
-  animation: aw-elicitation-card-in 180ms ease-out;
-}
+/* 消息区 */
+.aw-cl-scroll-wrap { flex: 1; position: relative; min-height: 0; display: flex; flex-direction: column; }
+.aw-cl-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.aw-cl-column { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.aw-cl-turn { min-width: 0; font-size: 13px; line-height: 22px; }
+.aw-cl-turn.user { align-self: flex-end; max-width: 85%; }
+.aw-cl-bubble { padding: 8px 12px; border-radius: 8px; background: var(--aw-gray-bg); color: var(--aw-text); overflow-wrap: anywhere; }
+.aw-cl-turn-meta { display: flex; align-items: center; gap: 6px; min-height: 20px; margin-bottom: 4px; font-size: 11px; color: var(--aw-text-3); }
+.aw-cl-turn.user .aw-cl-turn-meta { justify-content: flex-end; margin: 4px 0 0; }
+.aw-cl-turn-meta strong { font-size: 12px; font-weight: 600; color: var(--aw-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-cl-turn-meta time { flex-shrink: 0; }
+.aw-cl-turn .aw-clarify-msg-actions .ant-btn { width: 20px; height: 20px; min-width: 20px; color: var(--aw-text-3); }
+.aw-cl-turn:hover .aw-clarify-msg-actions { opacity: 1; }
+.aw-cl-steps { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.aw-cl-step { border-radius: 6px; min-width: 0; }
+.aw-cl-step > summary { list-style: none; display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 6px; margin: 0 -6px;
+  border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--aw-text-2); }
+.aw-cl-step > summary::-webkit-details-marker { display: none; }
+.aw-cl-step > summary:hover { background: var(--aw-gray-bg); color: var(--aw-text); }
+.aw-cl-step > summary > .ic { width: 13px; height: 13px; flex-shrink: 0; color: var(--aw-text-3); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+.aw-cl-step > summary .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-cl-step > summary .t code { font-family: var(--aw-font-mono); font-size: 11px; }
+.aw-cl-step > summary .r { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 11px; color: var(--aw-text-3); }
+.aw-cl-step > summary .chev { width: 12px; height: 12px; color: var(--aw-text-3); display: inline-flex; transition: transform .15s; }
+.aw-cl-step[open] > summary .chev { transform: rotate(180deg); }
+.aw-cl-step-body { margin: 4px 0 4px 6px; padding: 4px 0 4px 12px; border-left: 2px solid var(--aw-border); font-size: 12px; line-height: 20px; color: var(--aw-text-2); }
+.aw-cl-step-body .k { font-size: 11px; color: var(--aw-text-3); margin: 6px 0 2px; }
+.aw-cl-step-body .k:first-child { margin-top: 0; }
+.aw-cl-step-body .aw-clarify-md { font-size: 12px; line-height: 20px; color: var(--aw-text-2); }
+.aw-cl-pre { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--aw-header-bg); border: 1px solid var(--aw-border);
+  font-family: var(--aw-font-mono); font-size: 11px; line-height: 18px; color: var(--aw-text-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow-y: auto; }
+.aw-cl-pre .add { color: var(--aw-success-deep); }
+.aw-cl-pre .del { color: var(--aw-error-deep); }
+.aw-cl-st-ok { color: var(--aw-success-deep); }
+.aw-cl-st-run { color: var(--aw-primary); }
+.aw-cl-st-fail { color: var(--aw-error-deep); }
+.aw-cl-plan { margin: 0 0 8px; padding: 10px 12px; border-radius: 8px; background: var(--aw-header-bg); }
+.aw-cl-plan-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.aw-cl-plan-head .n { margin-left: auto; font-weight: 400; color: var(--aw-text-3); font-size: 11px; }
+.aw-cl-plan ul { margin: 0; padding: 0; }
+.aw-cl-plan li { list-style: none; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 3px 0; font-size: 12px; line-height: 18px; }
+.aw-cl-plan li .ic { width: 14px; height: 14px; margin-top: 2px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.aw-cl-plan li.done .txt { color: var(--aw-text-3); }
+.aw-cl-plan .pri { font-size: 11px; }
+.aw-cl-plan .pri.h { color: var(--aw-error-deep); }
+.aw-cl-plan .pri.m { color: var(--aw-warning-deep); }
+.aw-cl-plan .pri.l { color: var(--aw-text-3); }
+.aw-cl-detail-toggle { margin-top: 6px; border: none; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--aw-text-3); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.aw-cl-detail-toggle:hover { color: var(--aw-primary); }
+.aw-cl-detail-toggle .chev { width: 12px; height: 12px; display: inline-flex; }
 
-/* 答完/跳过后的淡出：父级在 CLARIFICATION_CARD_DISMISS_MS 内保留卡片，期间不可交互。 */
-.aw-elicitation-card.is-dismissing {
-  animation: aw-elicitation-card-out 160ms ease-out forwards;
-  pointer-events: none;
-}
+/* 已回答的问题（历史 ElicitationCard） */
+.aw-cl-qa { padding: 10px 12px; border: 1px solid var(--aw-border); border-radius: 8px; font-size: 12px; line-height: 20px; }
+.aw-cl-qa-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.aw-cl-qa-head .ic { width: 13px; height: 13px; color: var(--aw-ai); flex-shrink: 0; display: inline-flex; font-size: 13px; }
+.aw-cl-qa-head strong { font-weight: 600; min-width: 0; }
+.aw-cl-qa-head .ant-tag { margin-left: auto; margin-inline-end: 0; }
+.aw-cl-qa dl { margin: 0; }
+.aw-cl-qa dt { color: var(--aw-text-3); }
+.aw-cl-qa dd { margin: 0 0 6px; color: var(--aw-text); }
+.aw-cl-qa dd:last-child { margin-bottom: 0; }
+.aw-cl-qa-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 
-/* 展开时题目区随高度展开一起淡入，与收起的高度折叠方向对称。 */
-.aw-elicitation-body {
-  animation: aw-elicitation-body-in 180ms ease-out;
-}
+/* 回复中 */
+.aw-cl-replying { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--aw-text-3); }
+.aw-cl-replying .dots { display: inline-flex; gap: 3px; }
+.aw-cl-replying .dots span { width: 4px; height: 4px; border-radius: 50%; background: var(--aw-text-3); animation: aw-cl-dot 1.2s infinite ease-in-out; }
+.aw-cl-replying .dots span:nth-child(2) { animation-delay: .15s; }
+.aw-cl-replying .dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes aw-cl-dot { 0%, 80%, 100% { opacity: .3; } 40% { opacity: 1; } }
 
-/* 箭头轻量旋转反馈：展开态朝上（可收起），收起态朝下（可展开）。 */
-.aw-elicitation-toggle .aw-elicitation-chevron {
-  transition: transform 180ms ease-out;
-}
+html .aw-cl-tobottom.ant-btn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 2; height: 26px; padding: 0 10px;
+  border: 1px solid var(--aw-border); border-radius: 13px; background: var(--aw-panel); box-shadow: var(--aw-shadow-menu); font-size: 12px; color: var(--aw-text-2); gap: 4px; }
+html .aw-cl-tobottom.ant-btn:not(:disabled):hover { color: var(--aw-primary); border-color: var(--aw-border); background: var(--aw-panel); }
 
-.aw-elicitation-toggle[aria-expanded='true'] .aw-elicitation-chevron {
-  transform: rotate(180deg);
-}
+/* 提示条 */
+.aw-cl-note { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 12px; line-height: 20px; }
+.aw-cl-note > .ic { width: 14px; height: 14px; flex-shrink: 0; margin-top: 3px; display: inline-flex; font-size: 14px; }
+.aw-cl-note .grow { flex: 1; min-width: 0; }
+.aw-cl-note > .ant-btn { margin: -3px -4px -3px 0; flex-shrink: 0; height: 26px; padding: 0 8px; font-size: 12px; }
+.aw-cl-note.info { background: var(--aw-primary-faint); color: var(--aw-text-2); }
+.aw-cl-note.info > .ic { color: var(--aw-primary); }
+.aw-cl-note.ok { background: var(--aw-success-bg); color: var(--aw-success-deep); }
+.aw-cl-note.warn { background: var(--aw-warning-bg); color: var(--aw-warning-deep); }
+.aw-cl-note.error { background: var(--aw-error-bg); color: var(--aw-error-deep); }
+.aw-cl-note.muted { background: var(--aw-gray-bg); color: var(--aw-text-2); }
+.aw-cl-state { margin: 40px auto; text-align: center; color: var(--aw-text-3); font-size: 12px; line-height: 20px; max-width: 260px; }
+.aw-cl-state > .ic { display: block; font-size: 28px; line-height: 1; color: var(--aw-text-disabled); margin-bottom: 8px; }
+.aw-cl-state strong { display: block; color: var(--aw-text-2); font-size: 13px; font-weight: 600; margin-bottom: 4px; }
 
-@keyframes aw-elicitation-card-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
-}
+/* 底部输入框 */
+.aw-cl-foot { flex-shrink: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+.aw-cl-grip { position: absolute; top: -4px; left: 50%; width: 32px; height: 8px; margin-left: -16px; pointer-events: none; display: flex; align-items: center; justify-content: center; z-index: 1; }
+.aw-cl-grip::before { content: ""; width: 24px; height: 3px; border-radius: 2px; background: var(--aw-border); transition: background .12s; }
+.aw-cl-resize { position: absolute; top: -4px; left: 0; right: 0; height: 8px; z-index: 2; }
+.aw-cl-input:has(.aw-cl-resize:hover) .aw-cl-grip::before { background: var(--aw-text-disabled); }
+.aw-cl-input { border: 1px solid var(--aw-border); border-radius: 8px; background: var(--aw-panel); transition: border-color .15s, box-shadow .15s; position: relative; }
+.aw-cl-input:focus-within { border-color: var(--aw-primary); box-shadow: 0 0 0 2px rgba(var(--aw-accent-rgb), .12); }
+.aw-cl-input.is-disabled { background: var(--aw-gray-bg); }
+.aw-cl-input-row { display: flex; align-items: center; gap: 4px; padding: 4px 8px 8px; }
+.aw-cl-input-row > .aw-cl-send { margin-left: auto; }
+html .aw-cl-input-row .ant-btn.aw-cl-send { height: 26px; padding: 0 8px; font-size: 12px; border-radius: 4px; }
+html .aw-cl-mode-select.ant-select-single { height: 26px; font-size: 11px; }
+html .aw-cl-mode-select.ant-select .ant-select-selector { height: 26px; padding: 0 18px 0 6px; border-radius: 4px; transition: background .12s; }
+html .aw-cl-mode-select.ant-select-single .ant-select-selector .ant-select-selection-item { font-size: 11px; line-height: 26px; color: var(--aw-text-3); padding-inline-end: 0; }
+html .aw-cl-mode-select.ant-select:not(.ant-select-disabled):hover .ant-select-selector { background: var(--aw-gray-bg); }
+html .aw-cl-mode-select.ant-select-single:not(.ant-select-disabled):hover .ant-select-selector .ant-select-selection-item { color: var(--aw-text-2); }
+html .aw-cl-mode-select.ant-select .ant-select-arrow { inset-inline-end: 4px; font-size: 10px; color: var(--aw-text-3); }
 
-@keyframes aw-elicitation-card-out {
-  from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateY(6px); }
-}
+/* 选择题向导（停靠的可折叠向导） */
+.aw-cl-wizard { flex-shrink: 0; border-top: 1px solid var(--aw-border); display: flex; flex-direction: column; max-height: min(60%, 420px); min-height: 0; }
+.aw-cl-wz-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px 0; min-width: 0; }
+.aw-cl-wz-head > .ic { width: 14px; height: 14px; color: var(--aw-ai); flex-shrink: 0; display: inline-flex; font-size: 14px; }
+.aw-cl-wz-head strong { font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-cl-wz-head .cnt { font-size: 11px; color: var(--aw-text-3); flex-shrink: 0; }
+.aw-cl-wz-head .acts { margin-left: auto; display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.aw-cl-wz-dots { display: flex; gap: 4px; padding: 8px 16px 0; }
+.aw-cl-wz-dots button { flex: 1; height: 4px; padding: 0; border: none; border-radius: 2px; background: var(--aw-border); cursor: pointer; }
+.aw-cl-wz-dots button.done { background: rgba(var(--aw-accent-rgb), .35); }
+.aw-cl-wz-dots button.cur { background: var(--aw-primary); }
+.aw-cl-wz-dots button:focus-visible { outline: 2px solid rgba(var(--aw-accent-rgb), .4); outline-offset: 1px; }
+.aw-cl-wz-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; }
+.aw-cl-q-label { font-size: 13px; font-weight: 600; line-height: 20px; }
+.aw-cl-q-label .req { color: var(--aw-error); margin-left: 2px; }
+.aw-cl-q-desc { font-size: 12px; line-height: 18px; color: var(--aw-text-3); margin-top: 2px; }
+.aw-cl-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+html .aw-cl-opts .aw-cl-opt.ant-radio-wrapper,
+html .aw-cl-opts .aw-cl-opt.ant-checkbox-wrapper { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 7px 10px; border: 1px solid var(--aw-border); border-radius: 6px;
+  cursor: pointer; transition: border-color .12s, background .12s; white-space: normal; }
+html .aw-cl-opts .aw-cl-opt:hover { border-color: rgba(var(--aw-accent-rgb), .3); background: var(--aw-primary-faint); }
+html .aw-cl-opts .aw-cl-opt:is(.ant-radio-wrapper-checked, .ant-checkbox-wrapper-checked) { border-color: var(--aw-primary); background: var(--aw-primary-weak); }
+html .aw-cl-opts .aw-cl-opt.other { border-style: dashed; }
+html .aw-cl-opts .aw-cl-opt :is(.ant-radio, .ant-checkbox) { margin-top: 3px; align-self: flex-start; }
+html .aw-cl-opts .aw-cl-opt > span:last-child { padding: 0; min-width: 0; }
+.aw-cl-opt .t { display: block; font-size: 13px; line-height: 20px; color: var(--aw-text); }
+.aw-cl-opt .h { display: block; font-size: 12px; line-height: 18px; color: var(--aw-text-3); }
+.aw-cl-other-input { margin: 6px 0 0 22px; }
+html .aw-cl-other-input textarea.ant-input,
+html textarea.ant-input.aw-cl-textq { min-height: 56px; padding: 6px 10px; border-radius: 6px; font-size: 13px; line-height: 20px; }
+.aw-cl-q-err { margin-top: 6px; font-size: 12px; color: var(--aw-error-deep); }
+.aw-cl-wz-foot { display: flex; align-items: center; gap: 8px; padding: 0 16px 12px; }
+.aw-cl-wz-foot .hint { font-size: 11px; color: var(--aw-text-3); }
+.aw-cl-wz-foot .aw-cl-wz-primary { margin-left: auto; }
+html .aw-cl-wz-foot .ant-btn { height: 26px; padding: 0 8px; font-size: 12px; border-radius: 4px; }
+.aw-cl-wizard.collapsed .aw-cl-wz-head { padding-bottom: 12px; }
+.aw-cl-wz-toggle .chev { display: inline-flex; transition: transform .15s; }
+.aw-cl-wz-toggle[aria-expanded='false'] .chev { transform: rotate(180deg); }
+/* 答完/跳过：父级在 CLARIFICATION_CARD_DISMISS_MS 内保留卡片，期间不可交互。 */
+.aw-cl-wizard.is-dismissing { pointer-events: none; opacity: .6; }
 
-@keyframes aw-elicitation-body-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+/* 选择数字员工 */
+.aw-cl-pick { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.aw-cl-pick-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.aw-cl-pick-intro { margin: 0; font-size: 12px; line-height: 20px; color: var(--aw-text-3); }
+.aw-cl-field-label { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: var(--aw-text-2); line-height: 20px; }
+.aw-cl-field-label .n { font-weight: 400; color: var(--aw-text-3); font-size: 11px; }
+html .aw-cl-field .ant-select { width: 100%; }
+.aw-cl-agents { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; padding: 0; list-style: none; }
+.aw-cl-agent { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px; border: none; border-radius: 6px;
+  background: none; font: inherit; text-align: left; cursor: pointer; color: var(--aw-text); transition: background .12s; }
+.aw-cl-agent:hover { background: var(--aw-gray-bg); }
+.aw-cl-agent:focus-visible { outline: 2px solid rgba(var(--aw-accent-rgb), .4); outline-offset: 1px; }
+.aw-cl-agent .nm { display: block; font-size: 13px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-cl-agent .sub { display: block; font-size: 11px; line-height: 16px; color: var(--aw-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-cl-agent .go { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--aw-primary); opacity: 0; transition: opacity .12s; }
+.aw-cl-agent .st { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 16px; color: var(--aw-text-3); white-space: nowrap; }
+.aw-cl-agent .st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--aw-text-disabled); }
+.aw-cl-agent .st.on { color: var(--aw-success); }
+.aw-cl-agent .st.on::before { background: var(--aw-success); }
+.aw-cl-agent:hover .go,
+.aw-cl-agent:focus-visible .go,
+.aw-cl-agent.is-selected .go { opacity: 1; }
+.aw-cl-agent.is-selected { background: var(--aw-primary-weak); }
+.aw-cl-agent[disabled] { opacity: .45; cursor: not-allowed; }
+.aw-cl-agent[disabled]:hover { background: none; }
+.aw-cl-skel { height: 44px; border-radius: 6px; background: var(--aw-gray-bg); }
+.aw-cl-skel + .aw-cl-skel { margin-top: 2px; }
+
+/* 全屏：身份行与会话行并成一行、表头灰底；头部/正文/向导/输入行共用居中 1080 列 */
+.aw-clarification-panel.is-fullscreen .aw-cl-head { background: var(--aw-header-bg); padding: 0 24px; }
+.aw-clarification-panel.is-fullscreen .aw-cl-head > .aw-cl-head-row { min-height: 52px; width: 100%; max-width: 1080px; margin: 0 auto; }
+.aw-clarification-panel.is-fullscreen .aw-cl-head-inner { display: flex; align-items: center; gap: 12px; min-height: 52px;
+  width: 100%; max-width: 1080px; margin: 0 auto; }
+.aw-clarification-panel.is-fullscreen .aw-cl-wizard > * { box-sizing: border-box; width: 100%; max-width: 1128px; margin-left: auto; margin-right: auto; }
+.aw-clarification-panel.is-fullscreen .aw-cl-head-inner > .aw-cl-head-row { min-height: 0; padding: 0; }
+.aw-clarification-panel.is-fullscreen .aw-cl-head-inner > .aw-cl-head-row:first-child { flex: 1; min-width: 0; }
+.aw-clarification-panel.is-fullscreen .aw-cl-head-inner > .aw-cl-head-row + .aw-cl-head-row { flex: 0 1 560px; min-width: 0; }
+.aw-clarification-panel.is-fullscreen .aw-cl-body { padding: 20px 24px; }
+.aw-clarification-panel.is-fullscreen .aw-cl-foot { padding: 12px 24px; }
+.aw-clarification-panel.is-fullscreen .aw-cl-wz-head,
+.aw-clarification-panel.is-fullscreen .aw-cl-wz-dots,
+.aw-clarification-panel.is-fullscreen .aw-cl-wz-body { padding-left: 24px; padding-right: 24px; }
+.aw-clarification-panel.is-fullscreen .aw-cl-wz-foot { padding-left: 24px; padding-right: 24px; }
 
 .aw-clarify-artifact-browser {
   position: fixed;
@@ -192,11 +381,6 @@
 
 .aw-clarify-artifact-actions {
   flex-shrink: 0;
-}
-
-.aw-clarify-artifact-actions .ant-btn:focus-visible {
-  outline: 2px solid var(--aw-accent-text);
-  outline-offset: 2px;
 }
 
 .aw-clarify-artifact-address {
@@ -253,18 +437,5 @@
 
   .aw-clarify-artifact-browser [data-testid='resize-handle-horizontal'] {
     display: none;
-  }
-}
-
-/* 平台设计要求：系统开启「减少动画」偏好时全部动画与过渡禁用，瞬时呈现。 */
-@media (prefers-reduced-motion: reduce) {
-  .aw-elicitation-card,
-  .aw-elicitation-card.is-dismissing,
-  .aw-elicitation-body {
-    animation: none;
-  }
-
-  .aw-elicitation-toggle .aw-elicitation-chevron {
-    transition: none;
   }
 }

@@ -118,10 +118,10 @@ describe('SsoOverviewPanel', () => {
     ]) {
       expect(screen.queryByText(hidden)).toBeNull();
     }
-    expect(screen.queryByRole('button', { name: '新增 IdP' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '新增连接' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '添加身份提供方' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '添加登录连接' })).toBeNull();
     expect(screen.queryByRole('button', { name: '配置' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '回调信息' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '回调地址' })).toBeNull();
     expect(screen.queryAllByRole('switch')).toHaveLength(0);
     // 只读概览只调用白名单端点，不触达管理面接口。
     expect(adminRequests).toBe(0);
@@ -167,7 +167,7 @@ describe('SsoOverviewPanel', () => {
     renderPanel();
 
     expect(await screen.findByText('overview unavailable')).toBeInTheDocument();
-    expect(screen.getByText('企业 SSO 配置加载失败')).toBeInTheDocument();
+    expect(screen.getByText('加载企业 SSO 配置失败')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
 
     expect(await screen.findByText('尚未配置身份提供方')).toBeInTheDocument();

@@ -1,4 +1,4 @@
-/* 新空间 Chief 初始化引导：蒙版、引导卡与窄屏布局。 */
+/* 新空间 Chief 初始化引导：PENDING 居中卡 + 单面板（讲解条在 Chief 面板内）与蒙版（原型 37b）。 */
 
 body.aw-guide-lock { overflow: hidden; }
 
@@ -6,71 +6,342 @@ body.aw-guide-lock { overflow: hidden; }
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(21, 32, 59, .6);
+  background: rgba(17, 24, 39, .58);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
+/* ---------- PENDING 起步卡：唯一的独立浮层，绝不与 Chief 面板同时出现 ---------- */
 .aw-guide-card {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
   z-index: 1100;
-  width: min(520px, calc(100vw - 32px));
+  width: 360px;
+  max-width: calc(100vw - 32px);
   max-height: calc(100dvh - 32px);
-  display: flex;
+  overflow: auto;
+  padding: 18px 18px 14px;
   border: 1px solid var(--aw-border);
   border-radius: 14px;
   background: var(--aw-panel);
   color: var(--aw-text);
-  box-shadow: 0 12px 60px #0003;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 16px 48px rgba(21, 32, 59, .18), inset 0 1px 0 rgba(255, 255, 255, .9);
 }
-
-.aw-guide-card-content {
-  width: 100%;
-  min-height: 0;
-  overflow: auto;
-  padding: 26px;
-  border-radius: inherit;
-}
-
-.aw-guide-connector {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1090;
-  overflow: visible;
-  pointer-events: none;
-  fill: none;
-  stroke: rgb(var(--aw-accent-rgb));
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .14));
-}
-.aw-guide-connector-line { stroke-dasharray: 6 6; }
-.aw-guide-connector-arrow { stroke-width: 2.2; }
-
 .aw-guide-card:focus-visible { outline: 3px solid rgba(var(--aw-accent-rgb), .55); outline-offset: 2px; }
-.aw-guide-card h2 { margin: 10px 0; font-size: 24px; }
-.aw-guide-card p { font-size: 15px; line-height: 1.7; }
-.aw-guide-secondary { color: var(--aw-muted); font-size: 13px; }
-.aw-guide-flow-title { margin-bottom: 8px; font-size: 16px; font-weight: 600; }
-.aw-guide-navigation { display: flex; flex-wrap: wrap; gap: 8px; }
-.aw-guide-confirm { display: flex; justify-content: flex-end; }
 
-.aw-guide-skip {
+.guide-eyebrow {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--aw-text-3);
+}
+
+/* ---------- 三段进度：起步卡与讲解条共用 ---------- */
+.aw-guide-stepper { display: flex; align-items: center; margin: 10px 0 14px; }
+.aw-guide-stepper-part { display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; }
+.aw-guide-stepper-line { flex: 1 1 12px; min-width: 10px; height: 1px; margin: 0 8px; background: var(--aw-border); }
+.aw-guide-stepper-part:first-child { flex: 0 0 auto; }
+.aw-guide-stepper-part:last-child { flex: 0 0 auto; }
+.aw-guide-stepper-part:has(.aw-guide-stepper-line) { flex: 1 1 auto; }
+.aw-guide-stepper-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--aw-text-3);
+  white-space: nowrap;
+}
+.aw-guide-stepper-dot {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--aw-border);
+  border-radius: 50%;
+  background: var(--aw-panel);
+  color: var(--aw-text-3);
+  font-size: 10px;
+  line-height: 1;
+}
+.aw-guide-stepper-step.is-on { color: var(--aw-text); font-weight: 600; }
+.aw-guide-stepper-step.is-on .aw-guide-stepper-dot {
+  border-color: var(--aw-primary);
+  background: var(--aw-primary);
+  color: var(--aw-primary-ink);
+}
+.aw-guide-stepper-step.is-done { color: var(--aw-text-2); }
+.aw-guide-stepper-step.is-done .aw-guide-stepper-dot {
+  border-color: var(--aw-success);
+  background: var(--aw-success-bg);
+  color: var(--aw-success-deep);
+}
+.aw-guide-stepper-step.is-done .aw-guide-stepper-dot svg { width: 10px; height: 10px; }
+
+/* ---------- 起步卡内容 ---------- */
+.aw-guide-card h2 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-  padding-top: 14px;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.aw-guide-title-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--aw-primary-weak);
+  color: var(--aw-primary);
+}
+.aw-guide-title-icon svg { width: 15px; height: 15px; }
+
+.aw-guide-card > p { margin: 0; font-size: 12.5px; line-height: 19px; color: var(--aw-text-2); }
+.aw-guide-secondary { color: var(--aw-text-3); font-size: 12px; }
+
+.aw-guide-tip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--aw-gray-bg);
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--aw-text-3);
+}
+.aw-guide-tip svg { flex: none; width: 13px; height: 13px; color: var(--aw-text-2); }
+
+.aw-guide-card .ant-alert { margin-top: 10px; }
+.aw-guide-card .ant-alert .ant-alert-icon { margin-top: 2px; }
+
+.aw-guide-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.aw-guide-actions .ant-btn { flex: 1; }
+
+.aw-guide-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 11px;
   border-top: 1px solid var(--aw-border);
 }
+.aw-guide-foot .spacer { flex: 1; }
+.aw-guide-foot .ant-btn.aw-guide-skip { height: auto; padding: 0; color: var(--aw-text-3); font-size: 12px; }
+.aw-guide-foot .ant-btn.aw-guide-skip:hover { color: var(--aw-text-2); }
+.aw-guide-never {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--aw-text-3);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+.aw-guide-never:hover { color: var(--aw-text-2); text-decoration: underline; }
+.aw-guide-never:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; border-radius: 3px; }
 
-.aw-guide-never { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+/* ---------- 单面板：Chief 抬到蒙版之上，讲解条固定在面板顶部 ---------- */
+/* 只有非 PENDING 才抬升；PENDING 的面板由引导层强制关闭，不参与层级竞争。 */
+.aw-chief.aw-chief-guide-focus { z-index: 1050; }
+.aw-chief-guide .aw-chief-launch { display: none; }
+.aw-chief-guide .aw-chief-guide-panel { box-shadow: 0 12px 55px #0003; resize: none; }
+.aw-chief-guide .aw-chief-header { cursor: default; }
+
+.aw-guide-strip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 14px 11px;
+  border-bottom: 1px solid var(--aw-border);
+  background: var(--aw-primary-faint);
+}
+.aw-guide-strip:focus-visible { outline: 2px solid rgba(var(--aw-accent-rgb), .55); outline-offset: -2px; }
+.aw-guide-strip.error { background: var(--aw-error-bg); border-bottom-color: var(--aw-error-bg); }
+
+.aw-guide-strip-row { display: flex; align-items: center; gap: 10px; }
+.aw-guide-strip .aw-guide-stepper { flex: 1 1 auto; min-width: 0; margin: 0; }
+.aw-guide-strip-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.aw-guide-strip-actions .ant-btn.aw-guide-skip { height: auto; padding: 0; color: var(--aw-text-2); font-size: 12px; }
+.aw-guide-strip-actions .ant-btn.aw-guide-skip:hover { color: var(--aw-text); }
+
+.aw-guide-strip-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-text-2);
+}
+.aw-guide-strip-line > svg { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--aw-primary); }
+.aw-guide-strip-line .ant-btn { flex-shrink: 0; margin-left: auto; }
+.aw-guide-strip-line.is-error { color: var(--aw-error-deep); }
+.aw-guide-strip-line.is-error > svg { color: var(--aw-error-deep); }
+.aw-guide-strip-line.is-warn { color: var(--aw-warning-deep); }
+.aw-guide-strip-line.is-warn > svg { color: var(--aw-warning-deep); }
+
+/* 阶段 3 的输入框徽标 ② 保留；面板徽标 ① 已移除。 */
+.aw-chief-composer[data-guide-spot='send'] {
+  position: relative;
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--aw-primary), 0 0 0 6px rgba(var(--aw-accent-rgb), .18);
+}
+.aw-chief-composer[data-guide-spot='send']::after {
+  position: absolute;
+  top: -11px;
+  left: 12px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--aw-primary);
+  color: var(--aw-primary-ink);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  content: '2';
+  box-shadow: 0 0 0 3px var(--aw-panel), 0 4px 10px rgba(0, 0, 0, .22);
+}
+
+/* ---------- Chief 准备区（子步 0 生成并复制 / 子步 1 等待上线） ---------- */
+.aw-chief-setup-guided .ant-btn,
+.aw-chief-setup-guided .ant-select,
+.aw-chief-setup-guided .ant-segmented { margin: 0; }
+
+.aw-chief-setup-steps { padding: 2px 0 10px; border-bottom: 1px solid var(--aw-border); }
+.aw-chief-setup-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--aw-text-3);
+}
+.aw-chief-setup-step-n {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--aw-border);
+  border-radius: 50%;
+  background: var(--aw-panel);
+  color: var(--aw-text-3);
+  font-size: 10px;
+  line-height: 1;
+}
+.aw-chief-setup-step-n svg { width: 9px; height: 9px; }
+.aw-chief-setup-step.is-done { color: var(--aw-text-2); }
+.aw-chief-setup-step.is-done .aw-chief-setup-step-n {
+  border-color: var(--aw-success);
+  background: var(--aw-success);
+  color: var(--aw-panel);
+}
+.aw-chief-setup-step.is-on { color: var(--aw-text); font-weight: 600; }
+.aw-chief-setup-step.is-on .aw-chief-setup-step-n { border-color: var(--aw-primary); color: var(--aw-primary); }
+
+.aw-chief-setup-body { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; }
+.aw-chief-setup-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.aw-chief-setup-field .ant-select { min-width: 140px; }
+.aw-chief-setup-field .ant-segmented { flex: none; }
+.aw-chief-setup-primary { margin-top: 2px; }
+
+.aw-chief-guide-command {
+  position: relative;
+  padding: 8px 34px 8px 10px;
+  border-radius: 8px;
+  background: #1D1D20;
+  color: #D6D8DB;
+  font-family: var(--aw-font-mono);
+  font-size: 11px;
+  line-height: 18px;
+  word-break: break-all;
+}
+.aw-chief-guide-command .ant-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 5px;
+  color: #C9CCD1;
+  background: rgba(255, 255, 255, .08);
+}
+.aw-chief-guide-command .ant-btn:hover { color: #fff; background: rgba(255, 255, 255, .16); }
+.aw-chief-guide-command pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  font: inherit;
+}
+
+.aw-chief-setup-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.aw-chief-setup-foot .ant-tag { margin: 0; }
+.aw-chief-setup-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--aw-success-deep);
+}
+.aw-chief-setup-pulse {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aw-success);
+}
+
+.aw-chief-setup-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-gray-bg);
+  font-size: 12px;
+  line-height: 18px;
+}
+.aw-chief-setup-status .ant-btn { margin-left: auto; }
+.aw-chief-setup-hint { margin: 0; font-size: 11px; line-height: 17px; color: var(--aw-text-3); }
+
+/* ---------- 面板未打开时的独立 notice 与确认弹窗 ---------- */
+.aw-guide-notice {
+  position: fixed;
+  left: 18px;
+  bottom: 16px;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 36px);
+  padding: 10px 12px;
+  border: 1px solid var(--aw-border);
+  border-radius: 10px;
+  background: var(--aw-panel);
+  color: var(--aw-text);
+  font-size: 12.5px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .14);
+}
+.aw-guide-notice > svg { flex: none; color: var(--aw-error); }
+.aw-guide-notice .ant-btn { flex-shrink: 0; }
 
 .aw-guide-dialog-mask {
   position: fixed;
@@ -82,138 +353,36 @@ body.aw-guide-lock { overflow: hidden; }
 }
 
 .aw-guide-dialog {
-  width: min(460px, 92vw);
-  padding: 22px;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  padding: 20px;
   border: 1px solid var(--aw-border);
-  border-radius: 14px;
-  background: var(--aw-panel);
-  color: var(--aw-text);
-  box-shadow: 0 12px 60px #0003;
-}
-
-.aw-guide-dialog h2 { margin-top: 0; font-size: 19px; }
-.aw-guide-dialog p { line-height: 1.8; }
-.aw-guide-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
-
-/* 只抬高阶段 2 的机器人，白底隔开下层蒙版；覆盖全局按钮阴影和交互态。 */
-html .aw-chief-entry.ant-btn.aw-guide-focus,
-html .aw-chief-entry.ant-btn.aw-guide-focus:is(:hover, :active, :focus-visible) {
-  --aw-accent-text: #087f5b;
-  --aw-accent-rgb: 8, 127, 91;
-  --aw-panel: #fff;
-  position: relative;
-  z-index: 1100;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  flex-shrink: 0;
-  border: 2px solid var(--aw-accent-text);
   border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 0 0 3px #fff, 0 0 0 5px rgba(var(--aw-accent-rgb), .35), 0 4px 12px #0003;
-}
-
-html .aw-chief-entry.aw-guide-focus svg { width: 28px; height: 28px; }
-html .aw-chief-entry.aw-guide-focus svg path { stroke-width: 2.2; }
-
-/* 引导中的 Chief：同一实例抬到蒙版之上，收起态的悬浮球在引导期间不出现。 */
-.aw-chief.aw-chief-guide { z-index: 1050; }
-.aw-chief-guide .aw-chief-launch { display: none; }
-.aw-chief-guide .aw-chief-guide-panel { box-shadow: 0 12px 55px #0003; }
-
-@media (min-width: 701px) {
-  .aw-chief-guide .aw-chief-guide-panel:not(.aw-chief-expanded) {
-    position: fixed;
-    left: 24px;
-    right: auto;
-    top: auto;
-    bottom: 24px;
-    width: min(560px, calc(100vw - 460px));
-    height: min(70dvh, 640px);
-  }
-}
-
-.aw-chief-setup-guided .ant-btn,
-.aw-chief-setup-guided .ant-select { margin: 12px 8px 0 0; }
-.aw-chief-setup-guided .ant-alert { margin-top: 12px; }
-.aw-chief-guide-check { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; }
-.aw-chief-setup-guided .aw-chief-guide-check .ant-btn { margin: 0; }
-.aw-chief-guide-command {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  margin-top: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--aw-border);
-  border-radius: 8px;
-  background: var(--aw-raised);
-}
-.aw-chief-setup-guided .aw-chief-guide-command .ant-btn { margin: 0; }
-.aw-chief-guide-command pre {
-  width: 100%;
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
-}
-
-.aw-guide-card[data-setup-panel] {
-  top: auto;
-  bottom: 12px;
-  transform: translateX(-50%);
-  max-height: calc(40dvh - 24px);
-}
-body:has(.aw-guide-card[data-setup-panel]) .aw-chief-guide .aw-chief-guide-panel:not(.aw-chief-expanded) {
-  top: 12px;
-  bottom: auto;
-  max-height: calc(60dvh - 12px);
-}
-
-@media (min-width: 1100px) {
-  .aw-guide-card[data-setup-panel] {
-    top: 50%;
-    bottom: auto;
-    left: auto;
-    right: 24px;
-    transform: translateY(-50%);
-    max-height: calc(100dvh - 32px);
-  }
-  body:has(.aw-guide-card[data-setup-panel]) .aw-chief-guide .aw-chief-guide-panel:not(.aw-chief-expanded) {
-    top: auto;
-    bottom: 24px;
-    max-width: calc(100vw - 592px);
-    max-height: calc(100dvh - 48px);
-  }
-}
-
-.aw-guide-notice {
-  position: fixed;
-  left: 18px;
-  bottom: 16px;
-  z-index: 1100;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--aw-border);
-  border-radius: 10px;
   background: var(--aw-panel);
   color: var(--aw-text);
-  font-size: 13px;
-  box-shadow: 0 6px 20px #0002;
+  box-shadow: 0 16px 56px rgba(20, 32, 62, .26);
 }
+.aw-guide-dialog h2 { margin: 0 0 8px; font-size: 16px; line-height: 24px; }
+.aw-guide-dialog p { margin: 0; font-size: 12.5px; line-height: 19px; color: var(--aw-text-2); }
+.aw-guide-dialog .ant-alert { margin-top: 10px; }
+.aw-guide-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
-@media (max-width: 700px) {
-  .aw-guide-card-content { padding: 18px; }
-  .aw-chief-guide .aw-chief-guide-panel:not(.aw-chief-expanded) {
-    position: fixed;
-    left: 12px;
-    right: 12px;
-    top: 72px;
-    bottom: auto;
+/* ---------- 窄屏（≤720）：起步卡下沉为底部面板，引导面板占满可视区 ---------- */
+@media (max-width: 720px) {
+  .aw-guide-card {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
     width: auto;
-    height: calc(100dvh - 360px);
+    max-width: none;
+    max-height: 74dvh;
+    padding: 16px;
+    transform: none;
   }
+  .aw-guide-card h2 { font-size: 15px; }
+  .aw-guide-strip { padding: 9px 12px 10px; }
+  .aw-guide-strip .aw-guide-stepper-label { display: none; }
   .aw-guide-dialog-actions { flex-direction: column-reverse; }
   .aw-guide-dialog-actions .ant-btn { width: 100%; }
 }

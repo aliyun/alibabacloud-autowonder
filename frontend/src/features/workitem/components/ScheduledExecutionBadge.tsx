@@ -1,7 +1,7 @@
 import { formatDateTime } from '@/shared/i18n/format';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
-import { ClockCircleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { WorkitemOrigin } from '../../../shared/types/workitem';
 
 interface ScheduledExecutionBadgeProps {
@@ -14,6 +14,13 @@ interface ScheduledExecutionBadgeProps {
 function formatTime(value: string): string {
   return formatDateTime(value);
 }
+
+/** 行内居中：-1.5px 补偿 13px 字号的基线偏移，图标略低于基线也不会压到字形。 */
+const badgeStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  verticalAlign: '-1.5px',
+} as const;
 
 /**
  * 定时执行标识：只要是定时工单就持续展示，覆盖三种状态——
@@ -30,7 +37,7 @@ export function ScheduledExecutionBadge({
   if (scheduledStartAt) {
     return (
       <Tooltip title={t('schedule.execution', { time: formatTime(scheduledStartAt) })}>
-        <ClockCircleOutlined aria-label={t('schedule.aria')} style={{ color: 'var(--aw-accent-text)' }} />
+        <span role="img" aria-label={t('schedule.aria')} style={{ ...badgeStyle, color: 'var(--aw-accent-text)' }}><AwStrokeIcon name="clock" size={12} /></span>
       </Tooltip>
     );
   }
@@ -38,14 +45,14 @@ export function ScheduledExecutionBadge({
     const taskName = origin.scheduledTaskName || origin.scheduledTaskId;
     return (
       <Tooltip title={t('schedule.taskExecution', { name: taskName ?? '', time: formatTime(gmtCreate) })}>
-        <ClockCircleOutlined aria-label={t('schedule.taskAria')} style={{ color: 'var(--aw-success)' }} />
+        <span role="img" aria-label={t('schedule.taskAria')} style={{ ...badgeStyle, color: 'var(--aw-success-deep)' }}><AwStrokeIcon name="clock" size={12} /></span>
       </Tooltip>
     );
   }
   if (scheduledStartTriggeredAt) {
     return (
       <Tooltip title={t('schedule.triggered', { time: formatTime(scheduledStartTriggeredAt) })}>
-        <ClockCircleOutlined aria-label={t('schedule.triggeredAria')} style={{ color: 'var(--aw-muted)' }} />
+        <span role="img" aria-label={t('schedule.triggeredAria')} style={{ ...badgeStyle, color: 'var(--aw-muted)' }}><AwStrokeIcon name="clock" size={12} /></span>
       </Tooltip>
     );
   }

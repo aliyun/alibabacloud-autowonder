@@ -252,7 +252,8 @@ describe('SquadCopyModal', () => {
     await userEvent.click(screen.getByRole('button', { name: '确定复制' }));
 
     const confirm = await findDialogByTitle('确认复制到工作空间');
-    expect(within(confirm).getByText('源小队：开发小队')).toBeInTheDocument();
+    expect(within(confirm).getByText('源小队')).toBeInTheDocument();
+    expect(within(confirm).getByText('开发小队')).toBeInTheDocument();
     expect(within(confirm).getByText('目标空间A')).toBeInTheDocument();
     expect(within(confirm).getByText('不复制仓库绑定；目标数字人的仓库权限为空')).toBeInTheDocument();
     expect(within(confirm).getByText('目标数字人直接上线')).toBeInTheDocument();
@@ -303,7 +304,7 @@ describe('SquadCopyModal', () => {
     const successRow = resultRow(2);
     expect(within(successRow).getByText('复制成功')).toBeInTheDocument();
     expect(within(successRow).getByRole('link', { name: '查看小队 #15' }))
-      .toHaveAttribute('href', '/agents?tab=squads&squadId=15&workspaceId=2');
+      .toHaveAttribute('href', '/squads?squadId=15&workspaceId=2');
 
     const failedRow = resultRow(3);
     expect(within(failedRow).getByText('复制失败')).toBeInTheDocument();

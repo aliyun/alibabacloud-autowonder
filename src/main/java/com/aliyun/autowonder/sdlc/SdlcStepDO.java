@@ -10,6 +10,8 @@ public class SdlcStepDO {
     private Long id;
     private Long tenantId;
     private Long sdlcId;
+    /** Workflow setting projected only when freezing its steps for execution. */
+    private boolean flowStageTimingEnabled;
     private Integer stepOrder;
     private String name;
     private String kind;

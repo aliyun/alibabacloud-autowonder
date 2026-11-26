@@ -13,9 +13,9 @@ import { WorkitemCreatePage } from './WorkitemCreatePage';
 import { WorkitemListPage } from './WorkitemListPage';
 import { WorkitemKanban } from './components/WorkitemKanban';
 import { WorkitemMeta } from './components/WorkitemMeta';
+import { WorkitemActionBar } from './components/WorkitemActionBar';
 import { AgentWorkitemList } from '@/features/agent/components/AgentWorkitemList';
 import { CANCELED_STATUS_COLUMN, getPriorityMeta, STATUS_COLUMNS, UNKNOWN_PRIORITY, workTypeMap } from './constants';
-import { groupPendingDecisionsByAssignee } from './decisionGrouping';
 import { useUpdateWorkitemContent } from './hooks';
 
 function ok(data: unknown) {
@@ -139,15 +139,17 @@ it('updates independently routed Kanban cards, headers and load-more text withou
   expect(within(screen.getByTestId('kanban-column-NEW')).getByText('New')).toBeInTheDocument();
   expect(screen.getByText('Requirement')).toBeInTheDocument();
   expect(screen.getByText(`Source reporter: ${authoredName}`)).toBeInTheDocument();
-  expect(screen.getByText('Assignee: Unassigned')).toBeInTheDocument();
-  expect(screen.getByText(item.statusName!)).toBeInTheDocument();
+  expect(screen.getByTitle('Assignee: Unassigned')).toHaveTextContent('Unassigned');
   expect(screen.getByText('From Aone')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Load more (showing 1/2)' })).toBeInTheDocument();
   expect(screen.getByTestId('workitem-card-42').querySelector('strong')).toBeNull();
 });
 
 it('updates the mandatory metadata caller with safe rich placeholders and unchanged authored names', async () => {
-  route(<WorkitemMeta workType="REQ" priority={0} statusName={item.statusName!} assigneeName={authoredName} assigneeType="HUMAN" creatorDisplayName={authoredName} sdlcName="需求" tags={['需求']} />);
+  route(<>
+    <WorkitemMeta assigneeName={authoredName} assigneeType="HUMAN" creatorDisplayName={authoredName} sdlcName="需求" tags={['需求']} />
+    <WorkitemActionBar workType="REQ" priority={0} statusName={item.statusName!} />
+  </>);
   await language('en-US');
   expect(screen.getByText('Requirement')).toBeInTheDocument();
   expect(screen.getByText('Urgent')).toBeInTheDocument();
@@ -170,7 +172,7 @@ it('updates the mandatory agent-list caller and its independent filter labels', 
   expect(screen.getByText(item.statusName!)).toBeInTheDocument();
 });
 
-it('resolves previously cached enum objects and grouping fallbacks in the current locale, preserving identity and codes', async () => {
+it('resolves previously cached enum objects in the current locale, preserving identity and codes', async () => {
   const requirement = workTypeMap.REQ;
   const unknown = getPriorityMeta(999);
   const column = STATUS_COLUMNS[0];
@@ -182,12 +184,6 @@ it('resolves previously cached enum objects and grouping fallbacks in the curren
   expect(column.title).toBe('New');
   expect(column.key).toBe('NEW');
   expect(CANCELED_STATUS_COLUMN.title).toBe('Canceled');
-  const groups = groupPendingDecisionsByAssignee([
-    { ...item, statusCategory: 'PENDING_DECISION', assigneeRef: null, assigneeDisplayName: null, assigneeName: null },
-    { ...item, id: 43, statusCategory: 'PENDING_DECISION', assigneeType: 'EXTERNAL' },
-    { ...item, id: 44, statusCategory: 'PENDING_DECISION', assigneeRef: 44 },
-  ]);
-  expect(groups.map(group => group.label)).toEqual(expect.arrayContaining(['Unassigned', 'Unclaimed (external assignee)', authoredName]));
   await i18n.changeLanguage('zh-CN');
   expect(requirement.label).toBe('需求');
   expect(unknown.label).toBe('未知优先级');

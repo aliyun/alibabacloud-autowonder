@@ -1,20 +1,19 @@
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
-import { formatNumber } from '@/shared/i18n/format';
+import { formatDateTime, formatNumber } from '@/shared/i18n/format';
 import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
-import { PageHeading } from '@/shared/ui/PageHeading';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
+import { SectionCard } from '@/shared/ui/SectionCard';
+import { StatusTag } from '@/shared/ui/StatusTag';
+import type { StatusColorKey } from '@/shared/ui/StatusTag';
 import { useState } from 'react';
 import type { ReactNode, CSSProperties } from 'react';
 import {
-  Card, Descriptions, Tag, Spin, Button, Result, Space, Modal, Form, Input, Select,
-  Popconfirm, message, Tooltip, Drawer, Alert, Switch, InputNumber, Empty, Popover} from 'antd';
+  Spin, Button, Result, Space, Modal, Form, Input, Select,
+  Popconfirm, message, Tooltip, Drawer, Alert, Switch, InputNumber, Empty, Popover, Typography } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import {
-  PlusOutlined, EditOutlined, DeleteOutlined,
-  ArrowUpOutlined, ArrowDownOutlined, CheckCircleOutlined, StopOutlined, BulbOutlined,
-  QuestionCircleOutlined,
-} from '@ant-design/icons';
+import { StopOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -41,11 +40,24 @@ const kindOptions = [
   { value: 'cleanup', key: 'kind.cleanup' as const },
 ];
 
-const statusMap: Record<string, { color: string; key: 'status.draft' | 'status.enabled' | 'status.disabled' }> = {
-  DRAFT: { color: 'default', key: 'status.draft' as const },
-  ENABLED: { color: 'success', key: 'status.enabled' as const },
-  DISABLED: { color: 'warning', key: 'status.disabled' as const },
+const statusMeta: Record<string, { colorKey: StatusColorKey; key: 'status.draft' | 'status.enabled' | 'status.disabled' }> = {
+  DRAFT: { colorKey: 'gray', key: 'status.draft' as const },
+  ENABLED: { colorKey: 'green', key: 'status.enabled' as const },
+  DISABLED: { colorKey: 'amber', key: 'status.disabled' as const },
 };
+
+// 与步骤总览流程条 getStepKindTone 的着色语义一致：分析=蓝 · 实现=绿 · 测试=琥珀 · 评审=紫 · 其余中性
+export const SDLC_KIND_TAG_COLOR: Record<string, StatusColorKey> = {
+  analysis: 'blue',
+  implementation: 'green',
+  test: 'amber',
+  review: 'violet',
+  artifact: 'gray',
+  handoff: 'gray',
+  cleanup: 'gray',
+};
+
+const MISSING = '-';
 
 export function SdlcDetailPage() {
   const { t } = useTranslation('sdlc');
@@ -85,9 +97,12 @@ export function SdlcDetailPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['sdlc', sdlcId] });
 
   const updateInfoMutation = useMutation({
-    mutationFn: (data: { name?: string; description?: string; workType?: string }) =>
-      updateSdlcTemplate(sdlcId, data),
-    onSuccess: () => { invalidate(); setEditingInfo(false); message.success(i18n.t('sdlc:messages.saved')); },
+    mutationFn: (data: Parameters<typeof updateSdlcTemplate>[1]) => updateSdlcTemplate(sdlcId, data),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['sdlc', sdlcId], updated);
+      invalidate(); setEditingInfo(false); message.success(i18n.t('sdlc:messages.saved'));
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : i18n.t('sdlc:messages.saveFailed')),
   });
 
   const enableMutation = useMutation({
@@ -223,47 +238,56 @@ export function SdlcDetailPage() {
   };
 
   const stepColumns: ColumnsType<SdlcStep> = [
-    { title: '#', width: 50, render: (_, __, idx) => idx + 1 },
-    { title: t('fields.stepName'), dataIndex: 'name', align: 'left', width: 140 },
+    { title: '#', width: 44, render: (_, __, idx) => idx + 1 },
+    { title: t('fields.stepName'), dataIndex: 'name', align: 'left', width: 150, render: (v: string) => <span style={{ fontWeight: 600 }}>{v}</span> },
     { title: t('fields.kind'), dataIndex: 'kind', width: 110, render: (v: string | null) => {
       const option = kindOptions.find(option => option.value === v);
-      return v ? <Tag>{option ? t(option.key) : v}</Tag> : '-';
+      return v ? <StatusTag size="sm" label={option ? t(option.key) : v} colorKey={SDLC_KIND_TAG_COLOR[v] ?? 'gray'} /> : MISSING;
     } },
-    { title: t('fields.required'), dataIndex: 'required', width: 80, render: (v: boolean) => v === false ? t('messages.no') : t('messages.yes') },
+    { title: t('fields.required'), dataIndex: 'required', width: 64, render: (v: boolean) => v === false ? t('messages.no') : t('messages.yes') },
     {
       title: t('fields.instruction'), dataIndex: 'instructionMd',
-      render: (v: string | null) => v ? <span style={{ whiteSpace: 'pre-wrap' }}>{v}</span> : '-',
+      render: (v: string | null) => v ? (
+        <Popover
+          title={t('fields.instruction')}
+          trigger={['hover', 'click']}
+          overlayStyle={{ maxWidth: 384 }}
+          content={<div style={instructionPopoverStyle}>{v}</div>}
+        >
+          <span style={instructionClampStyle}>{v}</span>
+        </Popover>
+      ) : MISSING,
     },
     {
-      title: t('fields.checklist'), dataIndex: 'checklistJson', width: 110,
+      title: t('fields.checklist'), dataIndex: 'checklistJson', width: 92,
       render: (v: string | null) => v ? (
         <Popover title={t('fields.checklist')} trigger={['hover', 'click']} content={<ChecklistPreview raw={v} />}>
-          <Tag color="blue" style={{ cursor: 'pointer' }}>{t('messages.configured')}</Tag>
+          <StatusTag size="sm" label={t('messages.configured')} colorKey="blue" style={{ cursor: 'pointer' }} />
         </Popover>
-      ) : '-',
+      ) : MISSING,
     },
     {
-      title: t('fields.policy'), dataIndex: 'gatePolicyJson', width: 110,
+      title: t('fields.policy'), dataIndex: 'gatePolicyJson', width: 92,
       render: (v: string | null) => v ? (
         <Popover title={t('fields.policy')} trigger={['hover', 'click']} content={<GatePolicyPreview raw={v} />}>
-          <Tag color="blue" style={{ cursor: 'pointer' }}>{t('messages.configured')}</Tag>
+          <StatusTag size="sm" label={t('messages.configured')} colorKey="blue" style={{ cursor: 'pointer' }} />
         </Popover>
-      ) : '-',
+      ) : MISSING,
     },
     {
-      title: t('fields.actions'), width: 160, fixed: 'right',
+      title: t('fields.actions'), width: 120,
       render: (_, record, idx) => (
-        <Space size="small">
+        <Space size={4}>
           <Tooltip title={t('actions.moveUp')}>
-            <Button type="text" size="small" aria-label={t('actions.moveUp')} icon={<ArrowUpOutlined aria-hidden="true" />} disabled={idx === 0 || isEnabled}
+            <Button type="text" size="small" className="aw-op-btn" aria-label={t('actions.moveUp')} icon={<AwStrokeIcon name="up" />} disabled={idx === 0 || isEnabled}
               onClick={() => handleMoveStep(idx, 'up')} />
           </Tooltip>
           <Tooltip title={t('actions.moveDown')}>
-            <Button type="text" size="small" aria-label={t('actions.moveDown')} icon={<ArrowDownOutlined aria-hidden="true" />} disabled={idx === steps.length - 1 || isEnabled}
+            <Button type="text" size="small" className="aw-op-btn" aria-label={t('actions.moveDown')} icon={<AwStrokeIcon name="down" />} disabled={idx === steps.length - 1 || isEnabled}
               onClick={() => handleMoveStep(idx, 'down')} />
           </Tooltip>
           <Tooltip title={t('actions.edit')}>
-            <Button type="text" size="small" aria-label={t('actions.editStep')} icon={<EditOutlined aria-hidden="true" />} disabled={isEnabled}
+            <Button type="text" size="small" className="aw-op-btn" aria-label={t('actions.editStep')} icon={<AwStrokeIcon name="edit" />} disabled={isEnabled}
               onClick={() => openEditStep(record)} />
           </Tooltip>
           <Popconfirm title={t('confirm.deleteStep')} onConfirm={() => accessCommand(
@@ -273,7 +297,7 @@ export function SdlcDetailPage() {
           )}
             disabled={isEnabled}>
             <Tooltip title={t('actions.delete')}>
-              <Button type="text" size="small" danger aria-label={t('actions.delete')} icon={<DeleteOutlined aria-hidden="true" />} disabled={isEnabled} />
+              <Button type="text" size="small" className="aw-op-btn aw-op-btn--del" aria-label={t('actions.delete')} icon={<AwStrokeIcon name="trash" />} disabled={isEnabled} />
             </Tooltip>
           </Popconfirm>
         </Space>
@@ -282,26 +306,27 @@ export function SdlcDetailPage() {
   ];
 
   return (
-    <div>
+    <div className="aw-detail-canvas">
 
-      <Card
-        className="aw-content-card" title={<PageHeading title={<span className="aw-detail-title"><PageBackButton to="/sdlcs" label={t('actions.backList')} /><span>{sdlc.name}</span></span>} />}
-        extra={
-          <Space>
-            {!editingInfo && !isEnabled && (
-              <Button size="small" icon={<EditOutlined aria-hidden="true" />}
-                onClick={() => accessCommand('READ_WRITE', t('commands.editInfo'), () => {
-                  infoForm.setFieldsValue({ name: sdlc.name, description: sdlc.description, workType: sdlc.workType });
-                  setEditingInfo(true);
-                })}>{t('actions.editInfo')}</Button>
-            )}
+      {/* 原型 14 页头块：画布上的白卡（同工单详情头部卡），back + 名称 + 状态 + 右置操作 */}
+      <section className="aw-detail-head-card">
+        <div className="aw-detail-title" style={{ gap: 10 }}>
+          <PageBackButton to="/sdlcs" label={t('actions.backList')} />
+          <Typography.Title level={5} style={{ margin: 0, fontSize: 16, lineHeight: '24px', minWidth: 0, overflowWrap: 'anywhere' }}>{sdlc.name}</Typography.Title>
+          <StatusTag
+            dot
+            size="sm"
+            label={Object.prototype.hasOwnProperty.call(statusMeta, sdlc.status) ? t(statusMeta[sdlc.status].key) : sdlc.status}
+            colorKey={Object.prototype.hasOwnProperty.call(statusMeta, sdlc.status) ? statusMeta[sdlc.status].colorKey : 'gray'}
+          />
+          <Space style={{ marginLeft: 'auto' }}>
             {sdlc.status === 'DRAFT' || sdlc.status === 'DISABLED' ? (
               <Popconfirm title={t('confirm.enableLock')} onConfirm={() => accessCommand(
                 'READ_WRITE',
                 t('commands.enable'),
                 () => enableMutation.mutate(),
               )}>
-                <Button type="primary" size="small" icon={<CheckCircleOutlined aria-hidden="true" />}
+                <Button type="primary" icon={<AwStrokeIcon name="check" />}
                   loading={enableMutation.isPending}>{t('actions.enable')}</Button>
               </Popconfirm>
             ) : (
@@ -310,12 +335,26 @@ export function SdlcDetailPage() {
                 t('commands.disable'),
                 () => disableMutation.mutate(),
               )}>
-                <Button size="small" danger icon={<StopOutlined aria-hidden="true" />}
+                <Button danger icon={<StopOutlined aria-hidden="true" />}
                   loading={disableMutation.isPending}>{t('actions.disable')}</Button>
               </Popconfirm>
             )}
           </Space>
-        }
+        </div>
+        <div style={{ marginLeft: 42, marginTop: 4, fontSize: 12, color: 'var(--aw-text-3)' }}>
+          {t('overview.subtitle', { date: formatDateTime(sdlc.gmtCreate) })}
+        </div>
+      </section>
+
+      <SectionCard
+        title={t('overview.info')}
+        extra={!editingInfo && !isEnabled ? (
+          <Button size="small" style={{ fontSize: 12 }} icon={<AwStrokeIcon name="edit" />}
+            onClick={() => accessCommand('READ_WRITE', t('commands.editInfo'), () => {
+              infoForm.setFieldsValue({ name: sdlc.name, description: sdlc.description, workType: sdlc.workType });
+              setEditingInfo(true);
+            })}>{t('actions.editInfo')}</Button>
+        ) : undefined}
       >
         {editingInfo ? (
           <Form name="sdlc-info" form={infoForm} layout="vertical" onFinish={handleInfoSave}>
@@ -325,7 +364,7 @@ export function SdlcDetailPage() {
             <Form.Item name="description" label={t('fields.description')}>
               <Input.TextArea rows={2} />
             </Form.Item>
-            <Form.Item name="workType" label={t('fields.workType')}>
+            <Form.Item name="workType" label={t('fields.workType')} style={{ maxWidth: 240 }}>
               <Select allowClear placeholder={t('placeholder.workType')}
                 options={[
                   { value: 'REQUIREMENT', label: t('workType.requirement') },
@@ -337,32 +376,58 @@ export function SdlcDetailPage() {
               <Button type="primary" htmlType="submit" loading={updateInfoMutation.isPending}>{t('actions.save')}</Button>
               <Button onClick={() => setEditingInfo(false)}>{t('actions.cancel')}</Button>
             </Space>
+            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--aw-text-3)' }}>{t('help.infoEditingNote')}</div>
           </Form>
         ) : (
-          <Descriptions column={2}>
-            <Descriptions.Item label={t('fields.status')}>
-              <Tag color={Object.prototype.hasOwnProperty.call(statusMap, sdlc.status) ? statusMap[sdlc.status].color : undefined}>{Object.prototype.hasOwnProperty.call(statusMap, sdlc.status) ? t(statusMap[sdlc.status].key) : sdlc.status}</Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label={t('fields.workType')}>{sdlc.workType ? workTypes.get(sdlc.workType) ?? sdlc.workType : t('workType.general')}</Descriptions.Item>
-            <Descriptions.Item label={t('fields.version')}>v{sdlc.version}</Descriptions.Item>
-            <Descriptions.Item label={t('fields.stepCount')}>{formatNumber(steps.length)}</Descriptions.Item>
-            <Descriptions.Item label={t('fields.description')} span={2}>{sdlc.description || '-'}</Descriptions.Item>
-          </Descriptions>
+          <div className="aw-desc-grid aw-desc-grid--c4">
+            <div className="aw-desc-item">
+              <div className="aw-dk">{t('fields.status')}</div>
+              <div className="aw-dv">
+                <StatusTag
+                  dot
+                  size="sm"
+                  label={Object.prototype.hasOwnProperty.call(statusMeta, sdlc.status) ? t(statusMeta[sdlc.status].key) : sdlc.status}
+                  colorKey={Object.prototype.hasOwnProperty.call(statusMeta, sdlc.status) ? statusMeta[sdlc.status].colorKey : 'gray'}
+                />
+              </div>
+            </div>
+            <div className="aw-desc-item">
+              <div className="aw-dk">{t('fields.workType')}</div>
+              <div className="aw-dv">{sdlc.workType ? workTypes.get(sdlc.workType) ?? sdlc.workType : t('workType.general')}</div>
+            </div>
+            <div className="aw-desc-item">
+              <div className="aw-dk">{t('fields.version')}</div>
+              <div className="aw-dv aw-desc-mono">{t('fields.versionValue', { version: sdlc.version })}</div>
+            </div>
+            <div className="aw-desc-item">
+              <div className="aw-dk">{t('fields.stepCount')}</div>
+              <div className="aw-dv">{formatNumber(steps.length)}</div>
+            </div>
+            <div className="aw-desc-item">
+              <div className="aw-dk">{t('fields.stageTiming')}</div>
+              <div className="aw-dv">
+                <Switch aria-label={t('fields.stageTiming')} checked={sdlc.stageTimingEnabled === true}
+                  loading={updateInfoMutation.isPending}
+                  onChange={checked => accessCommand('READ_WRITE', t('fields.stageTiming'), () => updateInfoMutation.mutate({ stageTimingEnabled: checked }))} />
+              </div>
+            </div>
+            <div className="aw-desc-item aw-desc-item--full">
+              <div className="aw-dk">{t('fields.description')}</div>
+              <div className="aw-dv">{sdlc.description || MISSING}</div>
+            </div>
+          </div>
         )}
-      </Card>
+      </SectionCard>
 
-      <Card
+      <SectionCard
         title={t('overview.title')}
-        size="small"
         data-testid="sdlc-step-overview-card"
-        style={{
-          marginTop: 16,
-          background: 'var(--aw-panel)',
-          borderColor: 'var(--aw-accent-text)',
-          boxShadow: 'none',
-        }}
-        styles={{ body: { padding: '14px 16px' } }}
-        extra={<span style={{ color: 'var(--aw-muted)', fontSize: 12 }}>{t('overview.count', { count: steps.length })}</span>}
+        extra={(
+          <span style={{ color: 'var(--aw-text-3)', fontSize: 11 }}>
+            <span>{t('overview.count', { count: steps.length })}</span>
+            <span style={{ marginLeft: 8 }}>{t('overview.hoverHint')}</span>
+          </span>
+        )}
       >
         {steps.length === 0 ? (
           <Empty
@@ -386,7 +451,7 @@ export function SdlcDetailPage() {
               const tone = getStepKindTone(step.kind);
               return (
                 <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
-                  <Tooltip title={<StepOverviewTooltip step={step} />}>
+                  <Tooltip overlayInnerStyle={{ fontSize: 11 }} title={<StepOverviewTooltip step={step} />}>
                     <div
                       aria-label={t('overview.step', { index: index + 1, name: step.name })}
                       style={{
@@ -403,11 +468,11 @@ export function SdlcDetailPage() {
                         borderRadius: '50%',
                         border: `1px solid ${tone.border}`,
                         background: tone.background,
-                        color: tone.text,
+                        color: tone.textColor,
                         display: 'inline-grid',
                         placeItems: 'center',
-                        fontSize: 12,
-                        fontWeight: 700,
+                        fontSize: 11,
+                        fontWeight: 600,
                         flex: '0 0 auto',
                       }}>
                         {index + 1}
@@ -419,6 +484,7 @@ export function SdlcDetailPage() {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        maxWidth: 150,
                       }}>
                         {step.name}
                       </span>
@@ -428,7 +494,8 @@ export function SdlcDetailPage() {
                     <span
                       aria-label={t('overview.next')}
                       style={{
-                        color: tone.line,
+                        color: step.kind === 'analysis' ? 'var(--aw-primary)' : 'var(--aw-text-3)',
+                        opacity: step.kind === 'analysis' ? 0.55 : undefined,
                         fontSize: 15,
                         fontWeight: 800,
                         lineHeight: 1,
@@ -443,42 +510,38 @@ export function SdlcDetailPage() {
             })}
           </div>
         )}
-      </Card>
+      </SectionCard>
 
-      <Card
+      <SectionCard
         title={t('overview.editor')}
-        style={{ marginTop: 16 }}
         extra={
           <Space>
             {SDLC_AI_ENABLED && (
-              <Button icon={<BulbOutlined aria-hidden="true" />}
+              <Button size="small" icon={<AwStrokeIcon name="bulb" />} style={{ fontSize: 12 }}
                 onClick={() => accessCommand('READ_WRITE', t('commands.aiAssist'), () => setAiDrawerOpen(true))}>
                 {t('actions.aiAssist')}
               </Button>
             )}
-            <Button type="primary" icon={<PlusOutlined aria-hidden="true" />} onClick={openAddStep} disabled={isEnabled}>
+            <Button type="primary" size="small" icon={<AwStrokeIcon name="plus" />} style={{ fontSize: 12 }} onClick={openAddStep} disabled={isEnabled}>
               {t('actions.addStep')}
             </Button>
           </Space>
         }
       >
         {isEnabled && (
-          <div style={{ marginBottom: 12, color: 'var(--aw-warning)' }}>
-            {t('overview.locked')}
-          </div>
+          <Alert className="aw-lock-note" type="warning" showIcon message={t('overview.locked')} />
         )}
         <Table
           rowKey="id"
           columns={stepColumns}
           dataSource={steps}
           pagination={false}
-          size="small"
-          scroll={{ x: 900 }}
         />
-      </Card>
+      </SectionCard>
 
       <Modal
         title={editingStep ? t('actions.editStep') : t('actions.addStep')}
+        width={720}
         open={stepModalOpen}
         closable={{ 'aria-label': t('gallery.close') }}
         onOk={handleStepSubmit}
@@ -487,12 +550,15 @@ export function SdlcDetailPage() {
         destroyOnClose
       >
         <Form name="sdlc-step" form={stepForm} layout="vertical">
-          <Form.Item name="name" label={t('fields.stepName')} rules={[{ required: true, message: t('validation.stepName') }]}>
-            <Input placeholder={t('placeholder.stepName')} />
-          </Form.Item>
-          <Form.Item name="kind" label={t('fields.stepKind')}>
-            <Select allowClear options={kindOptions.map(option => ({ ...option, label: t(option.key) }))} placeholder={t('placeholder.kind')} />
-          </Form.Item>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <Form.Item name="name" label={t('fields.stepName')} rules={[{ required: true, message: t('validation.stepName') }]}
+              style={{ flex: 1, minWidth: 0 }}>
+              <Input placeholder={t('placeholder.stepName')} />
+            </Form.Item>
+            <Form.Item name="kind" label={t('fields.stepKind')} style={{ width: 220 }}>
+              <Select allowClear options={kindOptions.map(option => ({ ...option, label: t(option.key) }))} placeholder={t('placeholder.kind')} />
+            </Form.Item>
+          </div>
           <Form.Item name="required" label={t('fields.isRequired')} valuePropName="checked">
             <Switch />
           </Form.Item>
@@ -500,37 +566,44 @@ export function SdlcDetailPage() {
             extra={t('approval.description')}>
             <Switch checkedChildren={t('approval.needed')} unCheckedChildren={t('approval.notNeeded')} />
           </Form.Item>
-          {humanApprovalRequired && <Form.Item name="approvers" label={t('approval.approvers')} rules={[{ required: true, message: t('approval.validation') }]}
-            extra={t('approval.approversDescription')}>
-            <Select mode="multiple" options={approverOptions} optionFilterProp="label" placeholder={t('approval.placeholder')} />
-          </Form.Item>}
-          <Form.Item label={t('humanInput.label')}>
+          <Form.Item label={t('humanInput.label')} extra={t('humanInput.description')}>
             <Space>
               <Form.Item name="askWhenUnclear" valuePropName="checked" noStyle>
                 <Switch aria-label={t('humanInput.label')} />
               </Form.Item>
               <Tooltip title={t('humanInput.description')}>
-                <QuestionCircleOutlined tabIndex={0} aria-label={t('humanInput.help')} />
+                <span role="img" tabIndex={0} aria-label={t('humanInput.help')}
+                  style={{ display: 'inline-flex', alignItems: 'center', height: 22, color: 'var(--aw-text-3)', cursor: 'help' }}>
+                  <AwStrokeIcon name="help" size={14} />
+                </span>
               </Tooltip>
             </Space>
           </Form.Item>
+          {humanApprovalRequired && <Form.Item name="approvers" label={t('approval.approvers')} rules={[{ required: true, message: t('approval.validation') }]}
+            extra={t('approval.approversDescription')}>
+            <Select mode="multiple" options={approverOptions} optionFilterProp="label" placeholder={t('approval.placeholder')} />
+          </Form.Item>}
           <Form.Item name="instructionMd" label={t('fields.instruction')} rules={[{ required: true, message: t('validation.instruction') }]}>
             <Input.TextArea rows={8} placeholder={t('placeholder.instruction')} />
           </Form.Item>
-          <Form.Item name="checklistJson" label={<StepFieldHelp text={t('fields.checklistJson')} help={<ChecklistFieldHelp />} popover />}>
-            <Input.TextArea rows={3} placeholder={t('help.examplePlaceholder', { example: checklistExample })} />
-          </Form.Item>
-          <Form.Item name="gatePolicyJson" label={<StepFieldHelp text={t('fields.policyJson')} help={<GatePolicyFieldHelp />} popover />}
-            rules={[{ validator: (_, value) => {
-              try {
-                const policy = JSON.parse(value || '{}');
-                if (!policy || typeof policy !== 'object' || Array.isArray(policy)) throw new Error();
-                return Promise.resolve();
-              } catch { return Promise.reject(new Error(t('validation.policyObject'))); }
-            } }]}>
-            <Input.TextArea rows={3} placeholder={t('help.examplePlaceholder', { example: policyExample })} />
-          </Form.Item>
-          <Space size="large" align="start">
+          <div style={{ display: 'flex', gap: 16 }}>
+            <Form.Item name="checklistJson" label={<StepFieldHelp text={t('fields.checklistJson')} help={<ChecklistFieldHelp />} popover />}
+              style={{ flex: 1, minWidth: 0 }}>
+              <Input.TextArea rows={3} placeholder={t('help.examplePlaceholder', { example: checklistExample })} />
+            </Form.Item>
+            <Form.Item name="gatePolicyJson" label={<StepFieldHelp text={t('fields.policyJson')} help={<GatePolicyFieldHelp />} popover />}
+              style={{ flex: 1, minWidth: 0 }}
+              rules={[{ validator: (_, value) => {
+                try {
+                  const policy = JSON.parse(value || '{}');
+                  if (!policy || typeof policy !== 'object' || Array.isArray(policy)) throw new Error();
+                  return Promise.resolve();
+                } catch { return Promise.reject(new Error(t('validation.policyObject'))); }
+              } }]}>
+              <Input.TextArea rows={3} placeholder={t('help.examplePlaceholder', { example: policyExample })} />
+            </Form.Item>
+          </div>
+          <div style={{ display: 'flex', gap: 32 }}>
             <Form.Item name="timeoutSeconds" label={t('fields.timeout')}>
               <InputNumber min={1} precision={0} />
             </Form.Item>
@@ -540,7 +613,7 @@ export function SdlcDetailPage() {
             >
               <InputNumber min={0} precision={0} />
             </Form.Item>
-          </Space>
+          </div>
         </Form>
       </Modal>
 
@@ -574,29 +647,47 @@ export function SdlcDetailPage() {
   );
 }
 
+// 与原型 14 流程条着色一致：分析=主蓝 · 实现=成功绿 · 测试=警示琥珀 · 评审=紫 · 其余中性。
+// 全部用 crystal.css 真实存在的令牌（早前引用了不存在的 --aw-info，color-mix 整体失效导致步骤圈无色）。
 function getStepKindTone(kind?: string | null) {
   switch (kind) {
     case 'analysis':
-      return { border: 'color-mix(in srgb, var(--aw-info) 30%, var(--aw-border))', background: 'color-mix(in srgb, var(--aw-info) 10%, var(--aw-panel))', text: 'var(--aw-info)', line: 'color-mix(in srgb, var(--aw-info) 30%, var(--aw-border))' };
+      return { border: 'color-mix(in srgb, var(--aw-primary) 45%, transparent)', background: 'var(--aw-primary-weak)', textColor: 'var(--aw-accent-text)' };
     case 'implementation':
-      return { border: 'var(--aw-success)', background: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))', text: 'var(--aw-success)', line: 'color-mix(in srgb, var(--aw-success) 30%, var(--aw-border))' };
+      return { border: 'var(--aw-success)', background: 'var(--aw-success-bg)', textColor: 'var(--aw-success-deep)' };
     case 'test':
-      return { border: '#f59e0b', background: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', text: 'var(--aw-warning)', line: 'color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border))' };
+      return { border: 'var(--aw-warning)', background: 'var(--aw-warning-bg)', textColor: 'var(--aw-warning-deep)' };
     case 'review':
-      return { border: '#8b5cf6', background: 'var(--aw-raised)', text: 'var(--aw-text)', line: '#ddd6fe' };
+      return { border: 'var(--aw-ai)', background: 'var(--aw-ai-bg)', textColor: 'var(--aw-ai)' };
     default:
-      return { border: 'var(--aw-muted)', background: 'var(--aw-raised)', text: 'var(--aw-muted)', line: 'var(--aw-border)' };
+      return { border: 'var(--aw-border)', background: 'var(--aw-gray-bg)', textColor: 'var(--aw-text-2)' };
   }
 }
 
 function StepOverviewTooltip({ step }: { step: SdlcStep }) {
   const { t } = useTranslation('sdlc');
   const kind = kindOptions.find(option => option.value === step.kind);
+  let policy: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(step.gatePolicyJson || '{}');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) policy = parsed as Record<string, unknown>;
+  } catch { policy = {}; }
+  const needsApproval = policy.humanApprovalRequired === true;
+  const approvers = needsApproval ? policy.humanApprovers as Record<string, unknown> | undefined : undefined;
+  const approverNames = approvers ? [
+    ...(approvers.includeCreator === true ? [t('approval.creator')] : []),
+    ...((approvers.userIds as number[] | undefined) ?? []).map((id) => `user:${id}`),
+    ...((approvers.identityTags as string[] | undefined) ?? []).map((tag) => `tag:${tag}`),
+  ] : [];
+  const approval = !needsApproval
+    ? t('overview.approvalNotNeeded')
+    : approverNames.length > 0 ? t('overview.approvalNeededWith', { names: approverNames.join(' + ') }) : t('overview.approvalNeeded');
   return (
     <div style={{ display: 'grid', gap: 4, maxWidth: 260 }}>
       <div style={{ fontWeight: 700 }}>{step.name}</div>
       <div>{t('overview.kind', { kind: kind ? t(kind.key) : step.kind || t('messages.unconfigured') })}</div>
       <div>{t('overview.required', { required: step.required === false ? t('messages.no') : t('messages.yes') })}</div>
+      <div>{t('overview.approval', { approval })}</div>
       <div>{t('overview.timeout', { timeout: step.timeoutSeconds ? t('overview.seconds', { count: step.timeoutSeconds }) : t('messages.unconfigured') })}</div>
       <div>{t('overview.retry', { retry: step.retryBudget == null ? t('messages.unconfigured') : formatNumber(step.retryBudget) })}</div>
     </div>
@@ -604,6 +695,29 @@ function StepOverviewTooltip({ step }: { step: SdlcStep }) {
 }
 
 const previewStyle: CSSProperties = { maxWidth: 360, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 };
+
+// 说明列十六轮定稿：20 行截断（约 360px = 20×18px），hover Popover 全文滚动查看
+const instructionClampStyle: CSSProperties = {
+  display: '-webkit-box',
+  WebkitLineClamp: 20,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden',
+  whiteSpace: 'pre-wrap',
+  fontSize: 12,
+  color: 'var(--aw-text-2)',
+  cursor: 'pointer',
+};
+
+const instructionPopoverStyle: CSSProperties = {
+  maxWidth: 360,
+  maxHeight: 240,
+  overflow: 'auto',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  fontSize: 12,
+  lineHeight: 1.7,
+  color: 'var(--aw-text-2)',
+};
 
 function ChecklistPreview({ raw }: { raw: string }) {
   const { t } = useTranslation('sdlc');
@@ -681,12 +795,12 @@ function StepFieldHelp({ text, help, popover }: { text: string; help: ReactNode;
           event.currentTarget.click();
         }
       }}
-      style={{ marginLeft: 4, color: 'var(--aw-muted)', cursor: 'help' }}>
-      <QuestionCircleOutlined aria-hidden="true" />
+      style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--aw-text-3)', cursor: 'help' }}>
+      <AwStrokeIcon name="help" size={14} />
     </span>
   );
   return (
-    <span>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       {text}
       {popover ? (
         <Popover trigger={['hover', 'focus', 'click']} content={help} overlayInnerStyle={{ maxWidth: 460 }} placement="topLeft">

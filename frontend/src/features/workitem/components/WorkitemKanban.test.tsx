@@ -1,5 +1,4 @@
-import { ConfigProvider, message } from 'antd';
-import { createAppearanceTheme } from '@/shared/theme/appearance';
+import { message } from 'antd';
 import { statusCategoryOf } from '../constants';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { within, render, screen, fireEvent } from '@testing-library/react';
@@ -48,8 +47,8 @@ function renderKanban(props: React.ComponentProps<typeof WorkitemKanban>) {
   );
 }
 
-describe('WorkitemKanban 待决策按人分类', () => {
-  it('groups pending-decision column by assignee', () => {
+describe('WorkitemKanban 待决策列展示', () => {
+  it('renders pending-decision cards flat without assignee grouping headers', () => {
     const items = [
       mk({ id: 1, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 10, assigneeDisplayName: '张三', title: '决策A' }),
       mk({ id: 2, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 10, assigneeName: '张三', title: '决策B' }),
@@ -61,12 +60,12 @@ describe('WorkitemKanban 待决策按人分类', () => {
     expect(screen.getByText('决策A')).toBeInTheDocument();
     expect(screen.getByText('决策B')).toBeInTheDocument();
     expect(screen.getByText('决策C')).toBeInTheDocument();
+    // 列头徽标只显示「我的待决策 + 服务端计数」
     const summary = screen.getByLabelText('决策人汇总');
+    expect(summary).toHaveTextContent('我的待决策 52');
     expect(summary.parentElement).toContainElement(screen.getByText('待决策'));
-    expect(within(summary).getByText('张三')).toBeInTheDocument();
-    expect(within(summary).queryByText('李四')).not.toBeInTheDocument();
-    expect(within(summary).getByTitle('52')).toBeInTheDocument();
-    expect(summary).toHaveStyle({ marginLeft: 'auto' });
+    // 待决策列与其他泳道一致平铺，不再按决策人分组（验收返修 8/11）
+    expect(document.querySelectorAll('.aw-kb-group')).toHaveLength(0);
   });
 
   it('filters to only mine when onlyMine is set', () => {
@@ -83,12 +82,12 @@ describe('WorkitemKanban 待决策按人分类', () => {
     expect(screen.queryByText('李四')).not.toBeInTheDocument();
   });
 
-  it('places a single decision owner beside the column title without a duplicate group heading', () => {
+  it('renders a single decision owner with a count-only summary badge', () => {
     const name = '需要完整悬停展示的超长决策人姓名';
     renderKanban({ pendingDecisionSummary: { name, count: 1 }, items: [mk({ id: 1, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 42, assigneeDisplayName: name })] });
-    const owner = screen.getByTitle(name);
-    expect(screen.getByLabelText('决策人汇总').parentElement).toContainElement(screen.getByText('待决策'));
-    expect(within(owner.parentElement!).getByTitle('1')).toBeInTheDocument();
+    expect(screen.getByLabelText('决策人汇总')).toHaveTextContent('我的待决策 1');
+    // 决策人姓名只在卡片脚的指派人出现一次（列头徽标只显示计数，无组头）
+    expect(document.querySelectorAll('.aw-kb-group')).toHaveLength(0);
     expect(screen.getAllByText(name)).toHaveLength(1);
   });
 
@@ -110,6 +109,7 @@ describe('WorkitemKanban 待决策按人分类', () => {
     renderKanban({ items });
 
     expect(screen.getByText('普通任务')).toBeInTheDocument();
+    expect(document.querySelectorAll('.aw-kb-group')).toHaveLength(0);
   });
 
   it('labels imported workitems and shows the external reporter', () => {
@@ -146,9 +146,11 @@ describe('WorkitemKanban 待决策按人分类', () => {
 });
 
 describe('WorkitemKanban 优先级与姓名展示', () => {
-  it('renders the shared Chinese priority label with its color', () => {
+  it('renders the priority as an outline tag beside the work type tag', () => {
     renderKanban({ items: [mk({ id: 1, priority: 0, title: '紧急工单' })] });
-    expect(screen.getByText('紧急')).toHaveClass('ant-tag-red');
+    const row = screen.getByText('紧急').closest('div')!;
+    expect(row).toContainElement(screen.getByText('需求'));
+    expect(row).toHaveStyle({ flexWrap: 'wrap' });
   });
 
   it('shows 未知优先级 for unknown priority values without treating them as low', () => {
@@ -156,7 +158,7 @@ describe('WorkitemKanban 优先级与姓名展示', () => {
     expect(screen.getByText('未知优先级')).toBeInTheDocument();
   });
 
-  it('strips id suffixes from assignee and creator names', () => {
+  it('strips id suffixes from assignee names and drops the creator line', () => {
     renderKanban({ items: [mk({
       id: 1,
       title: '姓名工单',
@@ -167,37 +169,35 @@ describe('WorkitemKanban 优先级与姓名展示', () => {
       creatorDisplayName: '蔡何（10000）',
     })] });
 
-    expect(screen.getByText('当前处理人: AW全栈开发')).toBeInTheDocument();
-    expect(screen.getByText('创建者: 蔡何')).toBeInTheDocument();
+    expect(screen.getByTitle('当前处理人: AW全栈开发')).toHaveTextContent('AW全栈开发');
+    expect(screen.queryByText(/创建者/)).not.toBeInTheDocument();
     expect(screen.queryByText(/40013/)).not.toBeInTheDocument();
     expect(screen.queryByText(/10000/)).not.toBeInTheDocument();
   });
 
-  it('preserves full long metadata in hover titles and renders the assignee as text', () => {
-    const creator = '负责前端验收的超长创建者名称';
+  it('preserves the full long assignee name in the hover title', () => {
     const assignee = '负责前端验收的超长数字员工名称';
-    const status = '等待人工确认的超长状态名称';
-    renderKanban({ items: [mk({ id: 1, creatorDisplayName: creator, assigneeType: 'AGENT', assigneeDisplayName: assignee, statusName: status })] });
-    const fields = [screen.getByTitle(`创建者: ${creator}`), screen.getByTitle(`当前处理人: ${assignee}`), screen.getByTitle(`状态: ${status}`)];
-    expect(fields[1]).toHaveTextContent(`当前处理人: ${assignee}`);
-    expect(fields[1].querySelector('svg')).toBeNull();
-    fields.slice(0, 2).forEach(field => expect(field).toHaveClass('ant-typography-ellipsis'));
-    expect(fields[2]).toHaveClass('ant-tag');
-    expect(fields[2]).toHaveStyle({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
-    expect(fields[1].parentElement).toBe(fields[0].parentElement);
-    expect(fields[2].parentElement).not.toBe(fields[0].parentElement);
-    expect(fields[2].parentElement).toContainElement(screen.getByText('需求'));
-    expect(fields[2].parentElement).toContainElement(screen.getByText('低'));
+    renderKanban({ items: [mk({ id: 1, assigneeType: 'AGENT', assigneeDisplayName: assignee })] });
+    const field = screen.getByTitle(`当前处理人: ${assignee}`);
+    expect(field).toHaveTextContent(assignee);
   });
 
   it('shows 未指派 for unassigned cards', () => {
     renderKanban({ items: [mk({ id: 1, title: '无人工单', assigneeName: null, assigneeDisplayName: null })] });
-    expect(screen.getByText('当前处理人: 未指派')).toBeInTheDocument();
+    expect(screen.getByTitle('当前处理人: 未指派')).toHaveTextContent('未指派');
   });
 
   it('falls back to 未返回 for external cards without a reporter', () => {
     renderKanban({ items: [mk({ id: 1, title: '无提出人工单', sourceType: 'EXTERNAL', sourceCreator: undefined })] });
     expect(screen.getByText('来源提出人: 未返回')).toBeInTheDocument();
+  });
+
+  it('shows the card id in mono style beside the assignee', () => {
+    renderKanban({ items: [mk({ id: 57123, title: '编号工单' })] });
+    const idSpan = screen.getByText('57123');
+    expect(idSpan.getAttribute('style')).toContain('var(--aw-font-mono)');
+    const foot = idSpan.closest('div')!;
+    expect(foot).toContainElement(screen.getByTitle('当前处理人: 未指派'));
   });
 });
 
@@ -209,7 +209,7 @@ describe('WorkitemKanban 人工处理与异常标记', () => {
     renderKanban({ items });
 
     expect(screen.queryByText('需要人工')).not.toBeInTheDocument();
-    expect(screen.getByText('当前处理人: 蔡何')).toBeInTheDocument();
+    expect(screen.getByTitle('当前处理人: 蔡何')).toBeInTheDocument();
   });
 
   it('does not show 需人工 tag for agent-assigned pending-decision cards', () => {
@@ -232,7 +232,7 @@ describe('WorkitemKanban 人工处理与异常标记', () => {
     expect(screen.queryByText(/需人工/)).not.toBeInTheDocument();
   });
 
-  it('places the abnormal tag in the priority row without a duplicate assignee', () => {
+  it('places the abnormal tag in the tag row without a duplicate assignee', () => {
     const items = [
       mk({
         id: 1, statusCategory: 'PENDING_DECISION', statusName: '开发中', assigneeType: 'HUMAN', assigneeRef: 10000, assigneeDisplayName: '蔡何',
@@ -242,11 +242,11 @@ describe('WorkitemKanban 人工处理与异常标记', () => {
     renderKanban({ items });
 
     expect(screen.queryByText('需要人工')).not.toBeInTheDocument();
-    expect(screen.getByText('当前处理人: 蔡何')).toBeInTheDocument();
-    const statusRow = screen.getByTitle('状态: 开发中').parentElement!;
-    expect(statusRow).toContainElement(screen.getByText('异常'));
-    expect(statusRow).toContainElement(screen.getByText('低'));
-    expect(statusRow).toHaveStyle({ flexWrap: 'wrap' });
+    expect(screen.getByTitle('当前处理人: 蔡何')).toBeInTheDocument();
+    const tagRow = screen.getByText('异常').closest('div')!;
+    expect(tagRow).toContainElement(screen.getByText('需求'));
+    expect(tagRow).toContainElement(screen.getByText('低'));
+    expect(tagRow).toHaveStyle({ flexWrap: 'wrap' });
   });
 
   it('does not show 需人工 tag merely because a human is assigned outside pending decision', () => {
@@ -293,6 +293,20 @@ describe('WorkitemKanban 拖拽', () => {
     fireEvent.drop(screen.getByTestId(`kanban-column-${column}`), { dataTransfer });
   }
 
+  it('marks the dragged card and the hovered column as the drop target', () => {
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
+    renderKanban({ items: [mk({ id: 1, statusName: '待处理' })], onMove: vi.fn() });
+    const card = screen.getByTestId('workitem-card-1');
+    fireEvent.dragStart(card, { dataTransfer });
+    expect(card).toHaveClass('dragging');
+    const column = screen.getByTestId('kanban-column-IN_PROGRESS');
+    fireEvent.dragOver(column, { dataTransfer });
+    expect(column).toHaveClass('drop-target');
+    fireEvent.drop(column, { dataTransfer });
+    expect(card).not.toHaveClass('dragging');
+    expect(column).not.toHaveClass('drop-target');
+  });
+
   it('requests a move without optimistically relocating the card', () => {
     const item = mk({ id: 1, statusName: '待处理' });
     const onMove = vi.fn();
@@ -312,7 +326,7 @@ describe('WorkitemKanban 拖拽', () => {
     expect(onMove).not.toHaveBeenCalled();
   });
 
-  it('supports cards grouped under a decision maker', () => {
+  it('supports cards in the pending-decision column', () => {
     const item = mk({ id: 1, statusCategory: 'PENDING_DECISION' });
     const onMove = vi.fn();
     renderKanban({ items: [item], onMove });
@@ -334,8 +348,56 @@ describe('WorkitemKanban counts', () => {
     const { container } = renderKanban({
       items: [], columnKeys: ['NEW'], columnTotals: { NEW: 12345 },
     });
-    expect(container.querySelector('.ant-badge-count')).toHaveTextContent('12345');
+    expect(container.querySelector('.aw-kb-count')).toHaveTextContent('12345');
     expect(screen.queryByText('99+')).not.toBeInTheDocument();
+  });
+});
+
+describe('WorkitemKanban 状态与高亮 Tag（原型 04b ⑤ / 04c）', () => {
+  it('shows the queued tag for pending executions outside DONE', () => {
+    renderKanban({ items: [mk({ id: 1, title: '排队工单', executionStatus: 'PENDING' })] });
+    expect(screen.getByText('排队中')).toBeInTheDocument();
+  });
+
+  it('shows the healthy tag for idle NEW workitems with health OK', () => {
+    renderKanban({ items: [mk({ id: 1, title: '健康工单', health: 'OK' })] });
+    expect(screen.getByText('健康')).toBeInTheDocument();
+  });
+
+  it('hides the healthy tag once the workitem starts queuing', () => {
+    renderKanban({ items: [mk({ id: 1, title: '排队工单', health: 'OK', executionStatus: 'PENDING' })] });
+    expect(screen.getByText('排队中')).toBeInTheDocument();
+    expect(screen.queryByText('健康')).not.toBeInTheDocument();
+  });
+
+  it('dims DONE cards', () => {
+    renderKanban({ items: [mk({ id: 1, title: '完成工单', statusCategory: 'DONE' })] });
+    expect(screen.getByTestId('workitem-card-1')).toHaveStyle({ opacity: '0.82' });
+  });
+
+  it('tints the pending column and my pending cards when I have pending decisions', () => {
+    renderKanban({
+      items: [
+        mk({ id: 1, title: '我的决策', statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 42, assigneeDisplayName: '我' }),
+        mk({ id: 2, title: '别人的决策', statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 99, assigneeDisplayName: '同事' }),
+      ],
+      currentUserId: 42,
+      pendingDecisionSummary: { name: '我', count: 1 },
+    });
+    expect(screen.getByTestId('kanban-column-PENDING_DECISION')).toHaveClass('hot');
+    expect(screen.getByTestId('workitem-card-1')).toHaveClass('hot');
+    expect(screen.getByTestId('workitem-card-2')).not.toHaveClass('hot');
+  });
+
+  it('leaves the pending column plain without my pending decisions', () => {
+    renderKanban({
+      items: [mk({ id: 1, title: '别人的决策', statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 99, assigneeDisplayName: '同事' })],
+      currentUserId: 42,
+      pendingDecisionSummary: { name: '我', count: 0 },
+    });
+    expect(screen.getByTestId('kanban-column-PENDING_DECISION')).not.toHaveClass('hot');
+    expect(screen.getByTestId('workitem-card-1')).not.toHaveClass('hot');
+    expect(screen.queryByText('我的待决策 0')).not.toBeInTheDocument();
   });
 });
 
@@ -381,7 +443,6 @@ describe('WorkitemKanban 排队标记', () => {
     const { rerender } = renderKanban({ items: [item] });
     const card = screen.getByTestId('workitem-card-91');
     expect(within(card).getByText('排队中')).toBeInTheDocument();
-    expect(within(card).getByText('开发中')).toBeInTheDocument();
     expect(statusCategoryOf(item)).toBe('IN_PROGRESS');
     expect(screen.getByTestId('kanban-column-IN_PROGRESS')).toContainElement(card);
     rerender(
@@ -398,10 +459,9 @@ describe('WorkitemKanban 排队标记', () => {
   });
 });
 
-it.each(['dark', 'light'] as const)('uses the %s theme surface for kanban columns', (mode) => {
-  const config = createAppearanceTheme(mode, '#f97316');
-  render(<ConfigProvider theme={config}><MemoryRouter><WorkitemKanban items={[]} /></MemoryRouter></ConfigProvider>);
-  expect(screen.getByTestId('kanban-column-NEW')).toHaveStyle({background: config.token!.colorFillAlter});
+it('styles kanban columns through the aw-kb-col class (surface via CSS vars, verified in browser)', () => {
+  render(<MemoryRouter><WorkitemKanban items={[]} /></MemoryRouter>);
+  expect(screen.getByTestId('kanban-column-NEW')).toHaveClass('aw-kb-col');
 });
 
 describe('WorkitemKanban 看板横向自适应', () => {

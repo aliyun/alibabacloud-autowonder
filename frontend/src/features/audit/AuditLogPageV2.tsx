@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Alert, Card, Descriptions, Drawer } from 'antd';
-import { CloseOutlined, CloseCircleOutlined } from '@ant-design/icons';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { Alert, Descriptions, Drawer } from 'antd';
+import { CloseCircleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { PageHead } from '@/shared/ui/PageHead';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import { usePageSizePreference } from '@/shared/lib/usePageSizePreference';
 import { listAllAgents } from '@/features/agent/api';
@@ -71,21 +72,22 @@ export function AuditLogPageV2() {
 
   return (
     <div className="audit-page">
-      <div className="audit-page-head">
-        <PageHeading title={t('title')} description={t('subtitle')} />
-        <span className="audit-count-chip" aria-live="polite">{t('countChip', { count: total })}</span>
-      </div>
-      {/* 筛选栏 z-index 需高于列表卡：两者都带入场动画时各自形成 stacking context，否则弹层会被表格遮盖。 */}
-      <Card className="aw-content-card audit-filter-card" styles={{ body: { padding: 12 } }}>
+      <PageHead
+        title={t('title')}
+        description={t('headDescription', { subtitle: t('subtitle'), description: t('description') })}
+      />
+      {/* 筛选卡独立成块：首行关键词/时间范围/条数/重置，次行维度筛选等宽换行。 */}
+      <div className="audit-filter-card">
         <AuditLogFilterBar
           value={filters}
           keywordInput={keywordInput}
           agents={agents}
+          total={total}
           onChange={updateFilters}
           onKeywordChange={setKeywordInput}
           onReset={resetFilters}
         />
-      </Card>
+      </div>
       {isError && (
         <Alert
           type="error"
@@ -95,7 +97,7 @@ export function AuditLogPageV2() {
           className="audit-error"
         />
       )}
-      <Card className="aw-content-card audit-table-card" styles={{ body: { padding: 0 } }}>
+      <div className="audit-table-card">
         <AuditLogTable
           rows={rows}
           total={total}
@@ -108,9 +110,9 @@ export function AuditLogPageV2() {
           }}
           onSelect={setSelected}
         />
-      </Card>
+      </div>
       <Drawer
-        closable={{ closeIcon: <CloseOutlined aria-hidden="true" />, 'aria-label': t('close') }}
+        closable={{ closeIcon: <AwStrokeIcon name="x" />, 'aria-label': t('close') }}
         title={t('detailTitle')}
         width="min(760px, 95vw)"
         open={selected !== null}
@@ -119,10 +121,10 @@ export function AuditLogPageV2() {
         {selected && (
           <>
             <Descriptions column={1} bordered size="small" items={[
-              { key: 'id', label: t('logId'), children: selected.id },
-              { key: 'action', label: t('rawAction'), children: selected.action },
+              { key: 'id', label: t('logId'), children: <span className="audit-mono">{selected.id}</span> },
+              { key: 'action', label: t('rawAction'), children: <span className="audit-mono">{selected.action}</span> },
               { key: 'trigger', label: t('trigger'), children: triggerText(selected) },
-              { key: 'event', label: t('eventType'), children: detail?.eventType ? String(detail.eventType) : '-' },
+              { key: 'event', label: t('eventType'), children: <span className="audit-mono">{detail?.eventType ? String(detail.eventType) : t('emptyValue')}</span> },
             ]} />
             <AuditJsonBlock titleKey="fullRecord" value={selected} />
             <AuditJsonBlock titleKey="eventDetail" value={detail ?? {}} />

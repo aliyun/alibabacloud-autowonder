@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Card, Input, Select, Button, Space, Typography, Empty } from 'antd';
-import { DeleteOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { AiResultRendererProps } from './types';
 import type { MemoryImportResult, MemoryImportItem, MemoryItemType } from '@/shared/types/ai';
 
@@ -41,7 +41,7 @@ export function MemoryImportRenderer({ value, onChange, disabled }: AiResultRend
                 size="small"
                 danger
                 type="text"
-                icon={<DeleteOutlined />}
+                icon={<AwStrokeIcon name="trash" />}
                 aria-label={t('memory.discardItem', { index: i + 1 })}
                 onClick={() => discard(i)}
               >{t('memory.discard')}</Button>

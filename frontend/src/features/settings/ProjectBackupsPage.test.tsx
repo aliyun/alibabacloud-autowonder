@@ -53,6 +53,25 @@ describe('ProjectBackupsPage', () => {
     expect(screen.getByRole('button', { name: /下载/ })).toBeDisabled();
   });
 
+  it('shows the page description, archive hint and empty state before any backup exists', async () => {
+    server.use(http.get('/api/workspaces/current/backups', () => ok([])));
+    renderPage();
+    expect(screen.getByRole('heading', { name: '项目配置备份' })).toBeInTheDocument();
+    expect(screen.getByText('备份当前项目的配置与知识，下载 ZIP 归档留档或迁移；列表每 5 秒自动轮询运行中任务')).toBeInTheDocument();
+    expect(screen.getByText('ZIP 包包含配置 JSON、技能包和校验清单。备份原始数据上限 64 MiB；下载链接有效期 5 分钟。')).toBeInTheDocument();
+    expect(await screen.findByText('暂无备份记录，点击右上角「立即备份到云端」创建第一份归档')).toBeInTheDocument();
+    expect(document.querySelector('[data-glyph="backup"]')).not.toBeNull();
+  });
+
+  it('renders running backups with a disabled download and dim placeholders', async () => {
+    server.use(http.get('/api/workspaces/current/backups', () => ok([
+      { ...backup, id: 'running-1', status: 'RUNNING', ossRef: undefined, sizeBytes: undefined },
+    ])));
+    renderPage();
+    expect(await screen.findByText('备份中')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /下载/ })).toBeDisabled();
+  });
+
   it('requests a fresh signed link only when downloading', async () => {
     const sign = vi.fn(() => ok({ url: 'https://example.com/backup.zip' }));
     server.use(

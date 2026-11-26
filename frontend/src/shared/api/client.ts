@@ -39,6 +39,11 @@ function isAuthEntryRequest(config?: InternalAxiosRequestConfig): boolean {
   return config?.url != null && AUTH_ENTRY_URLS.has(config.url);
 }
 
+// Each platform-admin addition requires explicit confirmation; never silently replay it.
+function isPlatformAdminAddRequest(config?: InternalAxiosRequestConfig): boolean {
+  return config?.method?.toUpperCase() === 'POST' && config?.url === '/api/platform/admins';
+}
+
 async function synchronizeWorkspaceAfterFailure(code: string, config?: InternalAxiosRequestConfig): Promise<void> {
   if (code === ErrorCodes.ORG_DELETED_OR_DISABLED) {
     const sent = config && requestContexts.get(config);
@@ -428,7 +433,9 @@ apiClient.interceptors.response.use(
       if (body.code === ErrorCodes.EMAIL_VERIFICATION_REQUIRED) {
         requireEmailVerification();
       }
-      if (body.code === ErrorCodes.UNAUTHORIZED && !isAuthEntryRequest(response.config)) {
+      if (body.code === ErrorCodes.UNAUTHORIZED
+        && !isAuthEntryRequest(response.config)
+        && !isPlatformAdminAddRequest(response.config)) {
         return handleUnauthorized(response.config);
       }
       const apiError = new ApiError(body.code, body.message, body.traceId, body.data);
@@ -445,7 +452,9 @@ apiClient.interceptors.response.use(
       if (body.code === ErrorCodes.EMAIL_VERIFICATION_REQUIRED) {
         requireEmailVerification();
       }
-      if (body.code === ErrorCodes.UNAUTHORIZED && !isAuthEntryRequest(error.config)) {
+      if (body.code === ErrorCodes.UNAUTHORIZED
+        && !isAuthEntryRequest(error.config)
+        && !isPlatformAdminAddRequest(error.config)) {
         return handleUnauthorized(error.config);
       }
       const apiErr = new ApiError(body.code, body.message, body.traceId, body.data);

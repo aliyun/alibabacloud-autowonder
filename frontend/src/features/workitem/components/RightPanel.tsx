@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Collapse, Space, Tooltip } from 'antd';
-import { RightOutlined, ArrowLeftOutlined, FullscreenOutlined, FullscreenExitOutlined } from '@ant-design/icons';
+import { FullscreenExitOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { PrdWorkitemEntry } from '@/features/prd/components/PrdWorkitemEntry';
 import { WorkitemClarificationPanel } from '../clarification/WorkitemClarificationPanel';
 import { CLARIFICATION_THEME } from '../clarification/theme';
@@ -182,8 +183,7 @@ export function RightPanel({
           />
         )}
         {/* 头部融合：全屏与停靠都不再渲染外层独立头行。「返回」与
-            「全屏/退出全屏」作为插槽并入澄清面板自己的头部——
-            全屏融成一行；停靠排成「导航/身份 + 会话操作」两行。 */}
+            「全屏/退出全屏」作为插槽并入澄清面板自己的头部。 */}
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <WorkitemClarificationPanel
             workitemId={workitemId}
@@ -191,32 +191,31 @@ export function RightPanel({
             fullscreen={clarifyFullscreen}
             headerPrefix={(
               <Button
-                size={clarifyFullscreen ? 'middle' : 'small'}
-                icon={<ArrowLeftOutlined />}
+                type="text"
+                className="aw-cl-icon-btn aw-cl-back"
+                icon={<AwStrokeIcon name="chev-l" />}
                 aria-label={t('detail.back')}
-                style={{ flexShrink: 0 }}
+                title={t('detail.back')}
                 onClick={() => switchMode('progress')}
-              >
-                {t('detail.back')}
-              </Button>
+              />
             )}
             headerSuffix={clarifyFullscreen ? (
               <Tooltip title={t('detail.exitFullscreenHint')}>
                 <Button
-                  size="middle"
+                  type="text"
+                  className="aw-cl-icon-btn"
                   icon={<FullscreenExitOutlined />}
                   aria-label={t('detail.exitFullscreen')}
-                  style={{ flexShrink: 0 }}
                   onClick={exitFullscreen}
                 />
               </Tooltip>
             ) : (
               <Tooltip title={t('detail.fullscreen')}>
                 <Button
-                  size="small"
-                  icon={<FullscreenOutlined />}
+                  type="text"
+                  className="aw-cl-icon-btn"
+                  icon={<AwStrokeIcon name="fullscreen" />}
                   aria-label={t('detail.fullscreen')}
-                  style={{ flexShrink: 0 }}
                   onClick={enterFullscreen}
                 />
               </Tooltip>
@@ -239,25 +238,35 @@ export function RightPanel({
 
   return (
     <div style={{ padding: 0, overflow: 'auto', height: '100%' }}>
-      <Space direction="vertical" style={{ width: '100%' }} size={8}>
+      <Space direction="vertical" style={{ width: '100%' }} size={12}>
         <PrdWorkitemEntry onClarify={AI_CLARIFICATION_ENABLED
           ? () => accessCommand('READ_WRITE', t('detail.clarifyCommand'), () => switchMode('clarify'))
           : undefined} />
 
         <Collapse
+          className="aw-rail-collapse"
           size="small"
           defaultActiveKey={[]}
-          expandIcon={({ isActive }) => <RightOutlined aria-hidden="true" rotate={isActive ? 90 : 0} />}
+          expandIconPosition="end"
+          expandIcon={({ isActive }) => (
+            <span
+              aria-hidden="true"
+              className="aw-rail-chev"
+              style={{ transform: `rotate(${isActive ? 0 : -90}deg)` }}
+            >
+              <AwStrokeIcon name="chev-d" />
+            </span>
+          )}
           items={[{
             key: 'task-info',
             label: t('detail.taskInfo'),
             children: (
-              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+              <div className="aw-task-info">
                 <ExternalCollaborationCard collaboration={externalCollaboration} />
                 <SquadMembers participants={participants} loading={participantsLoading} />
                 <WatcherList workitemId={workitemId} />
                 {progress?.workflowPlan && <WorkflowPlanSummary plan={progress.workflowPlan} />}
-              </Space>
+              </div>
             ),
           }]}
         />
@@ -271,7 +280,6 @@ export function RightPanel({
           renderControlTimeline={(dispatchId, compact) => <ExecutionControlTimeline key={`controls-${dispatchId}`} dispatchId={dispatchId} items={timeline} compact={compact} />}
           showWorkflowPlan={false}
           renderRecovery={(dispatchId) => <RecoveryControls key={`recovery-${dispatchId}`} workitemId={workitemId} variant="execution" dispatchId={dispatchId} />}
-          restartHistory={<RecoveryControls workitemId={workitemId} variant="history" />}
           steps={steps}
           progress={progress}
           terminalStatus={terminalStatus}
@@ -284,6 +292,7 @@ export function RightPanel({
             () => executionControl.mutate({ dispatchId: attempt.dispatchId, action }),
           )}
           pendingExecutionAction={executionControl.isPending ? executionControl.variables ?? null : null}
+          workitemId={workitemId}
         />
         <DebugLogList workitemId={workitemId} />
       </Space>

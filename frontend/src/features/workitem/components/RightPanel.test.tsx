@@ -167,8 +167,9 @@ describe('RightPanel resize handles', () => {
 });
 
 it('replaces recovery diagnostics rather than accumulating them while switching executions and refreshing data', async () => {
-  const progress = { steps: [], executions: [301, 302].map(dispatchId => ({ dispatchId, agentId: 41,
-    agentName: 'RD', executorName: null, status: 'PAUSED', startedAt: null, durationMs: null })) };
+  const progress = { steps: [], agents: [{ agentId: 41, agentName: 'RD', status: 'paused' as const, durationMs: null, steps: [] }],
+    executions: [301, 302].map(dispatchId => ({ dispatchId, agentId: 41,
+      agentName: 'RD', executorName: null, status: 'PAUSED', startedAt: null, durationMs: null })) };
   let reads = 0;
   server.use(http.get('/api/dispatches/:dispatchId/runtime-trace/events/window', () => HttpResponse.json({ success: true, code: '0', data: { events: [], changed: false } })),
   http.get('/api/workitems/1/recovery', () => { reads++; return HttpResponse.json({ success: true, code: '0', data: {
@@ -180,9 +181,11 @@ it('replaces recovery diagnostics rather than accumulating them while switching 
     executionControl: { action: 'PAUSE', phase: 'CONFIRMED', dispatchId },
   }));
   const { queryClient } = renderPanel({ progress, timeline });
-  await userEvent.click(screen.getByRole('button', { name: '查看执行' }));
+  await userEvent.click(screen.getAllByTestId('delivery-agent-row')[0]);
   const workbench = await screen.findByTestId('delivery-workbench');
   await waitFor(() => expect(within(workbench).getByText('recovery-302')).toBeVisible());
+  // 每组默认只显示最近 1 次，更早的执行需先展开（展开状态在回到当前执行后保持）
+  await userEvent.click(within(workbench).getByRole('button', { name: '更早 1 次' }));
   for (let i = 0; i < 3; i++) {
     await userEvent.click(within(workbench).getByRole('button', { name: /Dispatch 301/ }));
     await waitFor(() => expect(within(workbench).getByText('recovery-301')).toBeVisible());
@@ -214,8 +217,10 @@ describe('RightPanel clarify fullscreen', () => {
 
     const backButton = screen.getByRole('button', { name: '返回' });
     const fullscreenButton = screen.getByRole('button', { name: '全屏' });
-    expect(backButton).not.toHaveClass('ant-btn-text');
-    expect(fullscreenButton).not.toHaveClass('ant-btn-text');
+    // 05d：头部「返回/全屏」统一为平台文本图标按钮（type="text" + aw-cl-icon-btn），不带文字
+    expect(backButton).toHaveClass('ant-btn-text', 'aw-cl-icon-btn', 'aw-cl-back');
+    expect(fullscreenButton).toHaveClass('ant-btn-text', 'aw-cl-icon-btn');
+    expect(backButton).toHaveTextContent('');
     expect(fullscreenButton).toHaveTextContent('');
 
     await userEvent.click(fullscreenButton);
@@ -227,6 +232,7 @@ describe('RightPanel clarify fullscreen', () => {
     expect(screen.queryByText('需求澄清')).not.toBeInTheDocument();
     const exitFullscreenButton = screen.getByRole('button', { name: '退出全屏' });
     expect(exitFullscreenButton.parentElement).toBe(screen.getByTestId('clarification-panel-stub'));
+    expect(exitFullscreenButton).toHaveClass('ant-btn-text', 'aw-cl-icon-btn');
     expect(exitFullscreenButton).toHaveTextContent('');
     await userEvent.click(exitFullscreenButton);
     expect(screen.getByTestId('clarify-resize-box')).toHaveStyle('position: relative');

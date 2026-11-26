@@ -1,26 +1,39 @@
-.aw-comment-reply { margin: 10px 0 0 12px; padding: 12px 14px; border-left: 3px solid var(--aw-accent-text); border-radius: 8px; background: rgba(var(--aw-accent-rgb),.10); color: var(--aw-text); font-size: 12px; min-width: 0; }
-.aw-comment-reply-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.aw-comment-reply-header strong { color: var(--aw-accent-text); overflow-wrap: anywhere; }
-.aw-comment-robot { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(var(--aw-accent-rgb),.10); color: var(--aw-accent-text); font-size: 17px; flex-shrink: 0; }
-.aw-comment-state { margin-left: auto; background: rgba(var(--aw-accent-rgb),.10); color: var(--aw-accent-text); border-radius: 12px; padding: 2px 8px; white-space: nowrap; }
-.aw-comment-stage { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0; color: var(--aw-muted); }
-.aw-comment-log { height: 132px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--aw-border); border-radius: 6px; background: var(--aw-panel); padding: 8px 10px; }
+/* AI 回复（原型 05c .feed-reply）：安静的内嵌块，仅一条左边线，失败态也不换底色 */
+.aw-comment-reply { min-width: 0; margin-top: 12px; padding: 12px 14px; border-left: 2px solid var(--aw-border); border-radius: 0 6px 6px 0; background: var(--aw-header-bg); color: var(--aw-text); font-size: 12px; }
+.aw-comment-reply-header { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; font-size: 12px; line-height: 18px; }
+.aw-comment-reply-header strong { min-width: 0; font-size: 12px; font-weight: 600; color: var(--aw-text); overflow-wrap: anywhere; }
+.aw-comment-robot { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex-shrink: 0; color: var(--aw-ai); }
+.aw-comment-robot svg { width: 16px; height: 16px; }
+.aw-comment-state { margin-left: auto; color: var(--aw-text-3); font-size: 11px; font-weight: 400; white-space: nowrap; }
+.aw-comment-state.success { color: var(--aw-success-deep); }
+.aw-comment-state.failed { color: var(--aw-error-deep); }
+.aw-comment-state.active { color: var(--aw-primary); }
+/* 长回复整卡折叠：头部一行 + 收起/展开钮，chev 展开态旋转指上 */
+.aw-comment-fold { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; padding: 0; border: 0; background: transparent; color: var(--aw-link); font-family: inherit; font-size: 11px; line-height: 18px; cursor: pointer; }
+.aw-comment-fold:hover { color: var(--aw-primary-hover); text-decoration: underline; }
+.aw-comment-fold:focus-visible { outline: 2px solid var(--aw-primary); outline-offset: 2px; }
+.aw-comment-fold .aw-stroke-icon { width: 11px; height: 11px; }
+.aw-comment-fold--open .aw-stroke-icon { transform: rotate(180deg); }
+.aw-comment-stage { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; color: var(--aw-text-3); font-size: 11px; line-height: 18px; }
+.aw-comment-log { height: 132px; margin-top: 6px; padding: 8px 12px; overflow: auto; overscroll-behavior: contain; border-radius: 4px; background: var(--aw-gray-bg); color: var(--aw-text-2); font-size: 11px; line-height: 18px; }
 .aw-comment-log--expanded { height: 280px; }
-.aw-comment-log-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; overflow-wrap: anywhere; }
-.aw-comment-log-row time { color: var(--aw-muted); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.aw-comment-log-dot { color: var(--aw-accent-text); }
-.aw-comment-empty, .aw-comment-note { color: var(--aw-muted); padding: 6px 0; font-size: 11px; }
+.aw-comment-log-row { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; overflow-wrap: anywhere; }
+.aw-comment-log-row time { flex-shrink: 0; color: var(--aw-text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.aw-comment-log-dot { color: var(--aw-text-3); }
+.aw-comment-empty, .aw-comment-note { padding: 4px 0 0; color: var(--aw-text-3); font-size: 11px; line-height: 18px; }
 .aw-comment-controls { display: flex; gap: 12px; align-items: center; }
-.aw-comment-controls button { border: 0; background: transparent; padding: 4px 0; color: var(--aw-accent-text); font-size: 12px; cursor: pointer; }
-.aw-comment-controls button:focus-visible { outline: 2px solid var(--aw-accent-text); outline-offset: 2px; }
-.aw-comment-controls .aw-comment-stop { width: 30px; height: 30px; min-height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--aw-border); border-radius: 6px; background: var(--aw-panel); color: var(--aw-error); }
-.aw-comment-controls .aw-comment-stop:hover { background: var(--aw-raised); color: var(--aw-error); }
+.aw-comment-controls:empty { display: none; }
+.aw-comment-controls button { padding: 4px 0 0; border: 0; background: transparent; color: var(--aw-link); font-family: inherit; font-size: 11px; line-height: 18px; cursor: pointer; }
+.aw-comment-controls button:hover { color: var(--aw-primary-hover); text-decoration: underline; }
+.aw-comment-controls button:focus-visible { outline: 2px solid var(--aw-primary); outline-offset: 2px; }
+.aw-comment-controls .aw-comment-stop { width: 26px; height: 26px; min-height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--aw-border); border-radius: 4px; background: var(--aw-panel); color: var(--aw-error); }
+.aw-comment-controls .aw-comment-stop:hover { background: var(--aw-gray-bg); color: var(--aw-error); }
 .aw-comment-controls .aw-comment-stop--force { border-style: dashed; }
-.aw-comment-stop-warning { margin-top: 8px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--aw-warning) 40%, var(--aw-border)); background: color-mix(in srgb, var(--aw-warning) 8%, var(--aw-panel)); border-radius: 6px; font-size: 12px; }
-.aw-comment-stop-error { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--aw-error); }
-.aw-comment-stop-error button { border: 0; background: transparent; padding: 0; color: var(--aw-accent-text); font-size: 12px; cursor: pointer; text-decoration: underline; }
-.aw-comment-answer { margin-top: 8px; overflow-wrap: anywhere; }
-.aw-comment-reply--failed .aw-comment-state { background: color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel)); color: var(--aw-error); }
-.aw-comment-error { margin-top: 8px; color: var(--aw-error); overflow-wrap: anywhere; }
-.aw-comment-error pre { margin: 8px 0 0; padding: 10px; background: var(--aw-panel); border: 1px solid color-mix(in srgb, var(--aw-error) 35%, var(--aw-border)); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font-size: 11px; }
-.aw-comment-error p { margin: 6px 0; }
+.aw-comment-stop-warning { margin-top: 8px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--aw-warning) 40%, var(--aw-border)); background: color-mix(in srgb, var(--aw-warning) 8%, var(--aw-panel)); border-radius: 4px; color: var(--aw-text-2); font-size: 12px; line-height: 18px; }
+.aw-comment-stop-error { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--aw-error-deep); font-size: 12px; }
+.aw-comment-stop-error button { border: 0; background: transparent; padding: 0; color: var(--aw-link); font-size: 12px; cursor: pointer; text-decoration: underline; }
+.aw-comment-answer { min-width: 0; margin-top: 8px; overflow-wrap: anywhere; }
+.aw-comment-reply--failed .aw-comment-state { color: var(--aw-error-deep); }
+.aw-comment-error { margin-top: 6px; color: var(--aw-error-deep); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.aw-comment-error p { margin: 0 0 4px; }
+.aw-comment-error pre { max-height: 240px; margin: 6px 0 0; padding: 8px 12px; overflow: auto; border-radius: 4px; background: var(--aw-gray-bg); color: var(--aw-text-2); font-family: var(--aw-font-mono); font-size: 11px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }

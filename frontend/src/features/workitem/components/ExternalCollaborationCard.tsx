@@ -2,7 +2,8 @@ import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useTranslation } from 'react-i18next';
 import { Alert, Avatar, Card, Space, Tag, Typography } from 'antd';
-import { LinkOutlined, UserOutlined } from '@ant-design/icons';
+import { LinkOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { ExternalCollaboration, ExternalPrincipal } from '@/shared/types/workitem';
 
 const SYNC_TIME_FORMAT: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' };
@@ -52,7 +53,7 @@ function PrincipalList({ principals }: { principals: ExternalPrincipal[] }) {
     <Space size={[8, 8]} wrap>
       {principals.map((principal) => (
         <Space key={principal.id} size={4}>
-          <Avatar size={20} icon={<UserOutlined />} />
+          <Avatar size={20} icon={<AwStrokeIcon name="user" size={10} />} />
           <Typography.Text>{principalName(principal)}</Typography.Text>
         </Space>
       ))}

@@ -136,7 +136,7 @@ describe('EvolutionPage', () => {
     expect(within(table).getByText(formatDateTime('2026-07-24T10:00:00Z', {
       year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
     }))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Refresh' }).querySelector('[role="img"]')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByRole('button', { name: 'Refresh' }).querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     await act(async () => { await user.click(screen.getByRole('tab', { name: /Audit evidence \(1\)/ })); });
     expect(screen.getByRole('columnheader', { name: 'Source reference' })).toBeInTheDocument();
     expect(screen.getByText('Positive')).toBeInTheDocument();

@@ -5,6 +5,7 @@ import com.aliyun.autowonder.access.WorkspaceAccessLevel;
 import com.aliyun.autowonder.access.WorkspaceDomain;
 import com.aliyun.autowonder.common.error.BizException;
 import com.aliyun.autowonder.common.error.ErrorCode;
+import com.aliyun.autowonder.common.result.PageResult;
 import com.aliyun.autowonder.context.AutoWonderContext;
 import com.aliyun.autowonder.agent.AgentService;
 import com.aliyun.autowonder.agent.dto.AgentVO;
@@ -68,7 +69,9 @@ import com.aliyun.autowonder.memory.dto.CreateMemoryRequest;
 import com.aliyun.autowonder.memory.dto.MemoryVO;
 import com.aliyun.autowonder.memory.dto.UpdateMemoryRequest;
 import com.aliyun.autowonder.workspace.WorkspaceService;
+import com.aliyun.autowonder.workspace.dto.MemberVO;
 import com.aliyun.autowonder.workspace.dto.WorkspaceVO;
+import com.aliyun.autowonder.user.dto.UserProfileVO;
 import com.aliyun.autowonder.repo.RepoService;
 import com.aliyun.autowonder.repo.dto.CreateRelationRequest;
 import com.aliyun.autowonder.repo.dto.CreateRepoRequest;
@@ -127,6 +130,9 @@ import java.util.StringJoiner;
 @Service
 public class McpToolService {
     private static final String LIST_PROJECTS = "autowonder.list_projects";
+    private static final String GET_CURRENT_USER = "autowonder.get_current_user";
+    private static final String GET_WORKSPACE_MEMBERSHIP = "autowonder.get_workspace_membership";
+    private static final String LIST_WORKSPACE_MEMBERS = "autowonder.list_workspace_members";
     private static final String CREATE_WORKITEM = "autowonder.create_workitem";
     private static final String LIST_WORKITEMS = "autowonder.list_workitems";
     private static final String GET_WORKITEM = "autowonder.get_workitem";
@@ -348,6 +354,12 @@ public class McpToolService {
             Map.<String, ToolAccess>ofEntries(
                     Map.entry(LIST_PROJECTS,
                             globalTool(WorkspaceAccessLevel.READ_ONLY)),
+                    Map.entry(GET_CURRENT_USER,
+                            globalTool(WorkspaceAccessLevel.READ_ONLY)),
+                    Map.entry(GET_WORKSPACE_MEMBERSHIP,
+                            workspaceTool(WorkspaceAccessLevel.READ_ONLY)),
+                    Map.entry(LIST_WORKSPACE_MEMBERS,
+                            workspaceTool(WorkspaceAccessLevel.READ_ONLY)),
                     Map.entry(CREATE_WORKITEM,
                             workspaceTool(WorkspaceAccessLevel.READ_WRITE)),
                     Map.entry(LIST_WORKITEMS,
@@ -630,6 +642,8 @@ public class McpToolService {
     /** 工作空间域工具 → 功能域映射；个人令牌与对话凭据授权时按此检查角色的只读功能。 */
     private static final Map<String, WorkspaceDomain> TOOL_DOMAINS =
             Map.ofEntries(
+                    Map.entry(GET_WORKSPACE_MEMBERSHIP, WorkspaceDomain.WORKSPACE),
+                    Map.entry(LIST_WORKSPACE_MEMBERS, WorkspaceDomain.WORKSPACE),
                     Map.entry(CREATE_WORKITEM, WorkspaceDomain.WORKITEM),
                     Map.entry(LIST_WORKITEMS, WorkspaceDomain.WORKITEM),
                     Map.entry(GET_WORKITEM, WorkspaceDomain.WORKITEM),
@@ -864,6 +878,9 @@ public class McpToolService {
     private McpMemoryDocumentAdapter mcpMemoryDocumentAdapter;
     @org.springframework.beans.factory.annotation.Autowired
     private com.aliyun.autowonder.memory.store.PersonalMcpMemoryService personalMcpMemories;
+    /** 字段注入沿用本类既有写法，个人资料查询与成员目录直接复用 Web 端同一份服务实现。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.aliyun.autowonder.user.UserService userService;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private ExecutorService executorService;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -939,6 +956,22 @@ public class McpToolService {
     public List<McpToolVO> listTools() {
         return List.of(
                 tool(LIST_PROJECTS, "List the AutoWonder workspaces you can access, with your access level in each. Call this first to discover the workspaceId required by workspace-scoped tools.", schema()),
+                tool(GET_CURRENT_USER, "Get the personal profile of the credential owner: userId, username, "
+                        + "nickname, email, phone and whether that user may create a workspace. "
+                        + "A personal token needs no workspaceId; task-scoped credentials also receive their "
+                        + "workspaceId and effective access level.", schema()),
+                tool(GET_WORKSPACE_MEMBERSHIP, "Get the credential owner's membership in the given workspace: "
+                        + "effective access level, role, owner flag, identity tags, join time and the domains "
+                        + "restricted to read-only for that member.", schema()),
+                tool(LIST_WORKSPACE_MEMBERS, "List the human members of the given workspace with their access "
+                        + "level, role and joined time. Use keyword to search username, nickname or email, or "
+                        + "userId to look up one member; results are returned as {items, page, size, total}.",
+                        schema(prop("keyword", "string",
+                                        "Optional. Only return members whose username, nickname or email contains this text."),
+                                prop("userId", "integer",
+                                        "Optional. Return only this workspace member; combine with keyword freely."),
+                                prop("page", "integer", "Optional. Page number, 1-based; defaults to 1."),
+                                prop("size", "integer", "Optional. Page size between 1-100; defaults to 20."))),
                 tool(CREATE_WORKITEM, "Create an AutoWonder workitem in the given workspace. "
                         + "workType must be one of REQ (requirement), BUG (defect), or TASK (task). "
                         + "When assigneeType is omitted the workitem is assigned to the creator (HUMAN), "
@@ -1268,7 +1301,7 @@ public class McpToolService {
                         schema(required("id"), prop("id", "integer"))),
                 tool(CREATE_SDLC, "Create an AutoWonder SDLC flow.",
                         schema(required("name"), prop("name", "string"), prop("description", "string"),
-                                prop("workType", "string"))),
+                                prop("workType", "string"), prop("stageTimingEnabled", "boolean", "Record stage timing for new executions. Defaults to false."))),
                 tool(LIST_SDLCS, "List AutoWonder SDLC flows.",
                         schema(prop("workType", "string"), prop("status", "string"),
                                 prop("squadId", "integer", "Optional. Filter by squad id; a SDLC belongs to a squad "
@@ -1278,7 +1311,8 @@ public class McpToolService {
                         schema(required("id"), prop("id", "integer"))),
                 tool(UPDATE_SDLC, "Update an AutoWonder SDLC flow, including enabled flows.",
                         schema(required("id"), prop("id", "integer"), prop("name", "string"),
-                                prop("description", "string"), prop("workType", "string"))),
+                                prop("description", "string"), prop("workType", "string"),
+                                prop("stageTimingEnabled", "boolean", "Record stage timing for newly queued dispatches and newly triggered scheduled runs. Resumed runs keep their frozen setting. Omit to keep the current setting."))),
                 tool(DELETE_SDLC, "Delete an unused AutoWonder SDLC flow.",
                         schema(required("id"), prop("id", "integer"))),
                 tool(ADD_SDLC_STEP, "Add a step to an AutoWonder SDLC flow, including enabled flows.",
@@ -2715,6 +2749,10 @@ public class McpToolService {
                         ? workspaceService.listByUserWithAccess(context.userId())
                         : List.of(workspaceService.scopedWorkspace(context.workspaceId(), context.accessLevel()));
             }
+            case GET_CURRENT_USER -> currentUser(context);
+            case GET_WORKSPACE_MEMBERSHIP -> workspaceService.currentMembership(
+                    context.workspaceId(), context.userId());
+            case LIST_WORKSPACE_MEMBERS -> listWorkspaceMembers(context, safeArgs);
             case CREATE_WORKITEM -> {
                 Date scheduledStartAt = isoInstantArgument(safeArgs, "scheduledStartAt");
                 CreateWorkitemRequest request = toBean(safeArgs, CreateWorkitemRequest.class);
@@ -4131,6 +4169,48 @@ public class McpToolService {
         return result;
     }
 
+    /** 个人信息查询：读取与 /api/users/me/profile 同一份资料，并补充调用凭据的作用域信息。 */
+    private Map<String, Object> currentUser(ToolExecutionContext context) {
+        UserProfileVO profile = userService.getProfile(context.userId());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", profile.getId());
+        result.put("username", profile.getUsername());
+        result.put("nickname", profile.getNickname());
+        result.put("email", profile.getEmail());
+        result.put("phone", profile.getPhone());
+        result.put("canCreateWorkspace", profile.isCanCreateWorkspace());
+        result.put("credentialType", context.credentialType().name());
+        result.put("workspaceId", context.workspaceId());
+        result.put("accessLevel", context.accessLevel() == null ? null : context.accessLevel().name());
+        return result;
+    }
+
+    private Object listWorkspaceMembers(ToolExecutionContext context, Map<String, Object> args) {
+        if (isDispatchCredential(context)) {
+            workspaceService.activeAccessLevel(context.workspaceId(), context.userId());
+        }
+        int page = integer(args, "page", 1);
+        int size = integer(args, "size", 20);
+        if (page < 1 || size < 1 || size > 100) {
+            throw BizException.keyed(ErrorCode.MCP_TOOL_ARGUMENT_INVALID,
+                    "mcp.argument.member_page_invalid", null,
+                    "page 必须大于 0 且 size 必须在 1-100 之间");
+        }
+        Long userId = lng(args, "userId");
+        if (userId != null && userId <= 0) {
+            throw BizException.keyed(ErrorCode.MCP_TOOL_ARGUMENT_INVALID,
+                    "mcp.argument.member_user_invalid", null, "userId 必须是正整数");
+        }
+        PageResult<MemberVO> members = workspaceService.listMembers(
+                context.workspaceId(), str(args, "keyword"), userId, page, size);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", members.getList());
+        result.put("page", members.getPageNum());
+        result.put("size", members.getPageSize());
+        result.put("total", members.getTotal());
+        return result;
+    }
+
     private Object listScheduledTasks(ToolExecutionContext context, Map<String, Object> args) {
         requireScheduledTaskCapability();
         String status = str(args, "status");
@@ -4860,6 +4940,13 @@ public class McpToolService {
                     nullableProp("nextAfterId", "integer", "Pass as afterId; null means the namespace is fully read."));
             case PUT_TASK_DATA -> taskDataRecordSchema();
             case LIST_PROJECTS -> listOutputSchema(workspaceSchema());
+            case GET_CURRENT_USER -> currentUserSchema();
+            case GET_WORKSPACE_MEMBERSHIP -> workspaceMembershipSchema();
+            case LIST_WORKSPACE_MEMBERS -> schema(required("items"),
+                    arrayProp("items", workspaceMemberSchema(), "Members on this page."),
+                    prop("page", "integer", "Page number, 1-based."),
+                    prop("size", "integer", "Page size used for this page."),
+                    prop("total", "integer", "Total matching members."));
             case CREATE_WORKITEM, GET_WORKITEM, UPDATE_WORKITEM, UPDATE_WORKITEM_TAGS, ASSIGN_WORKITEM,
                     TRANSITION_WORKITEM, PAUSE_WORKITEM, RESUME_WORKITEM -> workitemSchema();
             case LIST_WORKITEMS -> listOutputSchema(workitemSchema());
@@ -5108,6 +5195,43 @@ public class McpToolService {
                         "Your access level in this workspace: READ_ONLY, READ_WRITE or ADMIN."));
     }
 
+    private Map<String, Object> currentUserSchema() {
+        return schema(prop("id", "integer", "User id."),
+                nullableProp("username", "string", "Login username."),
+                nullableProp("nickname", "string", "Display nickname."),
+                nullableProp("email", "string", "Account email."),
+                nullableProp("phone", "string", "Account phone number; null when unset."),
+                prop("canCreateWorkspace", "boolean", "Whether this user may create a workspace."),
+                prop("credentialType", "string",
+                        "Credential kind used for this call: LONG_LIVED, DISPATCH or CONVERSATION."),
+                nullableProp("workspaceId", "integer",
+                        "Workspace bound to a task-scoped credential; null for a personal token."),
+                nullableProp("accessLevel", "string",
+                        "Effective access level of a task-scoped credential in workspaceId; null for a personal token."));
+    }
+
+    private Map<String, Object> workspaceMembershipSchema() {
+        return workspaceMemberSchema();
+    }
+
+    /** MemberVO 与 CurrentMembershipVO 的 JSON 形状一致，成员目录与成员身份共用同一份声明。 */
+    private Map<String, Object> workspaceMemberSchema() {
+        return schema(prop("userId", "integer", "Member user id."),
+                nullableProp("username", "string", "Login username."),
+                nullableProp("nickname", "string", "Display nickname."),
+                nullableProp("email", "string", "Account email."),
+                timestampProp("joinedAt", "Join time."),
+                prop("owner", "boolean", "Whether this member owns the workspace."),
+                prop("accessLevel", "string", "Access level: READ_ONLY, READ_WRITE or ADMIN."),
+                nullableArrayProp("identityTags", Map.of("type", "string"),
+                        "Identity tags configured for this member."),
+                nullableProp("roleId", "integer", "Custom role id; null when the member has no custom role."),
+                nullableProp("roleCode", "string", "Role code when a custom role is assigned."),
+                nullableProp("roleName", "string", "Role display name when a custom role is assigned."),
+                nullableArrayProp("readOnlyDomains", Map.of("type", "string"),
+                        "Domains where this member is restricted to read-only."));
+    }
+
     private Map<String, Object> workitemSchema() {
         return schema(prop("id", "integer", "Workitem id."),
                 prop("workType", "string", "Workitem type."),
@@ -5293,6 +5417,7 @@ public class McpToolService {
                 nullableProp("description", "string", "SDLC flow description."),
                 nullableProp("workType", "string", "Supported workitem type."),
                 prop("status", "string", "SDLC flow status."),
+                prop("stageTimingEnabled", "boolean", "Whether new executions record stage timing."),
                 prop("isDefault", "integer", "Whether this is default."),
                 nullableProp("entryStepId", "integer", "Entry step id."),
                 prop("version", "integer", "Optimistic lock version."),

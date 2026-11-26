@@ -53,9 +53,18 @@ function renderAnalysis() {
   return render(<QueryClientProvider client={queryClient}><DeliveryAnalysis /></QueryClientProvider>);
 }
 
+// 卡片把前缀/数值/单位拆成三段排版，整段文案不再落在单个文本节点里。
+function valueEls(text: string) {
+  return screen.getAllByText((_, element) => (
+    element instanceof HTMLElement
+    && element.classList.contains('delivery-value')
+    && (element.textContent ?? '').replace(/\s+/g, '') === text
+  ));
+}
+
 async function durationCard() {
-  const value = await screen.findByText('35.4小时');
-  return value.closest('.delivery-card--duration') as HTMLElement;
+  await waitFor(() => expect(valueEls('35.4小时')).toHaveLength(1));
+  return valueEls('35.4小时')[0].closest('.delivery-card--duration') as HTMLElement;
 }
 
 beforeEach(async () => {
@@ -81,9 +90,9 @@ describe('DeliveryAnalysis duration caliber', () => {
     expect(within(card).getByText('需求交付平均耗时')).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: '查看需求交付平均耗时口径' })).toBeInTheDocument();
     // Other indicators on the same page keep their values and wording.
-    expect(screen.getByText('总完成需求21个')).toBeInTheDocument();
-    expect(screen.getByText('2.3次')).toBeInTheDocument();
-    expect(screen.getByText('共计4次交付')).toBeInTheDocument();
+    expect(valueEls('总完成需求21个')).toHaveLength(1);
+    expect(valueEls('2.3次')).toHaveLength(1);
+    expect(valueEls('共计4次交付')).toHaveLength(1);
     expect(screen.getByText('12.5')).toBeInTheDocument();
   });
 
@@ -147,8 +156,8 @@ describe('DeliveryAnalysis duration caliber', () => {
     server.use(deliveryHandler());
     renderAnalysis();
 
-    const value = await screen.findByText('35.4h');
-    const card = value.closest('.delivery-card--duration') as HTMLElement;
+    await waitFor(() => expect(valueEls('35.4h')).toHaveLength(1));
+    const card = valueEls('35.4h')[0].closest('.delivery-card--duration') as HTMLElement;
     const badge = within(card).getByRole('button', { name: 'View delivery duration caliber' });
 
     const user = userEvent.setup();
@@ -189,7 +198,7 @@ describe('DeliveryAnalysis natural-week presentation', () => {
     server.use(deliveryHandler({ ...report, weeks: [fullWeek, currentWeek] }));
     renderAnalysis();
 
-    await screen.findByText('总完成需求21个');
+    await waitFor(() => expect(valueEls('总完成需求21个')).toHaveLength(1));
     await waitFor(() => expect(chart.setOption.mock.calls.length).toBeGreaterThanOrEqual(8));
     const options = capturedOptions();
     expect(new Set(options.map(option => option.series[0]?.name)).size).toBe(8);
@@ -248,7 +257,7 @@ describe('DeliveryAnalysis natural-week presentation', () => {
     ] }));
     renderAnalysis();
 
-    await screen.findByText('总完成需求21个');
+    await waitFor(() => expect(valueEls('总完成需求21个')).toHaveLength(1));
     expect(screen.queryByText(/半透明柱\/点/)).not.toBeInTheDocument();
   });
 
@@ -259,7 +268,7 @@ describe('DeliveryAnalysis natural-week presentation', () => {
       server.use(deliveryHandler({ ...report, weeks: Array.from({ length: 14 }, () => fullWeek) }));
       renderAnalysis();
 
-      await screen.findByText('总完成需求21个');
+      await waitFor(() => expect(valueEls('总完成需求21个')).toHaveLength(1));
       await waitFor(() => expect(chart.setOption.mock.calls.length).toBeGreaterThanOrEqual(8));
       const delivered = chartOption(capturedOptions(), '需求周交付吞吐趋势');
       expect(delivered.xAxis.axisLabel.interval).toBe(1);
@@ -284,7 +293,7 @@ describe('DeliveryAnalysis natural-week presentation', () => {
       server.use(deliveryHandler({ ...report, weeks: Array.from({ length: 14 }, () => fullWeek) }));
       renderAnalysis();
 
-      await screen.findByText('总完成需求21个');
+      await waitFor(() => expect(valueEls('总完成需求21个')).toHaveLength(1));
       await waitFor(() => expect(callbacks.length).toBe(8));
       const initial = chart.setOption.mock.calls.length;
 

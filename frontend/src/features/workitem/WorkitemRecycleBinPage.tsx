@@ -1,25 +1,24 @@
 import { useState } from 'react';
-import { Button, Card, Empty, Input, Popconfirm, Select, Space, Tag } from 'antd';
+import { Button, Input, Popconfirm, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
-import { formatDateTime } from '@/shared/i18n/format';
 import { useSystemLabel } from '@/shared/i18n/systemLabels';
-import { EllipsisText } from '@/shared/ui/EllipsisText';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { PageHead } from '@/shared/ui/PageHead';
+import { Toolbar } from '@/shared/ui/Toolbar';
+import { TableCard, TableFooter } from '@/shared/ui/TableCard';
 import { Table } from '@/shared/theme/ThemedTable';
+import { TimeCell } from '@/shared/ui/TimeCell';
+import { StatusTag, type StatusColorKey } from '@/shared/ui/StatusTag';
+import { EmptyState } from '@/shared/ui/EmptyState';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { EllipsisText } from '@/shared/ui/EllipsisText';
 import type { ColumnsType } from 'antd/es/table';
 import type { Workitem } from '@/shared/types/workitem';
-import { workTypeMap } from './constants';
+import { STATUS_CATEGORY_TAG_COLOR, statusCategoryOf, workTypeMap } from './constants';
 import { useRecycledWorkitemList, useRestoreWorkitem } from './hooks';
+import './WorkitemRecycleBinPage.css';
 
 const PAGE_SIZE = 20;
-
-const formatDeletedAt = (deletedAt: string | null | undefined) => (deletedAt
-  ? formatDateTime(deletedAt, {
-    year: 'numeric', month: 'numeric', day: 'numeric',
-    hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false,
-  })
-  : null);
 
 /** 工单回收站：只展示软删除工单；恢复仅还原可见性，不自动恢复执行。 */
 export function WorkitemRecycleBinPage() {
@@ -37,7 +36,12 @@ export function WorkitemRecycleBinPage() {
   const restoreMutation = useRestoreWorkitem();
 
   const columns: ColumnsType<Workitem> = [
-    { title: t('recycleBin.id'), dataIndex: 'id', width: 90 },
+    {
+      title: t('recycleBin.id'),
+      dataIndex: 'id',
+      width: 90,
+      render: (id: number) => <span className="aw-recycle-bin-id">{id}</span>,
+    },
     {
       title: t('fields.title'),
       dataIndex: 'title',
@@ -48,14 +52,21 @@ export function WorkitemRecycleBinPage() {
       title: t('fields.type'),
       dataIndex: 'workType',
       width: 100,
-      render: (type: string) => <Tag color={workTypeMap[type]?.color}>{workTypeMap[type]?.label || type}</Tag>,
+      render: (type: string) => {
+        const meta = workTypeMap[type];
+        return <StatusTag label={meta?.label ?? type} colorKey={(meta?.color ?? 'gray') as StatusColorKey} />;
+      },
     },
     {
       title: t('recycleBin.previousStatus'),
       dataIndex: 'statusName',
       width: 140,
       render: (statusName: string | null, record: Workitem) => (statusName
-        ? <Tag>{systemLabel(record.statusLabelKey, statusName)}</Tag>
+        ? <StatusTag
+          label={systemLabel(record.statusLabelKey, statusName)}
+          colorKey={STATUS_CATEGORY_TAG_COLOR[statusCategoryOf(record)] ?? 'gray'}
+          dot
+        />
         : t('recycleBin.notAvailable')),
     },
     {
@@ -71,7 +82,7 @@ export function WorkitemRecycleBinPage() {
       title: t('recycleBin.deletedAt'),
       dataIndex: 'deletedAt',
       width: 190,
-      render: (deletedAt: string | null) => formatDeletedAt(deletedAt) || t('recycleBin.unknownDeletedAt'),
+      render: (deletedAt: string | null) => (deletedAt ? <TimeCell value={deletedAt} /> : t('recycleBin.unknownDeletedAt')),
     },
     {
       title: t('fields.actions'),
@@ -93,6 +104,7 @@ export function WorkitemRecycleBinPage() {
             size="small"
             data-testid={`restore-workitem-${record.id}`}
             aria-label={t('recycleBin.restoreCommand')}
+            icon={<AwStrokeIcon name="undo" size={14} />}
             loading={restoreMutation.isPending}
           >{t('recycleBin.restore')}</Button>
         </Popconfirm>
@@ -100,49 +112,70 @@ export function WorkitemRecycleBinPage() {
     },
   ];
 
+  const tableEmpty = (
+    <div className="aw-recycle-bin-empty" data-testid="recycle-bin-empty">
+      <EmptyState
+        icon={<AwStrokeIcon name={keyword ? 'search' : 'trash'} size={20} />}
+        title={keyword ? t('recycleBin.noMatches', { keyword }) : t('recycleBin.empty')}
+        subtext={keyword ? t('recycleBin.noMatchesSubtext') : t('recycleBin.emptySubtext')}
+      />
+    </div>
+  );
+
+  const handlePageChange = (nextPage: number, nextSize: number) => {
+    setPage(nextPage);
+    setSize(nextSize);
+  };
+
   return (
-    <Card className="aw-content-card aw-workitems" title={<PageHeading title={t('recycleBin.title')} description={t('recycleBin.scope')} />}>
-      <Space wrap style={{ marginBottom: 16 }}>
+    <div className="aw-recycle-bin-page">
+      <PageHead title={t('recycleBin.title')} description={t('recycleBin.scope')} />
+
+      <Toolbar left={<>
         <Select
           placeholder={t('list.typeFilter')}
           value={workType}
           allowClear
-          style={{ width: 140 }}
+          style={{ width: 140, flexShrink: 0 }}
           onChange={(value) => { setWorkType(value); setPage(1); }}
           options={Object.entries(workTypeMap).map(([value, meta]) => ({ value, label: meta.label }))}
         />
-        <Input.Search
+        <Input
+          aria-label={t('list.search')}
           allowClear
+          prefix={<AwStrokeIcon name="search" />}
           placeholder={t('list.search')}
-          onSearch={(value) => { setKeyword(value.trim() || undefined); setPage(1); }}
-          style={{ width: 240 }}
+          onPressEnter={(event) => {
+            const value = (event.target as HTMLInputElement).value;
+            setKeyword(value.trim() || undefined);
+            setPage(1);
+          }}
+          style={{ width: 240, maxWidth: '100%', flex: '0 1 240px', minWidth: 150 }}
         />
-      </Space>
+      </>} />
 
-      {isLoading ? (
-        <Table<Workitem> rowKey="id" loading columns={columns} dataSource={[]} pagination={false} />
-      ) : items.length === 0 ? (
-        <div data-testid="recycle-bin-empty">
-          <Empty description={keyword
-            ? t('recycleBin.noMatches', { keyword })
-            : t('recycleBin.empty')}
-          />
-        </div>
-      ) : (
+      <TableCard
+        flush
+        className="aw-workitems"
+        footer={total > 0 ? <TableFooter
+          total={total}
+          page={page}
+          pageSize={size}
+          onPageChange={handlePageChange}
+          onPageSizeChange={setSize}
+          totalText={t('list.pagination_other', { count: total })}
+        /> : undefined}
+      >
         <Table<Workitem>
           rowKey="id"
           columns={columns}
           dataSource={items}
-          pagination={{
-            current: page,
-            pageSize: size,
-            total,
-            showSizeChanger: true,
-            onChange: (nextPage, nextSize) => { setPage(nextPage); setSize(nextSize); },
-            showTotal: (count) => t('list.pagination_other', { count }),
-          }}
+          loading={isLoading}
+          tableLayout="fixed"
+          pagination={false}
+          locale={{ emptyText: tableEmpty }}
         />
-      )}
-    </Card>
+      </TableCard>
+    </div>
   );
 }

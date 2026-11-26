@@ -65,11 +65,13 @@
     "empty": "No data",
     "more": "and {{total}} more workspaces",
     "moreTooltip": "{{total}} workspaces tie; only the first {{shown}} are shown: {{names}}",
-    "drilldown": "Open the insights page of {{name}}"
+    "drilldown": "Open the insights page of {{name}}",
+    "drilldownWithValue": "Open the insights page of {{name}} · {{value}}"
   },
   "range": {
     "delivery": "Delivery statistics date range",
-    "cost": "Cost statistics date range"
+    "cost": "Cost statistics date range",
+    "custom": "Custom"
   },
   "state": {
     "error": "Failed to load the dashboard data",

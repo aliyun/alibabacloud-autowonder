@@ -16,7 +16,14 @@ public class InMemoryObjectStorage implements ObjectStorage {
 
     @Override
     public byte[] get(String ossRef) {
+        return get(ossRef, Integer.MAX_VALUE);
+    }
+
+    @Override
+    public byte[] get(String ossRef, int maxBytes) {
+        if (maxBytes < 0) throw new IllegalArgumentException("Negative object size limit");
         byte[] v = store.get(ossRef);
+        if (v != null && v.length > maxBytes) throw new SizeLimitExceededException();
         return v == null ? null : v.clone();
     }
 

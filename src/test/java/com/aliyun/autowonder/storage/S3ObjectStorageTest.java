@@ -3,7 +3,7 @@ package com.aliyun.autowonder.storage;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
-import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.SdkHttpMethod;
 import software.amazon.awssdk.http.SdkHttpRequest;
@@ -57,6 +57,40 @@ class S3ObjectStorageTest {
     }
 
     @Test
+    void boundedGetAbortsOnlyAnUnconsumedResponse() {
+        for (int size : new int[]{0, 4, 20}) {
+            S3Client client = mock(S3Client.class);
+            var input = new java.io.ByteArrayInputStream(new byte[size]);
+            var aborted = new java.util.concurrent.atomic.AtomicBoolean();
+            var response = new software.amazon.awssdk.core.ResponseInputStream<>(GetObjectResponse.builder().build(),
+                    software.amazon.awssdk.http.AbortableInputStream.create(input, () -> aborted.set(true)));
+            when(client.getObject(any(GetObjectRequest.class))).thenReturn(response);
+            var storage = new S3ObjectStorage(client, mock(S3Presigner.class));
+            if (size > 4) {
+                assertThrows(ObjectStorage.SizeLimitExceededException.class, () -> storage.get("bucket/key", 4));
+                assertEquals(size - 5, input.available());
+                assertTrue(aborted.get());
+            } else {
+                assertArrayEquals(new byte[size], storage.get("bucket/key", 4));
+                assertFalse(aborted.get());
+            }
+        }
+    }
+
+    @Test
+    void boundedGetRejectsOversizeMetadataEvenIfAbortFails() {
+        S3Client client = mock(S3Client.class);
+        var input = new java.io.ByteArrayInputStream(new byte[20]);
+        var response = new software.amazon.awssdk.core.ResponseInputStream<>(GetObjectResponse.builder().contentLength(20L).build(),
+                software.amazon.awssdk.http.AbortableInputStream.create(input, () -> { throw new IllegalStateException("abort failed"); }));
+        when(client.getObject(any(GetObjectRequest.class))).thenReturn(response);
+        var failure = assertThrows(ObjectStorage.SizeLimitExceededException.class,
+                () -> new S3ObjectStorage(client, mock(S3Presigner.class)).get("bucket/key", 4));
+        assertEquals(20, input.available());
+        assertEquals(1, failure.getSuppressed().length);
+    }
+
+    @Test
     void putUsesServiceClientWithoutCallingPresigner() {
         S3Client serviceClient = mock(S3Client.class);
         S3Presigner presigner = mock(S3Presigner.class);
@@ -76,20 +110,22 @@ class S3ObjectStorageTest {
         S3Client serviceClient = mock(S3Client.class);
         S3Presigner presigner = mock(S3Presigner.class);
         byte[] data = {10, 20, 30};
-        when(serviceClient.getObjectAsBytes(any(GetObjectRequest.class)))
-                .thenReturn(ResponseBytes.fromByteArray(GetObjectResponse.builder().build(), data));
+        when(serviceClient.getObject(any(GetObjectRequest.class)))
+                .thenAnswer(ignored -> new ResponseInputStream<>(GetObjectResponse.builder().build(),
+                        new java.io.ByteArrayInputStream(data)));
         S3ObjectStorage storage = new S3ObjectStorage(serviceClient, presigner);
 
         byte[] result = storage.get("bucket/key");
 
         assertArrayEquals(data, result);
+        assertArrayEquals(data, storage.get("bucket/key", Integer.MAX_VALUE));
     }
 
     @Test
     void getReturnsNullForNoSuchKey() {
         S3Client serviceClient = mock(S3Client.class);
         S3Presigner presigner = mock(S3Presigner.class);
-        when(serviceClient.getObjectAsBytes(any(GetObjectRequest.class)))
+        when(serviceClient.getObject(any(GetObjectRequest.class)))
                 .thenThrow(NoSuchKeyException.builder().build());
         S3ObjectStorage storage = new S3ObjectStorage(serviceClient, presigner);
 
@@ -100,7 +136,7 @@ class S3ObjectStorageTest {
     void getThrowsObjectStorageExceptionForTransientS3Error() {
         S3Client serviceClient = mock(S3Client.class);
         S3Presigner presigner = mock(S3Presigner.class);
-        when(serviceClient.getObjectAsBytes(any(GetObjectRequest.class)))
+        when(serviceClient.getObject(any(GetObjectRequest.class)))
                 .thenThrow((S3Exception) S3Exception.builder()
                         .awsErrorDetails(AwsErrorDetails.builder().errorCode("InternalError").build())
                         .build());
@@ -115,7 +151,7 @@ class S3ObjectStorageTest {
     void getReturnsNullForS3Exception404() {
         S3Client serviceClient = mock(S3Client.class);
         S3Presigner presigner = mock(S3Presigner.class);
-        when(serviceClient.getObjectAsBytes(any(GetObjectRequest.class)))
+        when(serviceClient.getObject(any(GetObjectRequest.class)))
                 .thenThrow((S3Exception) S3Exception.builder().statusCode(404).build());
         S3ObjectStorage storage = new S3ObjectStorage(serviceClient, presigner);
 
@@ -199,7 +235,7 @@ class S3ObjectStorageTest {
     void getThrowsObjectStorageExceptionForNonS3Exception() {
         S3Client serviceClient = mock(S3Client.class);
         S3Presigner presigner = mock(S3Presigner.class);
-        when(serviceClient.getObjectAsBytes(any(GetObjectRequest.class)))
+        when(serviceClient.getObject(any(GetObjectRequest.class)))
                 .thenThrow(new RuntimeException("connection reset"));
         S3ObjectStorage storage = new S3ObjectStorage(serviceClient, presigner);
 

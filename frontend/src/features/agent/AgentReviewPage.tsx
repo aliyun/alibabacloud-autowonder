@@ -2,10 +2,12 @@ import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useState } from 'react';
-import { Alert, Card, Button, Space, Modal, Input, message, Spin, Empty, Result, Popconfirm, Tooltip } from 'antd';
+import { Alert, Button, Space, Modal, Input, message, Spin, Empty, Result, Popconfirm, Tooltip } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
+import { TableCard } from '@/shared/ui/TableCard';
+import { Toolbar } from '@/shared/ui/Toolbar';
 import { useQueryClient } from '@tanstack/react-query';
-import { CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useNavigate } from 'react-router-dom';
 import {
   PENDING_REVIEW_COUNT_QUERY_KEY,
@@ -15,6 +17,7 @@ import {
   useRejectAgent,
   useAgentVersion,
   useAgentVersions,
+  useAgentSdlcOptions,
 } from './hooks';
 import type { Agent } from './api';
 import { ApiError } from '@/shared/types/common';
@@ -33,7 +36,7 @@ export function AgentReviewPage() {
   const { t } = useTranslation('agent');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: pendingAgents = [], isLoading } = usePendingReviews();
+  const { data: pendingAgents = [], isLoading, isFetching, refetch } = usePendingReviews();
   const approveAgent = useApproveAgent();
   const rejectAgent = useRejectAgent();
   const accessCommand = useAccessCommand();
@@ -93,19 +96,20 @@ export function AgentReviewPage() {
       render: (name: string, record: Agent) => <a onClick={() => navigate(`/agents/${record.id}`)}>{name}</a>,
     },
     { title: t('display.latestVersion'), dataIndex: 'latestVersionNo', width: 90, render: (v: number | null) => v ? `v${v}` : '-' },
-    { title: t('display.submittedAt'), dataIndex: 'gmtCreate', width: 160, render: (t: string) => formatDateTime(t) },
+    { title: t('display.submittedAt'), key: 'submittedAt', width: 160, render: (_: unknown, record: Agent) => <ReviewSubmittedAt agent={record} /> },
     {
-      title: t('fields.actions'), width: 280,
+      title: t('fields.actions'), width: 170,
       render: (_: unknown, record: Agent) => (
-        <Space>
-          <Button size="small" icon={<EyeOutlined aria-hidden />} onClick={() => setPreviewAgent(record)}>
+        <Space size={2} className="agent-review-ops">
+          <Button type="link" size="small" onClick={() => setPreviewAgent(record)}>
             {t('display.viewDiff')}
           </Button>
-          <Button size="small" type="primary" icon={<CheckOutlined aria-hidden />}
-            onClick={() => handleApprove(record)} loading={approveAgent.isPending}>
+          <Button type="link" size="small"
+            onClick={() => handleApprove(record)}
+            loading={approveAgent.isPending && approveAgent.variables?.agentId === record.id}>
             {t('display.approve')}
           </Button>
-          <Button size="small" danger icon={<CloseOutlined aria-hidden />}
+          <Button type="link" size="small" danger
             onClick={() => accessCommand('READ_WRITE', t('display.rejectAction'), () => setRejectModalAgent(record))}>
             {t('display.reject')}
           </Button>
@@ -115,7 +119,7 @@ export function AgentReviewPage() {
   ];
 
   return (
-    <div>
+    <div className="agent-review-page">
       {feedback && (
         <Alert
           showIcon
@@ -126,15 +130,31 @@ export function AgentReviewPage() {
         />
       )}
 
-      <Card className="aw-content-card">
+      <Toolbar
+        left={isLoading ? null : (
+          <span className="agent-summary-badge agent-summary-badge--amber">
+            {t('display.status.PENDING_REVIEW')}<b>{pendingAgents.length}</b>
+          </span>
+        )}
+        right={(
+          <div className="agent-toolbar-actions">
+            <Button icon={<AwStrokeIcon name="refresh" />} loading={isFetching && !isLoading} onClick={() => { void refetch(); }}>
+              {t('display.refresh')}
+            </Button>
+          </div>
+        )}
+      />
+
+      {/* 原型 06 版本审核 Tab：表格直接挂在内容框内（flush），加载态居中 Spin、空态 Empty。 */}
+      <TableCard flush>
         {isLoading ? (
-          <Spin style={{ display: 'block', margin: '40px auto' }} />
+          <div style={{ padding: 24, textAlign: 'center' }}><Spin /></div>
         ) : pendingAgents.length === 0 ? (
           <Empty description={t('display.emptyReviews')} />
         ) : (
           <Table rowKey="id" columns={columns} dataSource={pendingAgents} pagination={false} />
         )}
-      </Card>
+      </TableCard>
 
       <Modal
         title={previewAgent ? t('diff.title', { name: previewAgent.name }) : ''}
@@ -168,6 +188,14 @@ export function AgentReviewPage() {
   );
 }
 
+// 待审核版本的创建时间即提交时间（与变更弹窗头部一致），agent.gmtCreate 是员工创建时间。
+function ReviewSubmittedAt({ agent }: { agent: Agent }) {
+  useTranslation('agent');
+  const { data: versions } = useAgentVersions(agent.id);
+  const pending = versions?.find((version) => version.versionNo === agent.latestVersionNo);
+  return <>{pending ? formatDateTime(pending.gmtCreate) : '-'}</>;
+}
+
 function ReviewDiffModal({
   agent,
   canWrite,
@@ -183,6 +211,8 @@ function ReviewDiffModal({
 }) {
   const { t } = useTranslation('agent');
   const { data: versions, isLoading: versionsLoading } = useAgentVersions(agent.id);
+  const { options: sdlcOptions } = useAgentSdlcOptions();
+  const sdlcNameOf = (sdlcId: number) => sdlcOptions.find((option) => option.value === sdlcId)?.name;
   const onlineVersionNo = agent.onlineVersionId == null
     ? null
     : versions?.find((version) => version.id === agent.onlineVersionId)?.versionNo ?? null;
@@ -216,6 +246,7 @@ function ReviewDiffModal({
         target={target}
         variant="modal"
         baselineUnavailable={baselineUnavailable}
+        sdlcNameOf={sdlcNameOf}
       />
       <div className="awdiff-modal-footer">
         <div className="awdiff-footer-hint">

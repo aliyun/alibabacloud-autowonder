@@ -212,3 +212,42 @@ describe('comment execution activity', () => {
     expect(screen.getByText('执行已结束，等待回复同步')).toBeInTheDocument();
   });
 });
+
+describe('long reply whole-card collapse', () => {
+  afterEach(() => { cleanup(); });
+
+  it('folds a long replied interaction to the header row and restores it on toggle', () => {
+    // jsdom 无布局，scrollHeight 恒为 0；以 getter 桩模拟超限高的回复正文。
+    const heightSpy = vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(600);
+    const longReply = Array.from({ length: 60 }, (_, line) => `第 ${line + 1} 行回复正文，长度超过限高。`).join('\n\n');
+    const { unmount } = render(<CommentInteractionCard
+      interaction={{ ...interaction, status: 'APPLIED', replyContent: longReply, repliedAt: start }}
+      createdAt={start} />);
+
+    expect(screen.getByRole('button', { name: '展开回复' })).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('.aw-comment-answer')).toBeNull();
+    expect(screen.queryByText('回复已完成')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '展开回复' }));
+    expect(screen.getByRole('button', { name: '收起回复' })).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelector('.aw-comment-answer')).not.toBeNull();
+    expect(screen.getByText('回复已完成')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '收起回复' }));
+    expect(screen.getByRole('button', { name: '展开回复' })).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('.aw-comment-answer')).toBeNull();
+
+    unmount();
+    heightSpy.mockRestore();
+  });
+
+  it('keeps short replies unfolded without a fold control', () => {
+    render(<CommentInteractionCard
+      interaction={{ ...interaction, status: 'APPLIED', replyContent: '完成', repliedAt: start }}
+      createdAt={start} />);
+
+    expect(screen.queryByRole('button', { name: '展开回复' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '收起回复' })).not.toBeInTheDocument();
+    expect(screen.getByText('完成')).toBeInTheDocument();
+  });
+});

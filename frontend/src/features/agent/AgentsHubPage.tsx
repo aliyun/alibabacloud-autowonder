@@ -1,12 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import { Badge } from 'antd';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { AgentListPage } from './AgentListPage';
 import { AgentReviewPage } from './AgentReviewPage';
 import { useAgentPendingReviewCount } from './hooks';
-import { SquadListPage } from '@/features/squad/SquadListPage';
 import { HubPageShell, resolveHubTab, useHubTabParam } from '@/shared/ui/HubPage';
 
-export const AGENTS_HUB_TAB_KEYS = ['list', 'reviews', 'squads'] as const;
+export const AGENTS_HUB_TAB_KEYS = ['list', 'reviews'] as const;
 export const DEFAULT_AGENTS_HUB_TAB = 'list';
 
 export function resolveAgentsHubTab(tabParam: string | null): string {
@@ -15,9 +15,18 @@ export function resolveAgentsHubTab(tabParam: string | null): string {
 
 export function AgentsHubPage() {
   const { t } = useTranslation('agent');
-  const descriptions = new Map([['list', t('display.hubListDescription')], ['reviews', t('display.hubReviewsDescription')], ['squads', t('display.hubSquadsDescription')]]);
+  const descriptions = new Map([['list', t('display.hubListDescription')], ['reviews', t('display.hubReviewsDescription')]]);
   const { activeTab, setTab } = useHubTabParam(AGENTS_HUB_TAB_KEYS, DEFAULT_AGENTS_HUB_TAB);
   const { data: pendingReviewCount = 0 } = useAgentPendingReviewCount();
+  const [searchParams] = useSearchParams();
+
+  // 小队已独立成页：旧链接 /agents?tab=squads（可能带 squadId / workspaceId）转发过去。
+  if (searchParams.get('tab') === 'squads') {
+    const rest = new URLSearchParams(searchParams);
+    rest.delete('tab');
+    const query = rest.toString();
+    return <Navigate to={query ? `/squads?${query}` : '/squads'} replace />;
+  }
 
   const reviewsLabel = pendingReviewCount > 0 ? (
     <span className="hub-tab-label">
@@ -37,7 +46,6 @@ export function AgentsHubPage() {
         // 审核面板只在激活时挂载：Tabs 默认保留已挂载面板，重新激活不会重新挂载，
         // 也就不会触发 usePendingReviews 的 refetchOnMount:'always'，切回 Tab 时会看到旧列表。
         { key: 'reviews', label: reviewsLabel, children: activeTab === 'reviews' ? <AgentReviewPage /> : null },
-        { key: 'squads', label: t('display.squads'), children: <SquadListPage /> },
       ]}
     />
   );

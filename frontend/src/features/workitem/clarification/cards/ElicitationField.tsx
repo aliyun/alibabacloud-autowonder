@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, type ReactNode } from 'react';
 import type { TextAreaRef } from 'antd/es/input/TextArea';
 import { Checkbox, Input, InputNumber, Radio, Switch } from 'antd';
-import { CLARIFICATION_THEME } from '../theme';
 import { OTHER_SENTINEL } from './elicitationAnswer';
 import type { ElicitationField as ElicitationFieldType, ElicitationOption } from './schemaForm';
 
@@ -19,30 +18,12 @@ export interface ElicitationFieldProps {
   onPickOption?: (optionValue: string) => void;
 }
 
-const optionBlockStyle = {
-  display: 'flex' as const,
-  alignItems: 'flex-start' as const,
-  padding: '10px 12px',
-  lineHeight: 1.7,
-  marginBottom: 8,
-  borderWidth: 1, borderStyle: 'solid', borderColor: CLARIFICATION_THEME.controlBorder,
-  borderRadius: CLARIFICATION_THEME.radiusBlock,
-  backgroundColor: CLARIFICATION_THEME.surface,
-  whiteSpace: 'normal' as const,
-};
-
-// 「有其他想法」末项：与真实选项同款边框块，仅把边框改成虚线以示区分。
-// 提为模块常量，避免每次渲染新建对象，也保证单选/多选两处完全一致。
-const otherOptionBlockStyle = { ...optionBlockStyle, borderStyle: 'dashed' as const };
-
 function OptionLabel({ option }: { option: ElicitationOption }) {
   return (
-    <span style={{ fontSize: 16 }}>
-      {option.label}
-      {option.hint ? (
-        <span style={{ display: 'block', fontSize: 14, color: CLARIFICATION_THEME.textMuted }}>{option.hint}</span>
-      ) : null}
-    </span>
+    <>
+      <span className="t">{option.label}</span>
+      {option.hint ? <span className="h">{option.hint}</span> : null}
+    </>
   );
 }
 
@@ -69,16 +50,17 @@ export function ElicitationField({
   });
 
   const otherInput = (
-    <Input.TextArea
-      ref={otherInputRef}
-      value={otherText}
-      disabled={disabled}
-      rows={2}
-      placeholder={t('clarification.otherPlaceholder')}
-      data-testid={`elicitation-other-input-${field.name}`}
-      onChange={(e) => onOtherTextChange(e.target.value)}
-      style={{ marginTop: 6 }}
-    />
+    <div className="aw-cl-other-input">
+      <Input.TextArea
+        ref={otherInputRef}
+        value={otherText}
+        disabled={disabled}
+        rows={2}
+        placeholder={t('clarification.otherPlaceholder')}
+        data-testid={`elicitation-other-input-${field.name}`}
+        onChange={(e) => onOtherTextChange(e.target.value)}
+      />
+    </div>
   );
 
   let control: ReactNode;
@@ -94,14 +76,14 @@ export function ElicitationField({
             onValueChange(next);
             if (next !== OTHER_SENTINEL) onPickOption?.(next);
           }}
-          style={{ display: 'block' }}
+          className="aw-cl-opts"
         >
           {(field.options ?? []).map((option, index) => (
             <Radio
               key={option.value}
               value={option.value}
               data-testid={`elicitation-option-${field.name}-${index}`}
-              style={optionBlockStyle}
+              className="aw-cl-opt"
             >
               <OptionLabel option={option} />
             </Radio>
@@ -110,9 +92,9 @@ export function ElicitationField({
             key={OTHER_SENTINEL}
             value={OTHER_SENTINEL}
             data-testid={`elicitation-option-${field.name}-other`}
-            style={otherOptionBlockStyle}
+            className="aw-cl-opt other"
           >
-            <span style={{ fontSize: 16 }}>{t('clarification.otherIdeas')}</span>
+            <span className="t">{t('clarification.otherIdeas')}</span>
           </Radio>
         </Radio.Group>
         {value === OTHER_SENTINEL ? otherInput : null}
@@ -126,14 +108,14 @@ export function ElicitationField({
           value={arr}
           disabled={disabled}
           onChange={(next) => onValueChange(next as string[])}
-          style={{ display: 'block' }}
+          className="aw-cl-opts"
         >
           {(field.options ?? []).map((option, index) => (
             <Checkbox
               key={option.value}
               value={option.value}
               data-testid={`elicitation-option-${field.name}-${index}`}
-              style={optionBlockStyle}
+              className="aw-cl-opt"
             >
               <OptionLabel option={option} />
             </Checkbox>
@@ -142,9 +124,9 @@ export function ElicitationField({
             key={OTHER_SENTINEL}
             value={OTHER_SENTINEL}
             data-testid={`elicitation-option-${field.name}-other`}
-            style={otherOptionBlockStyle}
+            className="aw-cl-opt other"
           >
-            <span style={{ fontSize: 16 }}>{t('clarification.otherIdeas')}</span>
+            <span className="t">{t('clarification.otherIdeas')}</span>
           </Checkbox>
         </Checkbox.Group>
         {arr.includes(OTHER_SENTINEL) ? otherInput : null}
@@ -157,6 +139,7 @@ export function ElicitationField({
         disabled={disabled}
         data-testid={`elicitation-field-${field.name}`}
         onChange={(checked) => onValueChange(checked)}
+        style={{ marginTop: 10 }}
       />
     );
   } else if (field.control === 'number') {
@@ -167,7 +150,7 @@ export function ElicitationField({
         aria-label={field.label}
         data-testid={`elicitation-field-${field.name}`}
         onChange={(next) => onValueChange(next ?? undefined)}
-        style={{ width: '100%' }}
+        style={{ width: '100%', marginTop: 10 }}
       />
     );
   } else if (field.control === 'json') {
@@ -178,22 +161,15 @@ export function ElicitationField({
           disabled={disabled}
           rows={3}
           aria-label={field.label}
+          className="aw-cl-textq"
           data-testid={`elicitation-field-${field.name}`}
           onChange={(e) => onValueChange(e.target.value)}
+          style={{ marginTop: 10 }}
         />
         {field.rawSchema !== undefined ? (
-          <details style={{ marginTop: 4 }}>
-            <summary style={{ cursor: 'pointer', fontSize: 14, color: CLARIFICATION_THEME.textMuted }}>{t('clarification.rawSchema')}</summary>
-            <pre
-              data-testid={`elicitation-raw-schema-${field.name}`}
-              style={{
-                fontSize: 14, whiteSpace: 'pre-wrap', maxHeight: 150, overflow: 'auto',
-                padding: '6px 10px', color: CLARIFICATION_THEME.textSecondary,
-                backgroundColor: CLARIFICATION_THEME.codeSurface,
-                border: `1px solid ${CLARIFICATION_THEME.codeBorder}`,
-                borderRadius: CLARIFICATION_THEME.radiusBlock, margin: '2px 0 0',
-              }}
-            >
+          <details style={{ marginTop: 6 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--aw-text-3)' }}>{t('clarification.rawSchema')}</summary>
+            <pre data-testid={`elicitation-raw-schema-${field.name}`} className="aw-cl-pre" style={{ marginTop: 4 }}>
               {JSON.stringify(field.rawSchema, null, 2)}
             </pre>
           </details>
@@ -207,8 +183,10 @@ export function ElicitationField({
         disabled={disabled}
         rows={2}
         aria-label={field.label}
+        className="aw-cl-textq"
         data-testid={`elicitation-field-${field.name}`}
         onChange={(e) => onValueChange(e.target.value)}
+        style={{ marginTop: 10 }}
       />
     );
   }
@@ -217,10 +195,7 @@ export function ElicitationField({
     <div>
       {control}
       {error ? (
-        <div
-          data-testid={`elicitation-error-${field.name}`}
-          style={{ color: 'var(--aw-error)', fontSize: 14, marginTop: 2 }}
-        >
+        <div data-testid={`elicitation-error-${field.name}`} className="aw-cl-q-err">
           {error}
         </div>
       ) : null}

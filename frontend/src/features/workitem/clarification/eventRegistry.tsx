@@ -1,9 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import type { ReactNode } from 'react';
-import { Typography } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { TimelineNode } from './timeline';
-import { CLARIFICATION_THEME } from './theme';
 import { PlanCard } from './cards/PlanCard';
 import { ToolCallNode } from './cards/ToolCallNode';
 import { ElicitationCard } from './cards/ElicitationCard';
@@ -21,20 +20,15 @@ export interface TimelineArtifactContext {
 
 export type TimelineNodeRenderer = (node: TimelineNode, artifactContext?: TimelineArtifactContext) => ReactNode;
 
-/** 折叠块的摘要行：与 master 的浅色规范一致，用 textMuted 而非自造灰。 */
-const SUMMARY_STYLE = {
-  cursor: 'pointer' as const,
-  color: CLARIFICATION_THEME.textMuted,
-  fontSize: 14,
-};
-
-const DETAIL_PRE_STYLE = {
-  fontSize: 13, color: CLARIFICATION_THEME.textSecondary, whiteSpace: 'pre-wrap' as const,
-  maxHeight: 200, overflow: 'auto' as const, padding: '6px 10px',
-  backgroundColor: CLARIFICATION_THEME.codeSurface,
-  border: `1px solid ${CLARIFICATION_THEME.codeBorder}`,
-  borderRadius: CLARIFICATION_THEME.radiusBlock, margin: '4px 0 0',
-};
+function StepSummary({ icon, label }: { icon: string; label: ReactNode }) {
+  return (
+    <>
+      <span className="ic"><AwStrokeIcon name={icon} size={13} /></span>
+      <span className="t">{label}</span>
+      <span className="r"><span className="chev"><AwStrokeIcon name="chev-d" size={12} /></span></span>
+    </>
+  );
+}
 
 export const timelineRenderers: Readonly<Record<string, TimelineNodeRenderer>> = {
   text: (node, artifactContext) => (node.text ? (
@@ -46,15 +40,9 @@ export const timelineRenderers: Readonly<Record<string, TimelineNodeRenderer>> =
   ) : null),
 
   thinking: (node) => (node.text ? (
-    <PersistentFold foldKey={node.id} style={{ marginBottom: 8 }} summaryStyle={SUMMARY_STYLE}
-      summary={i18n.t('workitem:clarification.thinkingProcess')}>
-      <div className="aw-clarify-thinking" style={{
-        fontSize: 15, color: CLARIFICATION_THEME.textSecondary,
-        lineHeight: 1.75, maxHeight: 280, overflow: 'auto', padding: '10px 12px',
-        backgroundColor: CLARIFICATION_THEME.codeSurface,
-        border: `1px solid ${CLARIFICATION_THEME.codeBorder}`,
-        borderRadius: CLARIFICATION_THEME.radiusBlock, marginTop: 4,
-      }}>
+    <PersistentFold className="aw-cl-step" foldKey={node.id}
+      summary={<StepSummary icon="bulb" label={i18n.t('workitem:clarification.thinkingProcess')} />}>
+      <div className="aw-cl-step-body aw-clarify-thinking" style={{ maxHeight: 280, overflowY: 'auto' }}>
         <WindowedConversationText text={node.text} />
       </div>
     </PersistentFold>
@@ -62,9 +50,7 @@ export const timelineRenderers: Readonly<Record<string, TimelineNodeRenderer>> =
 
   tool: (node) => (node.tool ? <ToolCallNode tool={node.tool} foldKey={node.id} /> : null),
 
-  displaySummary: (node) => (
-    <EventAvailabilityNode node={node} />
-  ),
+  displaySummary: (node) => <EventAvailabilityNode node={node} />,
 
   plan: (node) => (node.plan ? <PlanCard entries={node.plan.entries} /> : null),
 
@@ -75,15 +61,17 @@ export const timelineRenderers: Readonly<Record<string, TimelineNodeRenderer>> =
   status: () => null,
 
   error: (node) => (
-    <Typography.Text type="danger" style={{ display: 'block', fontSize: 14, marginBottom: 4 }}>
-      {node.text}
-    </Typography.Text>
+    <div className="aw-cl-note error" style={{ marginBottom: 4 }}>
+      <span className="grow">{node.text}</span>
+    </div>
   ),
 
   log: (node) => (
-    <PersistentFold foldKey={node.id} style={{ marginBottom: 4 }} summaryStyle={SUMMARY_STYLE}
-      summary={i18n.t('workitem:clarification.logs')}>
-      <pre style={DETAIL_PRE_STYLE}>{node.text}</pre>
+    <PersistentFold className="aw-cl-step" foldKey={node.id}
+      summary={<StepSummary icon="term" label={i18n.t('workitem:clarification.logs')} />}>
+      <div className="aw-cl-step-body">
+        <pre className="aw-cl-pre">{node.text}</pre>
+      </div>
     </PersistentFold>
   ),
 
@@ -121,11 +109,13 @@ function TimelineNodeView({ node, artifactContext }: {
 function renderUnknownNode(node: TimelineNode): ReactNode {
   const eventType = node.raw?.eventType ?? node.kind;
   return (
-    <PersistentFold foldKey={node.id} style={{ marginBottom: 4 }} summaryStyle={SUMMARY_STYLE}
-      summary={i18n.t('workitem:clarification.unknownEvent', { eventType })}>
-      <pre data-testid="timeline-unknown-raw" style={DETAIL_PRE_STYLE}>
-        {JSON.stringify(node.raw ?? { kind: node.kind, eventSeq: node.eventSeq }, null, 2)}
-      </pre>
+    <PersistentFold className="aw-cl-step" foldKey={node.id}
+      summary={<StepSummary icon="info" label={i18n.t('workitem:clarification.unknownEvent', { eventType })} />}>
+      <div className="aw-cl-step-body">
+        <pre data-testid="timeline-unknown-raw" className="aw-cl-pre">
+          {JSON.stringify(node.raw ?? { kind: node.kind, eventSeq: node.eventSeq }, null, 2)}
+        </pre>
+      </div>
     </PersistentFold>
   );
 }

@@ -61,20 +61,20 @@ describe('platform and about language boundaries', () => {
     await waitFor(() => expect(screen.getByRole('radio', { name: '海洋蓝' })).toBeEnabled()); await userEvent.click(screen.getByText('海洋蓝'));
     const color = screen.getByLabelText('选择主色'); expect(color).toHaveValue('#2563eb');
     await userEvent.click(screen.getByRole('tab', { name: '消息渠道' }));
-    const secret = screen.getByLabelText('AppSecret'); await userEvent.type(secret, ' raw/+秘密 ');
+    const secret = screen.getByLabelText('通知 AppSecret'); await userEvent.type(secret, ' raw/+秘密 ');
     const show = screen.getByRole('button', { name: '显示密钥' }); show.focus(); await userEvent.keyboard('{Enter}'); expect(secret).toHaveAttribute('type', 'text');
     await language('en-US');
     expect(screen.getByRole('heading', { name: 'Platform configuration' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Message channels' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByLabelText('AppSecret')).toBe(secret); expect(secret).toHaveValue(' raw/+秘密 ');
+    expect(screen.getByLabelText('Notification AppSecret')).toBe(secret); expect(secret).toHaveValue(' raw/+秘密 ');
     screen.getByRole('button', { name: 'Hide secret' }).focus(); await userEvent.keyboard(' '); expect(secret).toHaveAttribute('type', 'password');
     await userEvent.click(screen.getByRole('tab', { name: 'Brand and theme' }));
     expect(screen.getByLabelText('Platform name')).toBe(name); expect(name).toHaveValue(rawName); expect(domain).toHaveValue('https://raw.example/+?a=1');
     expect(screen.getByRole('radio', { name: 'Ocean blue' })).toBeChecked(); expect(color).toHaveValue('#2563eb');
     expect(THEME_PRESETS.map(p => [p.key, p.primaryColor])).toEqual([
-      ['aliyun-orange', '#f97316'], ['ocean-blue', '#2563eb'], ['jade-green', '#059669'], ['indigo', '#4f46e5'], ['rose', '#e11d48'], ['cyan', '#0891b2'], ['amber', '#d97706'], ['violet', '#7c3aed'], ['graphite', '#374151'], ['teal', '#0f766e'],
+      ['alicloud-blue', '#0064C8'], ['aliyun-orange', '#f97316'], ['ocean-blue', '#2563eb'], ['jade-green', '#059669'], ['indigo', '#4f46e5'], ['rose', '#e11d48'], ['cyan', '#0891b2'], ['amber', '#d97706'], ['violet', '#7c3aed'], ['graphite', '#374151'], ['teal', '#0f766e'],
     ]);
-    for (const label of ['Aliyun orange', 'Ocean blue', 'Jade green', 'Indigo', 'Rose', 'Cyan', 'Amber', 'Violet', 'Graphite', 'Teal']) expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
+    for (const label of ['Default', 'Aliyun orange', 'Ocean blue', 'Jade green', 'Indigo', 'Rose', 'Cyan', 'Amber', 'Violet', 'Graphite', 'Teal']) expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: 'Platform administrators' }));
     expect(await screen.findByRole('columnheader', { name: 'Administrator' })).toBeInTheDocument();
     await language('zh-CN'); expect(screen.getByRole('columnheader', { name: '管理员' })).toBeInTheDocument();
@@ -87,9 +87,9 @@ describe('platform and about language boundaries', () => {
       http.get('/api/platform/im-channels/selection', () => ok({ provider, generation: 2, activatedAt: null })),
     );
     mount(<BrandingConfigPage />); await userEvent.click(await screen.findByRole('tab', { name: '消息渠道' }));
-    const key = await screen.findByLabelText(provider === 'FEISHU' ? 'App ID' : 'AppKey'); await waitFor(() => expect(key).toBeEnabled());
-    const secret = screen.getByLabelText('AppSecret'); await userEvent.type(secret, ' raw secret ');
-    await userEvent.click(screen.getByRole('button', { name: /保存通知配置/ })); await screen.findByText('请输入 AppKey');
+    const key = await screen.findByLabelText(provider === 'FEISHU' ? '通知 App ID' : '通知 AppKey'); await waitFor(() => expect(key).toBeEnabled());
+    const secret = screen.getByLabelText('通知 AppSecret'); await userEvent.type(secret, ' raw secret ');
+    await userEvent.click(screen.getByRole('button', { name: /保存通知机器人/ })); await screen.findByText('请输入 AppKey');
     await language('en-US'); await screen.findByText('Enter AppKey');
     if (provider === 'DINGTALK') expect(screen.getByText('Enter RobotCode')).toBeInTheDocument();
     else expect(screen.queryByText('Enter RobotCode')).not.toBeInTheDocument();
@@ -105,11 +105,11 @@ describe('platform and about language boundaries', () => {
     let payload: unknown;
     server.use(http.put('/api/platform/im-channels/feishu', async ({ request }) => { payload = await request.json(); return ok({ provider: 'FEISHU', enabled: false, appKey: '', robotCode: '', secretConfigured: false, ready: false }); }));
     mount(<BrandingConfigPage />); await userEvent.click(await screen.findByRole('tab', { name: '消息渠道' }));
-    await waitFor(() => expect(screen.getByLabelText('App ID')).toHaveValue('cli_raw'));
-    await userEvent.click(screen.getByRole('button', { name: /保存通知配置/ })); await screen.findByText('请输入 AppSecret');
+    await waitFor(() => expect(screen.getByLabelText('通知 App ID')).toHaveValue('cli_raw'));
+    await userEvent.click(screen.getByRole('button', { name: /保存通知机器人/ })); await screen.findByText('请输入 AppSecret');
     await language('en-US'); await screen.findByText('Enter AppSecret');
-    await userEvent.click(screen.getByRole('switch', { name: 'Enable Feishu robot' })); await userEvent.clear(screen.getByLabelText('App ID'));
-    await userEvent.click(screen.getByRole('button', { name: 'Save notification configuration' }));
+    await userEvent.click(screen.getByRole('switch', { name: 'Enable Feishu robot' })); await userEvent.clear(screen.getByLabelText('Notification App ID'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save notification bot' }));
     await waitFor(() => expect(payload).toEqual({ enabled: false, appKey: '', robotCode: '', appSecret: '', baseUrl: '' }));
   });
   it.each([
@@ -130,17 +130,38 @@ describe('platform and about language boundaries', () => {
     mount(<PlatformAdminPanel />); const button = await screen.findByRole('button', { name: '添加管理员' });
     await userEvent.hover(button.parentElement!); await screen.findByRole('tooltip'); await language('en-US');
     expect(screen.getByRole('tooltip')).toHaveTextContent('Only platform administrators can perform this action');
-    expect(screen.getByRole('combobox', { name: 'Search users to add' })).toBeDisabled(); expect(requests).toBe(0);
+    expect(screen.getByRole('button', { name: 'Add administrator' })).toBeDisabled();
+    expect(screen.queryByRole('combobox', { name: 'Search users to add' })).not.toBeInTheDocument();
+    expect(requests).toBe(0);
   });
   it('keeps candidate search, selected numeric user and raw open confirmation through switching, and exposes keyboard clear', async () => {
     let requests = 0; let added: unknown;
     server.use(http.get('/api/platform/admins', () => ok({ admins: [self, { ...other, nickname: 'other<img src=x>' }], canManage: true })), http.get('/api/platform/admins/candidates', () => { requests++; return ok([{ userId: 3, username: 'candidate', nickname: 'raw candidate', email: null }]); }), http.post('/api/platform/admins', async ({ request }) => { added = await request.json(); return ok({ admins: [self, { ...other, nickname: 'other<img src=x>' }], canManage: true }); }));
     const { container } = mount(<PlatformAdminPanel />);
-    await screen.findByText('other<img src=x>'); const input = screen.getByRole('combobox', { name: '搜索可添加的用户' }); expect(input).toBeEnabled();
-    await userEvent.type(input, '原文'); await userEvent.click(await screen.findByText('raw candidate', { selector: '.ant-select-item-option-content' })); expect(screen.getByRole('button', { name: '添加管理员' })).toBeEnabled(); const calls = requests;
-    await language('en-US'); expect(screen.getByRole('combobox', { name: 'Search users to add' })).toBe(input); expect(screen.getAllByText('raw candidate').length).toBeGreaterThan(0); expect(requests).toBe(calls);
-    await userEvent.click(screen.getByRole('button', { name: 'Add administrator' })); await waitFor(() => expect(added).toEqual({ userId: 3 }));
-    await userEvent.type(input, 'raw search'); const clear = screen.getByRole('button', { name: 'Clear user selection and search' }); clear.focus(); await userEvent.keyboard('{Enter}'); expect(input).toHaveValue('');
+    await screen.findByText('other<img src=x>');
+    await userEvent.click(screen.getByRole('button', { name: '添加管理员' }));
+    const dialog = await screen.findByRole('dialog');
+    const input = within(dialog).getByRole('combobox', { name: '搜索可添加的用户' });
+    expect(input).toBeEnabled();
+    await userEvent.type(input, '原文');
+    await userEvent.click(await screen.findByText('raw candidate', { selector: '.ant-select-item-option-content' }));
+    expect(within(dialog).getByRole('button', { name: '添加 1 人' })).toBeEnabled();
+    const calls = requests;
+    await language('en-US');
+    expect(within(dialog).getByRole('combobox', { name: 'Search users to add' })).toBe(input);
+    expect(within(dialog).getByText('raw candidate', { selector: '.aw-admin-tag-label' })).toBeInTheDocument();
+    expect(requests).toBe(calls);
+    await userEvent.type(input, 'raw search');
+    const clear = within(dialog).getByRole('button', { name: 'Clear user selection and search' });
+    clear.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(input).toHaveValue('');
+    expect(within(dialog).getByRole('button', { name: 'Add 0 people' })).toBeDisabled();
+    await userEvent.click(input);
+    await userEvent.click(await screen.findByText('raw candidate', { selector: '.ant-select-item-option-content' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add 1 person' }));
+    await waitFor(() => expect(added).toEqual({ userId: 3 }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const row = (await screen.findByText('other<img src=x>')).closest('tr')!; await userEvent.click(within(row).getByRole('button', { name: 'Remove' }));
     expect(await screen.findByText('Remove platform administrator access from other<img src=x>?')).toBeInTheDocument();
     await language('zh-CN'); expect(screen.getByText('确定移除 other<img src=x> 的平台管理员权限？')).toBeInTheDocument(); expect(container.querySelector('img')).toBeNull();
@@ -149,10 +170,17 @@ describe('platform and about language boundaries', () => {
     let release!: () => void; let payload: unknown;
     server.use(http.put('/api/platform/branding', async ({ request }) => { payload = await request.json(); await new Promise<void>(resolve => { release = resolve; }); return ok({ ...DEFAULT_BRANDING, ...(payload as object) }); }));
     const success = vi.spyOn(message, 'success').mockImplementation(() => undefined as unknown as ReturnType<typeof message.success>);
-    mount(<BrandingConfigPage />); const name = await screen.findByLabelText('平台名称'); await waitFor(() => expect(name).toHaveValue('AutoWonder'));
+    mount(<BrandingConfigPage />);
+    const name = await screen.findByLabelText('平台名称');
+    await waitFor(() => {
+      expect(name).toBeEnabled();
+      expect(name).toHaveValue('AutoWonder');
+    });
     await userEvent.clear(name); await userEvent.type(name, rawName); await userEvent.click(screen.getByRole('button', { name: /保存配置/ })); await waitFor(() => expect(release).toBeDefined());
     await language('en-US'); expect(screen.getByRole('button', { name: 'Save configuration' })).toBeInTheDocument(); await act(async () => { release(); });
-    await waitFor(() => expect(success).toHaveBeenCalledWith('Platform configuration saved')); expect(payload).toMatchObject({ platformName: rawName, themeKey: 'aliyun-orange', primaryColor: '#f97316' }); expect(payload).not.toHaveProperty('appSecret');
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Platform configuration saved'));
+    expect(payload).toMatchObject({ platformName: rawName, themeKey: 'aliyun-orange', primaryColor: '#f97316' });
+    expect(payload).not.toHaveProperty('appSecret');
   });
   it('updates every about step while retaining nodes, raw version, and decorative accessibility', async () => {
     mount(<AboutAutoWonderPage />, '/about'); await screen.findByText('raw+version'); const nodes = screen.getAllByRole('listitem');

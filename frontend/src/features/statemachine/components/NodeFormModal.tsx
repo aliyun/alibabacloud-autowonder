@@ -40,12 +40,13 @@ export function NodeFormModal({ open, editing, nextSort, onSubmit, onCancel, loa
       onOk={() => form.validateFields().then(onSubmit, () => {})}
       onCancel={onCancel}
       confirmLoading={loading}
+      width={440}
       afterOpenChange={(visible) => { if (visible) handleOpen(); }}
       destroyOnHidden
     >
       <Form form={form} layout="vertical">
         <Form.Item name="code" label={t('nodes.code')} rules={[{ required: true, message: t('nodes.codeRequired') }]}
-          tooltip={t('nodes.codeHelp')}>
+          extra={editing ? t('nodes.codeHelpLocked') : t('nodes.codeHelp')}>
           <Input placeholder={t('nodes.codePlaceholder')} disabled={!!editing} />
         </Form.Item>
         <Form.Item name="name" label={t('nodes.name')} rules={[{ required: true, message: t('nodes.nameRequired') }]}>
@@ -54,7 +55,7 @@ export function NodeFormModal({ open, editing, nextSort, onSubmit, onCancel, loa
         <Form.Item name="category" label={t('nodes.category')} rules={[{ required: true, message: t('nodes.categoryRequired') }]}>
           <Select options={categoryOptions} />
         </Form.Item>
-        <Form.Item name="sort" label={t('nodes.sort')} tooltip={t('nodes.sortHelp')}>
+        <Form.Item name="sort" label={t('nodes.sort')} extra={t('nodes.sortHelp')}>
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
       </Form>

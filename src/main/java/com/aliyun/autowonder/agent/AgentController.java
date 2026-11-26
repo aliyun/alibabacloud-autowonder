@@ -19,6 +19,7 @@ import com.aliyun.autowonder.agent.dto.SkillRequest;
 import com.aliyun.autowonder.agent.dto.SubmitReviewRequest;
 import com.aliyun.autowonder.agent.dto.UpdateConfigRequest;
 import com.aliyun.autowonder.agent.dto.UpdateAgentRequest;
+import com.aliyun.autowonder.agent.dto.UpdateAgentTagsRequest;
 import com.aliyun.autowonder.squad.SquadService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -85,6 +86,17 @@ public class AgentController {
     @RequireWorkspaceAccess(value = WorkspaceAccessLevel.READ_WRITE, action = "查看待审核数量", actionKey = "access.action.view_the_pending_review_count")
     public Result<Long> countPendingReviews() {
         return Result.ok(agentService.countPendingReviews(currentWorkspaceId()));
+    }
+
+    @PutMapping("/{id}/tags")
+    @RequireWorkspaceAccess(value = WorkspaceAccessLevel.READ_WRITE, action = "更新数字人标签", actionKey = "access.action.update_agent_tags")
+    public Result<AgentVO> updateTags(@PathVariable("id") Long id, @RequestBody UpdateAgentTagsRequest req) {
+        return Result.ok(agentService.updateTags(id, req, currentWorkspaceId(), currentUserId()));
+    }
+
+    @GetMapping("/tag-options")
+    public Result<List<String>> tagOptions() {
+        return Result.ok(agentService.listAgentTagOptions(currentWorkspaceId()));
     }
 
     @PutMapping("/{id}/config")

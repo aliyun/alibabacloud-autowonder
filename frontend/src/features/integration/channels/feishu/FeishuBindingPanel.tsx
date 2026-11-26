@@ -2,13 +2,16 @@ import { formatDateTime } from '@/shared/i18n/format';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
-import { CopyOutlined, CheckOutlined, EyeOutlined, EyeInvisibleOutlined, PlusOutlined } from '@ant-design/icons';
+import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useState } from 'react';
-import { Alert, Button, Card, Checkbox, Drawer, Form, Input, Popconfirm, Select, Space, Tag, Typography, message } from 'antd';
+import { Alert, Button, Checkbox, Drawer, Form, Input, Popconfirm, Select, Space, Tag, Tooltip, Typography, message } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
+import { SectionCard } from '@/shared/ui/SectionCard';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listAgents } from '@/features/agent/api';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+import { useAuthStore } from '@/shared/auth/store';
 import { EllipsisText } from '@/shared/ui/EllipsisText';
 import { ImIdentityConflictAlert } from '@/shared/ui/ImIdentityConflictAlert';
 import { GroupIdGuide } from '../GroupIdGuide';
@@ -24,9 +27,10 @@ import {
 const statusLabelKeys = new Map([['ENABLED', 'statusEnabled'], ['DISABLED', 'statusDisabled']] as const);
 const SHARED_MODE = 'SHARED';
 
-export function FeishuBindingPanel() {
+export function FeishuBindingPanel({ platformReady = true }: { platformReady?: boolean }) {
   const { t } = useTranslation('integration');
   const runWithAccess = useAccessCommand();
+  const isPlatformAdmin = useAuthStore((s) => s.user?.isAdmin === true);
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [record, setRecord] = useState<FeishuBinding>();
@@ -132,8 +136,13 @@ export function FeishuBindingPanel() {
     };
   }
   const callbackUrl = record?.callbackUrl?.startsWith('/') ? `${window.location.origin}${record.callbackUrl}` : record?.callbackUrl;
-  return <Card title={t('feishuTitle')} extra={
-    <Button type="primary" icon={<PlusOutlined aria-hidden="true" />} aria-label={t('newFeishu')} onClick={() => edit()}>{t('newFeishu')}</Button>
+  const newFeishuButton = (
+    <Button type="primary" icon={<AwStrokeIcon name="plus" />} aria-label={t('newFeishu')}
+      disabled={!platformReady} onClick={() => edit()}>{t('newFeishu')}</Button>
+  );
+  return <SectionCard className="integration-panel" title={t('feishuTitle')} extra={
+    platformReady ? newFeishuButton
+      : <Tooltip title={isPlatformAdmin ? t('platformNotReadyHint') : t('platformNotReadyContactAdmin')}><span>{newFeishuButton}</span></Tooltip>
   }>
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
     <Alert type="info" showIcon message={t('feishuBot')}
@@ -217,7 +226,7 @@ export function FeishuBindingPanel() {
         {conflictError != null && <div style={{ marginTop: 16 }}><ImIdentityConflictAlert error={conflictError} /></div>}
       </Form>
       {/* AntD caches copy controls with string children; React text keeps labels reactive without remounting. */}
-      {!shared && record && <Alert style={{ marginTop: 16 }} type="success" message={t('feishuCallback')} description={<Typography.Paragraph copyable={{ text: callbackUrl, tooltips: [t('copyCallback'), t('copied')], icon: [<CopyOutlined aria-hidden="true" />, <CheckOutlined aria-hidden="true" />] }} style={{ wordBreak: 'break-all', marginBottom: 0 }}>
+      {!shared && record && <Alert style={{ marginTop: 16 }} type="success" message={t('feishuCallback')} description={<Typography.Paragraph copyable={{ text: callbackUrl, tooltips: [t('copyCallback'), t('copied')], icon: [<AwStrokeIcon name="copy" size={14} />, <AwStrokeIcon name="check" size={14} />] }} style={{ wordBreak: 'break-all', marginBottom: 0 }}>
         <Typography.Text>{callbackUrl}</Typography.Text>
       </Typography.Paragraph>} />}
       <Typography.Paragraph style={{ marginTop: 16 }}>{t('feishuSetup')}</Typography.Paragraph>
@@ -232,5 +241,5 @@ export function FeishuBindingPanel() {
       deleteLoading={remove.isPending}
     />
     </Space>
-  </Card>;
+  </SectionCard>;
 }

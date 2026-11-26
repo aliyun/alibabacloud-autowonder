@@ -94,11 +94,9 @@ describe('routed agent configuration languages', () => {
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeInTheDocument();
     expect(soul).toHaveValue('<strong>业务原文</strong> 草稿');
     expect(container.querySelectorAll('.ant-form-item-explain-error')).toHaveLength(0);
-    await user.click(screen.getByRole('combobox', { name: 'Evolution mode' }));
-    expect(await screen.findByText('Automatic memory (recommended)', { selector: '.ant-select-item-option-content span' })).toBeInTheDocument();
+    expect(await screen.findByText('Automatic memory (recommended)', { selector: '.aw-agent-evo-name' })).toBeInTheDocument();
     await act(async () => { await i18n.changeLanguage('zh-CN'); });
-    expect(await screen.findByText('自动记忆（推荐）', { selector: '.ant-select-item-option-content span' })).toBeInTheDocument();
-    await user.keyboard('{Escape}');
+    expect(await screen.findByText('自动记忆（推荐）', { selector: '.aw-agent-evo-name' })).toBeInTheDocument();
     await user.clear(nameInput);
     await user.click(screen.getByRole('button', { name: /保存草稿/ }));
     expect(await screen.findByText('请输入员工名称')).toBeInTheDocument();
@@ -125,10 +123,10 @@ describe('routed agent configuration languages', () => {
     await screen.findByText('<em>仓库</em>');
     await act(async () => { await i18n.changeLanguage('en-US'); });
     expect(screen.getByText('Read only')).toBeInTheDocument();
-    expect(screen.getByText('Skill', { selector: '.ant-tag' })).toBeInTheDocument();
+    expect(screen.getByText('Skill')).toBeInTheDocument();
     expect(screen.getByText('用户技能')).toBeInTheDocument();
-    expect(screen.getByText('constructor', { selector: '.ant-tag' })).toBeInTheDocument();
-    expect(screen.getByText('toString', { selector: '.ant-tag' })).toBeInTheDocument();
+    expect(screen.getByText('constructor')).toBeInTheDocument();
+    expect(screen.getByText('toString')).toBeInTheDocument();
     await user.click(screen.getAllByLabelText('SDLC workflow')[0]);
     expect(await screen.findByText('用户模版 (Enabled)')).toBeInTheDocument();
   });

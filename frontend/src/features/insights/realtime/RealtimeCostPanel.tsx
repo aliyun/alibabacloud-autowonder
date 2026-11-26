@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { CloseOutlined, DollarOutlined } from '@ant-design/icons';
 import { Alert, Segmented, Select, Spin } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { CostStatsCard } from '../components/CostStatsCard';
 import { InsightsCostComposition } from '../components/InsightsCostComposition';
 import type { CostComposition, CostKpi } from './api';
@@ -45,24 +45,10 @@ export default function RealtimeCostPanel({
     <section className="insight-panel insight-panel--cost" aria-label={t('cost.region')}>
       <div className="insight-panel-head">
         <div className="insight-panel-id">
-          <span className="insight-panel-glyph insight-panel-glyph--cost" aria-hidden="true">
-            <DollarOutlined />
-          </span>
-          <h2>{t('cost.region')}</h2>
-          <span className={`insight-scope-chip${workerId !== undefined ? ' is-specific' : ''}`}>
-            <span>{t('cost.scopeChip', { worker: workerLabel, range: rangeLabel })}</span>
-            {workerId !== undefined && (
-              <button
-                type="button"
-                className="insight-scope-clear"
-                aria-label={t('cost.clearAgent')}
-                title={t('cost.clearAgentHint')}
-                onClick={() => onWorkerChange(undefined)}
-              >
-                <CloseOutlined aria-hidden="true" />
-              </button>
-            )}
-          </span>
+          <h2 className="insight-panel-title-with-icon">
+            <AwStrokeIcon name="coin" />
+            {t('cost.region')}
+          </h2>
         </div>
         <div className="insight-panel-tools">
           <Select
@@ -73,7 +59,7 @@ export default function RealtimeCostPanel({
               { value: ALL_WORKERS, label: t('cost.allAgents'), title: t('cost.allAgents') },
               ...workers.map((worker) => ({ value: worker.id, label: worker.name, title: worker.name })),
             ]}
-            style={{ width: 200 }}
+            style={{ width: 180 }}
             optionLabelProp="label"
           />
           <Segmented
@@ -82,6 +68,20 @@ export default function RealtimeCostPanel({
             value={timeRange}
             onChange={(value) => onTimeRangeChange(value as TimeRange)}
           />
+          <span className={`insight-scope-chip${workerId !== undefined ? ' is-specific' : ''}`}>
+            <span>{t('cost.scopeChip', { worker: workerLabel, range: rangeLabel })}</span>
+            {workerId !== undefined && (
+              <button
+                type="button"
+                className="insight-scope-clear"
+                aria-label={t('cost.clearAgent')}
+                title={t('cost.clearAgentHint')}
+                onClick={() => onWorkerChange(undefined)}
+              >
+                <AwStrokeIcon name="x" />
+              </button>
+            )}
+          </span>
         </div>
       </div>
 

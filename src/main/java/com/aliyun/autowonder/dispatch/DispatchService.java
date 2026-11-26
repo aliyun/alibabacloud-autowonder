@@ -848,6 +848,8 @@ public class DispatchService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private DispatchModelSelectionService modelSelectionService;
+    @Autowired
+    private com.aliyun.autowonder.sdlc.SdlcExecutionSnapshotService sdlcExecutionSnapshotService;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setDispatchRequests(DispatchRequestService requests) { this.requests = requests; }
 
@@ -1342,9 +1344,10 @@ public class DispatchService {
             freezeDebugLogFlag(d, workspaceId);
 
             TaskPackageResult pkg;
+            PackageContext ctx;
             try {
                 if (modelSelectionService != null) modelSelectionService.freeze(d);
-                PackageContext ctx = assembler.assemble(d, version);
+                ctx = assembler.assemble(d, version);
 				if (trialAssignmentService != null) {
 					trialAssignmentService.prepare(ctx, d);
 				}
@@ -1384,6 +1387,14 @@ public class DispatchService {
                 }
             } else if (!transition(d, DispatchStatus.DISPATCHED, null, executorId, pkg.getOssRef(), null, null)) {
                 return true;
+            }
+            if (sdlcExecutionSnapshotService != null && ctx.isStageTimingEnabled()) {
+                try {
+                    sdlcExecutionSnapshotService.capture(ctx, pkg, d.getVersion());
+                } catch (RuntimeException snapshotFailure) {
+                    // Analytical capture must not prevent delivery; the verified task package can recover it.
+                    log.warn("SDLC snapshot capture failed dispatchId={}", d.getId(), snapshotFailure);
+                }
             }
             // 派发开始执行：工单仍处于 INIT 类别时自动推进到模板首个 IN_PROGRESS 节点（规格 3.3）。
             // 定时任务派发的 workitemId 列存的是 run ID，不是工单 ID，绝不能参与自动推进。
@@ -1921,6 +1932,7 @@ public class DispatchService {
                 || eventType.startsWith("mcp.")
                 || eventType.startsWith("cli.")
                 || eventType.startsWith("bash.")
+                || "operation.timing".equals(eventType)
                 || eventType.startsWith("skill.")
                 || eventType.startsWith("plugin.")
                 || eventType.startsWith("subagent.")

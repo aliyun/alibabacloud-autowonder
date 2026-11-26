@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -54,8 +54,8 @@ describe('RepoDetailPage', () => {
       })),
     );
     renderPage();
-    expect(await screen.findByRole('tab', { name: '基础信息' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '仓库关系' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: '信息' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '关系' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: '前端子项目' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('tab')).toHaveLength(2);
     expect(screen.queryByRole('tab', { name: '扫描结论' })).not.toBeInTheDocument();
@@ -94,7 +94,7 @@ describe('RepoDetailPage', () => {
     );
 
     renderPage();
-    await screen.findByRole('tab', { name: '基础信息' });
+    await screen.findByRole('tab', { name: '信息' });
 
     expect(screen.queryByRole('button', { name: /发起扫描/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /AI 仓库扫描/ })).not.toBeInTheDocument();
@@ -129,7 +129,7 @@ describe('RepoDetailPage', () => {
 
     renderPage(`/repos/${repoId}`);
 
-    expect(await screen.findByRole('tab', { name: '基础信息' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: '信息' })).toBeInTheDocument();
     expect(requestedDetailPath).toBe(`/api/repos/${repoId}`);
   });
 
@@ -162,10 +162,67 @@ describe('RepoDetailPage', () => {
     );
 
     renderPage('/repos/10000');
-    await userEvent.click(await screen.findByRole('tab', { name: '仓库关系' }));
+    await userEvent.click(await screen.findByRole('tab', { name: '关系' }));
 
     expect(await screen.findByText(/client-runtime/)).toBeInTheDocument();
-    expect(screen.getByText('服务调用')).toBeInTheDocument();
+    // 关系类型 Tag 与图谱边同色系（SERVICE）
+    expect(screen.getByText('服务')).toHaveStyle({ color: '#006d75' });
+  });
+
+  it('locks the source repo to the current repo when adding a relation', async () => {
+    const user = userEvent.setup();
+    const peerRepo = { ...mockRepo, id: 2, name: 'aw-e2e-tests' };
+    let postBody: Record<string, unknown> | null = null;
+    server.use(
+      http.get('/api/repos/1', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null, data: mockRepo,
+      })),
+      http.get('/api/repos/1/conclusion', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null, data: null,
+      })),
+      http.get('/api/repos/relations', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null, data: [],
+      })),
+      http.get('/api/repos', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null, data: [mockRepo, peerRepo],
+      })),
+      http.post('/api/repos/relations', async ({ request }) => {
+        postBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          success: true, code: '0', message: '', traceId: null,
+          data: {
+            id: 9, fromRepoId: 1, toRepoId: 2, relationType: 'SERVICE',
+            description: null, aiSessionId: null, gmtCreate: '2026-07-11T08:27:22.730+00:00',
+          },
+        });
+      }),
+    );
+
+    renderPage('/repos/1');
+    await user.click(await screen.findByRole('tab', { name: '关系' }));
+    await user.click(await screen.findByRole('button', { name: /新增关系/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: '新增仓库关系' });
+    const sourceInput = dialog.querySelector('input[disabled]') as HTMLInputElement | null;
+    expect(sourceInput?.value).toBe('auto-wonder');
+    // 源仓库固定为当前仓库，弹窗里只剩目标仓库 / 关系类型两个下拉
+    expect(dialog.querySelectorAll('.ant-select')).toHaveLength(2);
+
+    const selects = within(dialog).getAllByRole('combobox');
+    await user.click(selects[0].closest('.ant-select')!.querySelector('.ant-select-selector') as HTMLElement);
+    await user.click(await screen.findByText('aw-e2e-tests', { selector: '.ant-select-item-option-content' }));
+    await user.click(selects[1].closest('.ant-select')!.querySelector('.ant-select-selector') as HTMLElement);
+    // 关系类型选项为两行（类型名 + 方向说明），按 title 命中短标签
+    await user.click(await screen.findByTitle('服务'));
+    expect(screen.getByTestId('relation-direction-hint')).toHaveTextContent(
+      'auto-wonder 调用 aw-e2e-tests 提供的服务',
+    );
+    // 测试未挂 antd 的 zh-CN ConfigProvider，弹窗默认按钮文案是 OK
+    await user.click(within(dialog).getByRole('button', { name: /确\s*定|OK/ }));
+
+    await waitFor(() => {
+      expect(postBody).toMatchObject({ fromRepoId: 1, toRepoId: 2, relationType: 'SERVICE' });
+    });
   });
 
   it('hides the scan entry for read-only members without raising a permission error', async () => {
@@ -191,7 +248,7 @@ describe('RepoDetailPage', () => {
     );
 
     renderPage('/repos/1', 'READ_ONLY');
-    await screen.findByRole('tab', { name: '基础信息' });
+    await screen.findByRole('tab', { name: '信息' });
 
     expect(screen.queryByRole('button', { name: /发起扫描/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /AI 仓库扫描/ })).not.toBeInTheDocument();
@@ -224,9 +281,9 @@ describe('RepoDetailPage', () => {
     );
 
     renderPage('/repos/1');
-    await screen.findByRole('tab', { name: '基础信息' });
+    await screen.findByRole('tab', { name: '信息' });
 
-    await user.click(screen.getByRole('button', { name: /删除仓库/ }));
+    await user.click(screen.getByRole('button', { name: /^删除$/ }));
     expect(await screen.findByText(/确认删除仓库/)).toBeInTheDocument();
     const confirmBtn = document.querySelector('.ant-popconfirm .ant-popconfirm-buttons button:last-child') as HTMLButtonElement;
     expect(confirmBtn).toBeTruthy();
@@ -263,7 +320,7 @@ describe('RepoDetailPage', () => {
     );
 
     renderPage('/repos/1');
-    await screen.findByRole('tab', { name: '基础信息' });
+    await screen.findByRole('tab', { name: '信息' });
 
     await user.click(await screen.findByRole('button', { name: /编辑/ }));
     const descInput = await screen.findByLabelText('描述');
@@ -307,7 +364,7 @@ describe('RepoDetailPage', () => {
     );
 
     renderPage('/repos/1');
-    await screen.findByRole('tab', { name: '基础信息' });
+    await screen.findByRole('tab', { name: '信息' });
 
     await user.click(await screen.findByRole('button', { name: /编辑/ }));
     const descInput = await screen.findByLabelText('描述');
@@ -347,7 +404,7 @@ describe('RepoDetailPage', () => {
     );
 
     renderPage('/repos/1');
-    await screen.findByRole('tab', { name: '基础信息' });
+    await screen.findByRole('tab', { name: '信息' });
 
     await user.click(await screen.findByRole('button', { name: /编辑/ }));
     const nameInput = await screen.findByLabelText('仓库名称');
@@ -383,7 +440,7 @@ describe('RepoDetailPage', () => {
     );
 
     renderPage('/repos/1');
-    await screen.findByRole('tab', { name: '基础信息' });
+    await screen.findByRole('tab', { name: '信息' });
 
     await user.click(await screen.findByRole('button', { name: /编辑/ }));
     const nameInput = await screen.findByLabelText('仓库名称');

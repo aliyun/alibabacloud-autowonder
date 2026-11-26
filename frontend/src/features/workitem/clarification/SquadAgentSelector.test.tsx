@@ -41,8 +41,8 @@ describe('SquadAgentSelector', () => {
     );
 
     renderSelector(null);
-    const [, agentInput] = getComboboxes();
-    expect(agentInput).toBeDisabled();
+    expect(getComboboxes()).toHaveLength(1);
+    expect(screen.getByText('请先选择小队')).toBeInTheDocument();
     await waitFor(() => expect(getComboboxes()[0]).not.toBeDisabled());
   });
 
@@ -73,11 +73,12 @@ describe('SquadAgentSelector', () => {
       ),
     );
 
-    renderSelector({ squadId: 11, agentId: 0 });
-    const [, agentInput] = getComboboxes();
-    await waitFor(() => expect(agentInput).not.toBeDisabled());
-    fireEvent.mouseDown(agentInput);
-    expect(await screen.findByText('Alpha-1 (AW_FS_DEV)')).toBeInTheDocument();
+    const onChange = vi.fn();
+    renderSelector({ squadId: 11, agentId: 0 }, onChange);
+    expect(await screen.findByText('Alpha-1')).toBeInTheDocument();
+    expect(screen.getByText('AW_FS_DEV · 101')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Alpha-1'));
+    expect(onChange).toHaveBeenCalledWith({ squadId: 11, agentId: 101 });
   });
 
   it('invokes onChange with agentId=0 when the squad is (re)chosen', () => {

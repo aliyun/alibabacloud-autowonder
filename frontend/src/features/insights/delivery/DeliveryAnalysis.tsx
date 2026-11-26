@@ -14,6 +14,18 @@ const AUTONOMOUS = 'autonomous';
 const WORKHOURS = 'workhours';
 const DURATION = 'duration';
 const rows: Metric[][] = [['delivered', 'resolution'], ['human', 'autonomous', 'duration'], ['offtime', 'workhours'], ['skill']];
+
+/** 原型 .delivery-value：数值放大，前置说明与单位以小字呈现。 */
+function NumberedValue({ text }: { text: string | null }) {
+  if (!text) return null;
+  const parts = /^([^\d]*)([\d,]+(?:\.\d+)?)(.*)$/.exec(text);
+  if (!parts) return <>{text}</>;
+  return <>
+    {parts[1].trim() && <span className="delivery-value-prefix">{parts[1].trim()}</span>}
+    {parts[2]}
+    {parts[3].trim() && <span className="delivery-unit">{parts[3].trim()}</span>}
+  </>;
+}
 export function DeliveryAnalysis() {
   const { t, i18n } = useTranslation('deliveryInsights');
   const scope = useAuthStore(s => [s.user?.id, s.currentWorkspace?.id].join(':'));
@@ -34,7 +46,7 @@ export function DeliveryAnalysis() {
     const value = metricValue(report.summary, metric);
     if (metric === 'delivered') return t('deliveredTotal', { value: fmt(value) });
     if (metric === 'autonomous') return t('autonomousTotal', { value: fmt(value) });
-    if (metric === WORKHOURS) return <><span className="delivery-hours-prefix">{t('hoursPrefix')}</span>{fmt(value, 1)}<span className="delivery-hours-unit">{t('hoursUnit')}</span></>;
+    if (metric === WORKHOURS) return `${t('hoursPrefix')}${fmt(value, 1)}${t('hoursUnit')}`;
     if (metric === 'human') return t('times', { value: fmt(value, 1) });
     if (metric === 'duration') return t('hours', { value: fmt(value, 1) });
     return t('total', { value: fmt(value) });
@@ -48,7 +60,7 @@ export function DeliveryAnalysis() {
       action={<Button onClick={() => void query.refetch()}>{t('retry')}</Button>} />}
     {!!report?.unclassifiedEvents && <Alert type="warning" showIcon message={t('historicalStatusWarning')} />}
     {!report && !failed && <div className="delivery-loading"><Spin /><span>{t('loading')}</span></div>}
-    {report && rows.map((row, index) => <div key={index}>
+    {report && rows.map((row, index) => <div className="delivery-row-group" key={index}>
       {index === 2 && <h2 className="delivery-section-title">{t('platform')}</h2>}
       <div className={`delivery-row delivery-row--${index}`}>
         {row.map(metric => <section className={`delivery-card delivery-card--${metric}`} key={metric}>
@@ -61,15 +73,16 @@ export function DeliveryAnalysis() {
                     onKeyDown={event => { if (event.key === 'Escape') event.currentTarget.blur(); }} />
                 </Tooltip>
               </div>
-            : <h3>{t(metric)}</h3>}<div className="delivery-value" title={metric === AUTONOMOUS ? t('autonomousUnique', { value: fmt(report.summary.autonomousRequirements) }) : undefined}>{summary(metric)}</div>
+            : <h3>{t(metric)}</h3>}
+          <div className="delivery-value" title={metric === AUTONOMOUS ? t('autonomousUnique', { value: fmt(report.summary.autonomousRequirements) }) : undefined}><NumberedValue text={summary(metric)} /></div>
           {metric === WORKHOURS && <div className="delivery-hours-legend"><span className="delivery-hours-regular">{t('regular')}</span><span className="delivery-hours-off">{t('offhours')}</span></div>}
           <DeliveryChart report={report} metric={metric} />
         </section>)}
-        {index === 3 && <section className="delivery-card delivery-versions">
-          <h3>{t('versions')}</h3><div className="delivery-value">{t('times', { value: fmt(report.summary.versions) })}</div>
+        {index === 3 && <section className="delivery-card delivery-card--versions">
+          <h3>{t('versions')}</h3><div className="delivery-value"><NumberedValue text={t('times', { value: fmt(report.summary.versions) })} /></div>
           <div className="delivery-version-types">{Object.entries(report.summary.versionTypes).map(([type, value]) =>
             <div key={type}><span>{type}</span><strong>{fmt(value)}</strong></div>)}</div>
-          <p>{t('versionNote')}</p>
+          <p className="delivery-version-note">{t('versionNote')}</p>
         </section>}
       </div>
     </div>)}

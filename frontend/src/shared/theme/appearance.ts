@@ -23,58 +23,87 @@ function mix(hex: string, target: string, amount: number) {
   const end = rgb(target);
   return '#' + rgb(hex).map((v, i) => Math.round(v * (1 - amount) + end[i] * amount).toString(16).padStart(2, '0')).join('');
 }
+export const FONT_FAMILY = '-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Helvetica,Arial,sans-serif';
+export const FONT_FAMILY_MONO = 'ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono","Courier New",monospace';
+// The redesign default preset walks a fixed ladder instead of mix() derivation, so both modes stay on-spec.
+const DEFAULT_ACCENT = '#0064c8';
 export function getAppearanceVariables(mode: ResolvedAppearance, color: string): Record<string, string> {
   const dark = mode === 'dark';
-  const accent = /^#[\da-f]{6}$/i.test(color) ? color.toLowerCase() : '#f97316';
+  const accent = /^#[\da-f]{6}$/i.test(color) ? color.toLowerCase() : DEFAULT_ACCENT;
+  const isDefaultBlue = accent === DEFAULT_ACCENT;
   const panel = dark ? '#1b2329' : '#ffffff';
   // Preserve the chosen brand color in both modes; adapt foreground ink, not the fill.
   const darkInk = contrastRatio(accent, '#171e23') >= 4.5 ? '#171e23' : '#000000';
-  const ink = contrastRatio(accent, '#ffffff') >= contrastRatio(accent, darkInk) ? '#ffffff' : darkInk;
+  const ink = dark && isDefaultBlue ? '#0d1620'
+    : contrastRatio(accent, '#ffffff') >= contrastRatio(accent, darkInk) ? '#ffffff' : darkInk;
   const away = ink === '#ffffff' ? '#000000' : '#ffffff';
-  const primary = accent;
-  const accentText = accent;
+  const primary = dark && isDefaultBlue ? '#339dff' : accent;
+  const primaryHover = isDefaultBlue ? (dark ? '#5cadff' : '#0052a4') : mix(primary, away, .07);
+  const primaryActive = isDefaultBlue ? (dark ? '#2e8ff0' : '#004385') : mix(primary, away, .14);
+  const accentRgb = rgb(accent).join(',');
+  const primaryWeak = isDefaultBlue ? (dark ? 'rgba(51,157,255,.14)' : '#eff3f8') : `rgba(${accentRgb},.13)`;
+  const primaryFaint = isDefaultBlue ? (dark ? 'rgba(51,157,255,.08)' : '#f7f9fa') : `rgba(${accentRgb},.07)`;
+  const accentText = primary;
   return {
-    '--aw-accent': accent, '--aw-accent-rgb': rgb(accent).join(','), '--aw-accent-text': accentText,
-    '--aw-primary': primary, '--aw-primary-hover': mix(primary, away, .07), '--aw-primary-active': mix(primary, away, .14), '--aw-primary-ink': ink,
-    '--aw-bg': dark ? '#171e23' : '#eef2f5', '--aw-panel': panel, '--aw-sidebar': dark ? '#222a31' : '#f8fafc',
-    '--aw-raised': dark ? '#263039' : '#f4f7fa', '--aw-field': dark ? '#1a232a' : '#ffffff',
-    '--aw-border': dark ? '#34404a' : '#dce3eb', '--aw-text': dark ? '#f1f3f5' : '#182435', '--aw-muted': dark ? '#a3adb9' : '#66758c',
-    '--aw-button': dark ? '#28323b' : '#f5f7fa', '--aw-button-hover': dark ? '#34414c' : '#e7edf3', '--aw-button-active': dark ? '#202a32' : '#dbe3ec',
-    '--aw-info': dark ? '#8cbcff' : '#175bc0', '--aw-success': dark ? '#49d8a2' : '#08724e',
-    '--aw-error': dark ? '#ff938f' : '#bd272c', '--aw-warning': dark ? '#f5cc58' : '#885800',
+    '--aw-accent': accent, '--aw-accent-rgb': accentRgb, '--aw-accent-text': accentText,
+    '--aw-primary': primary, '--aw-primary-hover': primaryHover, '--aw-primary-active': primaryActive, '--aw-primary-ink': ink,
+    '--aw-primary-weak': primaryWeak, '--aw-primary-faint': primaryFaint,
+    '--aw-bg': dark ? '#171e23' : '#f6f6f6', '--aw-panel': panel, '--aw-sidebar': dark ? '#222a31' : '#ffffff',
+    '--aw-raised': dark ? '#263039' : '#fafafa', '--aw-field': dark ? '#1a232a' : '#ffffff',
+    '--aw-border': dark ? '#34404a' : '#e5e5e5', '--aw-text': dark ? '#f1f3f5' : '#333333', '--aw-muted': dark ? '#b9c4ce' : '#555555',
+    '--aw-text-2': dark ? '#b9c4ce' : '#555555', '--aw-text-3': dark ? '#8d99a6' : '#808080', '--aw-text-disabled': dark ? '#5d6a76' : '#aaaaaa',
+    '--aw-gray-bg': dark ? '#263039' : '#f6f6f6', '--aw-canvas': dark ? '#171e23' : '#f6f6f6', '--aw-header-bg': dark ? '#263039' : '#fafafa',
+    '--aw-button': dark ? '#28323b' : '#ffffff', '--aw-button-hover': dark ? '#34414c' : '#ffffff', '--aw-button-active': dark ? '#202a32' : '#ffffff',
+    '--aw-info': dark ? '#8cbcff' : '#175bc0',
+    '--aw-error': dark ? '#ff938f' : '#e00000', '--aw-error-deep': dark ? '#ffb0ad' : '#b90000', '--aw-error-bg': dark ? 'rgba(255,147,143,.14)' : '#ffeaea',
+    '--aw-warning': dark ? '#f5cc58' : '#ffd813', '--aw-warning-deep': dark ? '#ffdd6e' : '#967d00', '--aw-warning-bg': dark ? 'rgba(245,204,88,.14)' : '#fff9d9',
+    '--aw-success': dark ? '#49d8a2' : '#009431', '--aw-success-deep': dark ? '#7fe0bc' : '#007a29', '--aw-success-bg': dark ? 'rgba(73,216,162,.14)' : '#e4ffed',
+    '--aw-ai': dark ? '#9d8cff' : '#6a4cff', '--aw-ai-bg': dark ? 'rgba(157,140,255,.16)' : '#f0ebff',
+    '--aw-link': primary,
+    '--aw-font-mono': FONT_FAMILY_MONO,
+    '--aw-shadow-card': '0 1px 2px rgba(0,0,0,.04)', '--aw-shadow-menu': '0 4px 8px rgba(0,0,0,.16)', '--aw-shadow-modal': '0 8px 24px rgba(0,0,0,.16)',
     '--aw-glass': dark ? 'rgba(32,43,53,.88)' : 'rgba(246,250,255,.88)',
   };
 }
 export function createAppearanceTheme(mode: ResolvedAppearance, accent: string): ThemeConfig {
   const v = getAppearanceVariables(mode, accent);
+  const dark = mode === 'dark';
   return {
     algorithm: (seed, map) => ({
       ...(mode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm)(seed, map),
       colorPrimary: v['--aw-accent-text'], colorPrimaryHover: v['--aw-accent-text'], colorPrimaryActive: v['--aw-accent-text'],
-      colorLink: v['--aw-accent-text'], colorLinkHover: v['--aw-accent-text'], colorLinkActive: v['--aw-accent-text'],
+      colorLink: v['--aw-accent-text'], colorLinkHover: v['--aw-primary-hover'], colorLinkActive: v['--aw-primary-active'],
     }),
     token: {
       // Keep popup lifecycle independent of OS motion settings and runtime toggles.
       motion: false,
-      colorPrimary: v['--aw-accent-text'], colorLink: v['--aw-accent-text'], colorLinkHover: v['--aw-accent-text'], colorLinkActive: v['--aw-accent-text'], colorBgBase: v['--aw-bg'], colorBgLayout: v['--aw-bg'],
-      colorBgContainer: v['--aw-panel'], colorBgElevated: v['--aw-panel'], colorText: v['--aw-text'], colorTextSecondary: v['--aw-muted'],
-      colorBorder: v['--aw-border'], colorBorderSecondary: v['--aw-border'], colorFillAlter: v['--aw-raised'],
-      colorError: mode === 'dark' ? '#ff827e' : '#ce3034', colorSuccess: mode === 'dark' ? '#49d8a2' : '#078658',
-      colorWarning: mode === 'dark' ? '#f5cc58' : '#936600', colorWarningBg: mode === 'dark' ? '#2c2618' : '#fff8e6', colorWarningBorder: mode === 'dark' ? '#554628' : '#eddcab', borderRadius: 8, borderRadiusLG: 12, controlHeight: 38, fontSize: 14,
-      fontFamily: '-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif',
+      colorPrimary: v['--aw-accent-text'], colorLink: v['--aw-accent-text'], colorLinkHover: v['--aw-primary-hover'], colorLinkActive: v['--aw-primary-active'], colorBgBase: v['--aw-bg'], colorBgLayout: v['--aw-bg'],
+      // 原型 .input:focus 聚焦环：0 0 0 2px rgba(primary,.12)（暗色用暗档 primary 的 .2）。
+      controlOutline: dark ? `rgba(${rgb(v['--aw-primary']).join(',')},.2)` : `rgba(${v['--aw-accent-rgb']},.12)`,
+      colorBgContainer: v['--aw-panel'], colorBgElevated: v['--aw-panel'], colorText: v['--aw-text'], colorTextSecondary: v['--aw-text-2'], colorTextTertiary: v['--aw-text-3'], colorTextDisabled: v['--aw-text-disabled'],
+      colorBorder: v['--aw-border'], colorBorderSecondary: v['--aw-border'], colorFillAlter: v['--aw-gray-bg'],
+      colorError: dark ? '#ff827e' : '#e00000', colorSuccess: dark ? '#49d8a2' : '#009431',
+      colorWarning: dark ? '#f5cc58' : '#967d00', colorWarningBg: dark ? '#2c2618' : '#fff9d9', colorWarningBorder: dark ? '#554628' : '#ead58a',
+      borderRadius: 6, borderRadiusLG: 8, borderRadiusSM: 4, controlHeight: 32, controlHeightSM: 26, fontSize: 13,
+      fontFamily: FONT_FAMILY,
     },
     components: {
       Input: { colorBgContainer: v['--aw-field'], hoverBg: v['--aw-field'], activeBg: v['--aw-field'] },
-      Segmented: { trackBg: v['--aw-field'], itemSelectedBg: `rgba(${v['--aw-accent-rgb']},.13)`, itemSelectedColor: v['--aw-accent-text'], itemHoverBg: `rgba(${v['--aw-accent-rgb']},.07)`, itemHoverColor: v['--aw-text'] },
-      Button: { primaryColor: v['--aw-primary-ink'], colorPrimary: v['--aw-primary'], colorPrimaryHover: v['--aw-primary-hover'], colorPrimaryActive: v['--aw-primary-active'], primaryShadow: 'none', dangerShadow: 'none', defaultShadow: 'none', defaultBg: v['--aw-button'], defaultHoverBg: v['--aw-button-hover'], defaultActiveBg: v['--aw-button-active'], defaultColor: v['--aw-text'], defaultHoverColor: v['--aw-text'], defaultActiveColor: v['--aw-text'], defaultBorderColor: v['--aw-border'], defaultHoverBorderColor: v['--aw-muted'] },
+      Segmented: { trackBg: v['--aw-gray-bg'], itemSelectedBg: v['--aw-panel'], itemSelectedColor: v['--aw-text'], itemHoverBg: 'transparent', itemHoverColor: v['--aw-text'] },
+      Button: { primaryColor: v['--aw-primary-ink'], colorPrimary: v['--aw-primary'], colorPrimaryHover: v['--aw-primary-hover'], colorPrimaryActive: v['--aw-primary-active'], primaryShadow: 'none', dangerShadow: 'none', defaultShadow: 'none', defaultBg: v['--aw-button'], defaultHoverBg: v['--aw-button-hover'], defaultActiveBg: v['--aw-button-active'], defaultColor: v['--aw-text'], defaultHoverColor: v['--aw-accent-text'], defaultActiveColor: v['--aw-primary-active'], defaultBorderColor: v['--aw-border'], defaultHoverBorderColor: v['--aw-primary'], defaultActiveBorderColor: v['--aw-primary-active'] },
       Layout: { headerBg: v['--aw-sidebar'], siderBg: v['--aw-sidebar'], bodyBg: v['--aw-bg'] },
-      Table: { headerBg: v['--aw-raised'], headerColor: v['--aw-muted'], rowHoverBg: v['--aw-button'], cellPaddingBlock: 14, cellPaddingInline: 14 },
-      Menu: { itemBg: 'transparent', subMenuItemBg: 'transparent', itemSelectedBg: `rgba(${v['--aw-accent-rgb']},.13)`, itemSelectedColor: v['--aw-accent-text'], itemHoverBg: `rgba(${v['--aw-accent-rgb']},${mode === 'dark' ? '.09' : '.065'})`, itemHeight: 35, itemBorderRadius: 7, groupTitleFontSize: 13, groupTitleColor: v['--aw-accent-text'] },
-      Card: { headerFontSize: 18, headerFontSizeSM: 15 },
+      Table: { headerBg: v['--aw-header-bg'], headerColor: v['--aw-text-2'], rowHoverBg: v['--aw-gray-bg'], cellFontSize: 12, cellPaddingBlock: 10, cellPaddingInline: 12 },
+      Menu: { itemBg: 'transparent', subMenuItemBg: 'transparent', itemSelectedBg: v['--aw-primary-weak'], itemSelectedColor: v['--aw-accent-text'], itemHoverBg: v['--aw-primary-faint'], itemHeight: 32, itemBorderRadius: 6, groupTitleFontSize: 13, groupTitleColor: v['--aw-accent-text'] },
+      Card: { headerFontSize: 14, headerFontSizeSM: 13 },
       Checkbox: { colorPrimary: v['--aw-primary'], colorPrimaryHover: v['--aw-primary-hover'], colorWhite: v['--aw-primary-ink'] },
       Switch: { colorPrimary: v['--aw-primary'], colorPrimaryHover: v['--aw-primary-hover'], colorTextLightSolid: v['--aw-primary-ink'] },
       Radio: { buttonSolidCheckedBg: v['--aw-primary'], buttonSolidCheckedHoverBg: v['--aw-primary-hover'], buttonSolidCheckedActiveBg: v['--aw-primary-active'], buttonSolidCheckedColor: v['--aw-primary-ink'] },
-      Select: { selectorBg: v['--aw-field'], optionSelectedBg: `rgba(${v['--aw-accent-rgb']},.14)` },
+      Select: { selectorBg: v['--aw-field'], optionSelectedBg: v['--aw-primary-weak'] },
+      Tabs: { itemColor: v['--aw-text-2'], itemHoverColor: v['--aw-text'], itemSelectedColor: v['--aw-accent-text'], horizontalItemGutter: 4, horizontalItemPadding: '8px 12px' },
+      // 原型 11 模式 B 表单字阶：标签 12/text-2、行距 16（labelFontSize/itemMarginBottom 无 CSS 覆盖路径，走 token）
+      Form: { labelFontSize: 12, labelColor: v['--aw-text-2'], itemMarginBottom: 16 },
+      Modal: { boxShadow: v['--aw-shadow-modal'] },
+      Tooltip: { fontSize: 12 },
     },
   };
 }

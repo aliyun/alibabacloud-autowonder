@@ -1,6 +1,6 @@
 {
   "title": "Delivery overview",
-  "description": "Recent work item creation and delivery throughput, plus the work items that currently need your attention.",
+  "description": "The work items that currently need your attention, plus recent work item creation and delivery throughput.",
   "toolbar": {
     "rangeAria": "Recent stats range",
     "lastWeek": "Last week",
@@ -27,12 +27,11 @@
     "previous_other": "Previous {{start}} to {{end}}: {{count}} completed",
     "caption": "Daily average = completed work items divided by days in range (inclusive).",
     "method": "Method: work items entering a DONE-category status within the selected range are counted once per work item; canceled items are excluded. The change compares the previous period of equal length.",
-    "methodAria": "Completion metric method"
+    "methodAria": "Completion metric method",
+    "trendAria": "Daily trend of completed work items over the last {{days}} days"
   },
   "pending": {
     "title": "My pending work items",
-    "caption": "All pending",
-    "hint": "Not limited by the stats range above; every unfinished work item assigned to you is listed.",
     "workitem": "Work item",
     "name": "Title",
     "status": "Status",
@@ -52,8 +51,6 @@
   },
   "createdList": {
     "title": "New work items ({{range}})",
-    "caption": "Selected range",
-    "hint": "Same scope as the New work items card above: every work item created in the selected range, including canceled ones; the list length equals the card value.",
     "workitem": "Work item",
     "name": "Title",
     "status": "Status",

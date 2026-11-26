@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Image } from 'antd';
-import { CloseOutlined, FileOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useTranslation } from 'react-i18next';
 import type { Artifact } from '@/shared/types/workitem';
 
@@ -33,9 +33,9 @@ export function CommentAttachment({ attachment, disabled, onRemove }: {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '100%', padding: '4px 8px', border: '1px solid var(--aw-border)', borderRadius: 6 }}>
-      {previewUrl ? <Image src={previewUrl} alt={file.name} width={40} height={40} style={{ objectFit: 'cover' }} /> : <FileOutlined />}
+      {previewUrl ? <Image src={previewUrl} alt={file.name} width={40} height={40} style={{ objectFit: 'cover' }} /> : <AwStrokeIcon name="file" />}
       <span style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{file.name}</span>
-      <Button type="text" size="small" icon={<CloseOutlined />} disabled={disabled}
+      <Button type="text" size="small" icon={<AwStrokeIcon name="x" />} disabled={disabled}
         aria-label={t('comment.removeAttachment', { name: file.name })} onClick={onRemove} />
     </div>
   );

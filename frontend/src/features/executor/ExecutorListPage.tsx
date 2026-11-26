@@ -3,12 +3,15 @@ import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useTranslation } from 'react-i18next';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { PageHead } from '@/shared/ui/PageHead';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
+import { Toolbar } from '@/shared/ui/Toolbar';
 import { RobotHeadIcon } from '@/shared/ui/RobotHeadIcon';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Tag, Badge, Button, Space, Modal, Form, Input, InputNumber, Select, message, Popconfirm, Alert, Typography, Dropdown, Tooltip, Segmented, Collapse, Drawer, Descriptions } from 'antd';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Tag, Button, Space, Modal, Form, Input, InputNumber, Select, message, Popconfirm, Alert, Typography, Dropdown, Tooltip, Segmented, Collapse, Drawer, Descriptions, type MenuProps } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { PlusOutlined, DeleteOutlined, CopyOutlined, CheckCircleFilled, CloseCircleFilled, InfoCircleFilled, CodeOutlined, EyeOutlined, EyeInvisibleOutlined, CodeSandboxOutlined, DownOutlined, BugOutlined, TeamOutlined, CloudUploadOutlined, LinkOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { CheckCircleFilled, CloseCircleFilled, InfoCircleFilled, EyeInvisibleOutlined, CodeSandboxOutlined, BugOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   listExecutors, createExecutor, deleteExecutor, getExecutorToken, getExecutorModelCatalog, restartExecutor,
@@ -18,12 +21,13 @@ import {
 } from './api';
 import { listAgents, getAgent } from '@/features/agent/api';
 import type { Agent } from '@/features/agent/api';
-import { SquadFilterBar, useSquadOptions } from '@/features/squad/SquadFilterBar';
+import { PlatformAgentStatusNotice } from '@/features/agent/PlatformAgentStatusNotice';
+import { SquadSelect, SquadViewSwitch, useSquadOptions } from '@/features/squad/SquadFilterBar';
 import { SquadTags } from '@/features/squad/SquadTags';
 import { groupBySquad, type SquadGroup } from '@/features/squad/squadGrouping';
 import { Link, useSearchParams } from 'react-router-dom';
 import { formatAgentSquadLabel } from './agentSquadLabel';
-import { buildExecutorAgentGroups, type ExecutorAgentGroup } from './executorAgentGroups';
+import { buildExecutorAgentGroups, summarizeExecutorStatus, type ExecutorAgentGroup } from './executorAgentGroups';
 import type { ExecutorVO, IssuedExecutorVO, ExecutorLaunchConfig, ExecutorUpdateVO, ExecutorUpdateAllResultVO, ExecutorUpdateSkipVO } from './api';
 import type { DebugShell, StartupOs } from './api';
 import { ApiError } from '@/shared/types/common';
@@ -41,13 +45,14 @@ import { copyTextToClipboard } from '@/shared/lib/clipboard';
 import { readViewPreference, writeViewPreference } from '@/shared/lib/viewPreference';
 import { detectStartupOs } from './startupOs';
 import { parseExecutorAgentParam } from './executorAgentParam';
+import './ExecutorListPage.css';
 
-const CLIENT_KINDS: { value: string; label: string; color: string; Icon: typeof CodeOutlined | typeof RobotHeadIcon }[] = [
-  { value: 'QODER_CN_CLI', label: 'Qoder CLI CN', color: 'var(--aw-accent-text)', Icon: CodeOutlined },
-  { value: 'QODER_CLI', label: 'Qoder CLI', color: 'var(--aw-accent-text)', Icon: CodeOutlined },
-  { value: 'CLAUDE_CODE', label: 'Claude Code', color: '#d4380d', Icon: RobotHeadIcon },
-  { value: 'CODEX_CLI', label: 'Codex CLI', color: '#13a8a8', Icon: CodeSandboxOutlined },
-  { value: 'CURSOR_CLI', label: 'Cursor CLI', color: 'var(--aw-text)', Icon: CodeSandboxOutlined },
+const CLIENT_KINDS: { value: string; label: string; color: string; icon: ReactNode }[] = [
+  { value: 'QODER_CN_CLI', label: 'Qoder CLI CN', color: 'var(--aw-accent-text)', icon: <AwStrokeIcon name="code" size={18} /> },
+  { value: 'QODER_CLI', label: 'Qoder CLI', color: 'var(--aw-accent-text)', icon: <AwStrokeIcon name="code" size={18} /> },
+  { value: 'CLAUDE_CODE', label: 'Claude Code', color: '#d4380d', icon: <RobotHeadIcon aria-hidden="true" /> },
+  { value: 'CODEX_CLI', label: 'Codex CLI', color: '#13a8a8', icon: <CodeSandboxOutlined aria-hidden="true" /> },
+  { value: 'CURSOR_CLI', label: 'Cursor CLI', color: 'var(--aw-text)', icon: <CodeSandboxOutlined aria-hidden="true" /> },
 ];
 
 const clientKindMap = Object.fromEntries(CLIENT_KINDS.map((k) => [k.value, k]));
@@ -147,9 +152,16 @@ function updateSkipReason(skip: ExecutorUpdateSkipVO): string {
   }
 }
 
-const debugShellItems = (): { key: DebugShell; label: string }[] => [
-  { key: 'bash', label: i18n.t('executor:debugBash') },
-  { key: 'powershell', label: i18n.t('executor:debugPowershell') },
+// 箭头下拉里只有系统选项会让人误以为是普通命令，用分组标题明确这是 debug 模式命令
+const debugShellItems = (): MenuProps['items'] => [
+  {
+    type: 'group',
+    label: i18n.t('executor:copyDebug'),
+    children: [
+      { key: 'bash', label: i18n.t('executor:debugBash') },
+      { key: 'powershell', label: i18n.t('executor:debugPowershell') },
+    ],
+  },
 ];
 
 const SHELL_LABEL: Record<DebugShell, string> = {
@@ -186,22 +198,36 @@ export function isLaunchConfigured(config: ExecutorLaunchConfig | null): boolean
   return Boolean(config.model || config.reasoningEffort || config.contextWindow || config.memoryMode);
 }
 
-function CopyCommandActions({ onCopy, disabled }: { onCopy: (shell?: DebugShell) => void; disabled?: boolean }) {
+function CopyCommandActions({ onCopy, disabled, split }: { onCopy: (shell?: DebugShell) => void; disabled?: boolean; split?: boolean }) {
   const { t } = useTranslation('executor');
+  const debugEntry = (
+    <Tooltip title={t('debugWarning')}>
+      <span style={{ display: 'inline-flex' }}>
+      <Dropdown
+        disabled={disabled}
+        trigger={['click']}
+        menu={{ items: debugShellItems(), onClick: ({ key }) => onCopy(key as DebugShell) }}
+      >
+        {split
+          ? <Button disabled={disabled} aria-label={t('copyMoreWays')} icon={<AwStrokeIcon name="chev-d" />} />
+          : <Button disabled={disabled} icon={<BugOutlined aria-hidden="true" />}>{t('copyDebug')} <AwStrokeIcon name="chev-d" /></Button>}
+      </Dropdown>
+      </span>
+    </Tooltip>
+  );
+  // 启动命令页脚用拆分按钮：主按钮一键复制普通命令，debug 命令收进箭头，页脚只留一个主动作。
+  if (split) {
+    return (
+      <span className="executor-copy-split">
+        <Button disabled={disabled} icon={<AwStrokeIcon name="copy" />} onClick={() => onCopy()}>{t('copyStartup')}</Button>
+        {debugEntry}
+      </span>
+    );
+  }
   return (
     <Space>
       <Button type="primary" disabled={disabled} onClick={() => onCopy()}>{t('copyStartup')}</Button>
-      <Tooltip title={t('debugWarning')}>
-        <span style={{ display: 'inline-flex' }}>
-        <Dropdown
-          disabled={disabled}
-          trigger={['click']}
-          menu={{ items: debugShellItems(), onClick: ({ key }) => onCopy(key as DebugShell) }}
-        >
-          <Button disabled={disabled} icon={<BugOutlined aria-hidden="true" />}>{t('copyDebug')} <DownOutlined aria-hidden="true" /></Button>
-        </Dropdown>
-        </span>
-      </Tooltip>
+      {debugEntry}
     </Space>
   );
 }
@@ -215,10 +241,11 @@ function OsSegmented({ value, onChange }: { value: StartupOs; onChange: (os: Sta
       value={value}
       onChange={(os) => onChange(os as StartupOs)}
       options={[
-        { value: 'windows', label: t('windows') },
         { value: 'posix', label: t('posix') },
+        { value: 'windows', label: t('windows') },
       ]}
-      style={{ display: 'block', marginTop: 8 }}
+      style={{ display: 'flex', width: 'fit-content', margin: '8px 0' }}
+      className="executor-os-segmented"
     />
   );
 }
@@ -226,11 +253,7 @@ function OsSegmented({ value, onChange }: { value: StartupOs; onChange: (os: Sta
 function CommandPreview({ text }: { text: string }) {
   const { t } = useTranslation('executor');
   return (
-    <div role="region" aria-label={t('commandPreview')} style={{
-      marginTop: 4, padding: '8px 12px',
-      background: 'var(--aw-raised)', borderRadius: 6, fontFamily: 'monospace', fontSize: 13,
-      wordBreak: 'break-all', lineHeight: 1.6,
-    }}>
+    <div role="region" aria-label={t('commandPreview')} className="executor-cmd-box">
       {text}
     </div>
   );
@@ -240,7 +263,7 @@ function ClientKindSelect({ value, onChange }: { value?: string; onChange?: (v: 
   const { t } = useTranslation('executor');
   return (
     <div role="group" aria-label={t('clientChoice')} style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-      {CREATABLE_CLIENT_KINDS.map(({ value: v, label, color, Icon }) => {
+      {CREATABLE_CLIENT_KINDS.map(({ value: v, label, color, icon }) => {
         const selected = value === v;
         return (
           <button
@@ -249,25 +272,24 @@ function ClientKindSelect({ value, onChange }: { value?: string; onChange?: (v: 
             key={v}
             onClick={() => onChange?.(v)}
             style={{
-              color: 'inherit', font: 'inherit', textAlign: 'left',
+              color: 'inherit', font: 'inherit', fontSize: 12, textAlign: 'left',
               flex: '1 1 150px',
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
-              padding: '12px 16px',
-              border: `2px solid ${selected ? 'var(--aw-accent-text)' : 'var(--aw-border)'}`,
-              borderRadius: 8,
+              gap: 8,
+              padding: '10px 12px',
+              border: `1px solid ${selected ? 'var(--aw-primary)' : 'var(--aw-border)'}`,
+              borderRadius: 6,
               cursor: 'pointer',
-              background: selected ? 'rgba(var(--aw-accent-rgb), .10)' : 'var(--aw-panel)',
-              transition: 'all 0.2s',
+              background: selected ? 'var(--aw-primary-weak)' : 'var(--aw-panel)',
               position: 'relative',
             }}
           >
-            <span style={{ fontSize: 24, color }}><Icon aria-hidden="true" /></span>
-            <span style={{ fontWeight: 500 }}>{label}</span>
+            <span style={{ fontSize: 18, color, display: 'inline-flex' }}>{icon}</span>
+            <span>{label}</span>
             {selected && (
               <CheckCircleFilled aria-hidden="true"
-                style={{ position: 'absolute', top: 8, right: 8, color: 'var(--aw-accent-text)', fontSize: 16 }}
+                style={{ position: 'absolute', top: 6, right: 8, color: 'var(--aw-accent-text)', fontSize: 14 }}
               />
             )}
           </button>
@@ -279,36 +301,46 @@ function ClientKindSelect({ value, onChange }: { value?: string; onChange?: (v: 
 
 function ExecutorGroupHeader({ group }: { group: ExecutorAgentGroup }) {
   const { t } = useTranslation('executor');
+  const { online, busy, offline } = group.statusSummary;
   return (
-    <Space size={8} wrap>
-      <RobotHeadIcon aria-hidden="true" />
-      <Typography.Text strong>{group.label}</Typography.Text>
-      <Tag>{t('executorCount', { count: group.executors.length })}</Tag>
-      <Badge status="success" text={t('onlineCount', { count: group.statusSummary.online })} />
-      <Badge status="processing" text={t('busyCount', { count: group.statusSummary.busy })} />
-      <Badge status="default" text={t('offlineCount', { count: group.statusSummary.offline })} />
-    </Space>
+    <div className="aw-executor-group-head">
+      <span className="aw-executor-group-name">{group.label}</span>
+      <span className="aw-executor-group-count">{t('executorCount', { count: group.executors.length })}</span>
+      <span className="aw-executor-group-badges">
+        {online > 0 && <span className="executor-status-badge executor-status-badge--green">{t('onlineCount', { count: online })}</span>}
+        {busy > 0 && <span className="executor-status-badge executor-status-badge--amber">{t('busyCount', { count: busy })}</span>}
+        {offline > 0 && <span className="executor-status-badge">{t('offlineCount', { count: offline })}</span>}
+      </span>
+    </div>
   );
 }
 
 function ExecutorSquadGroupHeader({ group }: { group: SquadGroup<ExecutorVO> }) {
   const { t } = useTranslation('executor');
+  const summary = summarizeExecutorStatus(group.items);
   return (
-    <Space size={8} wrap>
-      <TeamOutlined aria-hidden="true" style={{ color: 'var(--aw-accent-text)' }} />
-      <Typography.Text strong>
-        {group.label}
-      </Typography.Text>
-      {group.squadId != null && (
-        <Tooltip title={t('viewSquad')}>
-          <Link to={`/agents?tab=squads&squadId=${group.squadId}`} aria-label={t('viewSquadNamed', { name: group.label })}
-            onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-            <LinkOutlined aria-hidden="true" />
+    <div className="aw-executor-group-head">
+      <span className="aw-executor-group-name">
+        {group.squadId == null ? (
+          group.label
+        ) : (
+          <Link
+            to={`/squads?squadId=${group.squadId}`}
+            aria-label={t('viewSquadNamed', { name: group.label })}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {group.label}
           </Link>
-        </Tooltip>
-      )}
-      <Tag>{t('executorCount', { count: group.items.length })}</Tag>
-    </Space>
+        )}
+      </span>
+      <span className="aw-executor-group-count">{t('executorCount', { count: group.items.length })}</span>
+      <span className="aw-executor-group-badges">
+        {summary.online > 0 && <span className="executor-status-badge executor-status-badge--green">{t('onlineCount', { count: summary.online })}</span>}
+        {summary.busy > 0 && <span className="executor-status-badge executor-status-badge--amber">{t('busyCount', { count: summary.busy })}</span>}
+        {summary.offline > 0 && <span className="executor-status-badge">{t('offlineCount', { count: summary.offline })}</span>}
+      </span>
+    </div>
   );
 }
 
@@ -345,8 +377,9 @@ export function ExecutorListPage() {
   const agentParam = parseExecutorAgentParam(searchParams);
   const entryAgentId = agentParam.entryView ? agentParam.agentId : undefined;
   const [selectedAgentId, setSelectedAgentId] = useState<number | undefined>(agentParam.agentId);
-  // 只记录用户主动展开的分组，Agent 分组默认折叠，异步加载或刷新后新出现的分组同样保持折叠。
+  // 分组默认全部展开；用户手动折叠后不再自动展开，新出现的分组也保持折叠。
   const [expandedAgentKeys, setExpandedAgentKeys] = useState<string[]>([]);
+  const hasDefaultExpandedAgents = useRef(false);
   const [squadFilter, setSquadFilter] = useState<number[]>([]);
   // view=agent 只影响本次直达视图，不覆盖用户保存的分组偏好。
   const [squadGrouped, setSquadGrouped] = useState(
@@ -355,6 +388,7 @@ export function ExecutorListPage() {
       : readViewPreference(EXECUTORS_VIEW_STORAGE_KEY, EXECUTORS_VIEW_OPTIONS, 'squad') === 'squad'),
   );
   const [expandedSquadKeys, setExpandedSquadKeys] = useState<string[]>([]);
+  const hasDefaultExpandedSquads = useRef(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [tokenResult, setTokenResult] = useState<IssuedExecutorVO | null>(null);
   const [form] = Form.useForm();
@@ -576,6 +610,21 @@ export function ExecutorListPage() {
     () => groupBySquad(visibleExecutors, (executor) => executor.squadIds, squadNameById),
     [visibleExecutors, squadNameById, squadT],
   );
+
+  useEffect(() => {
+    if (!hasDefaultExpandedAgents.current && executorGroups.length > 0) {
+      // 直达链接会在分组就绪前先展开目标分组；此时首屏可能还是「未知 Agent」，默认展开必须并集而不是覆盖。
+      setExpandedAgentKeys((current) => Array.from(new Set([...current, ...executorGroups.map((group) => group.key)])));
+      hasDefaultExpandedAgents.current = true;
+    }
+  }, [executorGroups]);
+
+  useEffect(() => {
+    if (!hasDefaultExpandedSquads.current && squadGroups.length > 0) {
+      setExpandedSquadKeys(squadGroups.map((group) => group.key));
+      hasDefaultExpandedSquads.current = true;
+    }
+  }, [squadGroups]);
 
   const handleAgentCollapseChange = (keys: string | string[]) => {
     // 非手风琴模式下 antd 恒传数组，用 flat 归一化两种签名，避免留下不可达分支。
@@ -972,9 +1021,8 @@ export function ExecutorListPage() {
       if (!startupTarget) return;
       // 先把当前选择写回服务端，再让服务端按数据库配置生成命令，页面与 MCP 共享同一份配置
       if (!(await persistStartupConfig(startupTarget))) return;
-      if (await copyLaunchCommand(startupTarget.id, shell)) {
-        setStartupTarget(null);
-      }
+      // 复制后保持弹窗：用户常紧接着复制另一条命令或继续调整参数
+      await copyLaunchCommand(startupTarget.id, shell);
     });
   };
 
@@ -999,53 +1047,55 @@ export function ExecutorListPage() {
   const formatTime = (value?: string | null) => value ? formatDateTime(value) : t('notReported');
   const restartLabels: Record<string, string> = { REQUESTED: t('restartWaiting'), WAITING_IDLE: t('restartWaitingIdle'), UPDATING: t('restartUpdating'), RESTARTING: t('restartRunning'), COMPLETED: t('restartSucceeded'), FAILED: t('restartFailed'), TIMED_OUT: t('restartTimedOut') };
   const columns: ColumnsType<ExecutorVO> = [
-    { title: t('executor'), dataIndex: 'name', align: 'left', width: 180, render: (name, record) => (
-      <div><Button type="link" style={{ padding: 0, maxWidth: '100%' }} onClick={() => setDetailId(record.id)}>{name}</Button>
-        <div style={{ color: 'var(--aw-muted)', fontSize: 12 }}>ID {record.id}</div></div>
+    { title: t('executor'), dataIndex: 'name', align: 'left', width: 170, render: (name, record) => (
+      <div><Button type="link" className="executor-name-link" onClick={() => setDetailId(record.id)}>{name}</Button>
+        <div className="executor-sub">ID {record.id}</div></div>
     ) },
-    { title: t('owner'), width: 180, render: (_, record) => (
-      <div><div>{record.agentName ?? '-'}</div><SquadTags squadIds={record.squadIds} squadNames={record.squadNames} /></div>
+    { title: t('owner'), width: 150, render: (_, record) => (
+      <div className="executor-owner-cell"><div className="executor-owner-name">{record.agentName ?? '-'}</div><SquadTags squadIds={record.squadIds} squadNames={record.squadNames} /></div>
     ) },
-    { title: t('machine'), width: 170, render: (_, record) => (
+    { title: t('machine'), width: 150, render: (_, record) => (
       // 主机名是客户端自报值，老客户端为 null；两个都没有时退成单个「未上报」。
       record.lastConnectHostname || record.lastConnectIp
         ? <div><div>{record.lastConnectHostname ?? t('notReported')}</div>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{record.lastConnectIp ?? t('notReported')}</Typography.Text></div>
+          <span className="executor-cell-sub">{record.lastConnectIp ?? t('notReported')}</span></div>
         : t('notReported')
     ) },
-    { title: t('clientVersion'), width: 150, render: (_, record) => (
+    { title: t('clientVersion'), width: 170, render: (_, record) => (
       // 历史数据的 clientKind 可为 null：明确标记「类型缺失」，绝不留空白让操作者误判客户端类型。
       <div><div>{record.clientKind
         ? (Object.prototype.hasOwnProperty.call(clientKindMap, record.clientKind) ? clientKindMap[record.clientKind].label : record.clientKind)
-        : <Tag color="warning">{t('missingClientKind')}</Tag>}</div>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>{record.version ?? t('versionNotReported')}</Typography.Text>
-        <div><Typography.Text type="secondary" style={{ fontSize: 12 }}>{record.modelName ?? record.model ?? t('modelNotReported')}</Typography.Text></div>
-        {record.upgradeAvailable && <div style={{ marginTop: 2 }}><Tag color="orange">{t('newVersion')}</Tag></div>}</div>
+        : <Tag color="warning" className="executor-tag-sm">{t('missingClientKind')}</Tag>}</div>
+        <span className="executor-cell-sub"><span>{record.version ?? t('versionNotReported')}</span><span className="executor-cell-sep">{record.modelName ?? record.model ?? t('modelNotReported')}</span></span>
+        {record.upgradeAvailable && <div className="executor-cell-tag"><Tag color="orange" className="executor-tag-sm">{t('newVersion')}</Tag></div>}</div>
     ) },
     { title: t('status'), dataIndex: 'status', width: 120, render: (status: string, record) => (
-      <div><Badge status={Object.prototype.hasOwnProperty.call(statusBadge, status) ? statusBadge[status].status : 'default'} text={Object.prototype.hasOwnProperty.call(statusBadge, status) ? t(statusBadge[status].key) : status} />
-        {record.restart && <div style={{ fontSize: 12 }}>{Object.prototype.hasOwnProperty.call(restartLabels, record.restart.status) ? restartLabels[record.restart.status] : record.restart.status}</div>}
-        {record.update && <div style={{ marginTop: 2 }}>
+      <div><span className="executor-state-line">
+          <span aria-hidden="true" className={`executor-state-dot executor-state-dot--${Object.prototype.hasOwnProperty.call(statusBadge, status) ? statusBadge[status].status : 'default'}`} />
+          {Object.prototype.hasOwnProperty.call(statusBadge, status) ? t(statusBadge[status].key) : status}
+        </span>
+        {record.restart && <span className="executor-cell-sub">{Object.prototype.hasOwnProperty.call(restartLabels, record.restart.status) ? restartLabels[record.restart.status] : record.restart.status}</span>}
+        {record.update && <div className="executor-cell-tag">
           <Tooltip title={record.update.lastError ?? undefined}>
-            <Tag color={updateStatusColor(record.update.status)}>{updateStatusLabel(record.update.status)}</Tag>
+            <Tag color={updateStatusColor(record.update.status)} className="executor-tag-sm">{updateStatusLabel(record.update.status)}</Tag>
           </Tooltip>
         </div>}</div>
     ) },
-    { title: t('lastStarted'), dataIndex: 'lastStartedAt', width: 170, render: (value: string | null) => formatTime(value) },
+    { title: t('lastStarted'), dataIndex: 'lastStartedAt', width: 130, render: (value: string | null) => <span className="executor-dim">{formatTime(value)}</span> },
     {
-      title: t('actions'), width: 300, fixed: 'right',
+      title: t('actions'), width: 230, fixed: 'right',
       render: (_: unknown, record: ExecutorVO) => {
         // 拒绝升级时只置灰按钮的话操作者不知道该做什么，所以把原因放在 Tooltip 里。
         const blockReason = upgradeBlockReason(record);
         return (
-          <Space size={0}>
+          <Space size={2} className="executor-ops">
             <Button type="link" size="small" onClick={() => setDetailId(record.id)}>{t('details')}</Button>
-            <Button type="link" size="small" icon={<CodeSandboxOutlined aria-hidden="true" />}
+            <Button type="link" size="small"
               onClick={() => openStartupModal(record)}>{t('startup')}</Button>
             {/* 禁用状态的 button 不触发鼠标事件，包一层 span 才能让 Tooltip 浮出拒绝原因。 */}
             <Tooltip title={blockReason ?? undefined}>
               <span>
-                <Button type="link" size="small" icon={<CloudUploadOutlined aria-hidden="true" />} disabled={blockReason !== null}
+                <Button type="link" size="small" disabled={blockReason !== null}
                   loading={updateMut.isPending && updateMut.variables === record.id}
                   onClick={() => runAccessCommand('READ_WRITE', t('accessUpdate'), () => updateMut.mutate(record.id), 'EXECUTOR')}>{t('update')}</Button>
               </span>
@@ -1065,7 +1115,7 @@ export function ExecutorListPage() {
                 runAccessCommand('READ_WRITE', t('accessDelete'), () => deleteMut.mutate(record.id), 'EXECUTOR');
               }}
             >
-              <Button type="link" size="small" danger icon={<DeleteOutlined aria-hidden="true" />}>{t('delete')}</Button>
+              <Button type="link" size="small" danger>{t('delete')}</Button>
             </Popconfirm>
           </Space>
         );
@@ -1075,17 +1125,17 @@ export function ExecutorListPage() {
 
   return (
     <div>
-      <Drawer closable={{ 'aria-label': t('close') }} title={detail ? t('namedDetail', { name: detail.name }) : t('detailTitle')} open={detailId !== null}
+      <Drawer rootClassName="executor-drawer" closable={{ 'aria-label': t('close') }} title={detail ? t('namedDetail', { name: detail.name }) : t('detailTitle')} open={detailId !== null}
         width={520} onClose={() => { if (detailId !== null) setRevealedTokens((prev) => { const next = { ...prev }; delete next[detailId]; return next; }); setDetailId(null); }}>
-        {detail && <Space direction="vertical" size={24} style={{ width: '100%' }}>
-          <Descriptions column={1} size="small" title={t('runtimeInfo')}>
-            <Descriptions.Item label={t('executorId')}>{detail.id}</Descriptions.Item>
+        {detail && <Space className="executor-detail" direction="vertical" size={24} style={{ width: '100%' }}>
+          <Descriptions column={1} size="small" colon={false} title={t('runtimeInfo')}>
+            <Descriptions.Item label={t('executorId')}><span className="executor-mono">{detail.id}</span></Descriptions.Item>
             <Descriptions.Item label={t('agent')}>{detail.agentName ?? '-'}</Descriptions.Item>
             <Descriptions.Item label={t('currentVersion')}>{detail.version ?? t('notReported')}</Descriptions.Item>
             <Descriptions.Item label={t('currentModel')}>{detail.modelName ?? detail.model ?? t('notReported')}</Descriptions.Item>
             <Descriptions.Item label={t('lastStartedTime')}>{formatTime(detail.lastStartedAt)}</Descriptions.Item>
             <Descriptions.Item label={t('lastHeartbeat')}>{formatTime(detail.lastHeartbeat)}</Descriptions.Item>
-            <Descriptions.Item label={t('connectIp')}>{detail.lastConnectIp ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('connectIp')}><span className="executor-mono">{detail.lastConnectIp ?? '-'}</span></Descriptions.Item>
             <Descriptions.Item label={t('hostname')}>{detail.lastConnectHostname ?? t('notReported')}</Descriptions.Item>
             <Descriptions.Item label={t('createdAt')}>{formatTime(detail.gmtCreate)}</Descriptions.Item>
           </Descriptions>
@@ -1107,39 +1157,62 @@ export function ExecutorListPage() {
           </div>
           <div>
             <Typography.Title level={5}>{t('credentials')}</Typography.Title>
-            <Space wrap>
-              <Typography.Text code style={{ wordBreak: 'break-all' }}>{revealedTokens[detail.id] ?? '••••••••••••'}</Typography.Text>
-              <Button size="small" loading={loadingTokenId === detail.id} icon={revealedTokens[detail.id] ? <EyeInvisibleOutlined aria-hidden="true" /> : <EyeOutlined aria-hidden="true" />}
-                onClick={() => handleRevealToken(detail.id)}>{revealedTokens[detail.id] ? t('hide') : t('show')}</Button>
-              <Button size="small" icon={<CopyOutlined aria-hidden="true" />} onClick={() => handleCopyRowToken(detail.id)}>{t('copyToken')}</Button>
-            </Space>
+            <div className="executor-cred-block">
+              <span className="executor-cred-code" title={revealedTokens[detail.id]}>{revealedTokens[detail.id] ?? '••••••••••••'}</span>
+              <div className="executor-cred-actions">
+                <Button size="small" loading={loadingTokenId === detail.id} icon={revealedTokens[detail.id] ? <EyeInvisibleOutlined aria-hidden="true" /> : <AwStrokeIcon name="eye" />}
+                  onClick={() => handleRevealToken(detail.id)}>{revealedTokens[detail.id] ? t('hide') : t('show')}</Button>
+                <Button size="small" icon={<AwStrokeIcon name="copy" />} onClick={() => handleCopyRowToken(detail.id)}>{t('copyToken')}</Button>
+              </div>
+            </div>
           </div>
         </Space>}
       </Drawer>
-      <Card className="aw-content-card" title={<PageHeading title={t('title')} />}
-        extra={
-          <Space wrap>
+      <PageHead title={t('title')} description={t('description')} />
+      <Toolbar
+        left={<div className="executor-toolbar-filters" role="group" aria-label={t('filters')}>
+          <SquadViewSwitch
+            grouped={squadGrouped}
+            onGroupedChange={(next) => {
+              setSquadGrouped(next);
+              writeViewPreference(EXECUTORS_VIEW_STORAGE_KEY, next ? 'squad' : 'agent');
+            }}
+            listLabel={squadT('groupByAgent')}
+            groupLabel={squadT('groupBySquad')}
+          />
+          <SquadSelect
+            options={squadOptions}
+            value={squadFilter}
+            onChange={setSquadFilter}
+            loading={squadsLoading}
+            style={{ width: 160 }}
+            single
+          />
+          <Select placeholder={t('selectAgent')} style={{ width: 180 }} value={selectedAgentId}
+            onChange={handleAgentFilterChange} allowClear showSearch optionFilterProp="label"
+            options={agentOptions}
+          />
+        </div>}
+        right={<div className="executor-toolbar-actions">
             {/* Tooltip 要靠子元素的 ref 定位，Space 是组件不是 DOM 节点，包一层 span 最稳妥。 */}
             <Tooltip title={t('autoUpdateHelp')}>
-              <span>
-                <Space size={4}>
-                  <Typography.Text type="secondary">{t('autoUpdate')}</Typography.Text>
-                  {/* 兜底取服务端的默认值「开启」：配置还没回来或这次读取失败时，显示「关闭」会让
-                      操作者以为自动升级被谁关掉了，而服务端此刻仍在自动下发。 */}
-                  {autoUpdateQuery.data?.executorAutoUpdateEnabled ?? true
-                    ? <Tag color="success">{t('enabled')}</Tag>
-                    : <Tag>{t('disabled')}</Tag>}
-                </Space>
+              <span className="executor-auto-update">
+                <span>{t('autoUpdate')}</span>
+                {/* 兜底取服务端的默认值「开启」：配置还没回来或这次读取失败时，显示「关闭」会让
+                    操作者以为自动升级被谁关掉了，而服务端此刻仍在自动下发。 */}
+                {autoUpdateQuery.data?.executorAutoUpdateEnabled ?? true
+                  ? <Tag className="executor-tag-sm" color="success">{t('enabled')}</Tag>
+                  : <Tag className="executor-tag-sm">{t('disabled')}</Tag>}
               </span>
             </Tooltip>
             <Tooltip title={upgradableExecutors.length === 0 ? t('noneUpgradable') : undefined}>
               <span>
-                <Button icon={<CloudUploadOutlined aria-hidden="true" />} disabled={upgradableExecutors.length === 0}
+                <Button icon={<AwStrokeIcon name="upload" />} disabled={upgradableExecutors.length === 0}
                   loading={updateAllMut.isPending}
                   onClick={() => runAccessCommand('READ_WRITE', t('accessBulkUpdate'), () => setUpdateAllOpen(true), 'EXECUTOR')}>{t('bulkUpdate')}</Button>
               </span>
             </Tooltip>
-            <Button type="primary" icon={<PlusOutlined aria-hidden="true" />} onClick={() => {
+            <Button type="primary" icon={<AwStrokeIcon name="plus" />} onClick={() => {
               runAccessCommand('READ_WRITE', t('create'), () => {
                 form.resetFields();
                 const defaults = qoderOptionsForModel('auto');
@@ -1156,28 +1229,10 @@ export function ExecutorListPage() {
             }}>
               {t('create')}
             </Button>
-          </Space>
-        }
-      >
-        <Space wrap className="aw-list-toolbar" aria-label={t('filters')}>
-          <SquadFilterBar
-            options={squadOptions}
-            value={squadFilter}
-            onChange={setSquadFilter}
-            grouped={squadGrouped}
-            onGroupedChange={(next) => {
-              setSquadGrouped(next);
-              writeViewPreference(EXECUTORS_VIEW_STORAGE_KEY, next ? 'squad' : 'agent');
-            }}
-            loading={squadsLoading}
-            listLabel={squadT('groupByAgent')}
-            groupLabel={squadT('groupBySquad')}
-          />
-          <Select placeholder={t('selectAgent')} style={{ width: 200 }} value={selectedAgentId}
-            onChange={handleAgentFilterChange} allowClear showSearch optionFilterProp="label"
-            options={agentOptions}
-          />
-        </Space>
+        </div>}
+      />
+      <div className="executor-list-body">
+        <PlatformAgentStatusNotice />
         {agentParam.invalid && (
           <Alert
             type="warning"
@@ -1209,6 +1264,10 @@ export function ExecutorListPage() {
             <Collapse
               activeKey={expandedSquadKeys}
               onChange={handleSquadCollapseChange}
+              className="aw-executor-groups"
+              bordered={false}
+              expandIconPosition="start"
+              destroyOnHidden
               items={squadGroups.map((group) => ({
                 key: group.key,
                 label: <ExecutorSquadGroupHeader group={group} />,
@@ -1218,7 +1277,7 @@ export function ExecutorListPage() {
                     columns={columns}
                     dataSource={group.items}
                     pagination={false}
-                    scroll={{ x: 1270 }}
+                    scroll={{ x: 1120 }}
                   />
                 ),
               }))}
@@ -1230,7 +1289,7 @@ export function ExecutorListPage() {
               dataSource={visibleExecutors}
               loading={isLoading || staleForTarget}
               pagination={false}
-              scroll={{ x: 1270 }}
+              scroll={{ x: 1120 }}
               locale={{ emptyText: executorEmptyText }}
             />
           )
@@ -1238,6 +1297,10 @@ export function ExecutorListPage() {
           <Collapse
             activeKey={expandedAgentKeys}
             onChange={handleAgentCollapseChange}
+            className="aw-executor-groups"
+            bordered={false}
+            expandIconPosition="start"
+            destroyOnHidden
             items={executorGroups.map((group) => ({
               key: group.key,
               label: <ExecutorGroupHeader group={group} />,
@@ -1247,7 +1310,7 @@ export function ExecutorListPage() {
                   columns={columns}
                   dataSource={group.executors}
                   pagination={false}
-                  scroll={{ x: 1270 }}
+                  scroll={{ x: 1120 }}
                 />
               ),
             }))}
@@ -1259,44 +1322,51 @@ export function ExecutorListPage() {
             dataSource={visibleExecutors}
             loading={isLoading || staleForTarget}
             pagination={false}
-            scroll={{ x: 1270 }}
+            scroll={{ x: 1120 }}
             locale={{ emptyText: executorEmptyText }}
           />
         )}
-      </Card>
+      </div>
 
       {/* Create Modal */}
-      <Modal closable={{ 'aria-label': t('close') }} title={t('create')} open={createModalOpen}
+      <Modal className="executor-modal" closable={{ 'aria-label': t('close') }} title={t('create')} open={createModalOpen} width={640}
         onOk={handleCreate} onCancel={() => setCreateModalOpen(false)}
         confirmLoading={createMut.isPending}>
-        <Form form={form} layout="vertical" initialValues={{
+        <Form form={form} layout="vertical" className="executor-form" initialValues={{
           clientKind: 'QODER_CLI', memoryMode: 'platform', maxConcurrentDispatches: 5, model: 'auto',
           reasoningEffort: qoderOptionsForModel('auto').defaultReasoningEffort,
           contextWindow: qoderOptionsForModel('auto').defaultContextWindow,
         }}>
-          <Form.Item label={t('owningAgent')} name="agentId" rules={[{ required: true, message: t('selectOwningAgent') }]}>
-            <Select placeholder={t('selectAgent')} showSearch optionFilterProp="label"
-              options={agents.map(a => ({ value: a.id, label: agentOptionLabel(a) }))}
-            />
-          </Form.Item>
+          <div className="executor-form-row">
+            <Form.Item label={t('owningAgent')} name="agentId" rules={[{ required: true, message: t('selectOwningAgent') }]}>
+              <Select placeholder={t('selectAgent')} showSearch optionFilterProp="label"
+                options={agents.map(a => ({ value: a.id, label: agentOptionLabel(a) }))}
+              />
+            </Form.Item>
+            <Form.Item label={t('name')} name="name" rules={[{ required: true, message: t('enterName') }]}>
+              <Input placeholder={t('nameExample')} />
+            </Form.Item>
+          </div>
           <Form.Item label={t('clientKind')} name="clientKind" rules={[{ required: true, message: t('selectType') }]}>
             <ClientKindSelect />
           </Form.Item>
-          {/* ponytail: typing/keyboard retained; restore pointer controls when rc-input-number supports localized handler labels. */}
-          <Form.Item label={t('maxConcurrent')} name="maxConcurrentDispatches"
-            rules={[{ required: true, type: 'integer', min: 1, max: 10, message: t('concurrentValidation') }]}
-            extra={<span style={{ whiteSpace: 'nowrap' }}>{t('concurrentHelp')}</span>}>
-            <InputNumber controls={false} min={1} max={10} precision={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label={t('memoryMode')} name="memoryMode" rules={[{ required: true, message: t('selectMemory') }]}>
-            <Select options={[
-              { value: 'platform', label: t('platformMemory') },
-              { value: 'provider-local', label: t('localMemory') },
-              { value: 'none', label: t('noMemory') },
-            ]} />
-          </Form.Item>
+          <div className="executor-form-row">
+            {/* ponytail: typing/keyboard retained; restore pointer controls when rc-input-number supports localized handler labels. */}
+            <Form.Item label={t('maxConcurrent')} name="maxConcurrentDispatches"
+              rules={[{ required: true, type: 'integer', min: 1, max: 10, message: t('concurrentValidation') }]}
+              extra={t('concurrentHelp')}>
+              <InputNumber controls={false} min={1} max={10} precision={0} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label={t('memoryMode')} name="memoryMode" rules={[{ required: true, message: t('selectMemory') }]}>
+              <Select options={[
+                { value: 'platform', label: t('platformMemory') },
+                { value: 'provider-local', label: t('localMemory') },
+                { value: 'none', label: t('noMemory') },
+              ]} />
+            </Form.Item>
+          </div>
           {isQoderClientKind(clientKind) && (
-            <>
+            <div className="executor-form-row">
               <Form.Item label={t('qoderModel')} name="model" rules={[{ required: true, message: t('selectModel') }]}>
                 <Select options={createQoderModelOptions} onChange={(model) => {
                   form.setFieldsValue(resolveQoderLaunchOptions(model, form.getFieldsValue()));
@@ -1308,34 +1378,42 @@ export function ExecutorListPage() {
               <Form.Item label={t('context')} name="contextWindow" rules={[{ required: true, message: t('required') }]}>
                 <Select options={qoderModelOptions.contextWindows} />
               </Form.Item>
-            </>
+            </div>
           )}
-          <Form.Item label={t('name')} name="name" rules={[{ required: true, message: t('enterName') }]}>
-            <Input placeholder={t('nameExample')} />
-          </Form.Item>
         </Form>
       </Modal>
 
-      <Modal closable={{ 'aria-label': t('close') }} title={t('namedStartup', { name: startupTarget?.name ?? '' })} open={!!startupTarget} width={720}
+      <Modal className="executor-modal" closable={{ 'aria-label': t('close') }} title={t('namedStartup', { name: startupTarget?.name ?? '' })} open={!!startupTarget} width={720}
         onCancel={() => { setRestartPolicyOpen(false); setStartupTarget(null); }}
         footer={(
-          <Space size={8} wrap>
-            {commandDraft !== null ? <>
-              <Button disabled={commandSaving} onClick={() => setCommandDraft(null)}>{t('backToParameters')}</Button>
-              <Button loading={commandSaving} disabled={!commandDraft.trim()} onClick={saveEditedCommand}>{t('saveCommand')}</Button>
-            </> : <>
-            <Button onClick={() => setStartupTarget(null)}>{t('cancel')}</Button>
-            <Button loading={startupSaving}
-              onClick={saveFromStartupModal}>{t('saveConfig')}</Button>
-            <CopyCommandActions disabled={Boolean(startupConfigError) || !startupConfigured}
-              onCopy={(shell) => copyFromStartupModal(shell)} />
-            <Tooltip title={commandApplyBlockReason}>
-              <span><Button type="primary" loading={startupSaving || commandSaving}
-                disabled={Boolean(startupConfigError) || !startupConfigured || Boolean(commandApplyBlockReason)}
-                onClick={() => setRestartPolicyOpen(true)}>{t('applyCommand')}</Button></span>
-            </Tooltip>
-            </>}
-          </Space>
+          commandDraft !== null ? (
+            <div className="executor-modal-foot">
+              <div className="executor-modal-foot-group">
+                <Button disabled={commandSaving} onClick={() => setCommandDraft(null)}>{t('backToParameters')}</Button>
+              </div>
+              <div className="executor-modal-foot-group">
+                <Button onClick={() => setStartupTarget(null)}>{t('cancel')}</Button>
+                <Button type="primary" loading={commandSaving} disabled={!commandDraft.trim()} onClick={saveEditedCommand}>{t('saveCommand')}</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="executor-modal-foot">
+              <div className="executor-modal-foot-group">
+                <Button onClick={() => setStartupTarget(null)}>{t('cancel')}</Button>
+                <Button type="primary" loading={startupSaving}
+                  onClick={saveFromStartupModal}>{t('saveConfig')}</Button>
+              </div>
+              <div className="executor-modal-foot-group">
+                <CopyCommandActions split disabled={Boolean(startupConfigError) || !startupConfigured}
+                  onCopy={(shell) => copyFromStartupModal(shell)} />
+                <Tooltip title={commandApplyBlockReason}>
+                  <span><Button type="primary" loading={startupSaving || commandSaving}
+                    disabled={Boolean(startupConfigError) || !startupConfigured || Boolean(commandApplyBlockReason)}
+                    onClick={() => setRestartPolicyOpen(true)}>{t('applyCommand')}</Button></span>
+                </Tooltip>
+              </div>
+            </div>
+          )
         )}>
         {startupConfigError && (
           <Alert type="error" showIcon style={{ marginBottom: 16 }} message={startupConfigError} />
@@ -1353,7 +1431,7 @@ export function ExecutorListPage() {
             message={t('modelUnavailable')} />
         )}
         <div hidden={commandDraft !== null}>
-        <Form form={startupForm} layout="vertical" initialValues={{ maxConcurrentDispatches: 5 }}>
+        <Form form={startupForm} layout="vertical" className="executor-form" initialValues={{ maxConcurrentDispatches: 5 }}>
           {startupKindMissing && (
             <Form.Item label={t('clientKind')} name="clientKind"
               rules={[{ required: true, message: t('selectClient') }]}
@@ -1361,20 +1439,22 @@ export function ExecutorListPage() {
               <Select options={CREATABLE_CLIENT_KINDS.map(({ value, label }) => ({ value, label }))} />
             </Form.Item>
           )}
-          <Form.Item label={t('maxConcurrent')} name="maxConcurrentDispatches"
-            rules={[{ required: true, type: 'integer', min: 1, max: 10, message: t('concurrentValidation') }]}
-            extra={<span style={{ whiteSpace: 'nowrap' }}>{t('concurrentHelp')}</span>}>
-            <InputNumber controls={false} min={1} max={10} precision={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item label={t('memoryMode')} name="memoryMode" rules={[{ required: true, message: t('required') }]}>
-            <Select options={[
-              { value: 'platform', label: t('platformMemory') },
-              { value: 'provider-local', label: t('localMemory') },
-              { value: 'none', label: t('noMemory') },
-            ]} />
-          </Form.Item>
+          <div className="executor-form-row">
+            <Form.Item label={t('maxConcurrent')} name="maxConcurrentDispatches"
+              rules={[{ required: true, type: 'integer', min: 1, max: 10, message: t('concurrentValidation') }]}
+              extra={t('concurrentHelp')}>
+              <InputNumber controls={false} min={1} max={10} precision={0} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label={t('memoryMode')} name="memoryMode" rules={[{ required: true, message: t('required') }]}>
+              <Select options={[
+                { value: 'platform', label: t('platformMemory') },
+                { value: 'provider-local', label: t('localMemory') },
+                { value: 'none', label: t('noMemory') },
+              ]} />
+            </Form.Item>
+          </div>
           {Boolean(startupQoderProvider) && (
-            <>
+            <div className="executor-form-row">
               <Form.Item label={t('qoderModel')} name="model" rules={[{ required: true, message: t('required') }]}>
                 <Select options={startupQoderModelOptions} onChange={(model) => {
                   startupForm.setFieldsValue(resolveQoderLaunchOptions(model, startupForm.getFieldsValue()));
@@ -1386,7 +1466,7 @@ export function ExecutorListPage() {
               <Form.Item label={t('context')} name="contextWindow" rules={[{ required: true, message: t('required') }]}>
                 <Select options={startupQoderOptions.contextWindows} />
               </Form.Item>
-            </>
+            </div>
           )}
         </Form>
         </div>
@@ -1397,17 +1477,24 @@ export function ExecutorListPage() {
               disabled={commandSaving} autoSize={{ minRows: 6, maxRows: 14 }} spellCheck={false} style={{ fontFamily: 'monospace' }} />
           </Form.Item>
         </> : <>
-        <Typography.Text strong>{t('commandPreview')}</Typography.Text>
-        {startupPreviewConfig && <Tag style={{ marginLeft: 8 }}>{t('unsavedPreview')}</Tag>}
-        <OsSegmented value={startupOs} onChange={setStartupOs} />
+        <div className="executor-preview-head">
+          <Typography.Text strong>{t('commandPreview')}</Typography.Text>
+          {startupPreviewConfig && <Tag className="executor-tag-sm">{t('unsavedPreview')}</Tag>}
+        </div>
+        <div className="executor-os-row">
+          <OsSegmented value={startupOs} onChange={setStartupOs} />
+          <Button className="executor-preview-edit" size="small" type="text" icon={<AwStrokeIcon name="edit" />}
+            loading={commandSaving} disabled={Boolean(startupConfigError) || !startupConfigured || !startupPreviewValid}
+            onClick={editLaunchCommand}>{t('editFullCommand')}</Button>
+        </div>
         <CommandPreview text={startupPreview} />
-        <Button style={{ marginTop: 12 }} loading={commandSaving} disabled={Boolean(startupConfigError) || !startupConfigured || !startupPreviewValid}
-          onClick={editLaunchCommand}>{t('editFullCommand')}</Button>
-        <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>{t('onlineCommandHelp')}</Typography.Paragraph>
-        {commandApplyBlockReason && <Typography.Paragraph type="secondary">{commandApplyBlockReason}</Typography.Paragraph>}
+        <NoticeTip className="executor-command-tip"
+          kind={commandApplyBlockReason ? 'warning' : 'info'}
+          title={commandApplyBlockReason ?? t('onlineCommandHelp')}
+          detail={commandApplyBlockReason ? t('onlineCommandHelp') : undefined} />
         {commandRestart && <div>
           <Typography.Text strong>{t('lastCommandApplication')}</Typography.Text>
-          <Alert showIcon style={{ marginTop: 12 }}
+          <Alert showIcon style={{ marginTop: 8 }}
             icon={commandRestart.status === 'COMPLETED' ? <CheckCircleFilled aria-hidden="true" /> : ['FAILED', 'TIMED_OUT'].includes(commandRestart.status) ? <CloseCircleFilled aria-hidden="true" /> : <InfoCircleFilled aria-hidden="true" />}
             type={commandRestart.status === 'COMPLETED' ? 'success' : ['FAILED', 'TIMED_OUT'].includes(commandRestart.status) ? 'error' : 'info'}
             message={Object.prototype.hasOwnProperty.call(restartLabels, commandRestart.status) ? restartLabels[commandRestart.status] : commandRestart.status}
@@ -1416,7 +1503,7 @@ export function ExecutorListPage() {
         </>}
       </Modal>
 
-      <Modal title={t('restartPolicyTitle')} open={restartPolicyOpen && Boolean(startupTarget)}
+      <Modal className="executor-modal" title={t('restartPolicyTitle')} open={restartPolicyOpen && Boolean(startupTarget)}
         closable={{ 'aria-label': t('close') }} onCancel={() => setRestartPolicyOpen(false)}
         footer={<Space wrap>
           <Button onClick={() => setRestartPolicyOpen(false)}>{t('cancel')}</Button>
@@ -1430,7 +1517,7 @@ export function ExecutorListPage() {
       </Modal>
 
       {/* Token Display Modal */}
-      <Modal closable={{ 'aria-label': t('close') }} title={t('created')} open={!!tokenResult} width={640}
+      <Modal className="executor-modal" closable={{ 'aria-label': t('close') }} title={t('created')} open={!!tokenResult} width={640}
         onOk={() => setTokenResult(null)} onCancel={() => setTokenResult(null)}
         cancelButtonProps={{ style: { display: 'none' } }}>
         {tokenResult?.token ? (
@@ -1446,9 +1533,9 @@ export function ExecutorListPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
               <Input.Password aria-label={t('tokenPrefix')} value={tokenResult.token} readOnly style={{ flex: 1 }}
                 iconRender={(visible) => <Button type="text" htmlType="button" aria-label={visible ? t('hide') : t('show')}
-                  icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />}
+                  icon={visible ? <AwStrokeIcon name="eye" /> : <EyeInvisibleOutlined aria-hidden="true" />}
                   style={{ padding: 0, width: 16, height: 16 }} />} />
-              <Button icon={<CopyOutlined aria-hidden="true" />} onClick={handleCopyToken}>{t('copy')}</Button>
+              <Button icon={<AwStrokeIcon name="copy" />} onClick={handleCopyToken}>{t('copy')}</Button>
             </div>
           </div>
         )}
@@ -1465,7 +1552,7 @@ export function ExecutorListPage() {
       </Modal>
 
       {/* 批量升级确认：先把影响面和目标版本说清楚，别让一次点击悄悄重启整个机群。 */}
-      <Modal closable={{ 'aria-label': t('close') }} title={t('bulkUpdate')} open={updateAllOpen} okText={t('issueUpdate')}
+      <Modal className="executor-modal" closable={{ 'aria-label': t('close') }} title={t('bulkUpdate')} open={updateAllOpen} okText={t('issueUpdate')}
         onOk={() => updateAllMut.mutate()} onCancel={() => setUpdateAllOpen(false)}
         confirmLoading={updateAllMut.isPending}>
         <Alert type="warning" showIcon style={{ marginBottom: 16 }}
@@ -1479,7 +1566,7 @@ export function ExecutorListPage() {
       </Modal>
 
       {/* 结果弹窗：跳过的机器必须逐条给出原因，否则操作者只看到「已下发 N 个」会以为全部成功。 */}
-      <Modal closable={{ 'aria-label': t('close') }} title={t('bulkIssued')} open={Boolean(updateAllResult)} width={640}
+      <Modal className="executor-modal" closable={{ 'aria-label': t('close') }} title={t('bulkIssued')} open={Boolean(updateAllResult)} width={640}
         onOk={() => setUpdateAllResult(null)} onCancel={() => setUpdateAllResult(null)}
         cancelButtonProps={{ style: { display: 'none' } }}>
         {updateAllResult && (

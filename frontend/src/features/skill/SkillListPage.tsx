@@ -2,18 +2,18 @@ import { useTranslation } from 'react-i18next';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { formatDateTime as formatSharedDateTime, formatNumber } from '@/shared/i18n/format';
 import { i18n } from '@/shared/i18n';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { PageHead } from '@/shared/ui/PageHead';
+import { Toolbar } from '@/shared/ui/Toolbar';
+import { EmptyState } from '@/shared/ui/EmptyState';
 import { usePageSizePreference } from '@/shared/lib/usePageSizePreference';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AriaAttributes, Key, ReactNode } from 'react';
 import {
-  Card, Collapse, Tag, Button, Space, Segmented, Modal, Form, Input, Select, Popconfirm, message,
-  Radio, Alert, Typography, Descriptions, Divider, InputNumber, Checkbox, Tooltip, Tree, TreeSelect, Spin, Switch, Empty} from 'antd';
+  Collapse, Tag, Button, Space, Segmented, Modal, Form, Input, Select, Popconfirm, message,
+  Radio, Alert, Typography, Descriptions, Divider, InputNumber, Checkbox, Tooltip, Tree, TreeSelect, Spin } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import {
-  PlusOutlined, EditOutlined, DeleteOutlined, FolderOpenOutlined, FileTextOutlined,
-  CloseCircleFilled, MinusCircleOutlined, DownloadOutlined, ApartmentOutlined,
-} from '@ant-design/icons';
+import { FolderOpenOutlined, CloseCircleFilled, MinusCircleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   listSkills, createSkill, updateSkill, deleteSkill, createSkillFromPackage, updateSkillPackage,
@@ -42,6 +42,7 @@ import type { CategoryNode, CategorySkillGroup } from './categoryTree';
 import {
   isCategoryGroupingEnabled, setCategoryGroupingEnabled,
 } from './categoryDisplayPreference';
+import './SkillListPage.css';
 
 function skillTypeLabel(type: string): string {
   switch (type) {
@@ -63,6 +64,7 @@ const AUTHORIZATION_MASK = '********';
 // antd Select 对 null/undefined 值会按空值处理，分类下拉用字符串哨兵表示「未分类」，
 // 提交时再换算回显式 null（取消打标）。
 const UNCATEGORIZED = 'none';
+const UNCATEGORIZED_GROUP_KEY = 'uncategorized';
 
 // useQuery 未决/失败时的兜底必须是稳定引用：若每次渲染都新建 []，
 // 依赖 categories 的 useEffect 会每轮都触发 setState，形成无限重渲染。
@@ -153,6 +155,7 @@ export function SkillListPage() {
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
   const [pendingDeleteCategoryId, setPendingDeleteCategoryId] = useState<number | null>(null);
   const [categoryExpandedKeys, setCategoryExpandedKeys] = useState<Key[]>([]);
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<ReadonlySet<string>>(() => new Set());
   const [categoryForm] = Form.useForm();
   useLocalizedValidation(categoryForm);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
@@ -286,79 +289,89 @@ export function SkillListPage() {
     });
   };
 
-  const renderCategoryGroup = (group: CategorySkillGroup): ReactNode => (
-    <Collapse
-      key={`category-${group.category.id}`}
-      defaultActiveKey={[`category-${group.category.id}`]}
-      items={[{
-        key: `category-${group.category.id}`,
-        label: (
-          <Space size={8}>
-            <Typography.Text strong>{group.category.name}</Typography.Text>
-            <Typography.Text type="secondary">{t('items', { count: group.totalCount })}</Typography.Text>
-          </Space>
-        ),
-        children: (
-          <>
-            {group.direct.length > 0 && (
-              <Table
-                rowKey="id"
-                columns={columns}
-                dataSource={group.direct}
-                pagination={false}
-                size="small"
-                scroll={{ x: 1520 }}
-                style={{ marginBottom: 8 }}
-              />
-            )}
-            {group.children.length > 0 && (
-              <Space direction="vertical" size={8} style={{ width: '100%', marginLeft: 12 }}>
-                {group.children.map(renderCategoryGroup)}
-              </Space>
-            )}
-          </>
-        ),
-      }]}
-    />
+  const toggleGroup = (key: string) => setCollapsedGroupKeys((previous) => {
+    const next = new Set(previous);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+
+  // 分组卡沿用数字员工列表：一组一个外框，组头白底无分割线，组间 20px。
+  const groupSection = (key: string, name: string, count: number, body: ReactNode, depth = 0): ReactNode => {
+    const expanded = !collapsedGroupKeys.has(key);
+    return (
+      <section
+        key={key}
+        className={`aw-skill-group${depth > 0 ? ' is-nested' : ''}${expanded ? '' : ' is-collapsed'}`}
+      >
+        <header className="aw-skill-group-header" onClick={() => toggleGroup(key)}>
+          <button
+            type="button"
+            className="aw-skill-group-caret"
+            aria-expanded={expanded}
+            aria-label={t('category.toggleGroup', { name })}
+            onClick={(event) => { event.stopPropagation(); toggleGroup(key); }}
+          >
+            <AwStrokeIcon name={expanded ? 'chev-d' : 'chev-r'} size={14} />
+          </button>
+          <strong>{name}</strong>
+          <span className="aw-skill-group-count">{t('items', { count })}</span>
+        </header>
+        {expanded && <div className="aw-skill-group-body">{body}</div>}
+      </section>
+    );
+  };
+
+  const renderCategorySection = (group: CategorySkillGroup, depth = 0): ReactNode => groupSection(
+    `category-${group.category.id}`,
+    group.category.name,
+    group.totalCount,
+    <>
+      {group.direct.length > 0 && (
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={group.direct}
+          pagination={false}
+          scroll={{ x: 1000 }}
+        />
+      )}
+      {group.children.length > 0 && (
+        <div className="aw-skill-subgroups">
+          {group.children.map((child) => renderCategorySection(child, depth + 1))}
+        </div>
+      )}
+    </>,
+    depth,
   );
 
   const renderGroupedView = (): ReactNode => {
     // 首次加载时由外层 Spin 呈现加载态，避免闪现「暂无能力」空态
     if (groupedSkillsLoading && groupedSkills.length === 0) return null;
     if (categoryGrouping.groups.length === 0 && categoryGrouping.uncategorized.length === 0) {
-      return <Empty description={i18n.t('skill:empty')} />;
+      return <EmptyState icon={<AwStrokeIcon name="bulb" size={20} />} title={t('empty')} />;
     }
     return (
-      <Space direction="vertical" size={12} style={{ width: '100%' }}>
-        {categoryGrouping.groups.map(renderCategoryGroup)}
-        {categoryGrouping.uncategorized.length > 0 && (
-          <Collapse
-            defaultActiveKey={['uncategorized']}
-            items={[{
-              key: 'uncategorized',
-              label: (
-                <Space size={8}>
-                  <Typography.Text strong>{i18n.t('skill:uncategorized')}</Typography.Text>
-                  <Typography.Text type="secondary">{t('items', { count: categoryGrouping.uncategorized.length })}</Typography.Text>
-                </Space>
-              ),
-              children: (
-                <Table
-                  rowKey="id"
-                  columns={columns}
-                  dataSource={categoryGrouping.uncategorized}
-                  pagination={false}
-                  size="small"
-                  scroll={{ x: 1520 }}
-                />
-              ),
-            }]}
-          />
-        )}
-        <Typography.Text type="secondary">
+      <>
+        <div className="aw-skill-groups">
+          {categoryGrouping.groups.map((group) => renderCategorySection(group))}
+          {categoryGrouping.uncategorized.length > 0 && groupSection(
+            UNCATEGORIZED_GROUP_KEY,
+            i18n.t('skill:uncategorized'),
+            categoryGrouping.uncategorized.length,
+            <Table
+              rowKey="id"
+              columns={columns}
+              dataSource={categoryGrouping.uncategorized}
+              pagination={false}
+              scroll={{ x: 1000 }}
+            />,
+          )}
+        </div>
+        <Typography.Text type="secondary" className="aw-skill-group-summary">
           {t('grouped', { count: groupedSkills.length })}
         </Typography.Text>
-      </Space>
+      </>
     );
   };
 
@@ -809,8 +822,34 @@ export function SkillListPage() {
   const columns: ColumnsType<Skill> = [
     { title: t('id'), dataIndex: 'id', width: 70 },
     {
-      title: t('name'), dataIndex: 'name', align: 'left',
-      render: (v: string) => <EllipsisText tooltip={v}>{v}</EllipsisText>,
+      title: t('name'), dataIndex: 'name', align: 'left', width: 200,
+      render: (v: string, record) => {
+        const connectionResult = connectionResults[record.id];
+        if (record.type !== 'MCP' || !connectionResult) {
+          return <EllipsisText tooltip={v}>{v}</EllipsisText>;
+        }
+        const toolCount = connectionResult.tools?.length ?? 0;
+        const connectionTitle = `${formatConnectionResult(connectionResult)} · ${t('connection.viewTools', { count: toolCount })}`;
+        return (
+          <span className="aw-skill-name-line">
+            <EllipsisText tooltip={v}>{v}</EllipsisText>
+            {connectionResult.success ? (
+              <button
+                type="button"
+                className="aw-skill-conn"
+                title={connectionTitle}
+                onClick={() => setToolListResult(connectionResult)}
+              >
+                {t('connection.toolsShort', { count: toolCount })}
+              </button>
+            ) : (
+              <span className="aw-skill-conn is-err" title={formatConnectionResult(connectionResult)}>
+                {t('connection.failed')}
+              </span>
+            )}
+          </span>
+        );
+      },
     },
     {
       // 描述内容普遍很长，悬停提示意义不大：纯省略，不加 tooltip
@@ -818,7 +857,7 @@ export function SkillListPage() {
       render: (v: string) => v ?? '—',
     },
     {
-      title: t('type'), dataIndex: 'type', width: 90,
+      title: t('type'), dataIndex: 'type', width: 120,
       render: (type: Skill['type']) => <Tag color={Object.prototype.hasOwnProperty.call(typeColor, type) ? typeColor[type] : undefined}>{skillTypeLabel(type)}</Tag>,
     },
     {
@@ -865,41 +904,34 @@ export function SkillListPage() {
           title={record.categoryPath || t('category.select')}
           disabled={savingCategoryIds.includes(record.id)}
           onClick={() => runWithAccess('READ_WRITE', t('category.set'), () => setActiveCategorySkillId(record.id))}
-          style={{ border: 0, background: 'none', padding: 0, font: 'inherit',
-            color: record.categoryId == null ? 'var(--aw-muted)' : 'inherit', cursor: 'pointer',
-            maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}
+          className={record.categoryId == null ? 'aw-skill-cat-btn aw-skill-cat-btn--empty' : 'aw-skill-cat-btn'}
         >
           {savingCategoryIds.includes(record.id) ? t('saving') : (record.categoryPath || '—')}
         </button>
       ),
     },
     {
-      title: t('actions'), width: 280, fixed: 'right',
+      title: t('actions'), width: 200,
       render: (_, record) => {
         const connectionResult = connectionResults[record.id];
         return (
-          <Space size={4} wrap>
-            <Button type="link" size="small" icon={<FileTextOutlined aria-hidden="true" />} onClick={() => setDetailSkill(record)}>{t('detail')}</Button>
-            {record.type === 'MCP' && (
+          <div className="aw-skill-ops">
+            <Button type="link" size="small" className="aw-skill-op" onClick={() => setDetailSkill(record)}>{t('detail')}</Button>
+            {record.type === 'MCP' && !connectionResult && (
               <Button
                 type="link"
                 size="small"
+                className="aw-skill-op"
                 loading={testingSkillId === record.id}
                 onClick={() => handleTestConnection(record)}
               >
                 {t('connection.test')}</Button>
             )}
             {record.type === 'MCP' && connectionResult && (
-              <Tag color={connectionResult.success ? 'success' : 'error'}>
-                {formatConnectionResult(connectionResult)}
-              </Tag>
+              <Button type="link" size="small" className="aw-skill-op" onClick={() => handleTestConnection(record)}>
+                {t('connection.retest')}</Button>
             )}
-            {record.type === 'MCP' && connectionResult?.success && connectionResult.tools && (
-              <Button type="link" size="small" onClick={() => setToolListResult(connectionResult)}>
-                {t('connection.viewTools', { count: connectionResult.tools.length })}
-              </Button>
-            )}
-            <Button type="link" size="small" icon={<EditOutlined aria-hidden="true" />} onClick={() => openEdit(record)}>{t('editButton')}</Button>
+            <Button type="link" size="small" className="aw-skill-op" onClick={() => openEdit(record)}>{t('editButton')}</Button>
             <Popconfirm
               title={t('deleteConfirm')}
               open={pendingDeleteId === record.id}
@@ -916,7 +948,7 @@ export function SkillListPage() {
                 type="link"
                 size="small"
                 danger
-                icon={<DeleteOutlined aria-hidden="true" />}
+                className="aw-skill-op"
                 onClick={() => runWithAccess(
                   'READ_WRITE',
                   t('deleteAction'),
@@ -925,7 +957,7 @@ export function SkillListPage() {
               >
                 {t('delete')}</Button>
             </Popconfirm>
-          </Space>
+          </div>
         );
       },
     },
@@ -933,76 +965,80 @@ export function SkillListPage() {
 
   return (
     <>
-      <Card
-        className="aw-content-card" title={<PageHeading title={t('title')} />}
-        extra={<Button type="primary" icon={<PlusOutlined aria-hidden="true" />} onClick={openCreate}>{t('create')}</Button>}
-      >
-        <div style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}>
-          <Segmented
-            options={filterTypeOptions}
-            value={typeFilter}
-            onChange={(v) => { setTypeFilter(v as string); setPage(1); }}
-          />
-          <Space size={16}>
-            <Space size={8}>
-              <Typography.Text type="secondary">{t('category.group')}</Typography.Text>
-              <Switch
-                checked={groupByCategory}
-                onChange={handleToggleGroupByCategory}
-                aria-label={t('category.group')}
-              />
-            </Space>
-            <Button icon={<ApartmentOutlined aria-hidden="true" />} onClick={openCategoryManage}>{t('category.manage')}</Button>
-          </Space>
-        </div>
-        {groupByCategory ? (
-          <Spin spinning={groupedSkillsLoading}>
-            {renderGroupedView()}
-          </Spin>
-        ) : (
-          <>
-            {selectedRowKeys.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <Space>
-                  <Typography.Text type="secondary">{t('selected', { count: selectedRowKeys.length })}</Typography.Text>
-                  <Button
-                    size="small"
-                    onClick={() => runWithAccess('READ_WRITE', t('category.batchAction'), () => setBatchCategoryOpen(true))}
-                  >
-                    {t('category.batch')}</Button>
-                  <Button size="small" type="text" onClick={() => setSelectedRowKeys([])}>{t('clearSelection')}</Button>
-                </Space>
-              </div>
-            )}
-            <Table
-              rowKey="id"
-              columns={columns}
-              dataSource={skills}
-              loading={isLoading}
-              rowSelection={{
-                getCheckboxProps: (record): CheckboxProps & Pick<AriaAttributes, 'aria-label'> => ({ 'aria-label': t('selection.row', { name: record.name }) }),
-                getTitleCheckboxProps: () => ({ 'aria-label': t('selection.all') }),
-                selectedRowKeys,
-                onChange: (keys) => setSelectedRowKeys(keys),
-              }}
-              pagination={{
-                current: page, pageSize: size, total,
-                onChange: (p, ps) => { setPage(p); setSize(ps); },
-                showSizeChanger: true,
-                showTotal: (count) => t('count', { count }),
-              }}
-              scroll={{ x: 900 }}
+    <div className="aw-skill-page">
+      <PageHead
+        title={t('title')}
+        description={t('pageDescription')}
+      />
+      <Toolbar
+        left={(
+          <div className="aw-skill-toolbar-filters">
+            {/* 与数字员工页一致：视图切换在最左，类型筛选紧随其后。 */}
+            <Segmented
+              value={groupByCategory ? 'group' : 'list'}
+              onChange={(v) => handleToggleGroupByCategory(v === 'group')}
+              options={[
+                { value: 'group', label: t('view.grouped') },
+                { value: 'list', label: t('view.list') },
+              ]}
+              aria-label={t('view.switch')}
             />
-          </>
+            <Segmented
+              options={filterTypeOptions}
+              value={typeFilter}
+              onChange={(v) => { setTypeFilter(v as string); setPage(1); }}
+            />
+          </div>
         )}
-      </Card>
+        right={(
+          <div className="aw-skill-toolbar-actions">
+            <Button icon={<AwStrokeIcon name="apartment" />} onClick={openCategoryManage}>{t('category.manage')}</Button>
+            <Button type="primary" icon={<AwStrokeIcon name="plus" />} onClick={openCreate}>{t('create')}</Button>
+          </div>
+        )}
+      />
+      {groupByCategory ? (
+        <Spin spinning={groupedSkillsLoading}>
+          {renderGroupedView()}
+        </Spin>
+      ) : (
+        <>
+          {selectedRowKeys.length > 0 && (
+            <div className="aw-skill-batch-bar">
+              <Typography.Text type="secondary">{t('selected', { count: selectedRowKeys.length })}</Typography.Text>
+              <Button
+                size="small"
+                type="text"
+                onClick={() => runWithAccess('READ_WRITE', t('category.batchAction'), () => setBatchCategoryOpen(true))}
+              >
+                {t('category.batch')}</Button>
+              <span className="aw-skill-batch-gap" />
+              <Button size="small" type="text" onClick={() => setSelectedRowKeys([])}>{t('clearSelection')}</Button>
+            </div>
+          )}
+          <Table
+            rowKey="id"
+            columns={columns}
+            dataSource={skills}
+            loading={isLoading}
+            locale={{ emptyText: <EmptyState icon={<AwStrokeIcon name="bulb" size={20} />} title={t('empty')} /> }}
+            rowSelection={{
+              getCheckboxProps: (record): CheckboxProps & Pick<AriaAttributes, 'aria-label'> => ({ 'aria-label': t('selection.row', { name: record.name }) }),
+              getTitleCheckboxProps: () => ({ 'aria-label': t('selection.all') }),
+              selectedRowKeys,
+              onChange: (keys) => setSelectedRowKeys(keys),
+            }}
+            pagination={{
+              current: page, pageSize: size, total,
+              onChange: (p, ps) => { setPage(p); setSize(ps); },
+              showSizeChanger: true,
+              showTotal: (count) => t('count', { count }),
+            }}
+            scroll={{ x: 1000 }}
+          />
+        </>
+      )}
+      </div>
 
       <Modal
         closable={{ 'aria-label': t('close') }}
@@ -1051,7 +1087,7 @@ export function SkillListPage() {
               <Descriptions.Item label={t('modifier')}>
                 {modifierName(detailSkill)}
               </Descriptions.Item>
-              <Descriptions.Item label={t('modifiedAt')} span={2}>{formatDateTime(detailSkill.gmtModified)}</Descriptions.Item>
+              <Descriptions.Item label={t('modifiedAt')}>{formatDateTime(detailSkill.gmtModified)}</Descriptions.Item>
             </Descriptions>
             <div>
               <Typography.Text strong>{t('description')}</Typography.Text>
@@ -1096,7 +1132,7 @@ export function SkillListPage() {
                     <Typography.Text strong>{t('package.contents')}</Typography.Text>
                     <Button
                       size="small"
-                      icon={<DownloadOutlined aria-hidden="true" />}
+                      icon={<AwStrokeIcon name="dl" />}
                       loading={downloadingPackage}
                       onClick={handleDownloadPackage}
                     >
@@ -1216,7 +1252,7 @@ export function SkillListPage() {
                 <Space>
                   <Button icon={<FolderOpenOutlined aria-hidden="true" />} onClick={() => fileInputRef.current?.click()}>
                     {t('package.chooseFolder')}</Button>
-                  <Button icon={<FileTextOutlined aria-hidden="true" />} onClick={() => zipInputRef.current?.click()}>
+                  <Button icon={<AwStrokeIcon name="file" />} onClick={() => zipInputRef.current?.click()}>
                     {t('package.chooseZip')}</Button>
                 </Space>
                 <input
@@ -1291,7 +1327,7 @@ export function SkillListPage() {
                           </Form.Item>
                           <Button type="text" aria-label={t('mcp.removeArgument')} onClick={() => remove(field.name)} icon={<MinusCircleOutlined aria-hidden="true" />} />
                         </div>)}
-                        <Button block type="dashed" onClick={() => add()} icon={<PlusOutlined aria-hidden="true" />}>{t('mcp.addArgument')}</Button>
+                        <Button block type="dashed" onClick={() => add()} icon={<AwStrokeIcon name="plus" />}>{t('mcp.addArgument')}</Button>
                       </Form.Item>}
                     </Form.List>
                     <Form.List name="mcpEnv">
@@ -1308,7 +1344,7 @@ export function SkillListPage() {
                           </Form.Item>
                           <Button type="text" aria-label={t('mcp.removeEnv')} onClick={() => remove(field.name)} icon={<MinusCircleOutlined aria-hidden="true" />} />
                         </div>)}
-                        <Button block type="dashed" onClick={() => add()} icon={<PlusOutlined aria-hidden="true" />}>{t('mcp.addEnv')}</Button>
+                        <Button block type="dashed" onClick={() => add()} icon={<AwStrokeIcon name="plus" />}>{t('mcp.addEnv')}</Button>
                       </Form.Item>}
                     </Form.List>
                   </>
@@ -1341,7 +1377,7 @@ export function SkillListPage() {
                               <Button type="text" aria-label={t('mcp.removeHeader')} onClick={() => remove(field.name)} icon={<MinusCircleOutlined aria-hidden="true" />} />
                             </div>
                           ))}
-                          <Button block type="dashed" onClick={() => add()} icon={<PlusOutlined aria-hidden="true" />}>{t('mcp.addHeader')}</Button>
+                          <Button block type="dashed" onClick={() => add()} icon={<AwStrokeIcon name="plus" />}>{t('mcp.addHeader')}</Button>
                         </Form.Item>
                       )}
                     </Form.List>
@@ -1366,13 +1402,14 @@ export function SkillListPage() {
         </Form>
       </Modal>
       <Modal closable={{ 'aria-label': t('close') }} title={t('connection.tools', { count: toolListResult?.tools?.length || 0 })} open={toolListResult !== null}
-        footer={null} onCancel={() => setToolListResult(null)} width={680}>
+        footer={null} onCancel={() => setToolListResult(null)} width={680} className="aw-tool-list-modal"
+        styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}>
         {(toolListResult?.tools || []).length > 0 && <Collapse
           expandIconPosition="start"
           items={(toolListResult?.tools || []).map((tool, index) => ({
             key: `${tool.name || 'tool'}-${index}`,
             collapsible: 'icon',
-            label: <Typography.Text strong>{tool.name || '-'}</Typography.Text>,
+            label: <Typography.Text strong style={{ display: 'block', maxWidth: '100%' }} ellipsis={{ tooltip: tool.name }}>{tool.name || '-'}</Typography.Text>,
             children: <>
               {tool.description && <Typography.Paragraph>{tool.description}</Typography.Paragraph>}
               {tool.inputSchema !== undefined && <Typography.Paragraph code style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>
@@ -1390,88 +1427,86 @@ export function SkillListPage() {
         open={categoryManageOpen}
         onCancel={() => setCategoryManageOpen(false)}
         footer={null}
-        width={860}
+        width={820}
         forceRender
       >
-        <div style={{ display: 'flex', gap: 16, minHeight: 320 }}>
-          <div
-            data-testid="category-manage-tree"
-            style={{
-              width: 300,
-              flexShrink: 0,
-              maxHeight: 420,
-              overflow: 'auto',
-              border: '1px solid var(--aw-border)',
-              borderRadius: 8,
-              padding: 12,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Typography.Text type="secondary">{t('category.directory')}</Typography.Text>
+        <div className="aw-category-manage">
+          <aside className="aw-category-pane">
+            <div className="aw-category-pane-head">
+              <strong>{t('category.directory')}</strong>
+              <span className="aw-category-pane-count">{t('items', { count: categories.length })}</span>
               <Button
                 size="small"
-                icon={<PlusOutlined aria-hidden="true" />}
+                type="text"
+                icon={<AwStrokeIcon name="plus" />}
                 onClick={() => runWithAccess('ADMIN', t('category.create'), () => startCreateCategory(editingCategoryId))}
               >
                 {t('category.add')}</Button>
             </div>
-            {categories.length === 0 ? (
-              <Typography.Text type="secondary">{t('category.empty')}</Typography.Text>
-            ) : (
-              <Tree
-                treeData={manageTreeData}
-                titleRender={(node) => (
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {node.title as ReactNode}
-                    </span>
-                    {editingCategoryId === node.key && (
-                      <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                        <Popconfirm
-                          title={t('category.deleteConfirm', { name: node.title as string })}
-                          description={t('category.deleteHint')}
-                          open={pendingDeleteCategoryId === node.key}
-                          onOpenChange={(open) => { if (!open) setPendingDeleteCategoryId(null); }}
-                          onConfirm={() => runWithAccess('ADMIN', t('category.delete'),
-                            () => handleDeleteCategory(Number(node.key)))}
-                          okText={t('delete')}
-                          cancelText={t('cancel')}
-                          okButtonProps={{ danger: true, loading: deleteCategoryMut.isPending }}
-                        >
-                          <Button type="text" size="small" danger icon={<DeleteOutlined aria-hidden="true" />}
-                            aria-label={t('category.deleteLabel', { name: node.title as string })}
-                            title={t('category.delete')}
-                            loading={deleteCategoryMut.isPending}
-                            onClick={() => runWithAccess('ADMIN', t('category.delete'),
-                              () => setPendingDeleteCategoryId(Number(node.key)))}
-                          />
-                        </Popconfirm>
+            <div className="aw-category-tree" data-testid="category-manage-tree">
+              {categories.length === 0 ? (
+                <div className="aw-category-tree-empty">
+                  <Typography.Text type="secondary">{t('category.empty')}</Typography.Text>
+                </div>
+              ) : (
+                <Tree
+                  treeData={manageTreeData}
+                  titleRender={(node) => (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {node.title as ReactNode}
                       </span>
-                    )}
-                  </span>
-                )}
-                selectedKeys={editingCategoryId != null ? [editingCategoryId] : []}
-                expandedKeys={categoryExpandedKeys}
-                onExpand={(keys) => setCategoryExpandedKeys(keys)}
-                onSelect={(keys) => {
-                  // 取消选中不重置表单，避免误触丢失正在编辑的内容
-                  if (keys.length === 0) return;
-                  editCategory(Number(keys[0]));
-                }}
-                blockNode
-              />
-            )}
-            <Divider style={{ margin: '12px 0 8px' }} />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t('category.systemView')}</Typography.Text>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {editingCategoryId != null
-                ? t('category.current', { path: categories.find((item) => item.id === editingCategoryId)?.path ?? '' })
-                : t('category.add')}
-            </Typography.Text>
-            <Form name="skillCategory" form={categoryForm} layout="vertical" style={{ marginTop: 8 }}>
+                      {editingCategoryId === node.key && (
+                        <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                          <Popconfirm
+                            title={t('category.deleteConfirm', { name: node.title as string })}
+                            description={t('category.deleteHint')}
+                            open={pendingDeleteCategoryId === node.key}
+                            onOpenChange={(open) => { if (!open) setPendingDeleteCategoryId(null); }}
+                            onConfirm={() => runWithAccess('ADMIN', t('category.delete'),
+                              () => handleDeleteCategory(Number(node.key)))}
+                            okText={t('delete')}
+                            cancelText={t('cancel')}
+                            okButtonProps={{ danger: true, loading: deleteCategoryMut.isPending }}
+                          >
+                            <Button type="text" size="small" danger icon={<AwStrokeIcon name="trash" />}
+                              aria-label={t('category.deleteLabel', { name: node.title as string })}
+                              title={t('category.delete')}
+                              loading={deleteCategoryMut.isPending}
+                              onClick={() => runWithAccess('ADMIN', t('category.delete'),
+                                () => setPendingDeleteCategoryId(Number(node.key)))}
+                            />
+                          </Popconfirm>
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  selectedKeys={editingCategoryId != null ? [editingCategoryId] : []}
+                  expandedKeys={categoryExpandedKeys}
+                  onExpand={(keys) => setCategoryExpandedKeys(keys)}
+                  onSelect={(keys) => {
+                    // 取消选中不重置表单，避免误触丢失正在编辑的内容
+                    if (keys.length === 0) return;
+                    editCategory(Number(keys[0]));
+                  }}
+                  blockNode
+                />
+              )}
+            </div>
+            <p className="aw-category-pane-foot">{t('category.systemView')}</p>
+          </aside>
+          <div className="aw-category-editor">
+            <div className="aw-category-editor-head">
+              <div>
+                <strong>{editingCategoryId != null ? t('category.editTitle') : t('category.createTitle')}</strong>
+                <div className="aw-category-editor-sub">
+                  {editingCategoryId != null
+                    ? t('category.current', { path: categories.find((item) => item.id === editingCategoryId)?.path ?? '' })
+                    : t('category.pickHint')}
+                </div>
+              </div>
+            </div>
+            <Form name="skillCategory" form={categoryForm} layout="vertical" className="aw-category-form">
               <Form.Item
                 name="name"
                 label={t('category.name')}
@@ -1504,23 +1539,17 @@ export function SkillListPage() {
               >
                 <Input.TextArea rows={3} maxLength={1000} placeholder={t('placeholder.categoryDescription')} />
               </Form.Item>
-              <Form.Item style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-                  borderTop: '1px solid var(--aw-border)', paddingTop: 16 }}>
-                  <Space>
-                    <Button onClick={() => setCategoryManageOpen(false)}>{t('cancel')}</Button>
-                    <Button
-                      type="primary"
-                      loading={createCategoryMut.isPending || updateCategoryMut.isPending}
-                      onClick={handleCategorySubmit}
-                    >
-                      {t('category.save')}</Button>
-                  </Space>
-                </div>
-              </Form.Item>
             </Form>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t('category.editHint')}</Typography.Text>
+            <div className="aw-category-editor-foot">
+              <span className="aw-category-editor-hint">{t('category.editHint')}</span>
+              <Button onClick={() => startCreateCategory(null)}>{t('category.cancelEdit')}</Button>
+              <Button
+                type="primary"
+                loading={createCategoryMut.isPending || updateCategoryMut.isPending}
+                onClick={handleCategorySubmit}
+              >
+                {t('category.save')}</Button>
+            </div>
           </div>
         </div>
       </Modal>

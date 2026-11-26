@@ -49,7 +49,7 @@ final class WorkflowSnapshotFixture {
         step.setId(77L); step.setTenantId(1L); step.setSdlcId(70L); step.setStepOrder(1);
         step.setName("Original entry"); step.setKind("implementation"); step.setInstructionMd("old instruction");
         when(steps.findById(77L)).thenReturn(step);
-        when(steps.listBySdlc(70L)).thenReturn(List.of(step));
+        when(steps.listForExecution(1L, 70L)).thenReturn(List.of(step));
         AgentDO agent = new AgentDO(); agent.setId(20L); agent.setTenantId(1L); agent.setOnlineVersionId(21L);
         when(agents.findById(20L)).thenReturn(agent);
         AgentVersionDO version = new AgentVersionDO(); version.setId(21L); version.setTenantId(1L); version.setAgentId(20L);

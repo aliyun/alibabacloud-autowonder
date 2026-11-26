@@ -1,23 +1,36 @@
 import { useTranslation } from 'react-i18next';
-import type { ReactNode } from 'react';
-import { Tag } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, StopOutlined, SyncOutlined } from '@ant-design/icons';
+import { StatusTag, type StatusColorKey } from '@/shared/ui/StatusTag';
+
+/** 运行状态 → StatusTag 颜色映射（原型 12 状态字典），导出供测试直测。 */
+export const RUN_STATUS_TAG_COLOR: Record<string, StatusColorKey> = {
+  QUEUED: 'gray',
+  STARTING: 'blue',
+  WAITING_EXECUTOR: 'blue',
+  WAITING_HUMAN: 'amber',
+  RUNNING: 'blue',
+  PAUSED: 'amber',
+  SUCCEEDED: 'green',
+  FAILED: 'red',
+  TIMED_OUT: 'red',
+  CANCELED: 'gray',
+  SKIPPED: 'gray',
+};
 
 export function RunStatusTag({ status }: { status: string }) {
   const { t } = useTranslation('scheduledTask');
-  const RUN_STATUS_META: Record<string, { label: string; color: string; icon: ReactNode }> = {
-    QUEUED: { label: t('runStatus.queued'), color: 'default', icon: null },
-    STARTING: { label: t('runStatus.starting'), color: 'default', icon: null },
-    WAITING_EXECUTOR: { label: t('runStatus.waitingExecutor'), color: 'default', icon: null },
-    WAITING_HUMAN: { label: t('runStatus.waitingHuman'), color: 'default', icon: null },
-    PAUSED: { label: t('runStatus.paused'), color: 'default', icon: null },
-    TIMED_OUT: { label: t('runStatus.timedOut'), color: 'default', icon: null },
-    SUCCEEDED: { label: t('runStatus.succeeded'), color: 'success', icon: <CheckCircleOutlined aria-hidden="true" /> },
-    FAILED: { label: t('runStatus.failed'), color: 'error', icon: <CloseCircleOutlined aria-hidden="true" /> },
-    SKIPPED: { label: t('runStatus.skipped'), color: 'warning', icon: <ExclamationCircleOutlined aria-hidden="true" /> },
-    RUNNING: { label: t('runStatus.running'), color: 'processing', icon: <SyncOutlined aria-hidden="true" spin /> },
-    CANCELED: { label: t('runStatus.canceled'), color: 'default', icon: <StopOutlined aria-hidden="true" /> },
+  const RUN_STATUS_LABEL: Record<string, string> = {
+    QUEUED: t('runStatus.queued'),
+    STARTING: t('runStatus.starting'),
+    WAITING_EXECUTOR: t('runStatus.waitingExecutor'),
+    WAITING_HUMAN: t('runStatus.waitingHuman'),
+    RUNNING: t('runStatus.running'),
+    PAUSED: t('runStatus.paused'),
+    TIMED_OUT: t('runStatus.timedOut'),
+    CANCELED: t('runStatus.canceled'),
+    SUCCEEDED: t('runStatus.succeeded'),
+    FAILED: t('runStatus.failed'),
+    SKIPPED: t('runStatus.skipped'),
   };
-  const meta = Object.prototype.hasOwnProperty.call(RUN_STATUS_META, status) ? RUN_STATUS_META[status] : { label: status, color: 'default', icon: null };
-  return <Tag color={meta.color} icon={meta.icon}>{meta.label}</Tag>;
+  const known = Object.prototype.hasOwnProperty.call(RUN_STATUS_TAG_COLOR, status);
+  return <StatusTag label={known ? RUN_STATUS_LABEL[status] : status} colorKey={known ? RUN_STATUS_TAG_COLOR[status] : 'gray'} dot={known} />;
 }

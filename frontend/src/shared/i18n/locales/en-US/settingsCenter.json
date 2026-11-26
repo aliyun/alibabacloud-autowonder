@@ -1,0 +1,58 @@
+{
+  "shell": {
+    "title": "Settings",
+    "description": "Set up the delivery environment and manage workspace rules and members. This area holds one-off and low-frequency operations; return to the left navigation for daily delivery.",
+    "navLabel": "Settings navigation",
+    "roleAdmin": "Workspace admin",
+    "roleEditor": "Editor",
+    "roleViewer": "Viewer"
+  },
+  "groups": {
+    "init": "Setup",
+    "rules": "Delivery rules",
+    "workspace": "Workspace & access",
+    "compliance": "Compliance"
+  },
+  "nav": {
+    "online": "{{value}} online"
+  },
+  "overview": {
+    "initTitle": "Setup",
+    "initHint": "New workspaces only go through this once; while incomplete, Settings in the sidebar shows an amber dot. Each step opens the existing configuration page instead of duplicating forms.",
+    "manageTitle": "Management & rules",
+    "manageHint": "Configurations that keep changing after setup, grouped by scope: delivery rules, workspace & access, compliance.",
+    "unavailable": "—",
+    "manage": "Manage {{name}}",
+    "status": {
+      "done": "Done",
+      "todo": "Not set up",
+      "offline": "Offline",
+      "suggest": "Recommended",
+      "review": "{{value}} to review"
+    },
+    "meta": {
+      "agents": "{{value}} agents",
+      "agentsPending": "{{value}} agents; {{pending}} versions awaiting review",
+      "agentsEmpty": "No agents yet",
+      "executors": "{{value}} online, heartbeat healthy",
+      "executorsOffline": "{{value}} executors, none online",
+      "executorsEmpty": "No executors connected",
+      "repos": "{{value}} repositories bound",
+      "reposEmpty": "No repositories bound",
+      "sdlcs": "{{value}} workflows",
+      "sdlcsEmpty": "No SDLC workflows",
+      "skills": "{{value}} capabilities installed",
+      "skillsEmpty": "No capabilities installed",
+      "memories": "{{value}} memory stores",
+      "memoriesEmpty": "No memory stores"
+    },
+    "cards": {
+      "statusTemplates": "Work item status flow and stage gates",
+      "environment": "Secrets and runtime config, mounted per agent",
+      "integrations": "Aone work item sync and IM channels",
+      "members": "Members and role permissions",
+      "backups": "Export and restore workspace configuration",
+      "audit": "Trace key operations by member and time"
+    }
+  }
+}

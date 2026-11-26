@@ -82,6 +82,26 @@ class ChiefEffectiveConfigResolverTest {
         assertThrows(IllegalArgumentException.class, () -> resolver().resolve(List.of(extra)));
     }
     @Test
+    void addingTheDirectorySkillKeepsCustomNamesAndDefinitionsUsable() {
+        String directory = "autowonder-user-directory";
+        var catalog = new PlatformSkillCatalog().list();
+        var before = new ChiefEffectiveConfigResolver("agent", "soul", catalog.stream()
+                .filter(skill -> !directory.equals(skill.getId())).toList());
+        var after = new ChiefEffectiveConfigResolver("agent", "soul", catalog);
+        var custom = Map.<String, Object>of("id", 77L, "type", "SKILL", "name", directory,
+                "config", Map.of("instructions", "Workspace-owned directory"));
+        var customWithId = Map.<String, Object>of("id", 78L, "type", "SKILL", "name", "custom-people",
+                "config", Map.of("id", directory, "instructions", "Workspace-owned contacts"));
+        var extensions = List.of(custom, customWithId);
+        assertTrue(before.resolve(extensions).capabilities().containsAll(extensions));
+        var upgraded = after.resolve(extensions);
+        assertTrue(upgraded.capabilities().containsAll(extensions));
+        assertTrue(upgraded.capabilities().stream().anyMatch(entry ->
+                ("official:" + directory).equals(entry.get("id"))
+                        && ("platform-" + directory).equals(entry.get("name"))));
+    }
+
+    @Test
     void suppliesOfficialCapabilitiesWithoutWorkspaceCopies() {
         var catalog = new PlatformSkillCatalog();
         var result = new ChiefEffectiveConfigResolver("official agent", "official soul", catalog.list())

@@ -243,7 +243,7 @@ it('preserves member filters, owner selection and rejection draft while localizi
     await user.click(screen.getByRole('button', { name: 'Add member' }));
     const enAddDialog = screen.getByRole('dialog', { name: 'Add member' });
     expect(within(enAddDialog).getByRole('combobox', { name: 'Search people' })).toHaveValue('');
-    expect(within(enAddDialog).getByRole('combobox', { name: 'New member role' })).toBeInTheDocument();
+    expect(within(enAddDialog).getByRole('combobox', { name: 'Role' })).toBeInTheDocument();
     expect(within(enAddDialog).getByRole('button', { name: 'Add member' })).toBeDisabled();
     await user.click(within(enAddDialog).getByRole('button', { name: 'Cancel' }));    await user.click(screen.getByRole('tab', { name: 'Access requests' }));
     await screen.findByText('<em>申请人</em>');
@@ -252,9 +252,9 @@ it('preserves member filters, owner selection and rejection draft while localizi
     const reason = screen.getByRole('textbox', { name: 'Rejection reason (optional)' });
     await user.type(reason, '<b>拒绝原文</b>');
     await locale('zh-CN');
-    expect(screen.getByRole('textbox', { name: '拒绝原因（可选）' })).toBe(reason);
+    expect(screen.getByRole('textbox', { name: '拒绝原因（选填）' })).toBe(reason);
     expect(reason).toHaveValue('<b>拒绝原文</b>');
-    expect(screen.getByText('拒绝 <em>申请人</em> 的申请')).toBeInTheDocument();
+    expect(screen.getByText('拒绝 <em>申请人</em> 的「constructor」申请，申请人将保留当前角色。')).toBeInTheDocument();
     expect(reads).toBe(2);
     expect(router.state.location.search).toBe('?keep=raw&tab=requests');
     await user.click(screen.getByRole('button', { name: '确认拒绝' }));
@@ -313,7 +313,7 @@ it.each([[0, '0 members'], [1, '1 member'], [2, '2 members']] as const)('uses a 
         expect(await screen.findByText(total)).toBeInTheDocument();
     else
         expect(i18n.t('settings:totalMembers', { count, total: '0' })).toBe('0 members');
-    expect(screen.getByRole('combobox', { name: 'Filter by role' }).closest('.ant-select')).toHaveTextContent(`All (${count})`);
+    expect(screen.getByRole('combobox', { name: 'Filter by role' }).closest('.ant-select')).toHaveTextContent(`All members (${count})`);
 });
 it('uses completion-time backup feedback and preserves the create request body', async () => {
     let finish!: () => void;

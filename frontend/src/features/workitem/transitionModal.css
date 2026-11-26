@@ -1,0 +1,55 @@
+/* 流转弹窗共享样式（原型 05 ⑤、48）：详情页与工作台「我在跟进」共用同一壳与选项 */
+.aw-state-opts { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.aw-state-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-panel);
+  color: var(--aw-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.aw-state-opt:not(:disabled):hover { border-color: var(--aw-primary); }
+.aw-state-opt.is-on { border-color: var(--aw-primary); background: var(--aw-primary-weak); }
+.aw-state-opt:disabled { cursor: not-allowed; opacity: 0.6; }
+.aw-state-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--aw-primary); }
+.aw-state-dot.is-green { background: var(--aw-success); }
+.aw-state-dot.is-amber { background: var(--aw-warning); }
+.aw-state-dot.is-gray { background: var(--aw-text-3); }
+.aw-state-opt-name { min-width: 0; overflow-wrap: anywhere; }
+.aw-state-desc { flex: none; margin-left: auto; font-size: 11px; color: var(--aw-text-3); }
+
+.aw-transition-modal .ant-modal-content { padding: 0; overflow: hidden; }
+.aw-transition-modal .ant-modal-header { margin: 0; padding: 14px 48px 14px 16px; border-bottom: 1px solid var(--aw-border); }
+.aw-transition-modal .ant-modal-title { font-size: 14px; font-weight: 600; line-height: 20px; }
+.aw-transition-title { display: inline-flex; align-items: center; gap: 8px; }
+.aw-transition-title .aw-stroke-icon { color: var(--aw-text-3); flex-shrink: 0; }
+.aw-transition-modal .ant-modal-close { top: 12px; inset-inline-end: 12px; width: 24px; height: 24px; border-radius: 4px; color: var(--aw-text-3); }
+.aw-transition-modal .ant-modal-close:hover { background: var(--aw-gray-bg); color: var(--aw-text); }
+.aw-transition-modal .ant-modal-body { padding: 16px 16px 0; }
+.aw-transition-modal .ant-modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0 16px 16px; }
+html .aw-transition-modal .ant-modal-footer .ant-btn { height: 26px; padding: 0 8px; margin-inline-start: 0; border-radius: 4px; font-size: 12px; }
+
+/* 备注框：外框承载边框与聚焦环，内部 textarea 无边框 */
+.aw-transition-reason {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-panel);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.aw-transition-reason:focus-within {
+  border-color: var(--aw-primary);
+  box-shadow: 0 0 0 2px rgba(0, 100, 200, 0.12);
+}
+html .aw-transition-reason .ant-input { padding: 0; font-size: 13px; resize: none; background: transparent; }
+html .aw-transition-reason .ant-input:focus { box-shadow: none; background: transparent; }
+html .aw-transition-reason .ant-input::placeholder { color: var(--aw-text-disabled); }

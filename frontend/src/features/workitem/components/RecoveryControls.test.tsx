@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { message, Modal } from 'antd';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WorkitemActionBar } from './WorkitemActionBar';
-import { RecoveryControls } from './RecoveryControls';
+import { DeliveryStartRecords, RecoveryControls } from './RecoveryControls';
+import type { DeliveryControlAction, RestartRound } from './RecoveryControls';
 import { apiClient } from '@/shared/api/client';
+import { useAuthStore } from '@/shared/auth/store';
+
 vi.mock('@/shared/api/client', () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }));
-vi.mock('@/shared/auth/useAccessCommand', () => ({ useAccessCommand: () => (_level: string, _action: string, action: () => unknown) => action() }));
+
 type Pending<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (reason?: unknown) => void };
 function pending<T>(): Pending<T> {
   let resolve!: (value: T) => void;
@@ -15,139 +19,263 @@ function pending<T>(): Pending<T> {
   const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
   return { promise, resolve, reject };
 }
+function newClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+}
+function actionBar(deliveryControl: DeliveryControlAction | null, onStartDelivery?: () => void) {
+  return <WorkitemActionBar deliveryControl={deliveryControl} workType="REQ" statusName="开发中" priority={1} hasSdlc onStartDelivery={onStartDelivery} />;
+}
 function show(closed: boolean, status: string, recovery = {}, restarts: Array<Record<string, unknown>> = [],
               control: Record<string, unknown> | null = null) {
   vi.mocked(apiClient.get).mockResolvedValue({ data: { closed, canReopen: true,
     executions: [{ dispatchId: 100, agentId: 20, attempt: 2, status, recovery, control }], restarts } });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  render(<QueryClientProvider client={client}><RecoveryControls workitemId="10" renderActions={(deliveryControl) => <WorkitemActionBar deliveryControl={deliveryControl} />} /><RecoveryControls workitemId="10" variant="execution" dispatchId={100} /><RecoveryControls workitemId="10" variant="history" /></QueryClientProvider>);
+  const client = newClient();
+  return render(<QueryClientProvider client={client}>
+    <RecoveryControls workitemId="10" renderActions={actionBar} />
+    <RecoveryControls workitemId="10" variant="execution" dispatchId={100} />
+  </QueryClientProvider>);
 }
-function renderDelivery() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+function renderLedger(rounds: RestartRound[], props: Partial<ComponentProps<typeof DeliveryStartRecords>> = {}) {
+  return render(<DeliveryStartRecords rounds={rounds} {...props} />);
+}
+function renderDelivery(onStartDelivery?: () => void) {
+  const client = newClient();
+  const renderActions = vi.fn((control: DeliveryControlAction | null) => actionBar(control, onStartDelivery));
   const view = (workitemId: string) => <QueryClientProvider client={client}>
-    <RecoveryControls workitemId={workitemId} renderActions={(deliveryControl) => <WorkitemActionBar deliveryControl={deliveryControl} />} />
+    <RecoveryControls workitemId={workitemId} renderActions={renderActions} />
   </QueryClientProvider>;
-  return { ...render(view('10')), view };
+  return { ...render(view('10')), view, client, renderActions };
 }
-beforeEach(() => { vi.clearAllMocks(); vi.mocked(apiClient.post).mockResolvedValue({ data: {} }); });
-afterEach(() => { Modal.destroyAll(); });
+function menuItem(menu: HTMLElement, label: string) {
+  const item = within(menu).getByText(label).closest('[role="menuitem"]');
+  if (!(item instanceof HTMLElement)) throw new Error(`Missing menu item: ${label}`);
+  return item;
+}
+async function openDeliveryMenu(label = '关闭交付') {
+  await userEvent.click(await screen.findByRole('button', { name: '更多工单操作' }));
+  const menu = await screen.findByRole('menu');
+  await within(menu).findByText(label);
+  return menu;
+}
+async function requestDeliveryAction(label = '关闭交付') {
+  const menu = await openDeliveryMenu(label);
+  await userEvent.click(menuItem(menu, label));
+  return screen.findByRole('dialog', { name: label });
+}
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
+  useAuthStore.getState().clear();
+  useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
+});
+afterEach(() => {
+  Modal.destroyAll();
+  message.destroy();
+  useAuthStore.getState().clear();
+  vi.restoreAllMocks();
+});
+
 describe('delivery recovery', () => {
-  it.each([false, true])('closes or reopens delivery through an explicit confirmed action when closed=%s', async (closed) => {
+  it.each([false, true])('closes or reopens delivery through an explicit confirmed menu action when closed=%s', async (closed) => {
     show(closed, 'SUCCEEDED');
     const label = closed ? '重新开启交付' : '关闭交付';
-    const action = await screen.findByRole('button', { name: label });
-    expect(screen.getByTestId('workitem-action-bar')).toContainElement(action);
-    await userEvent.click(action);
-    await waitFor(() => expect(screen.getAllByRole('button', { name: label })).toHaveLength(2));
-    const confirmButtons = screen.getAllByRole('button', { name: label });
-    await userEvent.click(confirmButtons[confirmButtons.length - 1]);
+    expect(await screen.findByTestId('workitem-action-bar')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
+    const menu = await openDeliveryMenu(label);
+    expect(menuItem(menu, label)).toHaveAttribute('aria-disabled', 'false');
+    await userEvent.click(menuItem(menu, label));
+    const dialog = await screen.findByRole('dialog', { name: label });
+    expect(apiClient.post).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole('button', { name: label }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/workitems/10/recovery', {
       action: closed ? 'reopen' : 'close', dispatchId: undefined, force: false,
     }));
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
+
   it('does not claim the runtime stopped after forced platform cancellation', async () => {
     show(true, 'CANCELED', { cancel_requested: 1, stop_pending: 1, forced: 1 }, [],
       { action: 'CANCEL', phase: 'UNCONFIRMED', origin: 'USER', forced: true, stopPending: true });
-    await screen.findByRole('button', { name: '重新开启交付' });
+    const menu = await openDeliveryMenu('重新开启交付');
     expect(screen.getByText(/平台已结束，执行器停止未确认/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /重\s*试/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '重新开启交付' })).toBeInTheDocument();
+    expect(menuItem(menu, '重新开启交付')).toBeInTheDocument();
   });
+
   it('does not show the user force warning for a system timeout stop', async () => {
     show(true, 'TIMEOUT', { cancel_requested: 1, stop_pending: 1, forced: 1 }, [],
       { action: 'STOP', phase: 'REQUESTED', origin: 'TIMEOUT', forced: false, stopPending: true });
-    await screen.findByRole('button', { name: '重新开启交付' });
+    await openDeliveryMenu('重新开启交付');
     expect(screen.queryByText(/平台已结束，执行器停止未确认/)).not.toBeInTheDocument();
   });
 
   it('keeps execution actions out of the recovery detail panel', async () => {
     show(false, 'FAILED');
-    await screen.findByRole('button', { name: '关闭交付' });
+    await openDeliveryMenu();
     expect(screen.queryByText('Dispatch 100 · 第 2 次')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '执行操作' })).not.toBeInTheDocument();
     expect(screen.queryByText('取消本次执行')).not.toBeInTheDocument();
   });
 });
 
-describe('delivery restart rounds', () => {
-  it('surfaces the stopping-old-executions phase with the round number', async () => {
-    show(false, 'RUNNING', {}, [
-      { restart_round: 2, status: 'STOPPING_OLD', stop_reason: '正在停止旧执行 1 个，停止确认后启动新轮次' },
-    ]);
-
-    expect(await screen.findByText('正在停止旧执行，等待重新启动（第 2 轮）')).toBeInTheDocument();
-    await userEvent.click(await screen.findByText('交付重启轮次（1）'));
-    expect(screen.getByText('正在停止旧执行')).toBeInTheDocument();
-    expect(screen.getAllByText(/正在停止旧执行 1 个/).length).toBeGreaterThan(0);
+describe('delivery start records', () => {
+  it('renders a single failed start as a section row with a red-only status', () => {
+    renderLedger([{ restart_round: 1, status: 'FAILED', stop_reason: '数字员工未上线', gmt_create: '2026-09-18T08:00:00Z' }]);
+    const block = screen.getByTestId('delivery-restart-rounds');
+    expect(within(block).getByText('交付启动记录')).toBeInTheDocument();
+    expect(within(block).getByText('交付启动')).toBeInTheDocument();
+    const status = within(block).getByText('启动失败');
+    expect(status).toHaveClass('aw-restart-status', 'is-failed');
+    expect(within(block).getByText('数字员工未上线')).toBeInTheDocument();
+    expect(within(block).queryByRole('button', { name: /全部/ })).not.toBeInTheDocument();
+    expect(within(block).queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it.each(['PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED'])('keeps started rounds in history without a success banner when dispatch is %s', async (status) => {
-    show(false, status, {}, [
-      { restart_round: 3, status: 'STARTED', dispatch_id: 88, gmt_modified: '2026-09-18T08:00:00Z' },
-    ]);
-
-    await userEvent.click(await screen.findByText('交付重启轮次（1）'));
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByText('已启动第 3 轮交付（Dispatch #88）')).not.toBeInTheDocument();
-    expect(screen.getByText('第 3 轮')).toBeInTheDocument();
-    expect(screen.getByText('Dispatch #88')).toBeInTheDocument();
-    expect(screen.getByText('已启动')).toBeInTheDocument();
+  it('shows the stopping-old-executions phase with its reason', () => {
+    renderLedger([{ restart_round: 2, status: 'STOPPING_OLD', stop_reason: '正在停止旧执行 1 个，停止确认后启动新轮次' }]);
+    const block = screen.getByTestId('delivery-restart-rounds');
+    expect(within(block).getByText('第 2 轮')).toBeInTheDocument();
+    expect(within(block).getByText('正在停止旧执行')).toHaveClass('aw-restart-status');
+    expect(within(block).getByText(/正在停止旧执行 1 个/)).toBeInTheDocument();
   });
 
-  it('explains why a restart round failed to start', async () => {
-    show(false, 'FAILED', {}, [
-      { restart_round: 2, status: 'FAILED', stop_reason: '调度器内部错误' },
+  it('keeps a normal latest round collapsed behind the fold control', async () => {
+    renderLedger([
+      { restart_round: 3, status: 'STARTED', dispatch_id: 88, source_dispatch_id: 86, gmt_create: '2026-09-18T08:00:00Z' },
+      { restart_round: 2, status: 'SUPERSEDED', dispatch_id: 80 },
     ]);
-
-    expect(await screen.findByText('第 2 轮交付启动失败')).toBeInTheDocument();
-    expect(screen.getByText('调度器内部错误')).toBeInTheDocument();
+    const block = screen.getByTestId('delivery-restart-rounds');
+    const fold = within(block).getByRole('button', { name: /全部 2 次/ });
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+    expect(within(block).queryByText('第 3 轮')).not.toBeInTheDocument();
+    await userEvent.click(fold);
+    expect(within(block).getByRole('button', { name: /收起轮次/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(block).getByText('第 3 轮')).toBeInTheDocument();
+    expect(within(block).getByText('已启动')).toHaveClass('aw-restart-status');
+    expect(within(block).getByText('Dispatch #88 · 替换 #86')).toBeInTheDocument();
+    expect(within(block).getByText('已被新轮次取代')).toBeInTheDocument();
   });
 
-  it('announces a deferred round with its planned start time', async () => {
-    show(false, 'PAUSED', {}, [
-      { restart_round: 1, status: 'STARTING', scheduled_start_at: '2026-09-19T08:00:00Z' },
-    ]);
-
-    expect(await screen.findByText(/正在启动第 1 轮交付，计划.+启动/)).toBeInTheDocument();
+  it('keeps historical failures collapsed when the current dispatch has no failing round', async () => {
+    renderLedger([
+      { restart_round: 10, status: 'FAILED', stop_reason: '数字员工未上线' },
+      { restart_round: 4, status: 'FAILED', stop_reason: '执行器容量不足' },
+    ], { currentDispatchId: 10046 });
+    const block = screen.getByTestId('delivery-restart-rounds');
+    expect(within(block).queryByText('第 10 轮')).not.toBeInTheDocument();
+    const fold = within(block).getByRole('button', { name: /全部 2 次/ });
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(fold);
+    expect(within(block).getByText('第 10 轮')).toBeInTheDocument();
   });
 
-  it('shows a superseded round as informational, never as a failure', async () => {
-    show(false, 'RUNNING', {}, [
-      { restart_round: 1, status: 'SUPERSEDED', stop_reason: '已被第 2 轮重启取代' },
-    ]);
-
-    expect(await screen.findByText('第 1 轮已被更新的重启轮次取代')).toBeInTheDocument();
-    expect(screen.getByText('已被第 2 轮重启取代')).toBeInTheDocument();
-    expect(screen.queryByText(/启动失败/)).not.toBeInTheDocument();
-    await userEvent.click(await screen.findByText('交付重启轮次（1）'));
-    expect(screen.getByText('已被新轮次取代')).toBeInTheDocument();
+  it('keeps a lone failed restart available after a previous dispatch', async () => {
+    renderLedger([{ restart_round: 1, status: 'FAILED', stop_reason: '数字员工未上线' }],
+      { currentDispatchId: 10046 });
+    const block = screen.getByTestId('delivery-restart-rounds');
+    const fold = within(block).getByRole('button', { name: /全部 1 次/ });
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+    expect(within(block).queryByText('数字员工未上线')).not.toBeInTheDocument();
+    await userEvent.click(fold);
+    expect(within(block).getByText('数字员工未上线')).toBeInTheDocument();
   });
 
-  it('labels an earlier round superseded by a newer one in the round history', async () => {
-    show(false, 'RUNNING', {}, [
-      { restart_round: 2, status: 'STARTED', dispatch_id: 90 },
-      { restart_round: 1, status: 'SUPERSEDED', stop_reason: '已被第 2 轮重启取代' },
-    ]);
-
-    await userEvent.click(await screen.findByText('交付重启轮次（2）'));
-    expect(screen.getByText('已被新轮次取代')).toBeInTheDocument();
+  it('expands a failure attached to the current dispatch', () => {
+    renderLedger([{ restart_round: 2, status: 'FAILED', dispatch_id: 10046, stop_reason: '执行器未连接' }],
+      { currentDispatchId: 10046 });
+    const block = screen.getByTestId('delivery-restart-rounds');
+    expect(within(block).getByText('第 2 轮')).toBeInTheDocument();
+    expect(within(block).getByText('执行器未连接')).toBeInTheDocument();
   });
 
-  it('renders without restart data for deliveries that were never restarted', async () => {
-    show(false, 'PENDING');
-    expect(await screen.findByRole('button', { name: '关闭交付' })).toBeInTheDocument();
-    expect(screen.queryByText(/交付重启轮次/)).not.toBeInTheDocument();
+  it('renders newest first regardless of input order', () => {
+    renderLedger([
+      { restart_round: 1, status: 'FAILED', stop_reason: '数字员工未上线' },
+      { restart_round: 3, status: 'FAILED', stop_reason: '执行器未连接' },
+      { restart_round: 2, status: 'SUPERSEDED', dispatch_id: 40 },
+    ]);
+    const block = screen.getByTestId('delivery-restart-rounds');
+    const rows = [...block.querySelectorAll('.aw-restart-no')].map(element => element.textContent);
+    expect(rows).toEqual(['第 3 轮', '第 2 轮', '交付启动']);
+  });
+
+  it.each(['STARTED', 'STARTING'])('renders nothing for a single normal round (%s)', status => {
+    const { container } = renderLedger([{ restart_round: 1, status, dispatch_id: 70 }]);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('summarises the latest failure for a non-focused block with a clamped reason', () => {
+    const long = 'SELECTION_INTERNAL_ERROR: 调度器内部错误，任务未派发；重试 3 次仍失败，请检查执行器连接与网络策略';
+    renderLedger([{ restart_round: 4, status: 'FAILED', stop_reason: long, gmt_create: '2026-09-18T08:00:00Z' }],
+      { variant: 'summary' });
+    const summary = screen.getByTestId('recovery-controls');
+    expect(summary).toHaveAttribute('role', 'alert');
+    expect(summary).toHaveClass('aw-agent-block-sub');
+    expect(within(summary).getByText('第 4 轮启动')).toBeInTheDocument();
+    expect(within(summary).getByText('启动失败')).toHaveClass('is-failed');
+    expect(within(summary).getByText(long)).toHaveAttribute('title', long);
+    expect(screen.queryByTestId('delivery-restart-rounds')).not.toBeInTheDocument();
+  });
+
+  it('collapses a normal multi-round block into one quiet fold line and expands in place', async () => {
+    renderLedger([
+      { restart_round: 3, status: 'STARTED', dispatch_id: 90 },
+      { restart_round: 2, status: 'STARTED', dispatch_id: 88 },
+    ], { variant: 'summary' });
+    const quiet = screen.getByRole('button', { name: '交付启动记录 · 2 次' });
+    expect(quiet).toHaveClass('aw-agent-block-sub', 'is-quiet');
+    expect(quiet).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(quiet);
+    const block = screen.getByTestId('delivery-restart-rounds');
+    expect(within(block).getByText('交付启动记录')).toBeInTheDocument();
+    expect(within(block).getByText('第 3 轮')).toBeInTheDocument();
+    expect(within(block).getByText('第 2 轮')).toBeInTheDocument();
+  });
+
+  it('downgrades a historical failure to the quiet fold for a non-focused block', () => {
+    renderLedger([
+      { restart_round: 3, status: 'STARTED', dispatch_id: 90 },
+      { restart_round: 2, status: 'FAILED', stop_reason: '数字员工未上线' },
+    ], { variant: 'summary', currentDispatchId: 90 });
+    const quiet = screen.getByRole('button', { name: '交付启动记录 · 2 次' });
+    expect(quiet).toHaveClass('is-quiet');
+    expect(screen.queryByTestId('recovery-controls')).not.toBeInTheDocument();
+    expect(screen.queryByText('数字员工未上线')).not.toBeInTheDocument();
+  });
+
+  it('hides a single successful start for a non-focused block', () => {
+    const { container } = renderLedger([{ restart_round: 1, status: 'STARTED', dispatch_id: 70 }], { variant: 'summary' });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('expands a failed summary into the full round list', async () => {
+    renderLedger([
+      { restart_round: 2, status: 'FAILED', stop_reason: '执行器未连接' },
+      { restart_round: 1, status: 'SUPERSEDED', dispatch_id: 30, source_dispatch_id: 29 },
+    ], { variant: 'summary' });
+    await userEvent.click(screen.getByRole('button', { name: /全部 2 次/ }));
+    const block = screen.getByTestId('delivery-restart-rounds');
+    expect(within(block).getByText('第 2 轮')).toBeInTheDocument();
+    expect(within(block).getByText('Dispatch #30 · 替换 #29')).toBeInTheDocument();
+    expect(screen.queryByTestId('recovery-controls')).not.toBeInTheDocument();
+  });
+
+  it('renders nothing for deliveries that were never restarted', () => {
+    const { container } = renderLedger([]);
+    expect(container).toBeEmptyDOMElement();
   });
 });
 
-
 describe('recovery placement', () => {
-  it('keeps execution and restart history out of the page header', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ data: { closed: false, executions: [{ dispatchId: 100, agentId: 20, attempt: 1, status: 'FAILED', recovery: {} }], restarts: [{ restart_round: 1, status: 'STARTED', dispatch_id: 100 }] } });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  it('keeps execution recovery and restart rounds out of the page header', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { closed: false, executions: [{ dispatchId: 100, agentId: 20, attempt: 1, status: 'FAILED', recovery: {} }], restarts: [{ restart_round: 1, status: 'FAILED', stop_reason: '数字员工未上线' }] } });
+    const client = newClient();
     render(<QueryClientProvider client={client}><RecoveryControls workitemId="10" /></QueryClientProvider>);
     await screen.findByRole('button', { name: '关闭交付' });
-    expect(screen.queryByText(/执行恢复与取消|交付重启轮次|Dispatch/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/执行恢复与取消|交付重启轮次|Dispatch|第 1 轮交付启动失败|数字员工未上线/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('delivery-restart-rounds')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('recovery-controls')).not.toBeInTheDocument();
   });
 
   it('shows only the selected dispatch and suppresses retry for an older attempt', async () => {
@@ -155,7 +283,7 @@ describe('recovery placement', () => {
       { dispatchId: 100, agentId: 20, attempt: 1, status: 'FAILED', error: 'old failure', recovery: {} },
       { dispatchId: 101, agentId: 20, attempt: 2, status: 'RUNNING', error: 'current detail', recovery: {} },
     ], restarts: [] } });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = newClient();
     const view = (dispatchId: number) => <QueryClientProvider client={client}><RecoveryControls workitemId="10" variant="execution" dispatchId={dispatchId} /></QueryClientProvider>;
     const { rerender } = render(view(100));
     await screen.findByText('old failure');
@@ -168,18 +296,55 @@ describe('recovery placement', () => {
   });
 });
 
-describe('delivery switch layout contract', () => {
-  it('renders the delivery state and its button as one wrap-friendly group in the action bar', async () => {
+describe('delivery action placement contract', () => {
+  it('renders the delivery descriptor only as a menu item, not an inline state/button group', async () => {
     show(false, 'SUCCEEDED');
-    const state = await screen.findByText('交付已开启');
+    const actionBar = await screen.findByTestId('workitem-action-bar');
+    expect(screen.queryByTestId('delivery-toggle')).not.toBeInTheDocument();
+    expect(within(actionBar).queryByText('交付已开启')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '关闭交付' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const menu = await openDeliveryMenu();
+    expect(menuItem(menu, '关闭交付')).toHaveClass('ant-dropdown-menu-item-danger');
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      '重新指派', '指派给真人', '立即对账', '关闭交付', '删除工单',
+    ]);
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('preserves the standalone button and original confirmation when closed=%s', async (closed) => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { closed, canReopen: true, executions: [] } });
+    render(<QueryClientProvider client={newClient()}><RecoveryControls workitemId="10" /></QueryClientProvider>);
+    const label = closed ? '重新开启交付' : '关闭交付';
+    const button = await screen.findByRole('button', { name: label });
     const group = screen.getByTestId('delivery-toggle');
-    expect(screen.getByTestId('workitem-action-bar')).toContainElement(group);
     expect(group).toHaveClass('aw-delivery-toggle');
-    expect(state).toHaveClass('aw-delivery-toggle-state');
-    // 根因回归：状态文字与按钮是该组的两个直接子元素，不再套一层带边框的装饰外框。
     expect(group.children).toHaveLength(2);
-    expect(group.children[0]).toBe(state);
-    expect(group.children[1]).toBe(screen.getByRole('button', { name: '关闭交付' }));
+    expect(group.children[0]).toHaveClass('aw-delivery-toggle-state');
+    expect(group.children[0]).toHaveTextContent(closed ? '交付已关闭' : '交付已开启');
+    expect(group.children[1]).toBe(button);
+    await userEvent.click(button);
+    const dialog = await screen.findByRole('dialog', { name: label });
+    expect(apiClient.post).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole('button', { name: label }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(1));
+    expect(apiClient.post).toHaveBeenCalledWith('/api/workitems/10/recovery', { action: closed ? 'reopen' : 'close', dispatchId: undefined, force: false });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('supplies null while loading then a structured action descriptor without invoking it', async () => {
+    const read = pending<{ data: unknown }>();
+    vi.mocked(apiClient.get).mockReturnValue(read.promise as never);
+    const renderActions = vi.fn((control: DeliveryControlAction | null) => actionBar(control));
+    render(<QueryClientProvider client={newClient()}><RecoveryControls workitemId="10" renderActions={renderActions} /></QueryClientProvider>);
+    expect(renderActions).toHaveBeenLastCalledWith(null);
+    expect(screen.getByRole('button', { name: '再次交付' })).toBeInTheDocument();
+    await act(async () => { read.resolve({ data: { closed: false, canReopen: true, executions: [] } }); });
+    await waitFor(() => expect(renderActions).toHaveBeenLastCalledWith({
+      label: '关闭交付', danger: true, disabled: false, disabledReason: null, pending: false, invoke: expect.any(Function),
+    }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(apiClient.post).not.toHaveBeenCalled();
   });
 });
 
@@ -193,55 +358,72 @@ describe('delivery switch state machine', () => {
       writes.push(write);
       return write.promise as never;
     });
-    renderDelivery();
+    const { renderActions } = renderDelivery();
 
-    await userEvent.click(await screen.findByRole('button', { name: '关闭交付' }));
-    const cancelled = await screen.findByRole('dialog');
-    await userEvent.click(within(cancelled).getByRole('button', { name: /返\s*回/ }));
+    const cancelled = await requestDeliveryAction();
+    await userEvent.click(within(cancelled).getByRole('button', { name: /^返\s*回$/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(apiClient.post).not.toHaveBeenCalled();
-    expect(screen.getByText('交付已开启')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: '关闭交付' }));
-    const closing = await screen.findByRole('dialog');
-    await userEvent.click(within(closing).getByRole('button', { name: '关闭交付' }));
+    const closing = await requestDeliveryAction();
+    const confirm = within(closing).getByRole('button', { name: '关闭交付' });
+    act(() => { fireEvent.click(confirm); fireEvent.click(confirm); });
     await waitFor(() => expect(writes).toHaveLength(1));
-    // 提交中：弹窗保持打开、状态文字不消失、重复确认不再发写请求。
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('交付已开启')).toBeInTheDocument();
-    await userEvent.click(within(closing).getByRole('button', { name: /关闭交付/ }));
+    await waitFor(() => expect(renderActions).toHaveBeenLastCalledWith(expect.objectContaining({ label: '关闭交付', pending: true })));
+    await userEvent.click(confirm);
     expect(apiClient.post).toHaveBeenCalledTimes(1);
 
     state = { closed: true, canReopen: true, executions: [] };
     await act(async () => { writes[0].resolve({ data: {} }); });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(await screen.findByText('交付已关闭')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '重新开启交付' })).toBeEnabled();
-
-    await userEvent.click(screen.getByRole('button', { name: '重新开启交付' }));
-    const reopening = await screen.findByRole('dialog');
+    const reopenedMenu = await openDeliveryMenu('重新开启交付');
+    expect(menuItem(reopenedMenu, '重新开启交付')).toHaveAttribute('aria-disabled', 'false');
+    await userEvent.click(menuItem(reopenedMenu, '重新开启交付'));
+    const reopening = await screen.findByRole('dialog', { name: '重新开启交付' });
     await userEvent.click(within(reopening).getByRole('button', { name: '重新开启交付' }));
     await waitFor(() => expect(writes).toHaveLength(2));
     expect(apiClient.post).toHaveBeenLastCalledWith('/api/workitems/10/recovery', { action: 'reopen', dispatchId: undefined, force: false });
 
     state = { closed: false, canReopen: true, executions: [] };
     await act(async () => { writes[1].resolve({ data: {} }); });
-    await waitFor(() => expect(screen.getByText('交付已开启')).toBeInTheDocument());
-    expect(screen.queryByText('交付已关闭')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const openMenu = await openDeliveryMenu();
+    expect(menuItem(openMenu, '关闭交付')).toHaveAttribute('aria-disabled', 'false');
+    expect(within(openMenu).queryByText('重新开启交付')).not.toBeInTheDocument();
+    expect(apiClient.post).toHaveBeenCalledTimes(2);
   });
 
   it('keeps reopen disabled while runs are unconfirmed and exposes the reason to keyboard focus', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { closed: true, canReopen: false, executions: [] } });
     renderDelivery();
-
-    const reopen = await screen.findByRole('button', { name: '重新开启交付' });
-    expect(reopen).toBeDisabled();
-    expect(screen.getByText('交付已关闭')).toBeInTheDocument();
-    const hint = screen.getByLabelText('请先结束未完成的取消操作');
+    const menu = await openDeliveryMenu('重新开启交付');
+    const reopen = menuItem(menu, '重新开启交付');
+    expect(reopen).toHaveAttribute('aria-disabled', 'true');
+    const hint = within(menu).getByLabelText('请先结束未完成的取消操作');
+    expect(hint.tagName).toBe('SPAN');
     expect(hint).toHaveAttribute('tabindex', '0');
     act(() => { hint.focus(); });
     expect(hint).toHaveFocus();
-    expect(await screen.findByText('请先结束未完成的取消操作')).toBeInTheDocument();
+    expect(await screen.findByRole('tooltip', { name: '请先结束未完成的取消操作' })).toBeInTheDocument();
+    await userEvent.click(hint);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('preserves a focusable disabled-reopen reason for the standalone button too', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { closed: true, canReopen: false, executions: [] } });
+    render(<QueryClientProvider client={newClient()}><RecoveryControls workitemId="10" /></QueryClientProvider>);
+    const reopen = await screen.findByRole('button', { name: '重新开启交付' });
+    expect(reopen).toBeDisabled();
+    const hint = screen.getByLabelText('请先结束未完成的取消操作');
+    expect(hint.tagName).toBe('SPAN');
+    expect(hint).toHaveAttribute('tabindex', '0');
+    act(() => { hint.focus(); });
+    expect(hint).toHaveFocus();
+    expect(await screen.findByRole('tooltip', { name: '请先结束未完成的取消操作' })).toBeInTheDocument();
+    await userEvent.click(reopen);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
@@ -252,18 +434,16 @@ describe('delivery switch state machine', () => {
     const error = vi.spyOn(message, 'error').mockImplementation(() => undefined as never);
     const success = vi.spyOn(message, 'success').mockImplementation(() => undefined as never);
     renderDelivery();
-
-    await userEvent.click(await screen.findByRole('button', { name: '关闭交付' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '关闭交付' }));
+    const dialog = await requestDeliveryAction();
+    await userEvent.click(within(dialog).getByRole('button', { name: '关闭交付' }));
     await act(async () => { write.reject(new Error('关闭交付失败')); });
-
     await waitFor(() => expect(error).toHaveBeenCalledWith('关闭交付失败'));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(apiClient.post).toHaveBeenCalledTimes(1);
     expect(success).not.toHaveBeenCalled();
-    expect(screen.getByText('交付已开启')).toBeInTheDocument();
-    expect(screen.queryByText('交付已关闭')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '关闭交付' })).toBeEnabled();
+    const menu = await openDeliveryMenu();
+    expect(menuItem(menu, '关闭交付')).toHaveAttribute('aria-disabled', 'false');
+    expect(within(menu).queryByText('重新开启交付')).not.toBeInTheDocument();
   });
 
   it('keeps the open state until the post-close readback arrives', async () => {
@@ -276,39 +456,80 @@ describe('delivery switch state machine', () => {
     });
     const write = pending<{ data: unknown }>();
     vi.mocked(apiClient.post).mockReturnValue(write.promise as never);
-    renderDelivery();
-
-    await userEvent.click(await screen.findByRole('button', { name: '关闭交付' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '关闭交付' }));
+    const { renderActions } = renderDelivery();
+    const dialog = await requestDeliveryAction();
+    await userEvent.click(within(dialog).getByRole('button', { name: '关闭交付' }));
     await act(async () => { write.resolve({ data: {} }); });
     await waitFor(() => expect(gets).toBeGreaterThanOrEqual(2));
-    // 写请求已成功但回读未到：不提前宣称已关闭，确认弹窗仍在提交中。
-    expect(screen.getByText('交付已开启')).toBeInTheDocument();
-    expect(screen.queryByText('交付已关闭')).not.toBeInTheDocument();
+    // 写成功但回读未到：不提前提供 reopen，弹窗仍在提交中。
+    await waitFor(() => expect(renderActions).toHaveBeenLastCalledWith(expect.objectContaining({ label: '关闭交付', pending: true })));
+    expect(screen.queryByText('重新开启交付')).not.toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
     await act(async () => { readback.resolve({ data: { closed: true, canReopen: true, executions: [] } }); });
-    await waitFor(() => expect(screen.getByText('交付已关闭')).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(menuItem(await openDeliveryMenu('重新开启交付'), '重新开启交付')).toHaveAttribute('aria-disabled', 'false');
   });
 
   it('never reuses one workitem delivery state on another workitem', async () => {
-    vi.mocked(apiClient.get).mockImplementation(async (url: string) => ({ data: url.includes('/11/')
-      ? { closed: true, canReopen: true, executions: [] }
-      : { closed: false, canReopen: true, executions: [] } }));
+    const read = pending<{ data: unknown }>();
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => url.includes('/11/')
+      ? read.promise : { data: { closed: false, canReopen: true, executions: [] } });
     const { view, rerender } = renderDelivery();
-
-    expect(await screen.findByRole('button', { name: '关闭交付' })).toBeInTheDocument();
+    const menu = await openDeliveryMenu();
+    expect(menuItem(menu, '关闭交付')).toBeInTheDocument();
     rerender(view('11'));
-    expect(await screen.findByText('交付已关闭')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '关闭交付' })).not.toBeInTheDocument();
+    await waitFor(() => expect(within(menu).queryByText('关闭交付')).not.toBeInTheDocument());
+    expect(within(menu).queryByText('重新开启交付')).not.toBeInTheDocument();
+    await act(async () => { read.resolve({ data: { closed: true, canReopen: true, executions: [] } }); });
+    await within(menu).findByText('重新开启交付');
+    expect(within(menu).queryByText('关闭交付')).not.toBeInTheDocument();
+    expect(apiClient.get).toHaveBeenCalledWith('/api/workitems/11/recovery');
+    expect(apiClient.post).not.toHaveBeenCalled();
   });
 
-  it('shows a load failure instead of guessing the delivery state', async () => {
+  it('shows a load failure instead of guessing the delivery state and retains all primary actions', async () => {
     vi.mocked(apiClient.get).mockRejectedValue(new Error('network'));
-    renderDelivery();
-
+    const start = vi.fn();
+    renderDelivery(start);
     expect(await screen.findByText('交付恢复状态加载失败，请刷新重试')).toBeInTheDocument();
+    const bar = screen.getByTestId('workitem-action-bar');
+    expect(within(bar).getByRole('button', { name: '流转状态' })).toBeInTheDocument();
+    expect(within(bar).getByRole('button', { name: '关注工单' })).toBeInTheDocument();
+    expect(within(bar).getByRole('button', { name: '添加评论' })).toBeInTheDocument();
+    await userEvent.click(within(bar).getByRole('button', { name: '再次交付' }));
+    expect(start).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('delivery-toggle')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '关闭交付' })).not.toBeInTheDocument();
+    await userEvent.click(within(bar).getByRole('button', { name: '更多工单操作' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).queryByText('关闭交付')).not.toBeInTheDocument();
+    expect(within(menu).queryByText('重新开启交付')).not.toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: '删除工单' })).toBeInTheDocument();
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('delivery recovery permission boundary', () => {
+  it.each([false, true])('retains the menu entry but denies read-only confirmation writes when closed=%s', async (closed) => {
+    useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_ONLY');
+    show(closed, 'SUCCEEDED');
+    const label = closed ? '重新开启交付' : '关闭交付';
+    const dialog = await requestDeliveryAction(label);
+    await userEvent.click(within(dialog).getByRole('button', { name: label }));
+    expect(await screen.findByText('当前为只读权限，恢复或关闭交付需要读写权限')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(apiClient.post).not.toHaveBeenCalled();
+    expect(menuItem(await openDeliveryMenu(label), label)).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  it('rechecks current permissions when a confirmation opened with write access is submitted', async () => {
+    show(false, 'SUCCEEDED');
+    const dialog = await requestDeliveryAction();
+    act(() => { useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_ONLY'); });
+    await userEvent.click(within(dialog).getByRole('button', { name: '关闭交付' }));
+    expect(await screen.findByText('当前为只读权限，恢复或关闭交付需要读写权限')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(apiClient.post).not.toHaveBeenCalled();
   });
 });

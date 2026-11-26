@@ -1,0 +1,70 @@
+/* 跨项目工单交接卡 · 原型 56 方案 A；令牌来自 shared/theme/appearance.ts，明暗主题都生效。 */
+.aw-ws-handoff {
+  width: 520px;
+  max-width: 100%;
+  padding: 24px;
+  text-align: left;
+  background: var(--aw-panel);
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  box-shadow: var(--aw-shadow-card);
+}
+.aw-ws-handoff-head { display: flex; align-items: flex-start; gap: 12px; }
+.aw-ws-handoff-mark {
+  width: 32px; height: 32px; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  flex: none; border-radius: 8px;
+  background: var(--aw-warning-bg); color: var(--aw-warning-deep);
+}
+.aw-ws-handoff-title { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; color: var(--aw-text); }
+.aw-ws-handoff-desc { margin: 4px 0 0; font-size: 14px; line-height: 20px; color: var(--aw-text-3); }
+
+.aw-ws-handoff-projects {
+  margin-top: 16px;
+  display: flex; align-items: stretch;
+  border: 1px solid var(--aw-border); border-radius: 6px;
+  overflow: hidden;
+}
+.aw-ws-handoff-project { flex: 1; min-width: 0; padding: 10px 12px; }
+.aw-ws-handoff-project + .aw-ws-handoff-project { border-left: 1px solid var(--aw-border); }
+.aw-ws-handoff-k { font-size: 12px; line-height: 16px; color: var(--aw-text-3); }
+.aw-ws-handoff-v {
+  margin-top: 2px; display: flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 14px; font-weight: 600; line-height: 20px; color: var(--aw-text);
+}
+.aw-ws-handoff-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-ws-handoff-mk {
+  width: 18px; height: 18px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 4px; font-size: 10px; font-weight: 600;
+  background: #8c8c8c; color: #fff;
+}
+.aw-ws-handoff-project.is-target .aw-ws-handoff-mk { background: var(--aw-primary); color: var(--aw-primary-ink); }
+.aw-ws-handoff-arrow {
+  width: 28px; flex: none; display: flex; align-items: center; justify-content: center;
+  color: var(--aw-text-disabled); border-left: 1px solid var(--aw-border);
+}
+
+.aw-ws-handoff-note { margin: 12px 0 0; font-size: 12px; line-height: 18px; color: var(--aw-text-3); }
+
+.aw-ws-handoff-fail {
+  margin: 14px 0 0; padding: 6px 10px;
+  display: flex; align-items: flex-start; gap: 6px;
+  font-size: 12px; line-height: 18px;
+  color: var(--aw-error-deep); background: var(--aw-error-bg);
+  border-radius: 4px;
+}
+.aw-ws-handoff-fail .aw-stroke-icon { flex: none; margin-top: 2px; }
+
+.aw-ws-handoff-actions { margin-top: 20px; display: flex; align-items: center; gap: 8px; }
+.aw-ws-handoff-primary.ant-btn { max-width: 320px; }
+.aw-ws-handoff-primary.ant-btn > span { overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 560px) {
+  .aw-ws-handoff { padding: 18px; }
+  .aw-ws-handoff-projects { flex-direction: column; }
+  .aw-ws-handoff-project + .aw-ws-handoff-project { border-left: 0; border-top: 1px solid var(--aw-border); }
+  .aw-ws-handoff-arrow { display: none; }
+  .aw-ws-handoff-actions { flex-direction: column; align-items: stretch; }
+  .aw-ws-handoff-primary.ant-btn { max-width: none; }
+}

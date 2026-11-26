@@ -21,7 +21,7 @@ describe('ChangePasswordPanel', () => {
     expect(await screen.findByPlaceholderText('请输入当前密码')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('请输入新密码')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('请再次输入新密码')).toBeInTheDocument();
-    expect(screen.getByText('修改密码')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '修改密码' })).toBeInTheDocument();
   });
 
   it('shows validation error when passwords do not match', async () => {
@@ -31,7 +31,7 @@ describe('ChangePasswordPanel', () => {
     await user.type(screen.getByPlaceholderText('请输入当前密码'), 'oldPass1');
     await user.type(screen.getByPlaceholderText('请输入新密码'), 'newPass1');
     await user.type(screen.getByPlaceholderText('请再次输入新密码'), 'different');
-    await user.click(screen.getByText('修改密码'));
+    await user.click(screen.getByRole('button', { name: '修改密码' }));
 
     expect(await screen.findByText('两次输入的密码不一致')).toBeInTheDocument();
   });
@@ -57,7 +57,7 @@ describe('ChangePasswordPanel', () => {
     await user.type(screen.getByPlaceholderText('请输入当前密码'), 'oldPass1');
     await user.type(screen.getByPlaceholderText('请输入新密码'), 'newPass123');
     await user.type(screen.getByPlaceholderText('请再次输入新密码'), 'newPass123');
-    await user.click(screen.getByText('修改密码'));
+    await user.click(screen.getByRole('button', { name: '修改密码' }));
 
     expect(await screen.findByText('密码已成功修改，请使用新密码登录。')).toBeInTheDocument();
   });
@@ -75,7 +75,7 @@ describe('ChangePasswordPanel', () => {
     await user.type(screen.getByPlaceholderText('请输入当前密码'), 'wrongOld');
     await user.type(screen.getByPlaceholderText('请输入新密码'), 'newPass123');
     await user.type(screen.getByPlaceholderText('请再次输入新密码'), 'newPass123');
-    await user.click(screen.getByText('修改密码'));
+    await user.click(screen.getByRole('button', { name: '修改密码' }));
 
     await waitFor(() => {
       expect(document.querySelector('.ant-message-error')).toBeTruthy();

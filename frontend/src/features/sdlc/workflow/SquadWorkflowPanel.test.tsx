@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { message } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
@@ -11,37 +11,10 @@ import { useAuthStore } from '@/shared/auth/store';
 import { SquadWorkflowPanel, WORKFLOW_FAST_POLL_WINDOW_MS, WORKFLOW_POLL_INTERVAL, WORKFLOW_SLOW_POLL_INTERVAL, workflowPollInterval } from './SquadWorkflowPanel';
 import type { WorkflowGraph } from './api';
 
-const graphInstances: Array<{
-  options: { data: { nodes: Array<{ id: string }>; edges: Array<{ id: string }> } };
-  events: Map<string, (event?: { target?: { id?: string } }) => void>;
-  destroyed: boolean;
-}> = [];
-
-vi.mock('@antv/g6', () => ({
-  Graph: class {
-    private readonly state: {
-      options: { data: { nodes: Array<{ id: string }>; edges: Array<{ id: string }> } };
-      events: Map<string, (event?: { target?: { id?: string } }) => void>;
-      destroyed: boolean;
-    } = {
-      options: { data: { nodes: [], edges: [] } },
-      events: new Map(),
-      destroyed: false,
-    };
-
-    constructor(options: { data: { nodes: Array<{ id: string }>; edges: Array<{ id: string }> } }) {
-      this.state.options = options;
-      graphInstances.push(this.state);
-    }
-    on(event: string, callback: (event?: { target?: { id?: string } }) => void) {
-      this.state.events.set(event, callback);
-    }
-    render() { return Promise.resolve(); }
-    fitView() { return Promise.resolve(); }
-    setSize() { /* noop */ }
-    destroy() { this.state.destroyed = true; }
-  },
-}));
+const renderedNodes = () => [...document.querySelectorAll<HTMLElement>('[data-workflow-node]')]
+  .map((element) => element.dataset.workflowNode);
+const renderedEdges = () => [...document.querySelectorAll<HTMLElement>('[data-edge-id]')]
+  .map((element) => element.dataset.edgeId);
 
 const readyGraph: WorkflowGraph = {
   schemaVersion: '1.0',
@@ -171,8 +144,8 @@ function renderPanel() {
   );
 }
 
-async function selectSquad() {
-  await userEvent.click(await screen.findByRole('combobox', { name: '选择小队' }));
+async function selectSquad(label = '选择小队') {
+  await userEvent.click(await screen.findByRole('combobox', { name: label }));
   await userEvent.click(await screen.findByText('交付小队', { selector: '.ant-select-item-option-content' }));
 }
 
@@ -189,7 +162,6 @@ describe('SquadWorkflowPanel', () => {
   beforeEach(() => {
     useAuthStore.getState().clear();
     useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
-    graphInstances.length = 0;
     vi.restoreAllMocks();
   });
 
@@ -231,38 +203,182 @@ describe('SquadWorkflowPanel', () => {
     renderPanel();
     await selectSquad();
 
-    await waitFor(() => expect(graphInstances.length).toBeGreaterThan(0));
-    expect(graphInstances[0].options.data.edges.map((edge) => edge.id)).toEqual(['edge:e-dev-review']);
-    expect(graphInstances[0].options.data.nodes.map((node) => node.id)).toEqual(['node:n-dev', 'node:n-review']);
+    await waitFor(() => expect(renderedNodes()).toEqual(['n-dev', 'n-review']));
+    expect(renderedEdges()).toEqual(['e-dev-review']);
     expect(screen.getByText(/生成于.*2026/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByText('全部路径'));
 
-    await waitFor(() => expect(graphInstances.length).toBeGreaterThan(1));
-    const latest = graphInstances[graphInstances.length - 1];
-    expect(latest.options.data.edges.map((edge) => edge.id)).toEqual(['edge:e-dev-review', 'edge:e-review-dev']);
-    expect(latest.options.data.nodes).toHaveLength(3);
+    await waitFor(() => expect(renderedNodes()).toHaveLength(3));
+    expect(renderedEdges()).toEqual(['e-dev-review', 'e-review-dev']);
   });
 
-  it('shows node, edge and finding details with verbatim evidence', async () => {
+  it('shows only one detail panel without edge details before selection', async () => {
     useWorkflow(view('READY', { graph: readyGraph }));
     renderPanel();
     await selectSquad();
-    await waitFor(() => expect(graphInstances.length).toBeGreaterThan(0));
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
 
-    await act(async () => {
-      graphInstances[0].events.get('node:click')?.({ target: { id: 'node:n-dev' } });
-    });
-    expect(await screen.findByText('实现需求并移交评审')).toBeInTheDocument();
-    expect(screen.getByText('提交代码与自测')).toBeInTheDocument();
-    expect(screen.getByText('负责实现')).toBeInTheDocument();
-    expect(screen.getByText('评审节点未配置 SDLC')).toBeInTheDocument();
+    expect(document.querySelectorAll('.aw-workflow-detail-panel')).toHaveLength(1);
+    expect(screen.getByText('点击节点或连线查看详情；下方为全部分析发现。')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '连线' })).not.toBeInTheDocument();
+    expect(screen.queryByText('完成后移交')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: '分析发现' })).getByText('评审节点未配置 SDLC')).toBeInTheDocument();
+  });
 
-    await act(async () => {
-      graphInstances[0].events.get('edge:click')?.({ target: { id: 'edge:e-dev-review' } });
-    });
-    expect(await screen.findByText('编码完成后移交评审')).toBeInTheDocument();
-    expect(screen.getByText('完成后移交')).toBeInTheDocument();
+  it('replaces node details with a selected handoff and returns to its source with fresh scroll state', async () => {
+    useWorkflow(view('READY', { graph: readyGraph }));
+    renderPanel();
+    await selectSquad();
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
+
+    await userEvent.click(screen.getByRole('button', { name: '开发' }));
+    const nodeRegion = await screen.findByRole('region', { name: '节点' });
+    expect(document.querySelectorAll('.aw-workflow-detail-panel')).toHaveLength(1);
+    expect(within(nodeRegion).getByText('实现需求并移交评审')).toBeInTheDocument();
+    expect(within(nodeRegion).getByText('提交代码与自测')).toBeInTheDocument();
+    expect(within(nodeRegion).getByText('负责实现')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '连线' })).not.toBeInTheDocument();
+    expect(screen.queryByText('完成后移交')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '返回节点' })).not.toBeInTheDocument();
+    expect(document.querySelector('[data-workflow-edge-label="e-dev-review"]')).toHaveAttribute('aria-pressed', 'false');
+    const nodeBody = nodeRegion.querySelector<HTMLElement>('.aw-workflow-detail-body')!;
+    nodeBody.scrollTop = 180;
+
+    await userEvent.click(within(nodeRegion).getByRole('button', { name: /移交.*评审/ }));
+    const edgeRegion = await screen.findByRole('region', { name: '连线' });
+    expect(document.querySelectorAll('.aw-workflow-detail-panel')).toHaveLength(1);
+    expect(within(edgeRegion).getByText('编码完成后移交评审')).toBeInTheDocument();
+    expect(within(edgeRegion).getByText('移交', { selector: '.ant-tag' })).toBeInTheDocument();
+    expect(within(edgeRegion).getByText('完成后移交')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '节点' })).not.toBeInTheDocument();
+    expect(screen.queryByText('实现需求并移交评审')).not.toBeInTheDocument();
+    expect(screen.queryByText('提交代码与自测')).not.toBeInTheDocument();
+    expect(screen.queryByText('负责实现')).not.toBeInTheDocument();
+    expect(screen.queryByText('负责实现需求')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: '分析发现' })).getByText('评审节点未配置 SDLC')).toBeInTheDocument();
+    const edgeBody = edgeRegion.querySelector<HTMLElement>('.aw-workflow-detail-body')!;
+    expect(edgeBody).not.toBe(nodeBody);
+    expect(edgeBody.scrollTop).toBe(0);
+    edgeBody.scrollTop = 90;
+
+    await userEvent.click(within(edgeRegion).getByRole('button', { name: '返回节点' }));
+    const restoredNodeRegion = await screen.findByRole('region', { name: '节点' });
+    expect(document.querySelectorAll('.aw-workflow-detail-panel')).toHaveLength(1);
+    expect(within(restoredNodeRegion).getByText('实现需求并移交评审')).toBeInTheDocument();
+    expect(within(restoredNodeRegion).getByText('提交代码与自测')).toBeInTheDocument();
+    expect(within(restoredNodeRegion).getByText('负责实现')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开发' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('region', { name: '连线' })).not.toBeInTheDocument();
+    expect(screen.queryByText('完成后移交')).not.toBeInTheDocument();
+    const restoredNodeBody = restoredNodeRegion.querySelector<HTMLElement>('.aw-workflow-detail-body')!;
+    expect(restoredNodeBody).not.toBe(nodeBody);
+    expect(restoredNodeBody).not.toBe(edgeBody);
+    expect(restoredNodeBody.scrollTop).toBe(0);
+  });
+
+  it.each([
+    ['condition label', '[data-workflow-edge-label="e-dev-review"]'],
+    ['hit path', 'path.aw-workflow-edge-hit[data-edge-id="e-dev-review"]'],
+  ])('opens only edge details through the graph %s', async (_entry, selector) => {
+    useWorkflow(view('READY', { graph: readyGraph }));
+    renderPanel();
+    await selectSquad();
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
+
+    const entry = document.querySelector(selector);
+    expect(entry).toBeInTheDocument();
+    await userEvent.click(entry as Element);
+
+    const edgeRegion = await screen.findByRole('region', { name: '连线' });
+    expect(document.querySelectorAll('.aw-workflow-detail-panel')).toHaveLength(1);
+    expect(within(edgeRegion).getByText('编码完成后移交评审')).toBeInTheDocument();
+    expect(within(edgeRegion).getByText('完成后移交')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '节点' })).not.toBeInTheDocument();
+    expect(screen.queryByText('实现需求并移交评审')).not.toBeInTheDocument();
+  });
+
+  it('selects the source and target nodes through accessible endpoint buttons', async () => {
+    useWorkflow(view('READY', { graph: readyGraph }));
+    renderPanel();
+    await selectSquad();
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
+
+    await userEvent.click(screen.getByRole('button', { name: '编码完成后移交评审' }));
+    const edgeRegion = await screen.findByRole('region', { name: '连线' });
+    expect(within(edgeRegion).getByRole('button', { name: '查看节点：开发' })).toHaveTextContent('开发');
+    expect(within(edgeRegion).getByRole('button', { name: '查看节点：评审' })).toHaveTextContent('评审');
+    await userEvent.click(within(edgeRegion).getByRole('button', { name: '查看节点：开发' }));
+
+    expect(within(await screen.findByRole('region', { name: '节点' })).getByText('实现需求并移交评审')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开发' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('region', { name: '连线' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '编码完成后移交评审' }));
+    await userEvent.click(within(await screen.findByRole('region', { name: '连线' })).getByRole('button', { name: '查看节点：评审' }));
+
+    expect(within(await screen.findByRole('region', { name: '节点' })).getByText('评审代码')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '评审' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '开发' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('region', { name: '连线' })).not.toBeInTheDocument();
+    expect(screen.queryByText('完成后移交')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.aw-workflow-detail-panel')).toHaveLength(1);
+  });
+
+  it('keeps nodes without outgoing handoffs and human nodes usable', async () => {
+    useWorkflow(view('READY', {
+      graph: {
+        ...readyGraph,
+        workflow: { ...readyGraph.workflow, edges: [readyGraph.workflow.edges[0]] },
+      },
+    }));
+    renderPanel();
+    await selectSquad();
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
+
+    await userEvent.click(screen.getByRole('button', { name: '评审' }));
+    const reviewRegion = await screen.findByRole('region', { name: '节点' });
+    expect(within(reviewRegion).getByText('评审代码')).toBeInTheDocument();
+    expect(within(reviewRegion).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByRole('region', { name: '连线' })).not.toBeInTheDocument();
+    expect(screen.queryByText('完成后移交')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('全部路径'));
+    await userEvent.click(await screen.findByRole('button', { name: '发布审批' }));
+    const humanRegion = await screen.findByRole('region', { name: '节点' });
+    expect(within(humanRegion).getByText('人工审批发布')).toBeInTheDocument();
+    expect(within(humanRegion).getByText('人工', { selector: '.ant-tag' })).toBeInTheDocument();
+    expect(within(humanRegion).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: '发布审批' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('region', { name: '连线' })).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.aw-workflow-detail-panel')).toHaveLength(1);
+    expect(within(screen.getByRole('region', { name: '分析发现' })).getByText('评审节点未配置 SDLC')).toBeInTheDocument();
+  });
+
+  it('translates handoff navigation in English without translating user-written node names or evidence', async () => {
+    await i18n.changeLanguage('en-US');
+    useWorkflow(view('READY', { graph: readyGraph }));
+    renderPanel();
+    await selectSquad('Select a squad');
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
+
+    await userEvent.click(screen.getByRole('button', { name: '编码完成后移交评审' }));
+    const edgeRegion = await screen.findByRole('region', { name: 'Edge' });
+    expect(within(edgeRegion).getByRole('button', { name: 'Back to node' })).toHaveTextContent('Back to node');
+    expect(within(edgeRegion).getByRole('button', { name: 'View node: 开发' })).toHaveTextContent('开发');
+    expect(within(edgeRegion).getByRole('button', { name: 'View node: 评审' })).toHaveTextContent('评审');
+    expect(within(edgeRegion).getByText('完成后移交')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Node' })).not.toBeInTheDocument();
+    await userEvent.click(within(edgeRegion).getByRole('button', { name: 'View node: 开发' }));
+    expect(within(await screen.findByRole('region', { name: 'Node' })).getByText('实现需求并移交评审')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '编码完成后移交评审' }));
+    await userEvent.click(within(await screen.findByRole('region', { name: 'Edge' })).getByRole('button', { name: 'Back to node' }));
+    expect(within(await screen.findByRole('region', { name: 'Node' })).getByText('负责实现')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开发' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('region', { name: 'Edge' })).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.aw-workflow-detail-panel')).toHaveLength(1);
+    expect(within(screen.getByRole('region', { name: 'Findings' })).getByText('评审节点未配置 SDLC')).toBeInTheDocument();
   });
 
   it('reports an empty squad without offering generation', async () => {
@@ -288,7 +404,7 @@ describe('SquadWorkflowPanel', () => {
     await selectSquad();
 
     expect(await screen.findByText('协作图中没有可展示的节点')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /刷\s*新/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /刷\s*新/ }).length).toBeGreaterThan(0);
   });
 
   it('retries a timed-out generation with the retry flag', async () => {
@@ -323,7 +439,7 @@ describe('SquadWorkflowPanel', () => {
 
     expect(await screen.findByText('配置内容过大')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /重\s*试/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /刷\s*新/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /刷\s*新/ }).length).toBeGreaterThan(0);
   });
 
   it('switches to the fresh snapshot when the online configuration changed', async () => {
@@ -359,7 +475,7 @@ describe('SquadWorkflowPanel', () => {
     await selectSquad();
 
     expect(await screen.findByText('当前工作空间已有进行中的生成任务')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /刷\s*新/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /刷\s*新/ }).length).toBeGreaterThan(0);
   });
 
   it('recovers from a transient load error with the refresh button', async () => {
@@ -386,10 +502,10 @@ describe('SquadWorkflowPanel', () => {
     await selectSquad();
 
     expect(await screen.findByText('当前工作空间已有进行中的生成任务')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /刷\s*新/ }));
+    await userEvent.click(screen.getAllByRole('button', { name: /刷\s*新/ })[0]);
 
-    await waitFor(() => expect(graphInstances.length).toBeGreaterThan(0));
-    expect(screen.getByText('小队协作全景')).toBeInTheDocument();
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
+    expect(screen.getByText('交付流程 / DELIVERY WORKFLOW')).toBeInTheDocument();
   });
 
   it('resets the view mode and selection when another squad is selected', async () => {
@@ -407,30 +523,21 @@ describe('SquadWorkflowPanel', () => {
     );
     renderPanel();
     await selectSquad();
-    await waitFor(() => expect(graphInstances.length).toBeGreaterThan(0));
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
 
     await userEvent.click(screen.getByText('全部路径'));
-    await waitFor(() => {
-      const latest = graphInstances[graphInstances.length - 1];
-      expect(latest.options.data.edges).toHaveLength(2);
-    });
-    await act(async () => {
-      const latest = graphInstances[graphInstances.length - 1];
-      latest.events.get('node:click')?.({ target: { id: 'node:n-dev' } });
-    });
+    await waitFor(() => expect(renderedEdges()).toHaveLength(2));
+    await userEvent.click(screen.getByRole('button', { name: '开发' }));
     expect(await screen.findByText('实现需求并移交评审')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('combobox', { name: '选择小队' }));
     await userEvent.click(await screen.findByText('另一个小队', { selector: '.ant-select-item-option-content' }));
     expect(await screen.findByRole('button', { name: '生成协作图' })).toBeInTheDocument();
 
-    const beforeSwitchBack = graphInstances.length;
     await userEvent.click(screen.getByRole('combobox', { name: '选择小队' }));
     await userEvent.click(await screen.findByText('交付小队', { selector: '.ant-select-item-option-content' }));
 
-    await waitFor(() => expect(graphInstances.length).toBeGreaterThan(beforeSwitchBack));
-    const latest = graphInstances[graphInstances.length - 1];
-    expect(latest.options.data.edges.map((edge) => edge.id)).toEqual(['edge:e-dev-review']);
+    await waitFor(() => expect(renderedEdges()).toEqual(['e-dev-review']));
     expect(screen.queryByText('实现需求并移交评审')).not.toBeInTheDocument();
   });
 
@@ -438,16 +545,14 @@ describe('SquadWorkflowPanel', () => {
     useWorkflow(view('READY', { graph: escalationGraph }));
     renderPanel();
     await selectSquad();
-    await waitFor(() => expect(graphInstances.length).toBeGreaterThan(0));
+    await waitFor(() => expect(renderedNodes().length).toBeGreaterThan(0));
+    await userEvent.click(screen.getByText('全部路径'));
+    await waitFor(() => expect(renderedEdges()).toHaveLength(3));
 
-    await act(async () => {
-      graphInstances[0].events.get('edge:click')?.({ target: { id: 'edge:e-review-dev' } });
-    });
+    await userEvent.click(document.querySelector('[data-edge-id="e-review-dev"]') as HTMLElement);
     expect((await screen.findByText('返工', { selector: '.ant-tag' })).closest('.ant-tag')).toHaveClass('ant-tag-red');
 
-    await act(async () => {
-      graphInstances[0].events.get('edge:click')?.({ target: { id: 'edge:e-escalate' } });
-    });
-    expect((await screen.findByText('升级')).closest('.ant-tag')).toHaveClass('ant-tag-orange');
+    await userEvent.click(document.querySelector('[data-edge-id="e-escalate"]') as HTMLElement);
+    expect((await screen.findByText('升级', { selector: '.ant-tag' })).closest('.ant-tag')).toHaveClass('ant-tag-orange');
   });
 });

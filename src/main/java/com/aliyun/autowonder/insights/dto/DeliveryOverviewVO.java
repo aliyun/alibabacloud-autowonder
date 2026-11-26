@@ -42,6 +42,8 @@ public class DeliveryOverviewVO {
     @Setter
     public static class Delivered {
         private long count;
+        /** 区间内逐日完成数（Asia/Shanghai 自然日），无数据的日期零填充。 */
+        private List<DailyCount> daily;
         /** 完成数 / 区间天数，一位小数。 */
         private Double dailyAverage;
         /** 紧邻的前一个等时长区间。 */

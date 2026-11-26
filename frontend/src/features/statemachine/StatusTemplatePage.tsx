@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { PageHead } from '@/shared/ui/PageHead';
 import { useState, useEffect } from 'react';
-import { Card, Tabs, Spin, Empty, Button } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Tabs, Spin, Empty, Button } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { WorkType } from './types';
 import { TemplateSelector } from './components/TemplateSelector';
 import { StatusNodeEditor } from './components/StatusNodeEditor';
@@ -14,6 +14,7 @@ import {
   useCreateTransition, useUpdateTransition, useDeleteTransition,
 } from './hooks';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+import './StatusTemplatePage.css';
 
 export function StatusTemplatePage() {
   const { t } = useTranslation('statemachine');
@@ -50,11 +51,14 @@ export function StatusTemplatePage() {
   const deleteTransitionMut = useDeleteTransition(selectedId || 0);
 
   return (
-    <Card className="aw-content-card" title={<PageHeading title={t('page.title')} />}
-      extra={<Button type="primary" icon={<PlusOutlined aria-hidden="true" />} onClick={() => accessCommand(
-        'READ_WRITE', t('actions.createTemplate'), () => setCreateOpen(true),
-      )}>{t('page.create')}</Button>}
-    >
+    <>
+      <PageHead
+        title={t('page.title')}
+        description={t('page.description')}
+        actions={<Button type="primary" icon={<AwStrokeIcon name="plus" />} onClick={() => accessCommand(
+          'READ_WRITE', t('actions.createTemplate'), () => setCreateOpen(true),
+        )}>{t('page.create')}</Button>}
+      />
       <Tabs
         activeKey={activeType}
         onChange={(k) => setActiveType(k as WorkType)}
@@ -87,7 +91,7 @@ export function StatusTemplatePage() {
           />
 
           {detailLoading ? <Spin style={{ marginTop: 24 }} /> : detail ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginTop: 16 }}>
+            <div>
               <StatusNodeEditor
                 nodes={detail.nodes}
                 onCreate={(data) => accessCommand(
@@ -133,6 +137,6 @@ export function StatusTemplatePage() {
           ) : <Empty description={t('page.empty')} style={{ marginTop: 24 }} />}
         </>
       )}
-    </Card>
+    </>
   );
 }

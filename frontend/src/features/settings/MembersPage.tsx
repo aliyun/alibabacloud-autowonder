@@ -1,18 +1,22 @@
 import { useTranslation } from 'react-i18next';
-import { formatDateTime, formatNumber } from '@/shared/i18n/format';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { formatNumber } from '@/shared/i18n/format';
+import { PageHead } from '@/shared/ui/PageHead';
+import { TableFooter } from '@/shared/ui/TableCard';
+import { Toolbar } from '@/shared/ui/Toolbar';
+import { StatusTag, type StatusColorKey } from '@/shared/ui/StatusTag';
+import { TimeCell } from '@/shared/ui/TimeCell';
+import { humanAvatarColor } from '@/shared/ui/AiIdentity';
 import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Avatar,
   Button,
-  Card,
   Popconfirm,
   Select,
   Space,
   Tabs,
-  Tag,
   Tooltip} from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { Table } from '@/shared/theme/ThemedTable';
 import type { ColumnsType } from 'antd/es/table';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
@@ -37,6 +41,14 @@ import type { MemberVO } from './api';
 
 export const DEFAULT_MEMBERS_TAB = 'members';
 const MEMBERS_TAB_KEYS: readonly string[] = [DEFAULT_MEMBERS_TAB, 'roles', 'requests'];
+
+const ROLE_TAG_COLOR: Record<string, StatusColorKey> = {
+  ADMIN: 'green',
+  READ_WRITE: 'plain',
+  READ_ONLY: 'gray',
+};
+
+const MISSING = '-';
 
 /** Whitelisted so an unknown `tab` value keeps the historical default instead of blanking the pane. */
 export function resolveMembersTab(tabParam: string | null): string {
@@ -134,55 +146,92 @@ export function MembersPage() {
     {
       title: t('user'),
       key: 'user',
-      render: (_, member) => (
-        <div>
-          <Space size={6}>
-            <span style={{ fontWeight: 500 }}>{member.nickname || member.username}</span>
-            {member.owner && <Tag color="gold">{t('workspaceOwner')}</Tag>}
-          </Space>
-          <div style={{ fontSize: 12, color: 'var(--aw-muted)' }}>{member.email}</div>
-        </div>
-      ),
+      render: (_, member) => {
+        const displayName = member.nickname || member.username;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Avatar
+              aria-hidden="true"
+              size={20}
+              style={{ backgroundColor: humanAvatarColor(displayName), flexShrink: 0, fontSize: 11 }}
+            >
+              {displayName.slice(0, 1)}
+            </Avatar>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600 }}>{displayName}</span>
+                {member.owner && (
+                  <Tooltip title={t('workspaceOwner')}>
+                    <span
+                      aria-label={t('workspaceOwner')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        color: 'var(--aw-warning-deep)',
+                        cursor: 'default',
+                      }}
+                    >
+                      <AwStrokeIcon name="crown" size={12} />
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--aw-text-3)' }}>{member.email || MISSING}</div>
+            </div>
+          </div>
+        );
+      },
     },
     {
       title: t('role'),
       key: 'role',
-      render: (_, member) => <Tag color={member.accessLevel === 'ADMIN' ? 'green' : undefined}>
-        {workspaceRoleLabel({ id: member.roleId, code: member.roleCode, name: member.roleName })}
-      </Tag>,
+      width: 110,
+      render: (_, member) => (
+        <StatusTag
+          size="sm"
+          label={workspaceRoleLabel({ id: member.roleId, code: member.roleCode, name: member.roleName })}
+          colorKey={ROLE_TAG_COLOR[member.accessLevel] ?? 'plain'}
+          dot={member.accessLevel === 'ADMIN'}
+        />
+      ),
     },
     {
       title: t('tags'),
       dataIndex: 'identityTags',
+      width: 220,
       render: (tags: string[]) => (
         <Space size={4} wrap>
           {tags.length
-            ? tags.map((tag) => <Tag key={tag}>{tag}</Tag>)
-            : <span style={{ color: 'var(--aw-muted)' }}>-</span>}
+            ? tags.map((tag) => <StatusTag key={tag} size="sm" label={tag} colorKey="gray" />)
+            : <span style={{ color: 'var(--aw-text-3)' }}>{MISSING}</span>}
         </Space>
       ),
     },
     {
       title: t('joinedAt'),
       dataIndex: 'joinedAt',
-      render: (value: string) => value ? formatDateTime(value, { year: 'numeric', month: 'numeric', day: 'numeric' }) : '-',
+      width: 150,
+      render: (value: string) => <TimeCell value={value} />,
     },
     {
       title: t('actions'),
       key: 'action',
+      width: 104,
       render: (_, member) => (
-        <Space>
+        <Space size={6}>
           {adminOnlyTip(
             <Button
-              type="link"
+              type="text"
               size="small"
+              className="aw-op-btn"
+              title={t('editMember')}
+              aria-label={t('editMember')}
               disabled={!isAdmin}
+              icon={<AwStrokeIcon name="edit" />}
               onClick={() => accessCommand('ADMIN', t('editMember'), () => setEditTarget(member))}
-            >
-              {t('edit')}
-            </Button>,
+            />,
           )}
-          {adminOnlyTip(
+          {!member.owner && adminOnlyTip(
             <Popconfirm
               title={t('removeConfirm')}
               open={removeConfirmUserId === member.userId}
@@ -198,7 +247,15 @@ export function MembersPage() {
                   onSettled: () => setRemoveConfirmUserId(undefined),
                 }))}
             >
-              <Button type="link" size="small" danger disabled={!isAdmin}>{t('remove')}</Button>
+              <Button
+                type="text"
+                size="small"
+                className="aw-op-btn aw-op-btn--del"
+                title={t('removeMember')}
+                aria-label={t('removeMember')}
+                disabled={!isAdmin}
+                icon={<AwStrokeIcon name="trash" />}
+              />
             </Popconfirm>,
           )}
         </Space>
@@ -206,34 +263,84 @@ export function MembersPage() {
     },
   ];
 
+  const pagedMembers = filteredMembers.slice(
+    (memberPage - 1) * memberPageSize,
+    memberPage * memberPageSize,
+  );
+
+  const membersPane = (
+    <>
+      <Toolbar
+        left={(
+          <Select
+            aria-label={t('filterRole')} style={{ width: 180 }}
+            options={[
+              { label: t('allMembers', { count: members.length, total: formatNumber(members.length) }), value: 'ALL' as const },
+              ...roles.map((role) => ({ label: workspaceRoleLabel(role), value: role.id })),
+            ]}
+            value={roleFilter}
+            onChange={(value) => { setRoleFilter(value); setMemberPage(1); }}
+          />
+        )}
+        right={adminOnlyTip(
+          <Button
+            type="primary"
+            icon={<AwStrokeIcon name="plus" />}
+            aria-label={t('addMember')}
+            disabled={!isAdmin}
+            onClick={() => accessCommand('ADMIN', t('addMember'), () => setAddMemberOpen(true))}
+          >
+            {t('addMember')}
+          </Button>,
+        )}
+      />
+      <Table
+        rowKey="userId"
+        columns={columns}
+        dataSource={pagedMembers}
+        loading={isLoading}
+        pagination={false}
+        scroll={{ x: 880 }}
+      />
+      <TableFooter
+        total={filteredMembers.length}
+        page={memberPage}
+        pageSize={memberPageSize}
+        totalText={t('totalMembers', { count: filteredMembers.length, total: formatNumber(filteredMembers.length) })}
+        onPageChange={(nextPage, nextSize) => {
+          setMemberPage(nextPage);
+          if (nextSize !== memberPageSize) setMemberPageSize(nextSize);
+        }}
+        onPageSizeChange={(size) => {
+          setMemberPageSize(size);
+          setMemberPage(1);
+        }}
+      />
+    </>
+  );
+
   return (
-    <Card className="aw-content-card" title={<PageHeading title={t('members')} />}
-      extra={
-        <Space size={12}>
-          {adminOnlyTip(
-            <Button
-              disabled={!isAdmin}
-              onClick={() =>
-                accessCommand('ADMIN', t('transferOwner'), () => setOwnerTransferOpen(true))}
-            >
-              {t('transferOwner')}
-            </Button>,
-          )}
-          {activeTab === 'members' && adminOnlyTip(
-            <Button
-              type="primary"
-              icon={<PlusOutlined aria-hidden="true" />}
-              aria-label={t('addMember')}
-              disabled={!isAdmin}
-              onClick={() => accessCommand('ADMIN', t('addMember'), () => setAddMemberOpen(true))}
-            >
-              {t('addMember')}
-            </Button>,
-          )}
-        </Space>
-      }
-    >
+    <>
+      <PageHead
+        title={t('members')}
+        description={t('membersDescription')}
+        actions={
+          <Space size={12} wrap>
+            {adminOnlyTip(
+              <Button
+                icon={<AwStrokeIcon name="crown" />}
+                disabled={!isAdmin}
+                onClick={() =>
+                  accessCommand('ADMIN', t('transferOwner'), () => setOwnerTransferOpen(true))}
+              >
+                {t('transferOwner')}
+              </Button>,
+            )}
+          </Space>
+        }
+      />
       <Tabs
+        className="aw-list-tabs"
         activeKey={activeTab}
         onChange={(key) => {
           const next = new URLSearchParams(searchParams);
@@ -247,45 +354,13 @@ export function MembersPage() {
         items={[
           {
             key: 'members',
-            label: t('members'),
-            children: (
-              <>
-                <div style={{ marginBottom: 16 }}>
-                  <Select
-                    aria-label={t('filterRole')} style={{ minWidth: 180 }}
-                    options={[
-                      { label: t('allMembers', { count: members.length, total: formatNumber(members.length) }), value: 'ALL' as const },
-                      ...roles.map((role) => ({ label: workspaceRoleLabel(role), value: role.id })),
-                    ]}
-                    value={roleFilter}
-                    onChange={(value) => { setRoleFilter(value); setMemberPage(1); }}
-                  />
-                </div>
-                <Table
-                  rowKey="userId"
-                  columns={columns}
-                  dataSource={filteredMembers}
-                  loading={isLoading}
-                  pagination={{
-                    current: memberPage,
-                    pageSize: memberPageSize,
-                    total: filteredMembers.length,
-                    onChange: (nextPage, nextSize) => {
-                      setMemberPage(nextPage);
-                      if (nextSize !== memberPageSize) setMemberPageSize(nextSize);
-                    },
-                    showSizeChanger: true,
-                    showTotal: (total) => t('totalMembers', { count: total, total: formatNumber(total) }),
-                  }}
-                  scroll={{ x: 880 }}
-                />
-              </>
-            ),
+            label: t('membersTab'),
+            children: membersPane,
           },
-          { key: 'roles', label: t('roles'), children: <WorkspaceRolesPanel isAdmin={isAdmin} /> },
+          { key: 'roles', label: t('rolesTab'), children: <WorkspaceRolesPanel isAdmin={isAdmin} /> },
           {
             key: 'requests',
-            label: t('accessRequests'),
+            label: t('accessRequestsTab'),
             children: <AccessRequestsPanel />,
           },
         ]}
@@ -312,6 +387,6 @@ export function MembersPage() {
         onClose={() => setOwnerTransferOpen(false)}
         onConfirm={handleTransferOwner}
       />
-    </Card>
+    </>
   );
 }

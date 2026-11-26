@@ -66,7 +66,8 @@ it('switches cached hub and independent cards, keeps authored names literal and 
   expect(screen.getByRole('heading', { name: 'Agent management' })).toBeInTheDocument();
   expect(screen.getByRole('tab', { name: 'Agents' })).toBeInTheDocument();
   expect(screen.getByRole('tab', { name: /Version reviews/ })).toBeInTheDocument();
-  expect(screen.getByRole('tab', { name: 'Squads' })).toBeInTheDocument();
+  // 小队已独立成页，Hub 只剩列表与审核两个 Tab。
+  expect(screen.queryByRole('tab', { name: 'Squads' })).not.toBeInTheDocument();
   expect(screen.getByText('QA engineer')).toBeInTheDocument();
   expect(screen.getByText('1/2 online')).toBeInTheDocument();
   expect(screen.getByText(formatDateTime(agent.gmtCreate, { dateStyle: 'medium' }))).toBeInTheDocument();
@@ -77,11 +78,44 @@ it('switches cached hub and independent cards, keeps authored names literal and 
   expect(screen.getByText('测试工程师')).toBeInTheDocument();
   await user.click(screen.getByText('列表'));
   await language('en-US');
-  expect(screen.getByRole('columnheader', { name: 'Role' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Name / Role' })).toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: 'Filter by status' })).toBeInTheDocument();
   expect(screen.getByText('QA engineer')).toBeInTheDocument();
   await user.click(screen.getByText('Platform agents'));
-  expect(screen.queryByRole('button', { name: /Create/ })).not.toBeInTheDocument();
+  // 新建在数字员工 Tab 工具栏右侧，平台智能体不可新建。
+  expect(screen.queryByRole('button', { name: /Create an agent/ })).not.toBeInTheDocument();
+});
+
+it('translates list search, role choices, refresh, combined header and no-matches without resetting filters', async () => {
+  window.localStorage.setItem('autowonder.agents.view', 'list');
+  let requests = 0;
+  server.use(http.get('/api/agents', () => { requests += 1; return ok([agent, { ...agent, id: 2, name: 'Other', roleCode: 'BACKEND_DEV' }]); }));
+  renderRoute('/list');
+  await screen.findByText('<em>员工</em>');
+  const search = screen.getByRole('textbox', { name: '搜索名称或 ID' });
+  const filter = screen.getByRole('combobox', { name: '按角色筛选' });
+  await userEvent.click(filter);
+  await userEvent.click(screen.getByText('测试工程师', { selector: '.ant-select-item-option-content' }));
+  await userEvent.type(search, 'not found');
+  expect(screen.getByText('没有匹配的数字员工')).toBeInTheDocument();
+  await language('en-US');
+  expect(screen.getByRole('textbox', { name: 'Search by name or ID' })).toBe(search);
+  expect(search).toHaveValue('not found');
+  expect(search).toHaveAttribute('placeholder', 'Search by name or ID');
+  expect(screen.getByRole('combobox', { name: 'Filter by role' })).toBe(filter);
+  expect(screen.getByText('QA engineer', { selector: '.ant-select-selection-item' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Name / Role' })).toBeInTheDocument();
+  expect(screen.getByText('No matching agents')).toBeInTheDocument();
+  await userEvent.clear(search);
+  expect(screen.getByRole('button', { name: 'View details and configuration for <em>员工</em>' })).toBeInTheDocument();
+  expect(screen.queryByText('Other')).not.toBeInTheDocument();
+  await userEvent.click(filter);
+  expect(screen.getByText('Backend developer', { selector: '.ant-select-item-option-content' })).toBeInTheDocument();
+  await language('zh-CN');
+  expect(screen.getByText('测试工程师', { selector: '.ant-select-selection-item' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: '名称 / 角色' })).toBeInTheDocument();
+  expect(requests).toBe(1);
 });
 
 it('switches detail configuration, draft roles and historical row codes with missing/unknown raw fallbacks', async () => {
@@ -101,14 +135,12 @@ it('switches detail configuration, draft roles and historical row codes with mis
   // The inline diff repeats role/permission/name labels; collapse it before asserting the tabs.
   await user.click(screen.getByRole('button', { name: 'Hide differences' }));
   await waitFor(() => expect(screen.queryByText(/Backend developer/)).not.toBeInTheDocument());
-  await user.click(screen.getByRole('tab', { name: 'Repository permissions (1)' }));
+  await user.click(screen.getByRole('tab', { name: 'Configuration' }));
   expect(await screen.findByText('Read only')).toBeInTheDocument();
   expect(screen.getByText('Unrestricted')).toBeInTheDocument();
   expect(screen.getByText('<em>仓库</em>')).toBeInTheDocument();
-  await user.click(screen.getByRole('tab', { name: 'Capabilities (1)' }));
-  expect(await screen.findByText('<em>能力</em>')).toBeInTheDocument();
-  await user.click(screen.getByRole('tab', { name: 'Environment variables (1)' }));
-  expect(await screen.findByText('<em>变量</em>')).toBeInTheDocument();
+  expect(screen.getByText('<em>能力</em>')).toBeInTheDocument();
+  expect(screen.getByText('<em>变量</em>')).toBeInTheDocument();
   expect(screen.getByText('No description')).toBeInTheDocument();
   await user.click(screen.getByRole('tab', { name: 'Version history' }));
   const table = screen.getAllByRole('table').at(-1)!;
@@ -264,7 +296,7 @@ it('retains canonical status filters and translates fresh options while preservi
     statuses.push(new URL(request.url).searchParams.get('status'));
     return ok([{ ...agent, roleCode: 'constructor', roleName: '<b>用户角色</b>' }]);
   }));
-  const { container } = renderRoute('/list');
+  renderRoute('/list');
   await screen.findByText('<em>员工</em>');
   const filter = screen.getByRole('combobox', { name: '按状态筛选' });
   await user.click(filter);
@@ -274,7 +306,7 @@ it('retains canonical status filters and translates fresh options while preservi
   expect(screen.getByRole('combobox', { name: 'Filter by status' })).toBe(filter);
   expect(screen.getByText('Not enabled', { selector: '.ant-select-selection-item' })).toBeInTheDocument();
   expect(screen.getByText('<b>用户角色</b>')).toBeInTheDocument();
-  expect(container.querySelector('b')).toBeNull();
+  expect(screen.queryByText('用户角色')).not.toBeInTheDocument();
   await user.click(filter);
   expect(screen.getByText('Pending review', { selector: '.ant-select-item-option-content' })).toBeInTheDocument();
   await language('zh-CN');

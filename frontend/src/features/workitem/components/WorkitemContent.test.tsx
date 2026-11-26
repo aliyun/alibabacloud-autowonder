@@ -45,6 +45,14 @@ describe('WorkitemContent copy entry', () => {
 
     expect(screen.queryByRole('button', { name: '复制内容' })).not.toBeInTheDocument();
   });
+
+  it('hides the copy entry while editing', async () => {
+    render(<WorkitemContent title="示例工单" contentMd="# 背景" />);
+
+    await userEvent.click(screen.getByRole('button', { name: /编辑/ }));
+
+    expect(screen.queryByRole('button', { name: '复制内容' })).not.toBeInTheDocument();
+  });
 });
 
 describe('WorkitemContent null body', () => {

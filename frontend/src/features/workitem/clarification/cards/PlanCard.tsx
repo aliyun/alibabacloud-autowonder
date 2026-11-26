@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Spin, Typography } from 'antd';
-import { CheckCircleOutlined } from '@ant-design/icons';
+import { Spin } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { ReactNode } from 'react';
 import type { AcpPlanEntry, AcpPlanPriority, AcpPlanStatus } from '../types';
 import { CLARIFICATION_THEME } from '../theme';
@@ -9,32 +9,28 @@ interface PlanCardProps {
   entries: AcpPlanEntry[];
 }
 
-/** 优先级与完成态是语义色，不走中性令牌。 */
-const PRIORITY_COLOR: Record<AcpPlanPriority, string> = {
-  high: 'var(--aw-error)',
-  medium: 'var(--aw-warning)',
-  low: CLARIFICATION_THEME.textMuted,
-};
+const PRIORITY_TONE: Record<AcpPlanPriority, string> = { high: 'h', medium: 'm', low: 'l' };
+
+const PROGRESS_SEPARATOR = '/';
 
 const PRIORITY_LABEL = { high: 'clarification.priorityHigh', medium: 'clarification.priorityMedium', low: 'clarification.priorityLow' } as const;
 
 const STATUS_AFFORDANCE: Record<AcpPlanStatus, ReactNode> = {
   completed: (
-    <CheckCircleOutlined
-      data-testid="plan-entry-icon-completed"
-      style={{ color: 'var(--aw-success)', marginTop: 2 }}
-    />
+    <span data-testid="plan-entry-icon-completed" className="aw-cl-st-ok" style={{ display: 'inline-flex' }}>
+      <AwStrokeIcon name="check-c" size={12} />
+    </span>
   ),
   in_progress: (
-    <Spin size="small" data-testid="plan-entry-icon-in_progress" style={{ marginTop: 2 }} />
+    <Spin size="small" data-testid="plan-entry-icon-in_progress" />
   ),
   pending: (
     <span
       data-testid="plan-entry-icon-pending"
       style={{
-        width: 12, height: 12, marginTop: 4, borderRadius: '50%',
+        width: 10, height: 10, borderRadius: '50%',
         border: `1px solid ${CLARIFICATION_THEME.controlBorder}`,
-        display: 'inline-block', flex: '0 0 auto',
+        display: 'inline-block',
       }}
     />
   ),
@@ -43,44 +39,29 @@ const STATUS_AFFORDANCE: Record<AcpPlanStatus, ReactNode> = {
 export function PlanCard({ entries }: PlanCardProps) {
   const { t } = useTranslation('workitem');
   if (entries.length === 0) return null;
+  const completedCount = entries.filter((entry) => entry.status === 'completed').length;
 
   return (
-    <div
-      data-testid="acp-plan-card"
-      style={{
-        marginBottom: 8, padding: '8px 12px',
-        borderRadius: CLARIFICATION_THEME.radiusBlock,
-        border: `1px solid ${CLARIFICATION_THEME.hairline}`,
-        backgroundColor: CLARIFICATION_THEME.codeSurface,
-      }}
-    >
-      <Typography.Text strong style={{ fontSize: 14, display: 'block', marginBottom: 6 }}>
+    <div className="aw-cl-plan" data-testid="acp-plan-card">
+      <div className="aw-cl-plan-head">
         {t('clarification.executionPlan')}
-      </Typography.Text>
-      {entries.map((entry, index) => (
-        <div
-          key={index}
-          data-testid={`plan-entry-${entry.status}-${index}`}
-          style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 4 }}
-        >
-          {STATUS_AFFORDANCE[entry.status]}
-          <span
-            style={{
-              fontSize: 14,
-              flex: 1,
-              color: entry.status === 'completed'
-                ? CLARIFICATION_THEME.textMuted
-                : CLARIFICATION_THEME.textPrimary,
-              textDecoration: entry.status === 'completed' ? 'line-through' : 'none',
-            }}
+        <span className="n">{completedCount}{PROGRESS_SEPARATOR}{entries.length}</span>
+      </div>
+      <ul>
+        {entries.map((entry, index) => (
+          <li
+            key={index}
+            className={entry.status === 'completed' ? 'done' : undefined}
+            data-testid={`plan-entry-${entry.status}-${index}`}
           >
-            {entry.content}
-          </span>
-          <span style={{ fontSize: 13, color: PRIORITY_COLOR[entry.priority] }}>
-            {Object.prototype.hasOwnProperty.call(PRIORITY_LABEL, entry.priority) ? t(PRIORITY_LABEL[entry.priority]) : entry.priority}
-          </span>
-        </div>
-      ))}
+            <span className="ic">{STATUS_AFFORDANCE[entry.status]}</span>
+            <span className="txt">{entry.content}</span>
+            <span className={Object.prototype.hasOwnProperty.call(PRIORITY_TONE, entry.priority) ? `pri ${PRIORITY_TONE[entry.priority]}` : 'pri'}>
+              {Object.prototype.hasOwnProperty.call(PRIORITY_LABEL, entry.priority) ? t(PRIORITY_LABEL[entry.priority]) : entry.priority}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

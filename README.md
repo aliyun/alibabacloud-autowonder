@@ -1,44 +1,74 @@
-# AutoWonder Community
+<p align="left">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-AutoWonder is a multi-agent software delivery platform. The community runtime is
-self-contained and does not require Alibaba internal KMS, bootstrap, security,
-artifact, or package infrastructure.
+<p align="center">
+  <br>
+  <img src="docs/images/autowonder-logo.png" alt="Alibaba Cloud AutoWonder" width="490">
+</p>
 
-Deployment prerequisites, configuration, and verification commands are in the
-[community runtime guide](docs/community/README.md).
+AutoWonder is an end-to-end software delivery platform for organizations, where
+people and teams of AI agents collaborate through deterministic workflows.
 
-## Recommended Deployment / 推荐部署架构
+Built on Alibaba Cloud's internal AI-native engineering practices, **AutoWonder
+shifts software delivery from a human-driven process to one driven by tasks and
+coordinated AI agents.**
+
+The project was first open-sourced on August 4, 2026
+([Alibaba Cloud Landing Zone](https://github.com/aliyun/alibabacloud-landing-zone/tree/master/ai-sdlc/auto-wonder))
+and has since been deployed by more than 100 customers across industries.
+
+Enterprises and organizations can fully self-host AutoWonder on their own
+infrastructure and connect it to their internal office and production networks.
+They can also deploy it in a cloud VPC.
+
+For a quick proof of concept (POC), use the
+[Alibaba Cloud deployment Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md).
+
+## Recommended Deployment
 
 The recommended topology is a multi-zone HA deployment with two application
 nodes and private data services.
 
-![AutoWonder recommended deployment architecture](docs/images/autowonder-deployment-architecture.png)
+<p align="center">
+  <a href="docs/images/autowonder-deployment-architecture.png">
+    <img src="docs/images/autowonder-deployment-architecture.png" alt="AutoWonder recommended deployment architecture" width="1048">
+  </a>
+</p>
 
-## Collaboration Model / 平台工作模式
+## Collaboration Model
 
 Users collaborate through the native work item platform, DingTalk groups, or a
 personal Agent client connected through AutoWonder MCP.
 
-![AutoWonder collaboration model](docs/images/autowonder-collaboration-model.png)
+<p align="center">
+  <a href="docs/images/autowonder-collaboration-model.png">
+    <img src="docs/images/autowonder-collaboration-model.png" alt="AutoWonder collaboration model" width="1048">
+  </a>
+</p>
 
-## Model Guidance / 模型建议
+## Model Guidance
 
 | Digital workers | Recommended model | Context |
 | --- | --- | --- |
-| Development, Testing, Code Review / 开发、测试、CR | `DeepSeek-V4.1-Flash` | 1M |
-| DBA, Conflict Resolution, Requirement Clarification / DBA、冲突解决、需求澄清 | `DeepSeek-V4.1-Flash` | 1M |
+| Development, Testing, Code Review | `DeepSeek-V4.1-Flash` | 1M |
+| DBA, Conflict Resolution, Requirements Clarification | `DeepSeek-V4.1-Flash` | 1M |
 
 Use the equivalent model name provided by the selected executor.
 
-## Getting Started / 系统上手
+## Getting Started
 
-![Get started with AutoWonder](docs/images/autowonder-getting-started.png)
+<p align="center">
+  <a href="docs/images/autowonder-getting-started.png">
+    <img src="docs/images/autowonder-getting-started.png" alt="Get started with AutoWonder" width="1048">
+  </a>
+</p>
 
 Deployment details are in the
 [community runtime guide](docs/community/README.md) and the
 [Alibaba Cloud deployment Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md).
 
-## License / 开源许可证
+## License
 
 AutoWonder Community's original code and documentation are distributed under the
 [MIT License](LICENSE). Third-party components are subject to their respective

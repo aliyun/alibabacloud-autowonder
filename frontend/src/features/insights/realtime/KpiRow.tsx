@@ -46,8 +46,10 @@ export default function KpiRow({ kpi, onKpiClick }: Props) {
             style={{ cursor: clickable ? 'pointer' : 'default' }}
           >
             <div className="insight-kpi-label">{cell.label}</div>
-            <div className="insight-kpi-value"><FlashValue value={cell.value} /></div>
-            <div className="insight-kpi-hint">{cell.hint}</div>
+            <div className="insight-kpi-main">
+              <div className="insight-kpi-value"><FlashValue value={cell.value} /></div>
+              <div className="insight-kpi-hint">{cell.hint}</div>
+            </div>
           </div>
         );
       })}

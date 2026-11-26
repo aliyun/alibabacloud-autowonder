@@ -539,7 +539,7 @@ public class SquadCopyService {
             }
             sdlcs.add(new CopySourceSnapshot.SdlcSnapshot(sdlc.getId(), sdlc.getName(),
                     sdlc.getDescription(), sdlc.getWorkType(), sdlc.getStatus(), sdlc.getIsDefault(),
-                    sdlc.getEntryStepId(), steps));
+                    sdlc.isStageTimingEnabled(), sdlc.getEntryStepId(), steps));
         }
 
         List<CopySourceSnapshot.ExecutorSnapshot> executors = new ArrayList<>();

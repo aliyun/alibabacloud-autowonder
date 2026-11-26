@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { Empty, Skeleton, Tooltip } from 'antd';
+import { Spin, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { Table } from '@/shared/theme/ThemedTable';
 import { EllipsisText } from '@/shared/ui/EllipsisText';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { AuditLog } from './api';
 import { auditTime, detailText, parseDetail, triggerText } from './auditDetail';
 import { MODULE_KEYS, RISK_KEYS, TARGET_KEYS } from './auditLabels';
@@ -23,7 +24,7 @@ interface AuditLogTableProps {
 
 function DetailCell({ text }: { text: string }) {
   return (
-    <EllipsisText tooltip={text}>
+    <EllipsisText tooltip={text} style={{ maxWidth: 360 }}>
       <span className="audit-detail">
         {text}
       </span>
@@ -33,25 +34,30 @@ function DetailCell({ text }: { text: string }) {
 
 export function AuditLogTable({ rows, total, loading, page, size, onPageChange, onSelect }: AuditLogTableProps) {
   const { t } = useTranslation('audit');
-
-  if (loading && rows.length === 0) {
-    return (
-      <div role="status" aria-label={t('loading')} className="audit-table-skeleton">
-        <Skeleton active paragraph={{ rows: 6 }} />
-      </div>
-    );
-  }
+  // 03b ④：首屏加载表头常驻、正文区居中「加载」+ 旋转图标；非首屏刷新走表格加载遮罩保留旧行。
+  const firstLoadPending = loading && rows.length === 0;
+  const emptyText = firstLoadPending ? (
+    <div className="audit-loading-note" role="status" aria-label={t('loading')}>
+      <Spin />
+      <span>{t('loading')}</span>
+    </div>
+  ) : (
+    <div className="audit-empty-box">
+      <AwStrokeIcon name="audit" size={30} className="audit-empty-icon" />
+      <div className="audit-empty-text">{t('empty')}</div>
+    </div>
+  );
 
   const columns: ColumnsType<AuditLog> = [
     {
       title: t('time'),
       dataIndex: 'gmtCreate',
-      width: 170,
+      width: 168,
       render: (value: string) => <span className="audit-mono">{auditTime(value)}</span>,
     },
     {
       title: t('actor'),
-      width: 180,
+      width: 168,
       render: (_, record) => {
         const name = record.actorName || (record.actorId != null ? `#${record.actorId}` : '-');
         const tagClass = ACTOR_TAGS[record.actorType ?? ''] ?? '';
@@ -65,7 +71,7 @@ export function AuditLogTable({ rows, total, loading, page, size, onPageChange, 
     },
     {
       title: t('moduleAction'),
-      width: 200,
+      width: 188,
       render: (_, record) => {
         const moduleLabel = record.module in MODULE_KEYS
           ? t(MODULE_KEYS[record.module as keyof typeof MODULE_KEYS])
@@ -73,7 +79,7 @@ export function AuditLogTable({ rows, total, loading, page, size, onPageChange, 
         return (
           <span className="audit-module-action">
             <span className="audit-module-tag">{moduleLabel}</span>
-            <span className="audit-mono">{record.action}</span>
+            <span className="audit-mono" title={record.action}>{record.action}</span>
           </span>
         );
       },
@@ -96,7 +102,7 @@ export function AuditLogTable({ rows, total, loading, page, size, onPageChange, 
     },
     {
       title: t('target'),
-      width: 170,
+      width: 176,
       render: (_, record) => {
         const typeLabel = record.targetType
           ? (record.targetType in TARGET_KEYS
@@ -104,19 +110,20 @@ export function AuditLogTable({ rows, total, loading, page, size, onPageChange, 
             : record.targetType)
           : '-';
         const target = record.targetId != null ? `${typeLabel} #${record.targetId}` : typeLabel;
-        return <span className="audit-mono">{target}</span>;
+        return <span className="audit-mono audit-target" title={target}>{target}</span>;
       },
     },
     {
       title: t('triggerEvent'),
-      width: 190,
+      width: 184,
       render: (_, record) => {
         const eventType = parseDetail(record).eventType;
         const eventLabel = eventType ? String(eventType) : '-';
+        const trigger = triggerText(record);
         return (
           <span className="audit-trigger-event">
-            <span className="audit-trigger">{triggerText(record)}</span>
-            <span className="audit-mono">{eventLabel}</span>
+            <span className="audit-trigger" title={trigger}>{trigger}</span>
+            <span className="audit-mono" title={eventLabel}>{eventLabel}</span>
           </span>
         );
       },
@@ -130,11 +137,12 @@ export function AuditLogTable({ rows, total, loading, page, size, onPageChange, 
   return (
     <Table<AuditLog>
       className="audit-table"
+      tableLayout="fixed"
       scroll={{ x: 1180 }}
       rowKey="id"
       columns={columns}
       dataSource={rows}
-      loading={{ spinning: loading, tip: t('loading') }}
+      loading={{ spinning: loading && rows.length > 0, tip: t('loading') }}
       onRow={(record) => ({ onClick: () => onSelect(record) })}
       pagination={{
         current: page,
@@ -145,9 +153,7 @@ export function AuditLogTable({ rows, total, loading, page, size, onPageChange, 
         onChange: onPageChange,
         showTotal: (count) => t('total', { count }),
       }}
-      locale={{
-        emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('empty')} />,
-      }}
+      locale={{ emptyText }}
     />
   );
 }

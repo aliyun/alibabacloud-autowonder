@@ -45,6 +45,28 @@
         WHERE m.tenant_id = #{tenantId} AND m.is_deleted = 0 AND m.status = 0
         ORDER BY m.joined_at ASC
     </select>
+    <select id="countActiveByTenant" resultType="long">
+        SELECT COUNT(*) FROM org_member
+        WHERE tenant_id = #{tenantId} AND is_deleted = 0 AND status = 0
+    </select>
+    <!-- Clear the session cache between batches so prior member and identity pages do not accumulate. -->
+    <select id="listActivePage" resultType="com.aliyun.autowonder.workspace.WorkspaceMemberDO" flushCache="true">
+        <include refid="memberWithRole"/>
+        WHERE m.tenant_id = #{tenantId} AND m.is_deleted = 0 AND m.status = 0
+        <if test="after != null">
+            <choose>
+                <when test="after.joinedAt != null">
+                    AND (m.joined_at &gt; #{after.joinedAt}
+                         OR (m.joined_at = #{after.joinedAt} AND m.id &gt; #{after.id}))
+                </when>
+                <otherwise>
+                    AND (m.joined_at IS NOT NULL OR (m.joined_at IS NULL AND m.id &gt; #{after.id}))
+                </otherwise>
+            </choose>
+        </if>
+        ORDER BY m.joined_at ASC, m.id ASC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
     <update id="updateIdentityTags">
         UPDATE org_member SET identity_tags = #{identityTags},
             modifier_id = #{modifierId}, gmt_modified = NOW(3)

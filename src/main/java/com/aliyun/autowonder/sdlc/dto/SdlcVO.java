@@ -12,6 +12,7 @@ public class SdlcVO {
     private String name;
     private String description;
     private String workType;
+    private boolean stageTimingEnabled;
     private String status;
     private Integer isDefault;
     private Long entryStepId;

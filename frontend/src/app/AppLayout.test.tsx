@@ -90,6 +90,46 @@ describe('AppLayout', () => {
     expect(refreshCurrentMembership).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ['/workitems/new', true],
+    ['/workitems/new/', true],
+    ['/workitems/recycled', true],
+    ['/workitems/42', false],
+    ['/workitems/42/', false],
+    ['/scheduled-task-runs/12', false],
+    ['/scheduled-task-runs/12/', false],
+    ['/scheduled-tasks/7', false],
+    ['/scheduled-tasks/7/edit', true],
+    ['/scheduled-tasks/new', true],
+    ['/insights', false],
+    ['/insights/', false],
+    ['/agents/42', true],
+    ['/settings/members', false],
+    ['/agents', false],
+    ['/agents/new', false],
+    ['/agents/reviews', false],
+    ['/executors', false],
+    ['/repos', false],
+    ['/memories', false],
+    ['/skills', false],
+    ['/sdlcs', false],
+    ['/status-templates', false],
+    ['/integrations', false],
+    ['/audit-logs', false],
+  ])('applies the global frame correctly on %s', (path, framed) => {
+    const { container } = renderWithQueryClient(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="*" element={<div data-testid="page-body">页面</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(container.querySelectorAll('.aw-content-frame')).toHaveLength(framed ? 1 : 0);
+    if (framed) expect(screen.getByTestId('page-body').closest('.aw-content-frame')).not.toBeNull();
+  });
+
   it('parses and removes one-shot workspace deep-link parameters', () => {
     expect(getWorkspaceDeepLinkId('?workspaceId=8')).toBe(8);
     expect(getWorkspaceDeepLinkId('?workspaceId=0')).toBeNull();
@@ -114,8 +154,8 @@ describe('AppLayout', () => {
       </MemoryRouter>,
     );
 
-    const brand = await screen.findByRole('link', { name: /返回工单列表/ });
-    expect(brand.parentElement).toHaveStyle({ height: '60px' });
+    const brand = await screen.findByRole('link', { name: /返回工作台/ });
+    expect(brand.parentElement).toHaveClass('aw-brand');
   });
 
   it('renders workspace context and only a compact user avatar in the header', () => {
@@ -125,7 +165,6 @@ describe('AppLayout', () => {
       nickname: '爱丽丝',
       email: 'alice@example.com',
     });
-    // 空间管理员默认完整导航，本用例断言完整菜单项可见；简略版本见 Sidebar 用例。
     useAuthStore.getState().setCurrentWorkspace({ id: 7, name: '星云工坊', description: '研发工作空间' }, 'ADMIN');
 
     renderWithQueryClient(
@@ -145,13 +184,16 @@ describe('AppLayout', () => {
       expect(mark).toHaveClass('aw-initial-mark');
     });
     expect(screen.getByRole('button', { name: '用户菜单' })).toHaveTextContent('爱');
+    // 配置项收进设置的轨道空间，面板列出设置页；「设置」入口保持选中。
     expect(screen.queryByText('系统设置')).not.toBeInTheDocument();
-    expect(screen.getAllByText('成员管理')).toHaveLength(1);
-    expect(screen.getByRole('region', { name: '页面内容' })).toContainElement(screen.getByText('角色权限页'));
+    expect(screen.getByRole('link', { name: '成员管理' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '设置' })).toHaveAttribute('aria-current', 'true');
+    // 设置页由外壳自带画布，不再套全局 .aw-content-frame。
+    expect(screen.queryByRole('region', { name: '页面内容' })).not.toBeInTheDocument();
+    expect(screen.getByText('角色权限页')).toBeInTheDocument();
     expect(document.querySelector('.aw-page-header-context')?.textContent).toBe('');
     expect(screen.queryByText('爱丽丝')).not.toBeInTheDocument();
     expect(screen.queryByText('alice@example.com')).not.toBeInTheDocument();
-    expect(screen.getByText('角色权限页')).toBeInTheDocument();
   });
 
   it('navigates to personal settings from user menu', async () => {
@@ -420,9 +462,10 @@ describe('AppLayout', () => {
     expect(workspaceText).toHaveStyle({ textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
     expect(screen.queryByTitle(longNickname)).not.toBeInTheDocument();
     expect(screen.queryByTitle(longEmail)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '用户菜单' })).toHaveStyle({ width: '36px', height: '36px', borderRadius: '50%' });
-    // 只读成员默认简略导航，流程配置分类不渲染；状态模版入口的可见性由 Sidebar 用例覆盖。
-    expect(screen.queryByRole('menuitem', { name: '状态模版' })).not.toBeInTheDocument();
+    const userMenu = screen.getByRole('button', { name: '用户菜单' });
+    expect(userMenu).toHaveStyle({ width: '36px', height: '36px' });
+    expect(userMenu.querySelector('.aw-initial-mark')).toHaveStyle({ width: '28px', height: '28px', borderRadius: '50%' });
+    expect(screen.queryByTitle('状态模版')).not.toBeInTheDocument();
   });
 
   it('offers the Chief entry left of the help center only when signed in with a workspace', async () => {
@@ -441,5 +484,63 @@ describe('AppLayout', () => {
     const entry = await screen.findByRole('button', { name: '打开 Chief' });
     const help = screen.getByRole('link', { name: '帮助中心' });
     expect(entry.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('falls back to the expanded rail without matchMedia and with unreadable layout preferences', () => {
+    const originalMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    Object.defineProperty(window, 'matchMedia', { writable: true, value: undefined });
+    // Node 26 内置 localStorage 的方法是实例自有属性，需在实例上覆盖而非 spy 原型。
+    const storage = window.localStorage;
+    const originalGetItem = Object.getOwnPropertyDescriptor(storage, 'getItem');
+    let reads = 0;
+    Object.defineProperty(storage, 'getItem', { configurable: true, value: () => { reads += 1; throw new Error('denied'); } });
+    try {
+      useAuthStore.getState().setCurrentWorkspace({ id: 7, name: '星云工坊', description: '' }, 'ADMIN');
+      renderWithQueryClient(
+        <MemoryRouter initialEntries={['/workitems']}>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="/workitems" element={<div>工单页</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(screen.getByText('工单页')).toBeInTheDocument();
+      expect(document.querySelector('.aw-sider')).not.toHaveClass('collapsed');
+      expect(screen.getByRole('link', { name: '工单' })).toBeInTheDocument();
+      expect(reads).toBeGreaterThan(0);
+    } finally {
+      if (originalGetItem) Object.defineProperty(storage, 'getItem', originalGetItem);
+      else delete (storage as unknown as Record<string, unknown>).getItem;
+      if (originalMatchMedia) Object.defineProperty(window, 'matchMedia', originalMatchMedia);
+    }
+  });
+
+  it('collapses the rail once the compact breakpoint matches', () => {
+    const originalMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: query === '(max-width: 1080px)', media: query, onchange: null,
+        addListener: () => {}, removeListener: () => {},
+        addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+      }),
+    });
+    try {
+      useAuthStore.getState().setCurrentWorkspace({ id: 7, name: '星云工坊', description: '' }, 'ADMIN');
+      renderWithQueryClient(
+        <MemoryRouter initialEntries={['/workitems']}>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="/workitems" element={<div>工单页</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(document.querySelector('.aw-sider')).toHaveClass('collapsed');
+      expect(screen.getByTitle('星云工坊')).toBeInTheDocument();
+    } finally {
+      if (originalMatchMedia) Object.defineProperty(window, 'matchMedia', originalMatchMedia);
+    }
   });
 });

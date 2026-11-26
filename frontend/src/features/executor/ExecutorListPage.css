@@ -1,0 +1,533 @@
+/* 原型 21：工具栏筛选在左、操作靠右同排；分组不套框不加分割线，组间只靠 20px 留白。
+ * html 前缀用于压过 crystal.css 的全局 .ant-collapse 规则。 */
+.executor-toolbar-filters {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.executor-toolbar-filters + .aw-toolbar-gap {
+  display: none;
+}
+
+.executor-toolbar-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+}
+
+.executor-auto-update {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--aw-text-3);
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* 原型 .tag.sm：18px 高、11px 字，压过 crystal.css 的 html .ant-tag 22px/12px。
+   归属列小队标签用 outline 样式（透明底、灰边框、灰字），与原型 .tag.sm.outline 一致。 */
+html .ant-tag.executor-tag-sm,
+html .executor-owner-cell .ant-tag {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+  margin-inline-end: 0;
+}
+
+html .executor-owner-cell .ant-tag {
+  background: transparent;
+  border-color: var(--aw-border);
+  color: var(--aw-text-2);
+}
+
+html .executor-owner-cell .ant-tag a,
+html .executor-owner-cell .ant-tag a:hover {
+  color: inherit;
+}
+
+.executor-owner-name {
+  font-size: 12px;
+}
+
+/* 表格单元：名称常规字重 13px，次要行 11px 灰。 */
+html .ant-table-tbody .ant-btn.ant-btn-link.executor-name-link {
+  height: auto;
+  max-width: 100%;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--aw-text);
+}
+
+html .ant-table-tbody .ant-btn.ant-btn-link.executor-name-link:not(:disabled):hover {
+  color: var(--aw-primary);
+}
+
+.executor-sub {
+  margin-top: 1px;
+  font-family: var(--aw-font-mono);
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.executor-cell-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.executor-cell-sep::before {
+  content: " · ";
+}
+
+.executor-cell-tag {
+  margin-top: 2px;
+}
+
+.executor-state-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--aw-text-2);
+}
+
+.executor-state-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #AAAAAA;
+}
+
+.executor-state-dot--success {
+  background: var(--aw-success);
+}
+
+.executor-state-dot--processing {
+  background: var(--aw-warning);
+}
+
+.executor-dim {
+  color: var(--aw-text-3);
+}
+
+html .executor-ops .ant-btn.ant-btn-link {
+  padding: 2px 4px;
+}
+
+.aw-toolbar:has(.executor-toolbar-filters) {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.executor-list-body {
+  margin-top: 4px;
+}
+
+html .aw-executor-groups.ant-collapse {
+  background: transparent;
+  border: none;
+}
+
+html .aw-executor-groups.ant-collapse > .ant-collapse-item {
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  background: var(--aw-panel);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+html .aw-executor-groups.ant-collapse > .ant-collapse-item:last-child {
+  margin-bottom: 0;
+}
+
+html .aw-executor-groups.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 10px 12px;
+  background: var(--aw-panel);
+  border: none;
+}
+
+html .aw-executor-groups.ant-collapse > .ant-collapse-item > .ant-collapse-header .ant-collapse-expand-icon {
+  height: 20px;
+  padding-inline-end: 0;
+  margin-inline-end: 0;
+  color: var(--aw-text-3);
+  font-size: 12px;
+}
+
+html .aw-executor-groups.ant-collapse .ant-collapse-header-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+html .aw-executor-groups.ant-collapse .ant-collapse-content {
+  background: transparent;
+  border-top: none;
+}
+
+html .aw-executor-groups.ant-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
+  padding: 0 12px 4px;
+}
+
+html .aw-executor-groups .ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
+}
+
+.aw-executor-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+  line-height: 20px;
+}
+
+.aw-executor-group-name {
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aw-text);
+}
+
+.aw-executor-group-name a {
+  color: var(--aw-text);
+}
+
+.aw-executor-group-name a:hover {
+  color: var(--aw-primary);
+}
+
+.aw-executor-group-count {
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.aw-executor-group-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.executor-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.executor-status-badge--green {
+  background: var(--aw-success-bg);
+  color: var(--aw-success-deep);
+}
+
+.executor-status-badge--amber {
+  background: var(--aw-warning-bg);
+  color: var(--aw-warning-deep);
+}
+
+/* 弹窗表单：按行并排压缩纵向长度，每格等分。 */
+.executor-form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.executor-form-row > .ant-form-item {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.executor-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 「编辑完整命令」与系统切换同一排、靠右；页脚只保留命令动作。 */
+.executor-os-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.executor-preview-edit {
+  color: var(--aw-text-2);
+}
+
+/* 原型 .modal-head / .modal-foot：头尾各一条分割线，标题 13/600；正文说明 12px。 */
+html .executor-modal .ant-modal-content {
+  padding: 0;
+}
+
+html .executor-modal .ant-modal-header {
+  margin: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--aw-border);
+  background: transparent;
+}
+
+html .executor-modal .ant-modal-title {
+  padding-right: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+html .executor-modal .ant-modal-close {
+  top: 12px;
+  right: 14px;
+  width: 24px;
+  height: 24px;
+}
+
+html .executor-modal .ant-modal-body {
+  padding: 14px 18px;
+}
+
+html .executor-modal .ant-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--aw-border);
+}
+
+html .executor-modal .ant-modal-footer .ant-btn {
+  margin-inline-start: 0;
+}
+
+/* 启动命令页脚：左右分组，左侧退出/保存，右侧只放命令动作与唯一主动作。 */
+.executor-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.executor-modal-foot-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 复制启动命令拆分按钮：主按钮一键复制，箭头里是 debug 模式命令，两段共享边框。 */
+.executor-copy-split {
+  display: inline-flex;
+}
+
+.executor-copy-split > .ant-btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* 箭头按钮被 Tooltip 的 span 包了一层，半径与重叠边框要落到 span 内的按钮上。
+ * 带上 html .executor-modal 前缀，压过页脚通用的 margin-inline-start: 0。 */
+html .executor-modal .executor-copy-split > :last-child .ant-btn {
+  margin-inline-start: -1px;
+  padding-inline: 6px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.executor-copy-split .ant-btn:hover,
+.executor-copy-split .ant-btn:focus-visible {
+  z-index: 1;
+}
+
+html .executor-modal .ant-modal-body .ant-typography {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+html .executor-modal .ant-modal-body .ant-typography.ant-typography-secondary,
+html .executor-detail div.ant-typography.ant-typography-secondary {
+  color: var(--aw-text-3);
+}
+
+html .executor-modal .ant-alert .ant-alert-message,
+html .executor-modal .ant-alert .ant-alert-description,
+html .executor-detail .ant-alert .ant-alert-message,
+html .executor-detail .ant-alert .ant-alert-description {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+html .executor-os-segmented.ant-segmented {
+  font-size: 12px;
+}
+
+html .executor-os-segmented.ant-segmented .ant-segmented-item-label {
+  min-height: 26px;
+  padding: 0 12px;
+  line-height: 26px;
+}
+
+.executor-cmd-box {
+  padding: 10px 12px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  font-family: var(--aw-font-mono);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.executor-command-tip {
+  margin-top: 12px;
+}
+
+/* 详情抽屉：头 14/20 内边距带分割线，体 16/20；段标题 14/600，键值 12px 不加冒号、标签定宽灰字。 */
+html .executor-drawer .ant-drawer-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--aw-border);
+}
+
+html .executor-drawer .ant-drawer-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+html .executor-drawer .ant-drawer-body {
+  padding: 16px 20px;
+}
+
+.executor-detail .ant-descriptions-header {
+  margin-bottom: 8px;
+}
+
+html .executor-detail .ant-descriptions-title,
+html .executor-detail h5.ant-typography {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.executor-detail .ant-descriptions-item {
+  padding: 4px 0 !important;
+}
+
+html .executor-detail .ant-descriptions-item-label,
+html .executor-detail .ant-descriptions-item-content {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.executor-detail .ant-descriptions-item-label {
+  width: 96px;
+  flex-shrink: 0;
+  color: var(--aw-text-3);
+}
+
+html .executor-detail div.ant-typography.ant-typography-secondary {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.executor-mono {
+  font-family: var(--aw-font-mono);
+}
+
+/* 凭据分两行：灰底独占整行、长 Token 省略，按钮另起一行左对齐。 */
+.executor-cred-code {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  font-family: var(--aw-font-mono);
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.executor-cred-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* 任务模型自动升级：标签与小开关同排，删除等级为图标钮并与输入框底对齐。 */
+html .executor-detail .executor-policy-default {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.executor-policy-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.executor-policy-switch-label {
+  font-size: 12px;
+  color: var(--aw-text-2);
+}
+
+.executor-policy-help {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+}
+
+.executor-policy-level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 12px;
+}
+
+html .executor-policy-level .ant-form-item {
+  margin-bottom: 10px;
+}
+
+html .executor-policy .ant-form-vertical .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+.executor-policy-level-remove {
+  margin-bottom: 14px;
+}
+
+.executor-policy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.executor-policy-actions-spacer {
+  flex: 1;
+}

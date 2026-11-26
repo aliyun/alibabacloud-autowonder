@@ -55,8 +55,7 @@ it.each(['zh-CN', 'en-US'])('final widget runtime search and clear keep raw even
  render(<RuntimeLogDrawer dispatchId={12} onClose={() => {}} />);
  await screen.findByText(locale === 'en-US' ? '120 events' : '共 120 条');
  const input = screen.getByPlaceholderText(locale === 'en-US' ? 'Search events, tools, input or output' : '搜索事件、工具、输入或输出');
- const search = screen.getByRole('button', { name: locale === 'en-US' ? 'Search events, tools, input or output' : '搜索事件、工具、输入或输出' });
- await userEvent.type(input, 'full-0'); await userEvent.click(search);
+ await userEvent.type(input, 'full-0');
  expect(screen.getByText('result-0')).toBeInTheDocument(); expect(screen.queryByText('result-119')).not.toBeInTheDocument();
  const clear = screen.getByRole('button', { name: locale === 'en-US' ? 'Clear runtime log search' : '清空运行日志搜索' });
  await userEvent.click(clear); expect(input).toHaveValue(''); expect(screen.getByText('result-119')).toBeInTheDocument();
@@ -72,7 +71,7 @@ it.each(['zh-CN', 'en-US'])('final widget runtime pending refresh has no named d
   expect(button).toHaveClass('ant-btn-loading'); expect(button).toHaveAccessibleName(locale === 'en-US' ? 'Refresh' : '刷新');
   expect(button.querySelector('.anticon-loading')).toHaveAttribute('aria-hidden', 'true');
  } finally { await act(async () => { finish(response as never); }); }
- expect(button.querySelector('.anticon-reload')).toHaveAttribute('aria-hidden', 'true');
+ expect(button.querySelector('.aw-stroke-icon')).toHaveAttribute('aria-hidden', 'true');
 });
 it.each(['zh-CN', 'en-US'])('final widget runtime alerts retain raw errors and visible decorative glyphs in %s', async locale => {
  await i18n.changeLanguage(locale); vi.mocked(getRuntimeLog).mockRejectedValue(new Error('<raw>错误'));

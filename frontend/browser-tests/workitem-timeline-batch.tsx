@@ -37,4 +37,22 @@ function Fixture({ paged = false }: { paged?: boolean }) {
     <ScrollToEdgeButton containerRef={containerRef} />
   </div>;
 }
-createRoot(document.getElementById('root')!).render(<LocaleProvider><Fixture /><Fixture paged /></LocaleProvider>);
+// 状态变更备注：只有携带 note 且为 STATUS_CHANGE 的事件才渲染备注行。
+const noteItems: TimelineItem[] = [
+  {
+    id: 201, type: 'system', authorId: 7, authorName: 'Reader', authorType: 'HUMAN', isAgent: false,
+    content: '', gmtCreate: '2026-11-02T00:00:00Z', eventType: 'STATUS_CHANGE',
+    fromValDisplay: '开发中', toValDisplay: '已上线', operatorDisplayName: 'Reader', note: '与需求方确认后流转',
+  },
+  {
+    id: 202, type: 'system', authorId: 7, authorName: 'Reader', authorType: 'HUMAN', isAgent: false,
+    content: '', gmtCreate: '2026-11-01T00:00:00Z', eventType: 'STATUS_CHANGE',
+    fromValDisplay: '待处理', toValDisplay: '开发中', operatorDisplayName: 'Reader',
+  },
+];
+function StatusNoteFixture() {
+  return <section data-testid="timeline-status-note-fixture" style={{ marginBottom: 24 }}>
+    <UnifiedTimeline items={noteItems} />
+  </section>;
+}
+createRoot(document.getElementById('root')!).render(<LocaleProvider><Fixture /><Fixture paged /><StatusNoteFixture /></LocaleProvider>);

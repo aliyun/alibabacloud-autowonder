@@ -38,6 +38,8 @@ public class TaskDispatchFrame extends OutboundFrame {
     private Boolean allowNetwork;
     private String packageRefreshPath;
     private String artifactUploadPath;
+    /** Usage-only report endpoint that stays available after cancellation. */
+    private String usageReportPath;
     private String checkpointUploadPath;
     /** Optional: older runtimes ignore it and keep using the dispatch-time resume URL. */
     private String checkpointRefreshPath;

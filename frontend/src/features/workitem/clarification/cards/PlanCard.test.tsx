@@ -27,15 +27,26 @@ describe('PlanCard', () => {
     expect(screen.getByText('待办项')).toBeInTheDocument();
 
     // 勾 / spinner / 空心圈 三种可视差异
-    expect(completed.querySelector('.anticon-check-circle')).not.toBeNull();
+    expect(completed.querySelector('[data-glyph="check-c"]')).not.toBeNull();
     expect(running.querySelector('.ant-spin')).not.toBeNull();
     expect(pending.querySelector('[data-testid="plan-entry-icon-pending"]')).not.toBeNull();
     expect(view.container.textContent).toContain('执行计划');
   });
 
-  it('marks completed entries with a struck-through style so scanning the list is instant', () => {
-    render(<PlanCard entries={[{ content: '已完成项', priority: 'low', status: 'completed' }]} />);
-    expect(screen.getByText('已完成项')).toHaveStyle({ textDecoration: 'line-through' });
+  it('marks completed entries as done and shows the completed count', () => {
+    render(
+      <PlanCard
+        entries={[
+          { content: '已完成项', priority: 'low', status: 'completed' },
+          { content: '待办项', priority: 'high', status: 'pending' },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('plan-entry-completed-0')).toHaveClass('done');
+    expect(screen.getByTestId('plan-entry-pending-1')).not.toHaveClass('done');
+    expect(screen.getByText('已完成项')).toHaveClass('txt');
+    expect(screen.getByText('1/2')).toBeInTheDocument();
+    expect(screen.getByText('高')).toHaveClass('pri', 'h');
   });
 
   it('renders nothing for an empty plan', () => {

@@ -1,0 +1,9 @@
+.dispatch-guidance { margin-top:12px; font-size:12px; }
+.dispatch-guidance-box { border:1px solid var(--aw-border); border-radius:6px; padding:8px 10px; background:var(--aw-panel); transition:border-color 0.2s, box-shadow 0.2s; }
+.dispatch-guidance-box:focus-within { border-color:var(--aw-primary); box-shadow:0 0 0 2px rgba(0, 100, 200, 0.12); }
+html .dispatch-guidance-text.ant-input,
+html .dispatch-guidance-text.ant-input:focus { padding:0; font-size:12px; box-shadow:none; background:transparent; }
+html .dispatch-guidance-text.ant-input::placeholder { color:var(--aw-text-disabled); }
+.dispatch-guidance-row { display:flex; align-items:center; gap:8px; margin-top:6px; }
+.dispatch-guidance-hint { flex:1; min-width:0; font-size:11px; color:var(--aw-text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+html .dispatch-guidance-send.ant-btn { flex-shrink:0; height:26px; padding:0 8px; border-radius:4px; font-size:12px; }

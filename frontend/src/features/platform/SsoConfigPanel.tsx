@@ -1,26 +1,23 @@
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Alert,
   Button,
   Card,
-  Divider,
   Form,
   Input,
   Modal,
   Popconfirm,
   Select,
-  Space,
   Switch,
   Tag,
   Tooltip,
   Typography,
   message,
 } from 'antd';
-import { InfoCircleFilled, LinkOutlined, SettingOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Table } from '@/shared/theme/ThemedTable';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 import type { ColumnsType } from 'antd/es/table';
 import type { PlatformBranding } from './brandingApi';
 import { resolvePlatformBaseUrl } from './platformBaseUrl';
@@ -45,8 +42,7 @@ import {
   type FederationProtocol,
   type UpdateConnectionParams,
 } from './ssoApi';
-
-const { Text, Title } = Typography;
+import './ssoConfig.css';
 
 interface ConnectionFormValues {
   idpId: number;
@@ -157,6 +153,10 @@ function errorText(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <div className="sso-section-title">{children}</div>;
+}
+
 export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | null }) {
   const { t } = useTranslation('platform');
   const queryClient = useQueryClient();
@@ -194,7 +194,7 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
   const [savingIdp, setSavingIdp] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
-  // 保存成功必须以服务端回读为准：写后重新拉取两个列表，任一失败都不提示成功。
+  // 保存成功必须以服务端回读为准：写后重新拉取两个列表与认证配置，任一失败都不提示成功。
   const readback = async () => {
     const [nextIdps, nextConnections, nextAuthConfig] = await Promise.all([
       fetchFederationIdps(),
@@ -310,26 +310,22 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
   const loadError = idpsQuery.error || connectionsQuery.error || authConfigQuery.error;
   if (loadError) {
     return (
-      <Card styles={{ body: { padding: 18 } }}>
-        <Alert
-          type="error"
-          showIcon
-          message={t('ssoLoadFailed')}
-          description={loadError instanceof Error ? loadError.message : t('retryLater')}
+      <div className="aw-sso-panel">
+        <NoticeTip
+          kind="error"
+          title={t('ssoLoadFailed')}
+          detail={loadError instanceof Error ? loadError.message : t('retryLater')}
           action={
-            <Button
-              size="small"
-              onClick={() => {
-                void idpsQuery.refetch();
-                void connectionsQuery.refetch();
-                void authConfigQuery.refetch();
-              }}
-            >
+            <Button size="small" onClick={() => {
+              void idpsQuery.refetch();
+              void connectionsQuery.refetch();
+              void authConfigQuery.refetch();
+            }}>
               {t('ssoRetry')}
             </Button>
           }
         />
-      </Card>
+      </div>
     );
   }
 
@@ -349,25 +345,35 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
       title: t('ssoIdpName'),
       dataIndex: 'name',
       align: 'left',
-      render: (name: string) => <Text strong>{name}</Text>,
+      ellipsis: true,
+      render: (name: string) => <span className="sso-strong">{name}</span>,
     },
     {
       title: t('ssoIdpDescription'),
       dataIndex: 'description',
       align: 'left',
       ellipsis: true,
-      render: (description: string | null) => description || t('ssoValueMissing'),
+      render: (description: string | null) => (
+        <span className="sso-dim">{description || t('ssoValueMissing')}</span>
+      ),
+    },
+    {
+      title: t('ssoIdpConnections'),
+      key: 'connections',
+      width: 110,
+      render: (_, idp) => t('ssoCountTag', { count: connectionCountBySource.get(idp.id) ?? 0 }),
     },
     {
       title: t('ssoIdpStatus'),
       key: 'status',
-      width: 180,
+      width: 170,
       render: (_, idp) => {
         const switchingOff = idp.enabled === 1;
         const impact = connectionCountBySource.get(idp.id) ?? 0;
         const requiresConfirm = switchingOff && impact > 0;
         const switchControl = (
           <Switch
+            size="small"
             aria-label={t('ssoToggleIdpAria', { name: idp.name })}
             checked={switchingOff}
             disabled={busyKey === `idp-${idp.id}`}
@@ -378,7 +384,7 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
           />
         );
         return (
-          <Space size={8}>
+          <span className="sso-cell">
             {requiresConfirm ? (
               <Popconfirm
                 title={t('ssoDisableIdpConfirm', { name: idp.name })}
@@ -390,19 +396,23 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
                 {switchControl}
               </Popconfirm>
             ) : switchControl}
-            <Tag color={switchingOff ? 'green' : 'default'}>{switchingOff ? t('enabled') : t('disabled')}</Tag>
-          </Space>
+            <Tag color={switchingOff ? 'green' : undefined} className={switchingOff ? undefined : 'aw-tag-gray'}>
+              {switchingOff ? t('ssoStatusEnabled') : t('ssoStatusDisabled')}
+            </Tag>
+          </span>
         );
       },
     },
     {
       title: t('actions'),
       key: 'actions',
-      width: 120,
+      width: 90,
       render: (_, idp) => (
-        <Button type="link" size="small" onClick={() => setIdpEditor(idp)}>
-          {t('ssoEditIdp')}
-        </Button>
+        <span className="sso-actions">
+          <Button type="link" size="small" onClick={() => setIdpEditor(idp)}>
+            {t('ssoEditIdp')}
+          </Button>
+        </span>
       ),
     },
   ];
@@ -412,12 +422,14 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
       title: t('ssoConnectionName'),
       dataIndex: 'name',
       align: 'left',
-      render: (name: string) => <Text strong>{name}</Text>,
+      ellipsis: true,
+      render: (name: string) => <span className="sso-strong">{name}</span>,
     },
     {
-      title: t('ssoIdp'),
+      title: t('ssoIdpColumn'),
       dataIndex: 'idpName',
       align: 'left',
+      ellipsis: true,
       render: (idpName: string | null) => idpName || t('ssoValueMissing'),
     },
     {
@@ -428,6 +440,7 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
         const usable = connection.enabled === 1 && enabledIdpIds.has(connection.idpId);
         return (
           <Switch
+            size="small"
             aria-label={t('ssoDefaultLoginAria', { name: connection.name })}
             checked={connection.defaultLogin}
             disabled={!usable || busyKey === `default-${connection.id}`}
@@ -439,49 +452,51 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
     {
       title: t('ssoProtocol'),
       dataIndex: 'protocol',
-      width: 120,
+      width: 110,
       render: (protocol: string) => {
         const label = protocol === 'SAML2' ? t('ssoProtocolSaml') : t('ssoProtocolOidc');
-        return <Tag>{label}</Tag>;
+        return <Tag color={protocol === 'SAML2' ? undefined : 'blue'}>{label}</Tag>;
       },
     },
     {
       title: t('ssoConnectionStatus'),
       key: 'status',
-      width: 180,
+      width: 170,
       render: (_, connection) => (
-        <Space size={8}>
+        <span className="sso-cell">
           <Switch
+            size="small"
             aria-label={t('ssoToggleConnectionAria', { name: connection.name })}
             checked={connection.enabled === 1}
             disabled={busyKey === `connection-${connection.id}`}
             onChange={() => void toggleConnection(connection)}
           />
-          <Tag color={connection.enabled === 1 ? 'green' : 'default'}>
-            {connection.enabled === 1 ? t('enabled') : t('disabled')}
+          <Tag color={connection.enabled === 1 ? 'green' : undefined} className={connection.enabled === 1 ? undefined : 'aw-tag-gray'}>
+            {connection.enabled === 1 ? t('ssoStatusEnabled') : t('ssoStatusDisabled')}
           </Tag>
-        </Space>
+        </span>
       ),
     },
     {
-      title: t('ssoConnectionActions'),
+      title: t('actions'),
       key: 'actions',
-      width: 220,
+      width: 176,
       render: (_, connection) => (
-        <Space size={4}>
-          <Button type="link" size="small" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setConnectionEditor(connection)}>
+        <span className="sso-actions">
+          <Button type="link" size="small" onClick={() => setConnectionEditor(connection)}>
             {t('ssoConfigure')}
           </Button>
-          <Button type="link" size="small" icon={<LinkOutlined aria-hidden="true" />} onClick={() => setCallbackTarget(connection)}>
+          <Button type="link" size="small" onClick={() => setCallbackTarget(connection)}>
             {t('ssoCallbackInfo')}
           </Button>
-        </Space>
+        </span>
       ),
     },
   ];
 
   const connectionEditorValue = connectionEditor === 'new' ? null : connectionEditor;
   const idpEditorValue = idpEditor === 'new' ? null : idpEditor;
+  const platformName = branding?.platformName?.trim() || t('ssoPlatformNameFallback');
   const callbackUrl = callbackTarget
     ? federationCallbackUrl(callbackTarget.id, callbackTarget.protocol, platformBaseUrl)
     : '';
@@ -490,65 +505,97 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
     : '';
 
   return (
-    <>
-      <Alert
-        type="info"
-        showIcon
-        icon={<InfoCircleFilled aria-hidden="true" />}
-        message={t('ssoHint')}
-        style={{ marginBottom: 16 }}
-      />
+    <div className="aw-sso-panel">
+      <NoticeTip kind="info" title={t('ssoHint')} style={{ marginBottom: 12 }} />
 
       <Card
-        title={t('ssoRegistrationSection')}
-        style={{ marginBottom: 16 }}
-        styles={{ body: { padding: 18 } }}
+        className="aw-platform-message-card"
+        style={{ marginBottom: 12 }}
+        title={(
+          <div className="aw-config-card-title">
+            <span>{t('ssoRegistrationSection')}</span>
+            <div className="aw-config-tags">
+              <Tag color={registrationEnabled ? 'green' : undefined} className={registrationEnabled ? undefined : 'aw-tag-gray'}>
+                {registrationEnabled ? t('ssoRegistrationOn') : t('ssoRegistrationOff')}
+              </Tag>
+            </div>
+          </div>
+        )}
       >
-        <Space size={16} align="start">
+        <div className="sso-toggle-row">
           <Switch
+            size="small"
             aria-label={t('ssoRegistrationToggleAria')}
             checked={registrationEnabled}
             disabled={busyKey === 'registration'}
             onChange={(checked) => void toggleRegistration(checked)}
           />
-          <div>
-            <Text strong>{t('ssoRegistrationLabel')}</Text>
-            <br />
-            <Text type="secondary">{t('ssoRegistrationHint')}</Text>
+          <div className="sso-toggle-copy">
+            <b>{t('ssoRegistrationLabel')}</b>
+            <p>{t('ssoRegistrationHint')}</p>
           </div>
-        </Space>
+        </div>
       </Card>
 
       <Card
-        title={t('ssoIdpSection')}
-        style={{ marginBottom: 16 }}
-        styles={{ body: { padding: 18 } }}
-        extra={
-          <Button type="primary" onClick={() => setIdpEditor('new')}>
+        className="aw-platform-message-card"
+        style={{ marginBottom: 12 }}
+        title={(
+          <div className="aw-config-card-title">
+            <span>{t('ssoIdpSection')}</span>
+            <div className="aw-config-tags">
+              <Tag className="aw-tag-gray">{t('ssoCountTag', { count: idps.length })}</Tag>
+            </div>
+          </div>
+        )}
+        extra={idps.length > 0 ? (
+          <Button type="primary" className="sso-head-action" onClick={() => setIdpEditor('new')}>
             {t('ssoAddIdp')}
           </Button>
-        }
+        ) : undefined}
       >
-        <Table<FederationIdp>
-          rowKey="id"
-          size="small"
-          columns={idpColumns}
-          dataSource={idps}
-          loading={idpsQuery.isLoading}
-          pagination={false}
-          locale={{ emptyText: t('ssoEmptyIdps') }}
-        />
+        <div className="sso-table-scroll">
+          <Table<FederationIdp>
+            className="sso-table"
+            rowKey="id"
+            size="small"
+            columns={idpColumns}
+            dataSource={idps}
+            loading={idpsQuery.isLoading}
+            pagination={false}
+            locale={{
+              emptyText: (
+                <div className="sso-empty">
+                  <b>{t('ssoEmptyIdpsTitle')}</b>
+                  <p>{t('ssoEmptyIdpsHint')}</p>
+                  <Button size="small" type="primary" onClick={() => setIdpEditor('new')}>
+                    {t('ssoAddIdp')}
+                  </Button>
+                </div>
+              ),
+            }}
+          />
+        </div>
+        <p className="sso-hint">{t('ssoIdpDisableHint')}</p>
       </Card>
 
       <Card
-        title={t('ssoConnectionsSection')}
-        style={{ marginBottom: 16 }}
-        styles={{ body: { padding: 18 } }}
-        extra={
+        className="aw-platform-message-card"
+        style={{ marginBottom: 12 }}
+        title={(
+          <div className="aw-config-card-title">
+            <span>{t('ssoConnectionsSection')}</span>
+            <div className="aw-config-tags">
+              <Tag className="aw-tag-gray">{t('ssoCountTag', { count: connections.length })}</Tag>
+            </div>
+          </div>
+        )}
+        extra={connections.length > 0 ? (
           <Tooltip title={idps.length === 0 ? t('ssoNoIdpsHint') : undefined}>
             <span>
               <Button
                 type="primary"
+                className="sso-head-action"
                 disabled={idps.length === 0}
                 onClick={() => setConnectionEditor('new')}
               >
@@ -556,38 +603,81 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
               </Button>
             </span>
           </Tooltip>
-        }
+        ) : undefined}
       >
-        <Text type="secondary">{t('ssoConnectionHint')}</Text>
-        <Table<FederationConnection>
-          rowKey="id"
-          size="small"
-          style={{ marginTop: 12 }}
-          columns={connectionColumns}
-          dataSource={connections}
-          loading={connectionsQuery.isLoading}
-          pagination={false}
-          locale={{ emptyText: t('ssoEmptyConnections') }}
-        />
+        <p className="sso-hint sso-hint-tight">{t('ssoConnectionHint')}</p>
+        <div className="sso-table-scroll">
+          <Table<FederationConnection>
+            className="sso-table"
+            rowKey="id"
+            size="small"
+            columns={connectionColumns}
+            dataSource={connections}
+            loading={connectionsQuery.isLoading}
+            pagination={false}
+            locale={{
+              emptyText: (
+                <div className="sso-empty">
+                  <b>{t('ssoEmptyConnectionsTitle')}</b>
+                  <p>{t('ssoEmptyConnectionsHint')}</p>
+                  <Tooltip title={idps.length === 0 ? t('ssoNoIdpsHint') : undefined}>
+                    <span>
+                      <Button
+                        size="small"
+                        disabled={idps.length === 0}
+                        onClick={() => setConnectionEditor('new')}
+                      >
+                        {t('ssoAddConnection')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </div>
+              ),
+            }}
+          />
+        </div>
+        <p className="sso-hint">{t('ssoConnectionDisableHint')}</p>
       </Card>
 
-      <Card title={t('ssoPreviewTitle')} styles={{ body: { padding: 18 } }}>
-        <Text type="secondary">{t('ssoPreviewHint')}</Text>
-        <div style={{ display: 'grid', gap: 8, maxWidth: 360, marginTop: 12 }}>
-          {loginEntries.length === 0 ? (
-            <Text type="secondary">{t('ssoPreviewEmpty')}</Text>
-          ) : (
-            loginEntries.map((connection) => (
-              <Button
-                key={connection.id}
-                block
-                onClick={() => message.info(i18n.t('platform:ssoPreviewOnly'))}
-              >
-                {t('ssoPreviewLoginWith', { name: connection.name })}
-              </Button>
-            ))
-          )}
+      <Card
+        className="aw-platform-message-card"
+        title={(
+          <div className="aw-config-card-title">
+            <span>{t('ssoPreviewTitle')}</span>
+            <div className="aw-config-tags">
+              <Tag className="aw-tag-gray">{t('ssoPreviewTag')}</Tag>
+            </div>
+          </div>
+        )}
+      >
+        <p className="sso-hint sso-hint-tight">{t('ssoPreviewHint')}</p>
+        <div className="sso-preview-frame">
+          <div className="sso-preview-card">
+            <h4>{t('ssoPreviewCardTitle', { name: platformName })}</h4>
+            <p className="sso-preview-sub">{t('ssoPreviewCardSub', { name: platformName })}</p>
+            {loginEntries.length > 0 && (
+              <>
+                <div className="sso-preview-sso-list">
+                  {loginEntries.map((connection) => (
+                    <button key={connection.id} type="button" className="sso-preview-sso-btn" disabled>
+                      {t('ssoPreviewLoginWith', { name: connection.name })}
+                    </button>
+                  ))}
+                </div>
+                <div className="sso-preview-divider">{t('ssoPreviewOr')}</div>
+                <p className="sso-preview-local">{t('ssoPreviewLocalLabel', { name: platformName })}</p>
+              </>
+            )}
+            <div className="sso-preview-form">
+              <input className="sso-preview-input" placeholder={t('ssoPreviewUsername')} disabled />
+              <input className="sso-preview-input" type="password" placeholder={t('ssoPreviewPassword')} disabled />
+              <button type="button" className="sso-preview-login" disabled>{t('ssoPreviewLogin')}</button>
+            </div>
+          </div>
         </div>
+        <p className="sso-hint">
+          {loginEntries.length === 0 ? t('ssoPreviewEmpty') : t('ssoPreviewNote')}
+        </p>
       </Card>
 
       <SsoIdpModal
@@ -611,23 +701,24 @@ export function SsoConfigPanel({ branding }: { branding?: PlatformBranding | nul
       <Modal
         open={callbackTarget !== null}
         title={t('ssoCallbackTitle')}
-        footer={null}
+        width={520}
+        className="sso-modal"
+        footer={<Button onClick={() => setCallbackTarget(null)}>{t('ssoCallbackClose')}</Button>}
         onCancel={() => setCallbackTarget(null)}
       >
         {callbackTarget && (
           <>
-            <Title level={5} style={{ marginTop: 0 }}>{callbackTarget.name}</Title>
-            <Typography.Paragraph copyable={{ text: callbackUrl }} code>{callbackUrl}</Typography.Paragraph>
-            <Typography.Paragraph type="secondary">
-              {callbackHint}
-            </Typography.Paragraph>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              {t('ssoCallbackDeployHint')}
-            </Typography.Paragraph>
+            <b className="sso-callback-name">{callbackTarget.name}</b>
+            <div className="sso-code-line">
+              <code>{callbackUrl}</code>
+              <Typography.Text copyable={{ text: callbackUrl }} aria-label={t('ssoCopyCallback')} />
+            </div>
+            <p className="sso-hint">{callbackHint}</p>
+            <p className="sso-hint">{t('ssoCallbackDeployHint')}</p>
           </>
         )}
       </Modal>
-    </>
+    </div>
   );
 }
 
@@ -652,12 +743,14 @@ function SsoIdpModal({ open, idp, saving, onCancel, onSubmit }: SsoIdpModalProps
   return (
     <Modal
       open={open}
-      title={idp ? t('ssoEditIdp') : t('ssoAddIdp')}
+      title={idp ? t('ssoEditIdpTitle') : t('ssoAddIdp')}
       okText={t('ssoSaveIdp')}
       cancelText={t('cancel')}
       confirmLoading={saving}
       onOk={() => form.submit()}
       onCancel={onCancel}
+      width={520}
+      className="sso-modal"
       destroyOnClose
     >
       <Form form={form} layout="vertical" preserve={false} onFinish={onSubmit}>
@@ -776,10 +869,12 @@ function SsoConnectionModal({
       onOk={() => form.submit()}
       onCancel={onCancel}
       width={760}
+      className="sso-modal"
       destroyOnClose
     >
       <Form form={form} layout="vertical" preserve={false} onFinish={onSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <SectionTitle>{t('ssoBasicInfo')}</SectionTitle>
+        <div className="sso-form-grid">
           <Form.Item
             label={t('ssoIdp')}
             name="idpId"
@@ -809,15 +904,13 @@ function SsoConnectionModal({
         <Form.Item
           label={t('ssoConnectionName')}
           name="name"
+          extra={t('ssoConnectionNameHint')}
           rules={[{ required: true, whitespace: true, message: t('ssoConnectionNameRequired') }]}
         >
           <Input maxLength={64} placeholder={t('ssoConnectionNamePlaceholder')} />
         </Form.Item>
-        {editing && (
-          <Text type="secondary">{t('ssoProtocolLockedHint')}</Text>
-        )}
 
-        <Divider>{t('ssoProtocolConfig')}</Divider>
+        <SectionTitle>{t('ssoProtocolConfig')}</SectionTitle>
         <Form.Item
           label={t('ssoIssuer')}
           name="issuer"
@@ -840,6 +933,7 @@ function SsoConnectionModal({
             <Form.Item
               label={t('ssoSamlCert')}
               name="samlCert"
+              extra={t('ssoSamlCertHint')}
               rules={[{ required: true, whitespace: true, message: t('ssoSamlCertRequired') }]}
             >
               <Input.TextArea rows={4} placeholder={t('ssoSamlCertPlaceholder')} />
@@ -847,48 +941,50 @@ function SsoConnectionModal({
           </>
         ) : (
           <>
-            <Form.Item
-              label={t('ssoOidcAuthorizeUrl')}
-              name="oidcAuthorizeUrl"
-              rules={[{ required: true, whitespace: true, message: t('ssoOidcAuthorizeUrlRequired') }]}
-            >
-              <Input placeholder={t('ssoOidcAuthorizeUrlPlaceholder')} />
-            </Form.Item>
-            <Form.Item
-              label={t('ssoOidcTokenUrl')}
-              name="oidcTokenUrl"
-              rules={[{ required: true, whitespace: true, message: t('ssoOidcTokenUrlRequired') }]}
-            >
-              <Input placeholder={t('ssoOidcTokenUrlPlaceholder')} />
-            </Form.Item>
-            <Form.Item
-              label={t('ssoOidcJwksUrl')}
-              name="oidcJwksUrl"
-              rules={[{ required: true, whitespace: true, message: t('ssoOidcJwksUrlRequired') }]}
-            >
-              <Input placeholder={t('ssoOidcJwksUrlPlaceholder')} />
-            </Form.Item>
-            <Form.Item
-              label={t('ssoClientId')}
-              name="clientId"
-              rules={[{ required: true, whitespace: true, message: t('ssoClientIdRequired') }]}
-            >
-              <Input placeholder={t('ssoClientIdPlaceholder')} />
-            </Form.Item>
-            <Form.Item
-              label={t('ssoClientSecret')}
-              name="clientSecret"
-              extra={editing && connection?.clientSecretConfigured ? t('ssoClientSecretKeepHint') : undefined}
-              rules={editing ? [] : [{ required: true, whitespace: true, message: t('ssoClientSecretRequired') }]}
-            >
-              <Input.Password
-                autoComplete="new-password"
-                placeholder={editing ? t('ssoClientSecretPlaceholder') : t('ssoClientSecretCreatePlaceholder')}
-              />
-            </Form.Item>
-            <Form.Item label={t('ssoScopes')} name="scopes">
-              <Input placeholder={t('ssoScopesPlaceholder')} />
-            </Form.Item>
+            <div className="sso-form-grid">
+              <Form.Item
+                label={t('ssoOidcAuthorizeUrl')}
+                name="oidcAuthorizeUrl"
+                rules={[{ required: true, whitespace: true, message: t('ssoOidcAuthorizeUrlRequired') }]}
+              >
+                <Input placeholder={t('ssoOidcAuthorizeUrlPlaceholder')} />
+              </Form.Item>
+              <Form.Item
+                label={t('ssoOidcTokenUrl')}
+                name="oidcTokenUrl"
+                rules={[{ required: true, whitespace: true, message: t('ssoOidcTokenUrlRequired') }]}
+              >
+                <Input placeholder={t('ssoOidcTokenUrlPlaceholder')} />
+              </Form.Item>
+              <Form.Item
+                label={t('ssoOidcJwksUrl')}
+                name="oidcJwksUrl"
+                rules={[{ required: true, whitespace: true, message: t('ssoOidcJwksUrlRequired') }]}
+              >
+                <Input placeholder={t('ssoOidcJwksUrlPlaceholder')} />
+              </Form.Item>
+              <Form.Item
+                label={t('ssoClientId')}
+                name="clientId"
+                rules={[{ required: true, whitespace: true, message: t('ssoClientIdRequired') }]}
+              >
+                <Input placeholder={t('ssoClientIdPlaceholder')} />
+              </Form.Item>
+              <Form.Item
+                label={t('ssoClientSecret')}
+                name="clientSecret"
+                extra={editing && connection?.clientSecretConfigured ? t('ssoClientSecretKeepHint') : undefined}
+                rules={editing ? [] : [{ required: true, whitespace: true, message: t('ssoClientSecretRequired') }]}
+              >
+                <Input.Password
+                  autoComplete="new-password"
+                  placeholder={editing ? t('ssoClientSecretPlaceholder') : t('ssoClientSecretCreatePlaceholder')}
+                />
+              </Form.Item>
+              <Form.Item label={t('ssoScopes')} name="scopes">
+                <Input placeholder={t('ssoScopesPlaceholder')} />
+              </Form.Item>
+            </div>
             <Form.Item
               label={t('ssoAllowedTenants')}
               name="allowedTenants"
@@ -899,9 +995,9 @@ function SsoConnectionModal({
           </>
         )}
 
-        <Divider>{t('ssoAttributeMapping')}</Divider>
-        <Text type="secondary">{t('ssoAttributeHint')}</Text>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
+        <SectionTitle>{t('ssoAttributeMapping')}</SectionTitle>
+        <p className="sso-hint sso-hint-tight">{t('ssoAttributeHint')}</p>
+        <div className="sso-form-grid">
           <Form.Item label={t('ssoSubjectClaim')} name="subjectClaim">
             <Input placeholder={t('ssoSubjectClaimPlaceholder')} />
           </Form.Item>
@@ -931,47 +1027,58 @@ function SsoConnectionModal({
           </Form.Item>
         </div>
 
-        <Divider>{t('ssoConnectionStatus')}</Divider>
-        <Form.Item label={t('ssoEnableConnection')} name="enabled" valuePropName="checked">
-          <Switch aria-label={t('ssoEnableConnection')} />
-        </Form.Item>
-        {!editing && <Text type="secondary">{t('ssoNewConnectionDisabledHint')}</Text>}
+        <SectionTitle>{t('ssoConnectionStatus')}</SectionTitle>
+        <div className="sso-switch-row">
+          <div className="sso-switch-copy">
+            <b>{t('ssoEnableConnection')}</b>
+            <p>{t('ssoEnableConnectionHint')}</p>
+          </div>
+          <Form.Item name="enabled" valuePropName="checked" noStyle>
+            <Switch size="small" aria-label={t('ssoEnableConnection')} />
+          </Form.Item>
+        </div>
         <Form.Item noStyle shouldUpdate={(prev, next) => prev.enabled !== next.enabled}>
           {({ getFieldValue }) => (
-            <Form.Item
-              label={t('ssoDefaultLoginLabel')}
-              name="defaultLogin"
-              valuePropName="checked"
-              extra={t('ssoDefaultLoginHint')}
-            >
-              <Switch aria-label={t('ssoDefaultLoginLabel')} disabled={!getFieldValue('enabled')} />
-            </Form.Item>
+            <div className="sso-switch-row">
+              <div className="sso-switch-copy">
+                <b>{t('ssoDefaultLoginLabel')}</b>
+                <p>{t('ssoDefaultLoginHint')}</p>
+              </div>
+              <Form.Item name="defaultLogin" valuePropName="checked" noStyle>
+                <Switch size="small" aria-label={t('ssoDefaultLoginLabel')} disabled={!getFieldValue('enabled')} />
+              </Form.Item>
+            </div>
           )}
         </Form.Item>
-        <Form.Item
-          label={t('ssoAutoProvisionLabel')}
-          name="autoProvision"
-          valuePropName="checked"
-          extra={t('ssoAutoProvisionHint')}
-        >
-          <Switch aria-label={t('ssoAutoProvisionLabel')} />
-        </Form.Item>
+        <div className="sso-switch-row">
+          <div className="sso-switch-copy">
+            <b>{t('ssoAutoProvisionLabel')}</b>
+            <p>{t('ssoAutoProvisionHint')}</p>
+          </div>
+          <Form.Item name="autoProvision" valuePropName="checked" noStyle>
+            <Switch size="small" aria-label={t('ssoAutoProvisionLabel')} />
+          </Form.Item>
+        </div>
         <Form.Item noStyle shouldUpdate={(prev, next) => prev.usernameClaim !== next.usernameClaim}>
           {({ getFieldValue }) => (
-            <Form.Item
-              label={t('ssoBindExistingLabel')}
-              name="bindExistingByUsername"
-              valuePropName="checked"
-              extra={t('ssoBindExistingHint')}
-            >
-              <Switch
-                aria-label={t('ssoBindExistingLabel')}
-                // 新建连接默认跟随用户标识声明，未手填也可启用；既有连接没有声明时必须先显式配置。
-                disabled={editing && !text(getFieldValue('usernameClaim'))}
-              />
-            </Form.Item>
+            <div className="sso-switch-row">
+              <div className="sso-switch-copy">
+                <b>{t('ssoBindExistingLabel')}</b>
+                <p>{t('ssoBindExistingHint')}</p>
+              </div>
+              <Form.Item name="bindExistingByUsername" valuePropName="checked" noStyle>
+                <Switch
+                  size="small"
+                  aria-label={t('ssoBindExistingLabel')}
+                  // 新建连接默认跟随用户标识声明，未手填也可启用；既有连接没有声明时必须先显式配置。
+                  disabled={editing && !text(getFieldValue('usernameClaim'))}
+                />
+              </Form.Item>
+            </div>
           )}
         </Form.Item>
+        {!editing && <p className="sso-hint">{t('ssoNewConnectionDisabledHint')}</p>}
+        {editing && <p className="sso-hint">{t('ssoEditLockedHint')}</p>}
       </Form>
     </Modal>
   );

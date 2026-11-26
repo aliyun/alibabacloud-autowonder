@@ -14,6 +14,12 @@ export async function listNotifications(params: NotificationListParams): Promise
   return resp.data;
 }
 
+/** 未读数；与顶栏铃铛共用 ['notifications','unread-count'] 查询缓存。 */
+export async function getUnreadNotificationCount(): Promise<number> {
+  const resp = await apiClient.get<number>('/api/notifications/unread-count');
+  return resp.data;
+}
+
 /** 按 ID 读取本人通知；分页外的通知也能打开详情，归属由服务端约束。 */
 export async function getNotification(id: number): Promise<Notification> {
   const resp = await apiClient.get<Notification>(`/api/notifications/${id}`);

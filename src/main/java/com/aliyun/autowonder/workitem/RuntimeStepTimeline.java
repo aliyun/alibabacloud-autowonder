@@ -2,6 +2,7 @@ package com.aliyun.autowonder.workitem;
 
 import com.aliyun.autowonder.common.i18n.SystemMessages;
 import com.aliyun.autowonder.dispatch.DispatchRuntimeEventDO;
+import com.aliyun.autowonder.json.JSON;
 import com.aliyun.autowonder.sdlc.SdlcStepDO;
 import com.aliyun.autowonder.util.MojibakeDetector;
 import com.aliyun.autowonder.workitem.dto.SubStepVO;
@@ -22,12 +23,12 @@ class RuntimeStepTimeline {
     private final Map<Integer, DispatchRuntimeEventDO> stateByOrder;
     private final Map<Integer, List<SubStepVO>> detailsByOrder;
     private final Integer latestOrder;
-    private final Map<Integer, Long> durationByOrder;
+    private final Map<Integer, StepDuration> durationByOrder;
 
     private RuntimeStepTimeline(Map<Integer, DispatchRuntimeEventDO> lastByOrder,
                                 Map<Integer, DispatchRuntimeEventDO> stateByOrder,
                                 Map<Integer, List<SubStepVO>> detailsByOrder,
-                                Integer latestOrder, Map<Integer, Long> durationByOrder) {
+                                Integer latestOrder, Map<Integer, StepDuration> durationByOrder) {
         this.lastByOrder = lastByOrder;
         this.stateByOrder = stateByOrder;
         this.detailsByOrder = detailsByOrder;
@@ -69,21 +70,26 @@ class RuntimeStepTimeline {
         Map<Integer, DispatchRuntimeEventDO> state = new LinkedHashMap<>();
         Map<Integer, List<SubStepVO>> details = new LinkedHashMap<>();
         Map<Integer, StepDuration> timing = new LinkedHashMap<>();
-        Map<Integer, List<DispatchRuntimeEventDO>> unsorted = new LinkedHashMap<>();
+        List<DispatchRuntimeEventDO> unsortedBoundaries = new ArrayList<>();
         Integer latestOrder = null;
+        DispatchRuntimeEventDO latestEvent = null;
         for (DispatchRuntimeEventDO event : events) {
             String type = event.getEventType();
+            if ("step.timing".equals(type) || "operation.timing".equals(type)) continue;
+            Integer order = resolveOrder(event, stepsByOrder, orderByStepId, orderByName, orderByCode);
+            if (isTimingBoundary(type)) {
+                if (ordered) applyBoundary(timing, order, event);
+                else unsortedBoundaries.add(event);
+            }
             if ("dispatch.executor_failover".equals(type)) {
-                timing.values().forEach(duration -> duration.accept(event));
-                unsorted.values().forEach(bucket -> bucket.add(event));
                 last.clear();
                 state.clear();
                 if (spill != null) details.values().forEach(spill::discard);
                 details.clear();
                 latestOrder = null;
+                latestEvent = null;
                 continue;
             }
-            Integer order = resolveOrder(event, stepsByOrder, orderByStepId, orderByName, orderByCode);
             if (order == null) continue;
 
             last.put(order, event);
@@ -100,30 +106,17 @@ class RuntimeStepTimeline {
                 detail.setStatus(isFailureEvent(event) ? "failed" : "done");
                 rows.add(detail);
             }
-            if (latestOrder == null || compareEvent(event, last.get(latestOrder)) >= 0) {
+            if (latestEvent == null || compareEvent(event, latestEvent) >= 0) {
+                latestEvent = event;
                 latestOrder = order;
             }
-            if (ordered) {
-                timing.computeIfAbsent(order, ignored -> new StepDuration()).accept(event);
-            } else {
-                List<DispatchRuntimeEventDO> bucket = unsorted.computeIfAbsent(order, ignored -> new ArrayList<>());
-                if ("step.started".equals(type) || type != null && TERMINAL_EVENT_TYPES.contains(type)) {
-                    bucket.add(event);
-                }
-            }
         }
-        unsorted.forEach((order, rows) -> {
-            StepDuration duration = new StepDuration();
-            sortedByTime(rows).forEach(duration::accept);
-            timing.put(order, duration);
-        });
-        Map<Integer, Long> durations = new LinkedHashMap<>();
-        timing.forEach((order, duration) -> {
-            if (duration.sawStarted) {
-                durations.put(order, duration.total + positiveDelta(duration.openStart, now));
-            }
-        });
-        return new RuntimeStepTimeline(last, state, details, latestOrder, durations);
+        for (DispatchRuntimeEventDO event : sortedByTime(unsortedBoundaries)) {
+            Integer order = resolveOrder(event, stepsByOrder, orderByStepId, orderByName, orderByCode);
+            applyBoundary(timing, order, event);
+        }
+        timing.values().forEach(duration -> duration.total += positiveDelta(duration.openStart, now));
+        return new RuntimeStepTimeline(last, state, details, latestOrder, timing);
     }
 
     String statusOf(SdlcStepDO step) {
@@ -204,7 +197,18 @@ class RuntimeStepTimeline {
         if (step == null || step.getStepOrder() == null) {
             return null;
         }
-        return durationByOrder.get(step.getStepOrder());
+        StepDuration duration = durationByOrder.get(step.getStepOrder());
+        return duration == null ? null : duration.total;
+    }
+
+    long otherWaitOf(SdlcStepDO step) {
+        StepDuration duration = durationByOrder.get(step.getStepOrder());
+        return duration == null ? 0 : duration.otherWait;
+    }
+
+    boolean isOpen(SdlcStepDO step) {
+        StepDuration duration = durationByOrder.get(step.getStepOrder());
+        return duration != null && duration.openStart != null;
     }
 
     /** event_time 可空（客户端上报），回退到服务端落库时间 gmt_create。 */
@@ -239,22 +243,92 @@ class RuntimeStepTimeline {
     }
 
     private static final Set<String> TERMINAL_EVENT_TYPES = Set.of(
-            "step.completed", "step.failed", "step.reused", "step.stale");
+            "step.completed", "step.failed", "step.reused", "step.stale", "step.skipped", "step.cancelled", "step.blocked",
+            "dispatch.failed", "dispatch.cancelled", "dispatch.completed");
+    private static final Set<String> STOP_EVENTS = Set.of("session.interrupted", "session.failed",
+            "session.cancelled", "dispatch.paused");
+    private static final Set<String> RESUME_EVENTS = Set.of("session.resumed", "dispatch.resumed", "dispatch.recovered");
+
+    static boolean isTimingBoundary(String type) {
+        return type != null && ("step.started".equals(type) || "dispatch.executor_failover".equals(type)
+                || TERMINAL_EVENT_TYPES.contains(type) || STOP_EVENTS.contains(type) || RESUME_EVENTS.contains(type));
+    }
+
+    static boolean hasStepIdentity(DispatchRuntimeEventDO event) {
+        return event.getStepId() != null || event.getStepOrder() != null
+                || event.getStepKey() != null && !event.getStepKey().isBlank()
+                || event.getStepName() != null && !event.getStepName().isBlank();
+    }
+
+    private static void applyBoundary(Map<Integer, StepDuration> timing, Integer order, DispatchRuntimeEventDO event) {
+        String type = event.getEventType();
+        Date time = at(event);
+        if ("step.started".equals(type)) {
+            if (order == null) return;
+            // A later stage cannot resume an earlier interrupted stage.
+            timing.forEach((other, duration) -> {
+                if (!order.equals(other)) duration.stoppedAt = null;
+            });
+            StepDuration duration = timing.computeIfAbsent(order, ignored -> new StepDuration());
+            if (duration.openStart == null) {
+                Integer attempt = stepAttempt(event);
+                if (duration.paused && Objects.equals(attempt, duration.attempt)
+                        && (attempt == null || attempt > 0)) duration.resume(time);
+                duration.attempt = attempt;
+                duration.openStart = time;
+                duration.stoppedAt = null;
+            }
+        } else if (type.startsWith("dispatch.") || type.startsWith("session.") && !hasStepIdentity(event)) {
+            // Older runtimes can report pause and resume without a step identity.
+            timing.values().forEach(duration -> duration.accept(type, time));
+        } else {
+            StepDuration duration = timing.get(order);
+            if (duration != null) duration.accept(type, time);
+        }
+    }
+
+    private static Integer stepAttempt(DispatchRuntimeEventDO event) {
+        if (event.getDetailJson() == null) return null;
+        try {
+            var detail = JSON.parseObject(event.getDetailJson());
+            return detail == null ? null : detail.getInteger("stepAttempt");
+        } catch (RuntimeException invalidDetail) {
+            return -1;
+        }
+    }
 
     private static final class StepDuration {
         private long total;
+        private long otherWait;
         private Date openStart;
-        private boolean sawStarted;
+        private Date stoppedAt;
+        private Integer attempt;
+        private boolean paused;
 
-        private void accept(DispatchRuntimeEventDO event) {
-            String type = event.getEventType();
-            if ("step.started".equals(type)) {
-                sawStarted = true;
-                if (openStart == null) openStart = at(event);
-            } else if (openStart != null && type != null
-                    && (TERMINAL_EVENT_TYPES.contains(type) || "dispatch.executor_failover".equals(type))) {
-                total += positiveDelta(openStart, at(event));
+        private void resume(Date time) {
+            if (stoppedAt == null) return;
+            long wait = positiveDelta(stoppedAt, time);
+            total += wait;
+            otherWait += wait;
+            openStart = time;
+            stoppedAt = null;
+        }
+
+        private void accept(String type, Date time) {
+            if (STOP_EVENTS.contains(type)) {
+                paused = (openStart != null || paused)
+                        && ("dispatch.paused".equals(type) || "session.interrupted".equals(type));
+                if (openStart != null) {
+                    total += positiveDelta(openStart, time);
+                    openStart = null;
+                    stoppedAt = time;
+                }
+            } else if (RESUME_EVENTS.contains(type)) {
+                resume(time);
+            } else {
+                total += positiveDelta(openStart, time);
                 openStart = null;
+                stoppedAt = null;
             }
         }
     }

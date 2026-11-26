@@ -1,28 +1,65 @@
 {
   "title": "工作台",
+  "description": "今天需要你处理的事，和数字员工的进展。",
   "newWorkitem": "新建工单",
-  "todo": {
-    "title": "待我处理",
-    "count": "共 {{total}} 条",
-    "empty": "当前没有需要你处理的工单",
-    "handle": "去处理",
-    "reason": {
-      "assigned": "等待你处理",
-      "pendingDecision": "等待你的决定"
+  "totalRows": "共 {{total}} 条",
+  "overview": {
+    "decision": "待我决策",
+    "assigned": "指派给我",
+    "review": "待审核",
+    "unread": "未读通知",
+    "refresh": "刷新"
+  },
+  "queue": {
+    "title": "需要你处理",
+    "sortedHint": "按最近更新排序",
+    "filterAria": "待处理事项类型",
+    "filter": {
+      "all": "全部",
+      "decision": "待决策",
+      "assigned": "指派给我",
+      "review": "待审核",
+      "alert": "异常"
     },
-    "columns": {
-      "status": "状态",
-      "title": "工单",
-      "id": "工单号",
-      "reason": "原因",
-      "updated": "更新时间"
+    "kind": {
+      "decision": "待决策",
+      "assigned": "指派给我",
+      "review": "待审核",
+      "alert": "异常"
+    },
+    "action": {
+      "decision": "去决策",
+      "assigned": "去处理",
+      "review": "去审核",
+      "alert": "去查看"
+    },
+    "reason": {
+      "decision": "数字员工等待你的决定",
+      "assigned": "当前负责人是本人",
+      "review": "版本变更等待评审",
+      "alert": "需要关注最近一次运行"
+    },
+    "source": {
+      "agent": "数字员工",
+      "scheduledTask": "定时任务"
+    },
+    "reviewTitle": "数字员工「{{name}}」版本待审核",
+    "reviewTitleVersioned": "数字员工「{{name}}」v{{version}} 版本待审核",
+    "alertTitle": "定时任务「{{name}}」需要关注",
+    "filterEmpty": "该分类暂无可展示的条目",
+    "empty": {
+      "title": "今天没有需要你处理的事",
+      "description": "可以看看「我在跟进」，或新建一张工单。",
+      "viewFollowing": "查看我在跟进"
     }
   },
   "following": {
     "title": "我在跟进",
+    "viewAll": "查看全部",
+    "tabsAria": "我在跟进的工单范围",
     "tabs": {
       "all": "全部",
-      "created": "我发起的",
+      "created": "我创建的",
       "watched": "我关注的",
       "commented": "我参与的"
     },
@@ -49,7 +86,23 @@
     },
     "changeStatus": {
       "action": "改状态",
+      "title": "改状态",
+      "current": "当前",
+      "target": "目标",
+      "targetPlaceholder": "选择目标状态",
+      "recommended": "推荐流转",
+      "others": "其他状态",
+      "transitionEdge": "流转「{{name}}」",
+      "outOfTemplateHint": "不在模板推荐范围",
+      "contextMeta": "#{{id}} · {{type}} · 负责人 {{owner}}",
+      "reasonLabel": "流转备注（选填）",
+      "reasonPlaceholder": "说明原因，将写入时间线…",
+      "cancel": "取消",
+      "confirm": "确认流转",
+      "close": "关闭",
       "stale": "工单已被更新，请重试",
+      "staleHint": "加载后按最新状态重新给出可流转目标。",
+      "staleReload": "重新加载",
       "noWorkflow": "该工单未配置状态流程，无法直接改状态",
       "noTarget": "当前模板没有其他可流转的状态节点",
       "loadFailed": "读取可变更状态失败，请重试"
@@ -58,16 +111,24 @@
     "loadFailed": "加载失败，请重试",
     "retry": "重试"
   },
+  "running": {
+    "title": "运行中的交付",
+    "viewExecutions": "执行记录",
+    "empty": "当前没有运行中的交付",
+    "previewHint": "仅显示前 {{limit}} 条，共 {{total}} 条运行中的交付",
+    "minutes_other": "已运行 {{count}} 分钟",
+    "hours_other": "已运行 {{count}} 小时",
+    "hoursMinutes_other": "已运行 {{count}} 小时 {{minutes}} 分"
+  },
   "activity": {
-    "title": "协作动态",
-    "empty": "暂无协作动态",
-    "viewAll": "查看全部通知",
-    "unread": "未读"
+    "title": "最近动态",
+    "empty": "暂无最近动态",
+    "viewAll": "全部通知",
+    "unread": "未读",
+    "previewHint": "仅显示前 {{limit}} 条，共 {{total}} 条通知"
   },
   "duration": {
     "none": "—",
-    "notStarted": "尚未开始",
-    "ended": "已结束",
     "lessThanMinute": "不足 1 分钟",
     "minutes": "{{value}} 分钟",
     "hours": "{{value}} 小时",
@@ -75,19 +136,6 @@
   },
   "create": {
     "title": "新建工单",
-    "tabs": {
-      "default": "默认创建",
-      "smart": "智能创建"
-    },
-    "smart": {
-      "description": "用一句话描述目标，由 Chief 检索、整理草稿，并在你确认后创建。",
-      "draftLabel": "目标与背景",
-      "draftPlaceholder": "例如：为工单列表增加按负责人筛选，并补齐前后端测试",
-      "open": "在 Chief 中继续",
-      "checking": "正在检查 Chief 可用性…",
-      "unavailable": "Chief 暂不可用，请使用默认创建",
-      "prefillRejected": "Chief 当前已有草稿，已保留你的输入，请先发送当前内容后再试"
-    },
     "delivery": {
       "mode": "交付安排",
       "later": "暂不指派",

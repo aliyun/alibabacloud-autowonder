@@ -16,6 +16,8 @@
     "last7Days": "近 7 天",
     "last30Days": "近 30 天",
     "last90Days": "近 90 天",
+    "rangeAria": "时间范围",
+    "autoRefresh": "10 秒自动刷新",
     "total_other": "共 {{total}} 条",
     "empty": "暂无执行记录"
   },
@@ -30,6 +32,7 @@
     "attempt": "尝试次数",
     "status": "状态",
     "summary": "结果摘要",
+    "emptyValue": "—",
     "artifacts_other": "产物 ({{total}})",
     "noArtifacts": "无产物",
     "openWorkitem": "跳转工单",

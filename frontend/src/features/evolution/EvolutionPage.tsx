@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import {
   Button, Card, Form, Input, message, Modal, Popconfirm, Space, Tabs, Tag, Typography} from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { ApiOutlined, ReloadOutlined, CloseOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -334,13 +334,13 @@ export function EvolutionPage() {
               actionMutation.mutate({ action: 'release', proposal: record }))}>{t('actions.release')}</Button>
           )}
           {record.status === 'RELEASED' && (
-            <Popconfirm icon={<QuestionCircleOutlined aria-hidden />} okText={t('actions.confirm')} cancelText={t('actions.cancel')} title={t('confirm.rollback')} onConfirm={() => accessCommand('READ_WRITE', t('commands.rollback'), () =>
+            <Popconfirm icon={<AwStrokeIcon name="help" />} okText={t('actions.confirm')} cancelText={t('actions.cancel')} title={t('confirm.rollback')} onConfirm={() => accessCommand('READ_WRITE', t('commands.rollback'), () =>
               actionMutation.mutate({ action: 'rollback', proposal: record }))}>
               <Button size="small" danger>{t('actions.rollback')}</Button>
             </Popconfirm>
           )}
           {!['RELEASED', 'REJECTED'].includes(record.status) && (
-            <Popconfirm icon={<QuestionCircleOutlined aria-hidden />} okText={t('actions.confirm')} cancelText={t('actions.cancel')} title={t('confirm.reject')} onConfirm={() => accessCommand('READ_WRITE', t('commands.reject'), () =>
+            <Popconfirm icon={<AwStrokeIcon name="help" />} okText={t('actions.confirm')} cancelText={t('actions.cancel')} title={t('confirm.reject')} onConfirm={() => accessCommand('READ_WRITE', t('commands.reject'), () =>
               actionMutation.mutate({ action: 'reject', proposal: record }))}>
               <Button size="small" danger>{t('actions.reject')}</Button>
             </Popconfirm>
@@ -417,11 +417,11 @@ export function EvolutionPage() {
         className="aw-content-card" title={<PageHeading title={t('pageTitle')} />}
         extra={
           <Space>
-            <Button icon={<ReloadOutlined aria-hidden />} onClick={() => {
+            <Button icon={<AwStrokeIcon name="refresh" />} onClick={() => {
               refetch();
               refetchManifest();
             }}>{t('actions.refresh')}</Button>
-            <Button type="primary" icon={<ApiOutlined aria-hidden />}
+            <Button type="primary" icon={<AwStrokeIcon name="api" />}
               onClick={() => accessCommand('READ_WRITE', t('commands.submitDelta'), () => {
                 deltaForm.setFieldsValue({ deltaJson: defaultDeltaJson });
                 setDeltaOpen(true);
@@ -478,7 +478,7 @@ export function EvolutionPage() {
         width={820}
         cancelText={t('actions.cancel')}
         closable={{ 'aria-label': t('actions.close') }}
-        closeIcon={<CloseOutlined aria-hidden />}
+        closeIcon={<AwStrokeIcon name="x" />}
         destroyOnHidden
       >
         <Form form={deltaForm} layout="vertical" preserve={false}>
@@ -498,7 +498,7 @@ export function EvolutionPage() {
         width={720}
         cancelText={t('actions.cancel')}
         closable={{ 'aria-label': t('actions.close') }}
-        closeIcon={<CloseOutlined aria-hidden />}
+        closeIcon={<AwStrokeIcon name="x" />}
         destroyOnHidden
       >
         <Form form={replayForm} layout="vertical" preserve={false}>

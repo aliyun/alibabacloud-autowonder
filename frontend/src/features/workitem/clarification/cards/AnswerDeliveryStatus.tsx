@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { ClarificationElicitation } from '../types';
 
 /** One current receipt fact; question history owns answers and uncertain outcomes. */
@@ -10,7 +11,11 @@ export function AnswerDeliveryStatus({ cards, currentTurnId }: {
     && (row.deliveryStatus === 'SAVED' || row.deliveryStatus === 'RECEIVED'))
     .sort((a, b) => b.gmtCreate.localeCompare(a.gmtCreate) || b.requestId.localeCompare(a.requestId))[0];
   if (!card || (card.deliveryStatus !== 'SAVED' && card.deliveryStatus !== 'RECEIVED')) return null;
-  return <div aria-live="polite" data-testid={`answer-delivery-${card.requestId}`} style={{ padding: '4px 12px' }}>
-    {t(`clarification.answerDelivery.${card.deliveryStatus}`)}
+  const received = card.deliveryStatus === 'RECEIVED';
+  return <div aria-live="polite" data-testid={`answer-delivery-${card.requestId}`} style={{ padding: '0 16px 8px' }}>
+    <div className={`aw-cl-note ${received ? 'ok' : 'info'}`}>
+      <span className="ic"><AwStrokeIcon name={received ? 'check-c' : 'clock'} size={14} /></span>
+      <span className="grow">{t(`clarification.answerDelivery.${card.deliveryStatus}`)}</span>
+    </div>
   </div>;
 }

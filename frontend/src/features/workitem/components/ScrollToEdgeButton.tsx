@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useCallback } from 'react';
 import { Button } from 'antd';
-import { VerticalAlignTopOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { CSSProperties } from 'react';
 
 interface ScrollToEdgeButtonProps {
@@ -22,13 +22,11 @@ const CONTROL_STYLE: CSSProperties = {
   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
 };
 
-/** 居中在「内容右边框」与「滚动条」之间：
- *  经典滚动条占布局宽度（offsetWidth - clientWidth > 0），叠加滚动条不占（= 0），
- *  两种形态下都等于：滚动条宽 + (右侧轨道 - 按钮) / 2。 */
+/** 按钮中线压在内容卡右边框上：边框距容器外沿 = 滚动条宽（叠加滚动条为 0）+ 右内边距，可为负值外溢。 */
 function computeCenteredRight(el: HTMLElement): number {
   const scrollbarWidth = Math.max(0, el.offsetWidth - el.clientWidth);
   const gutter = parseFloat(getComputedStyle(el).paddingRight) || 0;
-  return scrollbarWidth + Math.max(0, (gutter - BUTTON_SIZE) / 2);
+  return scrollbarWidth + gutter - BUTTON_SIZE / 2;
 }
 
 export function ScrollToEdgeButton({ containerRef }: ScrollToEdgeButtonProps) {
@@ -91,7 +89,7 @@ export function ScrollToEdgeButton({ containerRef }: ScrollToEdgeButtonProps) {
         shape="circle"
         aria-label={t('detail.scrollTop')}
         title={t('detail.scrollTop')}
-        icon={<VerticalAlignTopOutlined />}
+        icon={<AwStrokeIcon name="top" />}
         disabled={state.atTop}
         style={CONTROL_STYLE}
         onClick={scrollToTop}
@@ -100,7 +98,7 @@ export function ScrollToEdgeButton({ containerRef }: ScrollToEdgeButtonProps) {
         shape="circle"
         aria-label={t('detail.scrollBottom')}
         title={t('detail.scrollBottom')}
-        icon={<VerticalAlignBottomOutlined />}
+        icon={<AwStrokeIcon name="down" />}
         disabled={state.atBottom}
         style={CONTROL_STYLE}
         onClick={scrollToBottom}

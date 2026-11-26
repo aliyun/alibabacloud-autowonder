@@ -1,7 +1,4 @@
-import { Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
-
-const { CheckableTag } = Tag;
 
 export const DASHBOARD_WORK_TYPES = ['REQ', 'BUG', 'TASK'] as const;
 export type DashboardWorkType = (typeof DASHBOARD_WORK_TYPES)[number];
@@ -20,23 +17,25 @@ export function WorkTypeFilter({ value, onChange }: {
 }) {
   const { t } = useTranslation('spaceDashboard');
   return (
-    <div className="space-dashboard-work-types" role="group" aria-label={t('workType.label')}>
+    <fieldset className="space-dashboard-work-types" aria-label={t('workType.label')}>
       {DASHBOARD_WORK_TYPES.map((type) => (
-        <CheckableTag
-          key={type}
-          checked={value.includes(type)}
-          data-testid={`space-dashboard-work-type-${type}`}
-          onChange={(checked) => {
-            const next = checked ? [...value, type] : value.filter((item) => item !== type);
-            // 全部取消会让版块失去统计口径，保留最后一种。
-            if (next.length > 0) {
-              onChange(next);
-            }
-          }}
-        >
+        <label key={type}>
+          <input
+            type="checkbox"
+            name="space-dashboard-work-type"
+            checked={value.includes(type)}
+            data-testid={`space-dashboard-work-type-${type}`}
+            onChange={(event) => {
+              const next = event.target.checked ? [...value, type] : value.filter((item) => item !== type);
+              // 全部取消会让版块失去统计口径，保留最后一种。
+              if (next.length > 0) {
+                onChange(next);
+              }
+            }}
+          />
           {t(WORK_TYPE_LABEL_KEYS[type])}
-        </CheckableTag>
+        </label>
       ))}
-    </div>
+    </fieldset>
   );
 }

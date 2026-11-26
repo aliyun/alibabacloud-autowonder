@@ -1,20 +1,28 @@
 import { useId, useState } from 'react';
-import { RightOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { Checkbox, Segmented } from 'antd';
 import { workspaceDomainLabel } from '@/shared/auth/access';
 import type { WorkspaceDomain } from '@/shared/types/common';
-import './MemberAccessModal.css';
 
-const DOMAIN_GROUPS = [
-  { key: 'delivery', domains: ['WORKITEM', 'PRD', 'SCHEDULEDTASK', 'DISPATCH', 'ARTIFACT', 'CLARIFICATION', 'CONVERSATION', 'DEBUGLOG'] },
-  { key: 'workers', domains: ['AGENT', 'SQUAD', 'EXECUTOR'] },
-  { key: 'knowledge', domains: ['REPO', 'MEMORY', 'SKILL', 'CATEGORY'] },
-  { key: 'configuration', domains: ['SDLC', 'TEMPLATE', 'STATEMACHINE', 'INTEGRATION', 'WORKSPACE', 'BACKUP', 'ENVIRONMENT'] },
-  { key: 'insights', domains: ['DASHBOARD', 'INSIGHTS', 'AUDIT'] },
-] as const;
-const ADVANCED_DOMAINS = ['AI', 'AIUSAGE', 'SETTING', 'EVOLUTION'] as const;
-const ADVANCED_GROUP_KEY = 'advanced';
-type ConfigurableDomain = Exclude<WorkspaceDomain, 'AUTH' | 'USER' | 'MCP'>;
+export type ConfigurableDomain = Exclude<WorkspaceDomain, 'AUTH' | 'USER' | 'MCP'>;
+
+interface DomainGroup {
+  key: string;
+  labelKey: 'readOnlyFeatures.group.delivery' | 'readOnlyFeatures.group.workers' | 'readOnlyFeatures.group.knowledge' | 'readOnlyFeatures.group.configuration' | 'readOnlyFeatures.group.insights' | 'readOnlyFeatures.advancedShort';
+  domains: readonly ConfigurableDomain[];
+  advanced?: boolean;
+}
+
+export const CONFIGURABLE_GROUPS: readonly DomainGroup[] = [
+  { key: 'delivery', labelKey: 'readOnlyFeatures.group.delivery', domains: ['WORKITEM', 'PRD', 'SCHEDULEDTASK', 'DISPATCH', 'ARTIFACT', 'CLARIFICATION', 'CONVERSATION', 'DEBUGLOG'] },
+  { key: 'workers', labelKey: 'readOnlyFeatures.group.workers', domains: ['AGENT', 'SQUAD', 'EXECUTOR'] },
+  { key: 'knowledge', labelKey: 'readOnlyFeatures.group.knowledge', domains: ['REPO', 'MEMORY', 'SKILL', 'CATEGORY'] },
+  { key: 'configuration', labelKey: 'readOnlyFeatures.group.configuration', domains: ['SDLC', 'TEMPLATE', 'STATEMACHINE', 'INTEGRATION', 'WORKSPACE', 'BACKUP', 'ENVIRONMENT'] },
+  { key: 'insights', labelKey: 'readOnlyFeatures.group.insights', domains: ['DASHBOARD', 'INSIGHTS', 'AUDIT'] },
+  { key: 'advanced', labelKey: 'readOnlyFeatures.advancedShort', domains: ['AI', 'AIUSAGE', 'SETTING', 'EVOLUTION'], advanced: true },
+];
+
+export const CONFIGURABLE_DOMAINS: readonly ConfigurableDomain[] = CONFIGURABLE_GROUPS.flatMap((group) => group.domains);
 
 export function ReadOnlyFeatures({ value = [], onChange, id, disabled = false }: {
   value?: WorkspaceDomain[];
@@ -24,72 +32,84 @@ export function ReadOnlyFeatures({ value = [], onChange, id, disabled = false }:
 }) {
   const { t } = useTranslation('settings');
   const instanceId = useId();
-  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const [activeKey, setActiveKey] = useState(CONFIGURABLE_GROUPS[0].key);
+  const active = CONFIGURABLE_GROUPS.find((group) => group.key === activeKey) ?? CONFIGURABLE_GROUPS[0];
+  const groupLabel = t(active.labelKey);
+  const readOnlyCount = active.domains.filter((domain) => value.includes(domain)).length;
+  const permissionOptions = [
+    { label: t('readOnlyFeatures.readWrite'), value: 'readWrite' as const },
+    { label: t('readOnlyFeatures.readOnly'), value: 'readOnly' as const },
+  ];
 
-  const setDomainPermission = (domain: WorkspaceDomain, readOnly: boolean) => {
+  const setDomainPermission = (domain: ConfigurableDomain, readOnly: boolean) => {
     onChange?.(readOnly
       ? value.includes(domain) ? value : [...value, domain]
       : value.filter((selected) => selected !== domain));
   };
-  const setGroupPermission = (domains: readonly ConfigurableDomain[], readOnly: boolean) => {
+  const setGroupPermission = (readOnly: boolean) => {
     onChange?.(readOnly
-      ? [...value, ...domains.filter((domain) => !value.includes(domain))]
-      : value.filter((domain) => !domains.some((item) => item === domain)));
-  };
-  const renderDomain = (domain: ConfigurableDomain) => {
-    const label = workspaceDomainLabel(domain);
-    const readOnly = value.includes(domain);
-    const descriptionId = `${instanceId}-${domain}-description`;
-    return <div className="member-permission-row" key={domain}>
-      <div className="member-permission-info">
-        <div className="member-permission-name">{label}</div>
-        <div className="member-domain-description" id={descriptionId}>{t(`readOnlyFeatures.description.${domain}`)}</div>
-      </div>
-      <fieldset className="member-permission-options" aria-describedby={descriptionId}>
-        <legend className="member-permission-sr-only">{label}</legend>
-        <label className="member-permission-choice">
-          <input type="radio" name={`${instanceId}-${domain}`} checked={readOnly} disabled={disabled} onChange={() => setDomainPermission(domain, true)} />
-          {t('readOnlyFeatures.readOnly')}
-        </label>
-        <label className="member-permission-choice">
-          <input type="radio" name={`${instanceId}-${domain}`} checked={!readOnly} disabled={disabled} onChange={() => setDomainPermission(domain, false)} />
-          {t('readOnlyFeatures.readWrite')}
-        </label>
-      </fieldset>
-    </div>;
-  };
-  const renderGroup = (key: string, label: string, domains: readonly ConfigurableDomain[], advanced = false) => {
-    const expanded = expandedGroups.includes(key);
-    const readOnlyCount = domains.filter((domain) => value.includes(domain)).length;
-    const panelId = `${instanceId}-${key}-panel`;
-    return <section className="member-permission-group" key={key} aria-label={label}>
-      <div className="member-permission-group-header">
-        <button type="button" className="member-permission-group-toggle" aria-expanded={expanded} aria-controls={panelId}
-          onClick={() => setExpandedGroups((current) => expanded ? current.filter((item) => item !== key) : [...current, key])}>
-          <RightOutlined rotate={expanded ? 90 : 0} aria-hidden="true" />
-          <span>{label}</span>
-          <span className="member-permission-group-count">{t('readOnlyFeatures.groupStatus', { readOnly: readOnlyCount, readWrite: domains.length - readOnlyCount })}</span>
-        </button>
-        <div className="member-permission-group-actions">
-          <span>{t('readOnlyFeatures.bulkLabel')}</span>
-          <button type="button" disabled={disabled} aria-pressed={readOnlyCount === domains.length}
-            aria-label={t('readOnlyFeatures.setGroupPermission', { group: label, permission: t('readOnlyFeatures.readOnly') })}
-            onClick={() => setGroupPermission(domains, true)}>{t('readOnlyFeatures.bulkReadOnly')}</button>
-          <button type="button" disabled={disabled} aria-pressed={readOnlyCount === 0}
-            aria-label={t('readOnlyFeatures.setGroupPermission', { group: label, permission: t('readOnlyFeatures.readWrite') })}
-            onClick={() => setGroupPermission(domains, false)}>{t('readOnlyFeatures.bulkReadWrite')}</button>
-        </div>
-      </div>
-      <div className="member-permission-group-body" id={panelId} hidden={!expanded}>
-        {advanced && <p className="member-domain-hint">{t('readOnlyFeatures.advancedHint')}</p>}
-        {domains.map(renderDomain)}
-      </div>
-    </section>;
+      ? [...value, ...active.domains.filter((domain) => !value.includes(domain))]
+      : value.filter((domain) => !active.domains.some((item) => item === domain)));
   };
 
-  return <div className="member-permissions" id={id}>
-    <p className="member-domain-hint">{t('readOnlyDomainsHint')}</p>
-    {DOMAIN_GROUPS.map((group) => renderGroup(group.key, t(`readOnlyFeatures.group.${group.key}`), group.domains))}
-    {renderGroup(ADVANCED_GROUP_KEY, t('readOnlyFeatures.advanced'), ADVANCED_DOMAINS, true)}
+  return <div className="aw-perm" id={id}>
+    <div className="aw-perm-nav" role="tablist" aria-label={t('readOnlyFeatures.categories')} aria-orientation="vertical">
+      {CONFIGURABLE_GROUPS.map((group) => {
+        const label = t(group.labelKey);
+        const count = group.domains.filter((domain) => value.includes(domain)).length;
+        return <button
+          key={group.key}
+          type="button"
+          role="tab"
+          aria-selected={group.key === active.key}
+          aria-controls={`${instanceId}-panel`}
+          className={group.key === active.key ? 'is-active' : undefined}
+          onClick={() => setActiveKey(group.key)}
+        >
+          <span className="aw-perm-nav-name">{label}</span>
+          <span className="aw-perm-nav-count">
+            {t('readOnlyFeatures.groupStatus', { readOnly: count, readWrite: group.domains.length - count })}
+          </span>
+        </button>;
+      })}
+    </div>
+    <div className="aw-perm-panel" id={`${instanceId}-panel`} role="tabpanel" aria-label={groupLabel}>
+      <div className="aw-perm-panel-head">
+        <span className="aw-perm-panel-title">{groupLabel}</span>
+        <Checkbox
+          checked={readOnlyCount === active.domains.length}
+          indeterminate={readOnlyCount > 0 && readOnlyCount < active.domains.length}
+          disabled={disabled}
+          onChange={(event) => setGroupPermission(event.target.checked)}
+        >
+          {t('readOnlyFeatures.bulkReadOnly')}
+        </Checkbox>
+      </div>
+      {active.advanced && <p className="aw-perm-hint">{t('readOnlyFeatures.advancedHint')}</p>}
+      <div className="aw-perm-rows">
+        {active.domains.map((domain) => {
+          const label = workspaceDomainLabel(domain);
+          const readOnly = value.includes(domain);
+          return <div className="aw-perm-row" key={domain}>
+            <div className="aw-perm-info">
+              <div className="aw-perm-name">{label}</div>
+              <div className="aw-perm-desc">{t(`readOnlyFeatures.description.${domain}`)}</div>
+            </div>
+            <div className="aw-perm-control">
+              <Segmented
+                size="small"
+                className="aw-perm-seg"
+                options={permissionOptions}
+                value={readOnly ? 'readOnly' : 'readWrite'}
+                disabled={disabled}
+                aria-label={t('readOnlyFeatures.domainPermission', { domain: label })}
+                onChange={(next) => setDomainPermission(domain, next === 'readOnly')}
+              />
+            </div>
+          </div>;
+        })}
+      </div>
+      <p className="aw-perm-hint">{t('readOnlyFeatures.permissionHint')}</p>
+    </div>
   </div>;
 }

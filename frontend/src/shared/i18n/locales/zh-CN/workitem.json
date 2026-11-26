@@ -85,7 +85,9 @@
     "watch": "关注",
     "unwatch": "取消关注",
     "watchAria": "关注工单",
-    "unwatchAria": "取消关注工单"
+    "unwatchAria": "取消关注工单",
+    "watched": "已关注",
+    "more": "更多工单操作"
   },
   "tags": {
     "empty": "暂无标签",
@@ -118,8 +120,16 @@
     "descriptionPlaceholder": "请输入工单描述（支持 Markdown）",
     "attachFiles": "添加文件或图片",
     "attachmentHint": "支持粘贴截图或选择文件；单个最大 5 MB，最多 10 个、总计 20 MB。",
+    "attachLabel": "附件",
+    "optional": "可选",
+    "attachmentCount": "已选 {{count}} / {{max}}",
+    "deliverySquad": "交付小队",
+    "deliveryAgent": "交付数字员工",
+    "deliveryOptionalHint": "不选择则仅创建工单，不会启动交付；待需求澄清后，可在工单详情选择数字员工并启动。",
     "attachmentsUploadFailed": "附件上传失败，工单已创建，请在详情页重新上传。",
-    "assignmentFailed": "工单已创建，但分配数字员工失败，请在详情页重试。"
+    "assignmentFailed": "工单已创建，但分配数字员工失败，请在详情页重试。",
+    "duplicateCheckHelp": "失焦自动查重；输入法组词过程中不触发",
+    "priorityHelp": "非必填，不选按「中」创建"
   },
   "duplicateCheck": {
     "title": "发现重复工单",
@@ -217,7 +227,14 @@
     "transitionConfirmTitle": "确认流转状态",
     "transitionConfirmText": "确认将工单状态从「{{from}}」流转为「{{to}}」？",
     "transitionConfirmOk": "确认流转",
-    "transitionVersionConflict": "工单已被修改，列表已刷新，请重新选择目标状态"
+    "transitionVersionConflict": "工单已被修改，列表已刷新，请重新选择目标状态",
+    "emptyTitle": "暂无工单",
+    "emptySubtext": "创建第一个工单，交给数字员工小队接力交付",
+    "emptyAction": "新建工单",
+    "emptyFilteredTitle": "没有匹配的工单",
+    "emptyFilteredSubtext": "当前筛选条件下共 0 条，试试放宽条件",
+    "emptyFilteredAction": "清空筛选",
+    "createdRangeSeparator": "至"
   },
   "recycleBin": {
     "title": "工单回收站",
@@ -232,7 +249,9 @@
     "restore": "恢复",
     "restoreCommand": "恢复工单",
     "restoreConfirmTitle": "恢复工单「{{title}}」？",
-    "restoreConfirmDescription": "恢复后将回到删除前状态，历史产物自动可见；仅恢复可见性，不会自动恢复执行，需重新指派。"
+    "restoreConfirmDescription": "恢复后将回到删除前状态，历史产物自动可见；仅恢复可见性，不会自动恢复执行，需重新指派。",
+    "emptySubtext": "删除的工单会保留在这里，可随时恢复。",
+    "noMatchesSubtext": "换个关键词，或清空搜索查看全部已删除工单。"
   },
   "assignee": {
     "unassigned": "未指派",
@@ -251,7 +270,9 @@
     "emptyDecision": "暂无需要您决策的工单",
     "updating": "正在检查并更新状态…",
     "decisionSummary": "决策人汇总",
-    "loadMore": "加载更多（已显示 {{shown}}/{{total}}）"
+    "loadMore": "加载更多（已显示 {{shown}}/{{total}}）",
+    "myPendingDecision": "我的待决策 {{count}}",
+    "healthOk": "健康"
   },
   "meta": {
     "type": "工单类型: <value/>",
@@ -260,11 +281,13 @@
     "creator": "创建者: <value/>",
     "assignee": "当前处理人: <value/>",
     "sdlc": "SDLC: <value/>",
-    "tags": "标签: <value/>"
+    "tags": "标签: <value/>",
+    "id": "工单 ID: <value/>"
   },
   "agentList": {
     "filterCount": "{{label}} {{count}}",
-    "empty": "该员工暂无关联工单"
+    "empty": "该员工暂无关联工单",
+    "filterAria": "按状态筛选该数字员工的工单"
   },
   "messages": {
     "created": "工单创建成功",
@@ -303,7 +326,10 @@
     "noTarget": "当前模板没有可流转到「{{title}}」的状态节点，请在详情页处理或联系管理员调整模板",
     "checkFailed": "状态检查失败，请重试",
     "choose": "选择目标状态",
-    "choices": "当前状态「{{name}}」可流转到以下状态："
+    "choices": "当前状态「{{name}}」可流转到以下状态：",
+    "reason": "流转备注",
+    "reasonPlaceholder": "流转备注（选填）：说明原因，将写入时间线…",
+    "confirm": "确认流转"
   },
   "detail": {
     "taskInfo": "任务信息",
@@ -311,10 +337,17 @@
     "back": "返回",
     "loadFailed": "加载失败",
     "retryLater": "请稍后重试",
-    "otherWorkspaceTitle": "该工单属于项目「{{name}}」",
-    "otherWorkspaceHint": "是否切换到该项目并打开工单？取消将停留在当前项目。",
+    "otherWorkspaceTitle": "打开其他项目的工单",
+    "otherWorkspaceHint": "这张工单不在你当前的项目里，需要切换后打开。",
     "otherWorkspaceSwitch": "切换到「{{name}}」并打开",
     "otherWorkspaceSwitchFailed": "切换项目失败，请稍后重试",
+    "otherWorkspaceFailDetail": "切换项目失败：{{message}}",
+    "otherWorkspaceCurrentProject": "当前项目",
+    "otherWorkspaceTargetProject": "目标项目",
+    "otherWorkspaceNote": "切换后会用你在目标项目的身份重新加载当前页面，地址与筛选参数保持不变；随时可以从左上角项目切换器切回。",
+    "otherWorkspaceSwitching": "正在切换…",
+    "otherWorkspaceRetry": "重试切换",
+    "otherWorkspaceBackToList": "返回工单列表",
     "reassignCommand": "重新指派工单",
     "startDeliveryCommand": "启动工单交付",
     "clarifyCommand": "发起 AI 需求澄清",
@@ -342,9 +375,10 @@
     "scrollTop": "回到顶部",
     "scrollBottom": "到达底部",
     "reassign": "重新指派",
+    "deliverAgain": "再次交付",
     "startDelivery": "启动交付",
     "reconcile": "立即对账",
-    "document": "需求/设计文档",
+    "document": "需求与设计",
     "externallyMaintained": "由外部工单维护",
     "save": "保存",
     "edit": "编辑",
@@ -415,6 +449,8 @@
     "awaitingEvents": "等待新的执行事件",
     "collapseLog": "收起执行记录",
     "expandLog": "展开执行记录",
+    "collapseReply": "收起回复",
+    "expandReply": "展开回复",
     "latest": "回到最新",
     "unconfirmed": "本次未能确认执行结果，请根据下方错误排查后重试。",
     "noError": "未收到底层原始错误，请查看执行器日志。平台不会根据失败状态推测具体原因。",
@@ -454,19 +490,21 @@
   },
   "documents": {
     "uploadCommand": "上传需求/设计上下文",
-    "title": "需求/设计上下文",
+    "title": "附件",
     "selectFile": "选择需求/设计上下文文件",
     "upload": "上传",
     "dropzone": "需求/设计上下文上传区",
-    "help": "支持任意类型文件（包括 Excel）；可点击「上传」、拖拽到此处或按 Ctrl/Cmd+V 粘贴截图；最多 10 个附件，单个最大 5 MB，总计不超过 20 MB。",
-    "empty": "暂无需求/设计上下文，可上传需求澄清、设计 Markdown 文档或设计截图。",
+    "help": "最多 10 个文件 · 单个不超过 5 MB · 合计不超过 20 MB",
+    "empty": "暂无附件。可上传需求文档、设计稿，或粘贴截图。",
     "preview": "预览",
     "download": "下载",
     "deleteCommand": "删除需求文档",
     "previewFile": "预览 {{name}}",
     "downloadFile": "下载 {{name}}",
     "deleteFile": "删除 {{name}}",
-    "deleteConfirm": "确认删除 {{name}}？"
+    "deleteConfirm": "确认删除 {{name}}？",
+    "countLabel": "· {{total}}",
+    "itemMeta": "{{size}} · {{type}}"
   },
   "share": {
     "copyFailed": "复制失败，请检查浏览器剪贴板权限",
@@ -483,23 +521,24 @@
     "noAgents": "暂无数字员工成员",
     "noHumans": "暂无真人参与者",
     "humanAvatar": "真人参与者头像",
-    "agents": "数字员工成员",
-    "humans": "真人参与者",
-    "identity": "工号: {{id}} · {{role}}",
+    "agents": "数字员工",
+    "humans": "真人",
+    "identity": "{{id}} · {{role}}",
     "runtime": "Agent状态: {{agent}} · Executor: {{executor}}",
     "squadIdentity": "开发小队成员",
     "humanIdentity": "真人",
     "agentStatus": {
       "DRAFT": "草稿",
       "PENDING_REVIEW": "待审核"
-    }
+    },
+    "agentAvatar": "数字员工头像"
   },
   "watchers": {
     "empty": "暂无关注人",
     "avatar": "关注人头像",
     "title": "关注人",
     "titleCount": "关注人 ({{count}})",
-    "identity": "工号: {{id}}"
+    "identity": "ID {{id}}"
   },
   "activity": {
     "executorAccepted": "执行器已接单",
@@ -521,7 +560,16 @@
     "copyComment": "复制评论",
     "system": "系统",
     "title": "评论 & 时间线",
-    "loadEarlier_other": "加载更早的 {{count}} 条评论"
+    "loadEarlier_other": "加载更早的 {{count}} 条评论",
+    "loadingEarlier": "正在加载更早的记录…",
+    "filterAll": "全部",
+    "filterComments": "仅评论",
+    "filterEvents": "仅时间线",
+    "expand": "展开全文",
+    "collapse": "收起",
+    "foldComment": "收起评论",
+    "unfoldComment": "展开评论",
+    "sectionSub": "{{commentCount}} 条评论 · {{eventCount}} 条事件"
   },
   "public": {
     "unavailable": "链接无效或产物已下线",
@@ -574,7 +622,7 @@
     "executionSummary_other": "{{latest}}{{label}} · {{count}} 个产物",
     "latest": "最近 · ",
     "categoryCount": "{{label}}（{{count}}）",
-    "agentCount_other": "产物（{{count}} artifacts）"
+    "agentCount_other": "产物（{{count}}）"
   },
   "debug": {
     "title": "Debug 日志",
@@ -612,9 +660,9 @@
     "exitFullscreen": "退出全屏",
     "fullscreen": "全屏查看",
     "graphAria": "执行过程流转图",
-    "lineage": "权威血缘",
+    "lineage": "{{sourceName}} → {{targetName}} · Dispatch {{source}} → {{target}}",
     "humanHandoff": "交接真人",
-    "graphHint": "点击节点或箭头查看权威流转详情",
+    "graphHint": "点击节点或连线查看权威流转详情",
     "title": "交付进度跟踪",
     "durationHint": "总耗时为纯 Agent 执行时长之和，不包含数字员工之间的交接、排队与人工处理间隔。",
     "round": "第 {{number}} 轮",
@@ -679,7 +727,49 @@
       "notResumable": "当前执行不能继续或重试"
     },
     "restartLatest": "按最新流程重启",
-    "restartLatestBody": "使用该数字员工当前启用的流程，从入口新建一轮。历史产物和操作回执会保留；原会话和暂停点不用于新轮次。"
+    "restartLatestBody": "使用该数字员工当前启用的流程，从入口新建一轮。历史产物和操作回执会保留；原会话和暂停点不用于新轮次。",
+    "fitWidth": "适配宽度",
+    "shortEdge": "{{number}} · {{label}}",
+    "graphMinutes_other": "{{count}} 分",
+    "stageTotal": "合计 {{duration}}",
+    "stageMeta": "{{status}} · {{duration}}",
+    "nodeStatus": "{{name}} · <status>{{status}}</status>",
+    "stageCount_other": "{{count}} 段",
+    "reworkComment": "触发返工的评论 #{{id}}",
+    "openTrace": "点击查看 Trace",
+    "graphTransitions_other": "{{count}} 次流转",
+    "empty": "尚未启动交付",
+    "railCurrentStage": "当前阶段",
+    "railInProgress": "进行中",
+    "railTotalCredits": "累计 Credits",
+    "railCreditsHint": "查看明细",
+    "railCreditsTotal": "合计",
+    "railDispatchCount_other": "×{{count}}",
+    "railCurrentExecution": "当前执行",
+    "railRecentExecution": "最近执行",
+    "railArtifacts_other": "产物 {{count}} 个（本 Dispatch）",
+    "railOpenExecution": "查看执行",
+    "railHistory_other": "全部执行记录（{{count}}）",
+    "railDispatch": "Dispatch {{id}}",
+    "railNoExecution": "暂无执行",
+    "railNoDispatchHint": "该数字员工尚未参与交付，派发后将在此显示执行时长、产物与实时活动。",
+    "railSquadIdle_other": "交付团队 {{count}} 名数字员工尚未参与，派发后在此展示执行进度。",
+    "railAgentsGroup_other": "数字人 · {{count}}",
+    "railAgentOrder": "按派发先后",
+    "railNoticeQueued": "已进入执行队列，等待执行器接单。",
+    "railWaitingReason": "等待原因：{{reason}}",
+    "railNoticePackaging": "正在打包任务与执行上下文，尚未发送给执行器。",
+    "railNoticeAccepted": "执行器已接单，等待首个运行事件。",
+    "railNoticePaused": "执行已在安全点暂停，继续后从暂停点恢复。",
+    "railNoticePausing": "已发送暂停请求，等待执行器确认暂停。",
+    "railNoticeWaitingPause": "前一次执行尚未确认暂停，暂停完成后自动开始。",
+    "railNoticePauseFailed": "执行器未在超时时间内确认暂停，可重新暂停或结束本次执行。",
+    "railNoticeFailed": "本次执行失败，可按最新流程重启。",
+    "railNoticeTimeout": "执行心跳中断已超时，本次执行停止跟踪。",
+    "railNoticeCanceled": "本次执行已取消，可重新触发交付。",
+    "railNoticeSucceeded": "本次执行已完成，产物已归档。",
+    "railEnterWorkbench": "查看交付进度",
+    "railEmptyExecution": "该数字人暂无执行记录。"
   },
   "executionControl": {
     "loadEarlier_other": "加载更早的 {{count}} 条记录",
@@ -816,6 +906,13 @@
     "reopenDelivery": "重新开启交付",
     "deliveryOpen": "交付已开启",
     "deliveryClosed": "交付已关闭",
+    "deliveryStartRecords": "交付启动记录",
+    "unattributedStartRecords": "未记录目标数字人的交付启动记录",
+    "deliveryStart": "交付启动",
+    "roundStart": "第 {{number}} 轮启动",
+    "recordsQuiet_other": "交付启动记录 · {{count}} 次",
+    "allRounds_other": "全部 {{count}} 次",
+    "collapseRounds": "收起轮次",
     "closeHint": "关闭交付会停止当前所有未结束的执行，并阻止新的执行开始。",
     "reopenHint": "重新开启交付只恢复调度入口，不会自动开始或重启任务。",
     "closeConfirmBody": "关闭交付？将停止当前所有未结束的执行，并阻止新的执行开始。工单、历史记录和产物保留。重新开启前需要所有执行进入终态。",
@@ -824,7 +921,6 @@
     "allowAgents": "允许数字员工执行",
     "enabled": "已开启",
     "disabled": "已关闭",
-    "closedHint": "已禁止自动派发；历史记录和产物保留。",
     "stoppingRound": "正在停止旧执行，等待重新启动（第 {{number}} 轮）",
     "failedRound": "第 {{number}} 轮交付启动失败",
     "supersededRound": "第 {{number}} 轮已被更新的重启轮次取代",
@@ -839,7 +935,10 @@
     "rounds": "交付重启轮次（{{count}}）",
     "startedDispatchRound": "已启动第 {{number}} 轮交付（Dispatch #{{id}}）",
     "roundSource": "源执行 #{{id}}",
-    "roundWorkflow": "流程 #{{id}}"
+    "roundWorkflow": "流程 #{{id}}",
+    "roundDispatch": "Dispatch #{{id}}",
+    "roundReplaces": "替换 #{{id}}",
+    "roundNoDispatch": "未生成派发"
   },
   "runtimeLog": {
     "windowHint": "每次显示最多 200 条日志；搜索仅限当前窗口。",
@@ -931,7 +1030,32 @@
     "preview": "预览",
     "turnCount_other": "{{count}} 个 Turn",
     "drawerTitle": "{{name}} · {{step}}",
-    "binary": "二进制文件"
+    "binary": "二进制文件",
+    "turnSteps_other": "Turn {{id}} 的 {{count}} 个步骤",
+    "stepCount_other": "{{count}} 步",
+    "failCount_other": "{{count}} 失败",
+    "charCount_other": "{{size}} 字符",
+    "fileCount_other": "{{count}} 个文件",
+    "roleContext": "任务上下文",
+    "roleHarness": "运行时 Harness",
+    "duration": "耗时",
+    "started": "开始",
+    "steps": "步骤",
+    "model": "模型",
+    "turns": "Turn",
+    "failed": "失败",
+    "kinds": {
+      "model": "模型",
+      "thinking": "思考",
+      "command": "命令",
+      "tool": "工具",
+      "mcp": "MCP",
+      "skill": "技能",
+      "wait": "等待",
+      "guidance": "引导",
+      "artifact": "产物",
+      "agent": "Agent"
+    }
   },
   "failureHistory": {
     "title": "失败历史",
@@ -981,7 +1105,10 @@
     "execution": "定时执行: {{time}}",
     "taskExecution": "定时任务 {{name}} 执行: {{time}}",
     "triggered": "定时执行已触发: {{time}}",
-    "plannedStart": "计划执行: {{time}}"
+    "planned": "计划执行",
+    "overdue": "计划执行已到时间",
+    "autoStart": "到点自动开始",
+    "notStarted": "尚未开始"
   },
   "start": {
     "reassignCommand": "重新指派工单",
@@ -1196,7 +1323,20 @@
       "questionContext": "此前的问题：",
       "redacted": "[已省略敏感信息或附件链接]",
       "truncated": "[上下文过长，已节选]"
-    }
+    },
+    "pickIntro": "选择一名数字员工，和你一起澄清工单 #{{id}} 的需求。已有会话会直接打开，没有会话时自动新建。",
+    "memberCount_other": "{{count}} 名成员",
+    "startClarify": "开始澄清",
+    "noMembers": "暂无可用数字员工。可先在小队设置中添加成员。",
+    "membersFailed": "成员列表加载失败",
+    "executorOnline": "执行器在线",
+    "executorOffline": "执行器离线",
+    "switchShort": "切换",
+    "replyEndedSyncing": "回复已结束，正在同步会话状态，输入暂不可用。",
+    "loadingHistory": "正在加载历史消息…",
+    "noHistoryHint": "发送开场消息后，{{name}} 会读取工单并开始提问。",
+    "metaJoin": "{{left}} · {{right}}",
+    "metaAppend": "· {{text}}"
   },
   "projection": {
     "health": {
@@ -1242,7 +1382,8 @@
         "to": "工单状态已变更: {{to}}",
         "operator": "工单状态已变更 （操作人：{{operator}}）",
         "both_operator": "工单状态已变更: {{from}} → {{to}} （操作人：{{operator}}）",
-        "to_operator": "工单状态已变更: {{to}} （操作人：{{operator}}）"
+        "to_operator": "工单状态已变更: {{to}} （操作人：{{operator}}）",
+        "note": "备注：{{note}}"
       },
       "assign": {
         "label": "交付负责人已变更",
@@ -1398,7 +1539,16 @@
     "endedAt": "结束时间：{{time}}",
     "unknownTime": "未记录",
     "notEnded": "尚未结束",
-    "historyExecutions": "历史执行"
+    "historyExecutions": "历史执行",
+    "allStages": "全部阶段",
+    "recentOnly": "仅看最近",
+    "earlierCount": "更早 {{count}} 次",
+    "executionCount_other": "{{count}} 次",
+    "grouping": "执行轨迹分组",
+    "byAgent": "按数字人",
+    "byTime": "按时间",
+    "noControls": "暂无控制记录",
+    "dispatchCreditsMissing": "本次 Dispatch 的 Credits 未记录"
   },
   "stepTiming": {
     "title": "SDLC 阶段耗时",

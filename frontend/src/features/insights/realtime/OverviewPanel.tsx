@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Alert, Button, Empty, Spin, Tooltip } from 'antd';
-import { LineChartOutlined, ReloadOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useOverviewDashboard } from './hooks';
 import KpiRow, { type KpiKey } from './KpiRow';
@@ -140,21 +140,17 @@ export default function OverviewPanel({ onKpiClick }: Props) {
     <section className="insight-panel insight-panel--ov" aria-label={t('overview.title')}>
       <div className="insight-panel-head">
         <div className="insight-panel-id">
-          <span className="insight-panel-glyph insight-panel-glyph--ov" aria-hidden="true">
-            <LineChartOutlined />
-          </span>
           <h2>{t('overview.title')}</h2>
           <span className="insight-live-badge" role="status" aria-label={t('overview.autoRefreshLabel')}>
-            <i aria-hidden="true" />
             <span>{t('overview.autoRefreshLabel')}</span>
             <b>{t('overview.autoRefreshValue')}</b>
           </span>
           <span className="insight-stamp">{t('overview.updatedAtLabel')} <b>{formatUpdatedAt(data?.generatedAt)}</b></span>
           {isFetching && data && <span className="insight-stamp is-updating">{t('overview.updating')}</span>}
         </div>
-        <div className="insight-panel-tools">
+        <div className="insight-panel-tools insight-panel-tools--end">
           <Button
-            icon={<ReloadOutlined aria-hidden="true" />}
+            icon={<AwStrokeIcon name="refresh" />}
             loading={isFetching}
             onClick={() => { void refetch(); }}
           >

@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { DeliveryAnalysis } from './delivery/DeliveryAnalysis';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { PageHead } from '@/shared/ui/PageHead';
 import { useEffect, useMemo } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Result, Segmented, Select, Spin } from 'antd';
+import { Result, Segmented, Select, Spin, Tabs } from 'antd';
 import { useInsightAudit, useInsightMetrics, useInsightWorkers } from './hooks';
 import { buildInsightModel } from './insightModel';
 import { MetricCards } from './components/MetricCards';
@@ -92,52 +92,57 @@ export function InsightsPage() {
 
   return (
     <div className="insights-page">
-      <PageHeading title={t('analytics.title')} description={t('analytics.description')}
-        extra={<Segmented
-          value={effectiveTab}
-          onChange={(v) => { setTab(v as typeof tab); }}
-          options={tabOptions}
-        />} />
-
-      {effectiveTab === 'metrics' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          {auditFilters}
+      {/* 页头与主体同一张白卡（页签下方全宽分割线），与原型 07 的 frame 结构一致。 */}
+      <section className="insights-shell">
+        <div className="insights-head">
+          <PageHead title={t('analytics.title')} description={t('analytics.description')} />
+          {/* Tabs 不挂 children：各 tab 内容仍按条件挂载/卸载，实时看板切走即停轮询。 */}
+          <Tabs
+            className="insights-tabs"
+            activeKey={effectiveTab}
+            onChange={(key) => { setTab(key as typeof tab); }}
+            items={tabOptions.map((option) => ({ key: option.value, label: option.label }))}
+          />
         </div>
-      )}
 
-      {effectiveTab === ANALYSIS_TAB_ID && <DeliveryAnalysis />}
+        <div className="insights-body">
+        {effectiveTab === 'metrics' && <div className="insights-filter-row">{auditFilters}</div>}
 
-      {/* Realtime Tab */}
-      {effectiveTab === 'realtime' && <RealtimeDashboard />}
+        {effectiveTab === ANALYSIS_TAB_ID && <DeliveryAnalysis />}
 
-      {/* Participation Tab */}
-      {effectiveTab === 'participation' && <ParticipationTab />}
-      {effectiveTab === 'members' && <MemberDeliveryTab />}
-      {effectiveTab === STAGES_TAB_ID && <StageDurationTab />}
+        {/* Realtime Tab */}
+        {effectiveTab === 'realtime' && <RealtimeDashboard />}
 
-      {/* Metrics Tab */}
-      {effectiveTab === 'metrics' &&
-        (metricsLoading ? (
-          <div style={{ textAlign: 'center', padding: 60 }}>
-            <Spin aria-label={t('analytics.loading')} />
-          </div>
-        ) : metricsUnavailable ? (
-          <Result status="warning" title={t('analytics.unavailable')} subTitle={t('analytics.retryHint')} />
-        ) : (
-          <>
-            {tab === 'metrics' && (
-              <>
-                <MetricCards metrics={model.adjustedMetrics} />
-                <SummaryCards cards={model.summaryCards} dateLabel={model.scope.dateLabel} />
-                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 14, marginBottom: 18 }}>
-                  <KeyInsights cards={model.insightCards} workerLabel={model.scope.workerLabel} />
-                  <SdlcLinkIssues findings={model.workerFindings} />
-                </div>
-                <Recommendations items={model.recommendations} />
-              </>
-            )}
-          </>
-        ))}
+        {/* Participation Tab */}
+        {effectiveTab === 'participation' && <ParticipationTab />}
+        {effectiveTab === 'members' && <MemberDeliveryTab />}
+        {effectiveTab === STAGES_TAB_ID && <StageDurationTab />}
+
+        {/* Metrics Tab */}
+        {effectiveTab === 'metrics' &&
+          (metricsLoading ? (
+            <div style={{ textAlign: 'center', padding: 60 }}>
+              <Spin aria-label={t('analytics.loading')} />
+            </div>
+          ) : metricsUnavailable ? (
+            <Result status="warning" title={t('analytics.unavailable')} subTitle={t('analytics.retryHint')} />
+          ) : (
+            <>
+              {tab === 'metrics' && (
+                <>
+                  <MetricCards metrics={model.adjustedMetrics} />
+                  <SummaryCards cards={model.summaryCards} dateLabel={model.scope.dateLabel} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 14, marginBottom: 18 }}>
+                    <KeyInsights cards={model.insightCards} workerLabel={model.scope.workerLabel} />
+                    <SdlcLinkIssues findings={model.workerFindings} />
+                  </div>
+                  <Recommendations items={model.recommendations} />
+                </>
+              )}
+            </>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

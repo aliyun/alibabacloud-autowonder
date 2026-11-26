@@ -1,5 +1,12 @@
 -- H2 版 sdlc_step 建表语句，镜像 docs/autowonder-schema.sql 的列与唯一键 uk_sdlc_order，
--- 仅用于 DAO 层唯一键回归测试。
+-- 流程头只保留派发步骤查询所需字段。
+CREATE TABLE IF NOT EXISTS sdlc (
+    id BIGINT PRIMARY KEY,
+    tenant_id BIGINT NOT NULL,
+    is_deleted TINYINT NOT NULL DEFAULT 0,
+    stage_timing_enabled TINYINT NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS sdlc_step (
     id                   BIGINT       NOT NULL AUTO_INCREMENT,
     tenant_id            BIGINT       NOT NULL,

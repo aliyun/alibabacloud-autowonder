@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
@@ -87,10 +88,11 @@ class DispatchAiUsageServiceTest {
         DispatchDO dispatch = dispatch();
         when(dispatchDao.findById(99L)).thenReturn(dispatch);
         TaskUsageReportRequest.TaskUsageEntry endpointEntry = usageEntry(1, 2, 0, 0);
-        byte[] artifactContent = "{\"usage\":[{\"provider\":\"codex\",\"model\":\"gpt-5\",\"input_tokens\":3,\"output_tokens\":4,\"cache_read_tokens\":0,\"cache_write_tokens\":0}]}"
+        endpointEntry.setStepId("400165");
+        byte[] artifactContent = "{\"usage\":[{\"provider\":\"codex\",\"model\":\"gpt-5\",\"step_id\":\"400165\",\"input_tokens\":3,\"output_tokens\":4,\"cache_read_tokens\":0,\"cache_write_tokens\":0}]}"
                 .getBytes(StandardCharsets.UTF_8);
 
-        service.recordTaskUsage(10L, 99L, List.of(endpointEntry));
+        service.recordUsage(10L, 99L, List.of(endpointEntry));
         service.ingestArtifact(10L, 20L, 99L, 77L, "observability/usage.json", "bucket/key", artifactContent);
 
         ArgumentCaptor<DispatchAiUsageDO> captor = ArgumentCaptor.forClass(DispatchAiUsageDO.class);
@@ -100,6 +102,8 @@ class DispatchAiUsageServiceTest {
         assertEquals(writes.get(0).getDispatchId(), writes.get(1).getDispatchId());
         assertEquals(writes.get(0).getProvider(), writes.get(1).getProvider());
         assertEquals(writes.get(0).getModel(), writes.get(1).getModel());
+        assertEquals("400165", writes.get(0).getStepId());
+        assertEquals(writes.get(0).getStepId(), writes.get(1).getStepId());
         assertEquals(77L, writes.get(1).getArtifactId());
     }
 
@@ -145,6 +149,14 @@ class DispatchAiUsageServiceTest {
         assertTrue(mapper.contains("ON DUPLICATE KEY UPDATE"));
         assertTrue(mapper.contains("#{stepId}"));
         assertTrue(mapper.contains("step_id"));
+
+        String dropArtifactKey = Files.readString(
+                Path.of("docs/migration/V125__dispatch_ai_usage_drop_artifact_key.sql"));
+        String fullSchema = Files.readString(Path.of("docs/autowonder-schema.sql"));
+        assertTrue(dropArtifactKey.contains("DROP INDEX"));
+        assertTrue(dropArtifactKey.contains("uk_artifact_provider_model"));
+        assertFalse(fullSchema.contains("uk_artifact_provider_model"));
+        assertTrue(fullSchema.contains("uk_dispatch_step_provider_model"));
     }
 
     @Test
@@ -222,6 +234,38 @@ class DispatchAiUsageServiceTest {
 
         service.ingestArtifact(10L, 20L, 99L, 77L, "observability/usage.json", null, content);
         verifyNoInteractions(usageDao);
+    }
+
+    @Test
+    void recordUsageReturnsPersistedEntryCount() {
+        when(dispatchDao.findById(99L)).thenReturn(dispatch());
+
+        int recorded = service.recordUsage(10L, 99L,
+                List.of(usageEntry(1, 2, 0, 0), usageEntry(3, 4, 0, 0)));
+
+        assertEquals(2, recorded);
+        verify(usageDao, times(2)).upsert(org.mockito.ArgumentMatchers.any(DispatchAiUsageDO.class));
+    }
+
+    @Test
+    void recordUsageSkipsMissingOrForeignDispatch() {
+        when(dispatchDao.findById(99L)).thenReturn(null);
+        assertEquals(0, service.recordUsage(10L, 99L, List.of(usageEntry(1, 2, 0, 0))));
+
+        DispatchDO foreign = dispatch();
+        foreign.setTenantId(11L);
+        when(dispatchDao.findById(99L)).thenReturn(foreign);
+        assertEquals(0, service.recordUsage(10L, 99L, List.of(usageEntry(1, 2, 0, 0))));
+
+        verifyNoInteractions(usageDao);
+    }
+
+    @Test
+    void recordUsageIgnoresEmptyEntries() {
+        assertEquals(0, service.recordUsage(10L, 99L, null));
+        assertEquals(0, service.recordUsage(10L, 99L, List.of()));
+
+        verifyNoInteractions(dispatchDao, usageDao);
     }
 
     private TaskUsageReportRequest.TaskUsageEntry usageEntry(long inputTokens, long outputTokens,

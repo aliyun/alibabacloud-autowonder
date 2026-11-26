@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState, type ReactNode, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent } from 'react';
-import { Button, Card, List, message, Popconfirm, Space, Spin, Tooltip, Typography } from 'antd';
-import { DeleteOutlined, DownloadOutlined, EyeOutlined, FileImageOutlined, FileMarkdownOutlined, UploadOutlined } from '@ant-design/icons';
+import { Button, message, Popconfirm, Spin, Tooltip } from 'antd';
+import { FileImageOutlined, FileMarkdownOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { Artifact } from '@/shared/types/workitem';
 import {
   DOCUMENT_ACCEPT_ATTRIBUTE,
@@ -18,7 +19,6 @@ import { useDeleteRequirementDocument, useUploadRequirementDocuments } from '../
 import { ArtifactPreviewModal } from './ArtifactPreviewModal';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 
-const { Text } = Typography;
 const VISUAL_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
 
 interface RequirementDocumentsCardProps {
@@ -132,43 +132,44 @@ export function RequirementDocumentsCard({ workitemId, documents, loading, child
   };
 
   return (
-    <Card
-      data-testid="requirement-documents-card"
-      title={t('documents.title')}
-      extra={(
-        <>
-          <input
-            ref={inputRef}
-            data-testid="requirement-document-file-input"
-            aria-label={t('documents.selectFile')}
-            type="file"
-            multiple
-            accept={DOCUMENT_ACCEPT_ATTRIBUTE}
-            style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
-            onChange={(event) => {
-              submitFiles(Array.from(event.target.files ?? []));
-              event.target.value = '';
-            }}
-          />
-          <Button
-            icon={<UploadOutlined />}
-            loading={uploadMutation.isPending}
-            disabled={uploadMutation.isPending || documents.length >= DOCUMENT_MAX_DOCUMENTS}
-            onClick={() => accessCommand(
-              'READ_WRITE',
-              t('documents.uploadCommand'),
-              () => inputRef.current?.click(),
-            )}
-          >
-            {t('documents.upload')}
-          </Button>
-        </>
-      )}
-      style={{ marginTop: 14 }}
-    >
+    <section data-testid="requirement-documents-card" className="aw-req-context">
+      <div className="aw-req-context-head">
+        <h3>
+          <AwStrokeIcon name="paperclip" size={14} />
+          <span>{t('documents.title')}</span>
+          <span className="aw-req-context-count">{t('documents.countLabel', { total: documents.length })}</span>
+        </h3>
+        <input
+          ref={inputRef}
+          data-testid="requirement-document-file-input"
+          aria-label={t('documents.selectFile')}
+          type="file"
+          multiple
+          accept={DOCUMENT_ACCEPT_ATTRIBUTE}
+          style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
+          onChange={(event) => {
+            submitFiles(Array.from(event.target.files ?? []));
+            event.target.value = '';
+          }}
+        />
+        <Button
+          className="aw-card-head-btn aw-req-context-upload"
+          icon={<AwStrokeIcon name="upload" />}
+          loading={uploadMutation.isPending}
+          disabled={uploadMutation.isPending || documents.length >= DOCUMENT_MAX_DOCUMENTS}
+          onClick={() => accessCommand(
+            'READ_WRITE',
+            t('documents.uploadCommand'),
+            () => inputRef.current?.click(),
+          )}
+        >
+          {t('documents.upload')}
+        </Button>
+      </div>
       {children}
       <div
         data-testid="requirement-document-dropzone"
+        className="aw-req-dropzone"
         data-drag-active={dragActive ? 'true' : 'false'}
         aria-label={t('documents.dropzone')}
         tabIndex={0}
@@ -177,102 +178,86 @@ export function RequirementDocumentsCard({ workitemId, documents, loading, child
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onPaste={handlePaste}
-        style={{
-          border: `1px dashed ${dragActive ? 'var(--aw-accent-text)' : 'transparent'}`,
-          backgroundColor: dragActive ? 'rgba(var(--aw-accent-rgb),.08)' : 'transparent',
-          borderRadius: 8,
-          padding: 8,
-          outline: 'none',
-          transition: 'border-color 0.2s, background-color 0.2s',
-        }}
       >
-        <Text type="secondary" style={{ display: 'block', marginBottom: documents.length === 0 ? 0 : 8 }}>
-          {t('documents.help')}
-        </Text>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 16 }}><Spin size="small" /></div>
         ) : documents.length === 0 ? (
-          hasGeneratedContext ? null : <Text type="secondary">{t('documents.empty')}</Text>
-        ) : (
-          <List
-            dataSource={documents}
-            renderItem={(artifact) => (
-              <List.Item
-                actions={[
-                  <Tooltip title={t('documents.preview')} key="preview">
-                    <Button
-                      aria-label={t('documents.previewFile', { name: displayName(artifact.name) })}
-                      icon={<EyeOutlined />}
-                      size="small"
-                      onClick={() => setPreviewArtifact(artifact)}
-                    />
-                  </Tooltip>,
-                  <Tooltip title={t('documents.download')} key="download">
-                    <Button
-                      aria-label={t('documents.downloadFile', { name: displayName(artifact.name) })}
-                      icon={<DownloadOutlined />}
-                      size="small"
-                      onClick={() => handleDownload(artifact)}
-                    />
-                  </Tooltip>,
-                  <Popconfirm
-                    key="delete"
-                    title={t('documents.deleteConfirm', { name: displayName(artifact.name) })}
-                    okText={t('detail.delete')}
-                    cancelText={t('detail.cancel')}
-                    open={deleteConfirmId === artifact.id}
-                    onOpenChange={(open) => {
-                      if (!open) {
-                        setDeleteConfirmId(null);
-                        return;
-                      }
-                      accessCommand(
-                        'READ_WRITE',
-                        t('documents.deleteCommand'),
-                        () => setDeleteConfirmId(artifact.id),
-                      );
-                    }}
-                    onConfirm={() => {
+          hasGeneratedContext ? null : (
+            <>
+              <p className="aw-req-empty">{t('documents.empty')}</p>
+              <p className="aw-doc-meta">{t('documents.help')}</p>
+            </>
+          )
+        ) : documents.map((artifact) => {
+          const name = displayName(artifact.name);
+          return (
+            <div key={artifact.id} className="aw-doc-item">
+              <span className="aw-doc-ic">
+                {isVisualName(artifact.name) ? <FileImageOutlined /> : <FileMarkdownOutlined />}
+              </span>
+              <div className="aw-doc-info">
+                <span className="aw-doc-name" title={name}>{name}</span>
+                <span className="aw-doc-meta">{t('documents.itemMeta', { size: formatBytes(artifact.size), type: artifact.type })}</span>
+              </div>
+              <div className="aw-doc-ops">
+                <Button
+                  className="aw-doc-op aw-doc-op-preview"
+                  aria-label={t('documents.previewFile', { name })}
+                  icon={<AwStrokeIcon name="eye" />}
+                  onClick={() => setPreviewArtifact(artifact)}
+                >
+                  {t('documents.preview')}
+                </Button>
+                <Tooltip title={t('documents.download')}>
+                  <Button
+                    className="aw-doc-op"
+                    aria-label={t('documents.downloadFile', { name })}
+                    icon={<AwStrokeIcon name="dl" />}
+                    onClick={() => handleDownload(artifact)}
+                  />
+                </Tooltip>
+                <Popconfirm
+                  title={t('documents.deleteConfirm', { name })}
+                  okText={t('detail.delete')}
+                  cancelText={t('detail.cancel')}
+                  open={deleteConfirmId === artifact.id}
+                  onOpenChange={(open) => {
+                    if (!open) {
                       setDeleteConfirmId(null);
-                      accessCommand(
-                        'READ_WRITE',
-                        t('documents.deleteCommand'),
-                        () => deleteMutation.mutate({ artifactId: artifact.id }),
-                      );
-                    }}
-                  >
-                    <Button
-                      aria-label={t('documents.deleteFile', { name: displayName(artifact.name) })}
-                      danger
-                      icon={<DeleteOutlined />}
-                      loading={deleteMutation.isPending}
-                      size="small"
-                    />
-                  </Popconfirm>,
-                ]}
-              >
-                <List.Item.Meta
-                  avatar={isVisualName(artifact.name)
-                    ? <FileImageOutlined style={{ color: 'var(--aw-accent-text)', fontSize: 20 }} />
-                    : <FileMarkdownOutlined style={{ color: 'var(--aw-accent-text)', fontSize: 20 }} />}
-                  title={<Text>{displayName(artifact.name)}</Text>}
-                  description={(
-                    <Space size={8}>
-                      <Text type="secondary">{formatBytes(artifact.size)}</Text>
-                      <Text type="secondary">{artifact.type}</Text>
-                    </Space>
-                  )}
-                />
-              </List.Item>
-            )}
-          />
-        )}
+                      return;
+                    }
+                    accessCommand(
+                      'READ_WRITE',
+                      t('documents.deleteCommand'),
+                      () => setDeleteConfirmId(artifact.id),
+                    );
+                  }}
+                  onConfirm={() => {
+                    setDeleteConfirmId(null);
+                    accessCommand(
+                      'READ_WRITE',
+                      t('documents.deleteCommand'),
+                      () => deleteMutation.mutate({ artifactId: artifact.id }),
+                    );
+                  }}
+                >
+                  <Button
+                    className="aw-doc-op aw-doc-op-danger"
+                    aria-label={t('documents.deleteFile', { name })}
+                    icon={<AwStrokeIcon name="trash" />}
+                    loading={deleteMutation.isPending}
+                  />
+                </Popconfirm>
+              </div>
+            </div>
+          );
+        })}
       </div>
       <ArtifactPreviewModal
         open={!!previewArtifact}
         artifact={previewArtifact}
         onClose={() => setPreviewArtifact(null)}
       />
-    </Card>
+    </section>
   );
 }

@@ -1,0 +1,118 @@
+/* 分组卡片：与员工页面（AgentListPage）同一套「1px 外框 + 圆角 8 + 白底 40px 组头」方案，
+ * 组头与内容之间不画分割线，组间 20px 空隙。 */
+.sdlc-squad-group {
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  background: var(--aw-panel);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.sdlc-squad-group:last-child {
+  margin-bottom: 0;
+}
+
+.sdlc-squad-group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 40px;
+  padding: 10px 12px;
+  background: var(--aw-panel);
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sdlc-squad-group-caret {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--aw-text-3);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sdlc-squad-group-caret:focus-visible {
+  outline: 2px solid var(--aw-accent-text);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.sdlc-squad-group-header strong {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sdlc-squad-group-header a {
+  color: var(--aw-text);
+}
+
+.sdlc-squad-group-header a:hover {
+  color: var(--aw-primary);
+}
+
+.sdlc-squad-group-count {
+  color: var(--aw-text-3);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.sdlc-squad-group-body {
+  padding: 0 12px 12px;
+}
+
+.sdlc-squad-group-body:empty {
+  display: none;
+}
+
+.sdlc-squad-group .ant-table {
+  border-radius: 0;
+}
+
+/* SDLC 页工具栏与员工页一致：分组/列表切换行下不画分割线。 */
+.sdlc-list-tabs .aw-toolbar {
+  border-bottom: none;
+}
+
+/* ===== 模版列表列样式 ===== */
+
+/* ID 列：mono 等宽 + 弱化（tabular-nums），与总览页 id 列同族。 */
+.sdlc-id-cell {
+  font-family: var(--aw-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--aw-text-3);
+}
+
+/* 名称链接用正文色不加粗，悬停转主色。 */
+.sdlc-name-link {
+  color: var(--aw-text);
+}
+
+.sdlc-name-link:hover {
+  color: var(--aw-primary);
+}
+
+/* 所属小队列：长小队名标签在 150px 列内截断，不再盖到状态列。 */
+.sdlc-squad-cell .ant-tag {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.sdlc-squad-cell .ant-tag a {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}

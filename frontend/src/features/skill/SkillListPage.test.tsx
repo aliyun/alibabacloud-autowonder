@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { act, render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider, MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,11 +12,84 @@ import { i18n } from '@/shared/i18n';
 import type { ExecutorVO } from '@/features/executor/api';
 import type { BatchSkillCategoryResult, Category, Skill, SkillPackageFileContent } from './api';
 
+const clients: QueryClient[] = [];
+const fixtureCleanups: Array<{ finish: () => Promise<void>; complete: () => Promise<void> }> = [];
+let restoreAfterCompletion: (() => void | Promise<void>) | undefined;
+
+function fixtureGate<T>(cleanupValue: T, complete: () => Promise<void>) {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  const completions: Array<Promise<PromiseSettledResult<unknown>[]>> = [];
+  const release = (value: T = cleanupValue) => { resolve(value); };
+  const finish = async () => {
+    release();
+    const results = (await Promise.all(completions)).flat();
+    const errors = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+    if (errors.length) throw new AggregateError(errors, 'Skill fixture completion failed');
+  };
+  fixtureCleanups.push({ finish, complete });
+  return {
+    promise, release, complete,
+    track<R>(work: Promise<R>): Promise<R> {
+      completions.push(Promise.allSettled([work]));
+      return work;
+    },
+  };
+}
+
+async function cleanupSkillPage() {
+  const fixtures = fixtureCleanups.splice(0);
+  const ownedClients = clients.splice(0);
+  const restore = restoreAfterCompletion;
+  restoreAfterCompletion = undefined;
+  const errors: unknown[] = [];
+  try {
+    try {
+      await act(async () => {
+        const results = await Promise.allSettled(fixtures.map(({ finish }) => finish()));
+        errors.push(...results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []));
+      });
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      // MSW handler 返回不代表响应已消费，也不代表 mutation 的 onSuccess 已完成。
+      await waitFor(() => {
+        for (const client of ownedClients) expect(client.isMutating()).toBe(0);
+      });
+    } catch (error) {
+      errors.push(error);
+    }
+    // 文件读取、inspection 和提交收尾还包含 mutation 之外的页面状态。
+    const results = await Promise.allSettled(fixtures.map(({ complete }) => Promise.resolve().then(complete)));
+    errors.push(...results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []));
+  } finally {
+    // 即使等待失败也逐项清理；由文件钩子独立报告，不包装或替换测试体的原断言。
+    for (const dispose of [cleanup, ...ownedClients.map((client) => () => client.clear()), restore]) {
+      try {
+        await dispose?.();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'Skill fixture cleanup failed');
+}
+
+async function pageDialog(container: HTMLElement, name: string) {
+  return waitFor(() => {
+    // Portal 发现只能在原页面仍挂载时进行；后续操作持有该 dialog，不重新查找下一页。
+    expect(container).toBeInTheDocument();
+    return screen.getByRole('dialog', { name });
+  });
+}
+
 function renderPage(accessLevel: 'READ_ONLY' | 'READ_WRITE' = 'READ_WRITE') {
   useAuthStore.setState({ accessLevel });
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  clients.push(queryClient);
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
@@ -40,24 +113,50 @@ const onlineExecutor: ExecutorVO = {
 };
 
 // 自「MCP 在所选 Runtime 本机执行」起，测试连接要先弹窗选中在线 Runtime，确认后才发请求。
-// Runtime 列表是异步查询，这里直接等下拉项出现，不依赖打开弹窗时的预选中值。
-async function pickRuntimeAndConfirm() {
-  await userEvent.click(screen.getByRole('button', { name: /测试连接/ }));
-  const dialog = await screen.findByRole('dialog');
+// Runtime 列表是异步查询，不依赖预选值，也不把虚拟 listbox 当作点击目标。
+async function pickRuntimeAndConfirm(container: HTMLElement) {
+  await userEvent.click(within(container).getByRole('button', { name: /测试连接/ }));
+  const dialog = await pageDialog(container, '选择测试 Runtime');
   expect(dialog).toHaveTextContent('选择测试 Runtime');
+  expect(onlineExecutor.status).toBe('ONLINE');
+  const input = within(dialog).getByRole('combobox');
+  const select = input.closest('.ant-select') as HTMLElement;
+  expect(select).not.toBeNull();
+  await userEvent.click(select.querySelector('.ant-select-selector') as HTMLElement);
 
-  await userEvent.click(dialog.querySelector('.ant-select-selector') as HTMLElement);
-  const option = await screen.findByText(
-    `${onlineExecutor.name}（${onlineExecutor.agentName} · #${onlineExecutor.id}）`,
-    { selector: '.ant-select-item-option-content' },
-    { timeout: 3000 },
-  );
+  const label = `${onlineExecutor.name}（${onlineExecutor.agentName} · #${onlineExecutor.id}）`;
+  const option = await waitFor(() => {
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toBeVisible();
+    expect(select).toContainElement(input);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    const controls = input.getAttribute('aria-controls');
+    expect(controls).toBeTruthy();
+    const associated = input.ownerDocument.getElementById(controls!);
+    expect(associated).not.toBeNull();
+    const dropdown = associated!.closest('.ant-select-dropdown') as HTMLElement;
+    expect(dropdown).not.toBeNull();
+    expect(dropdown).toBeVisible();
+    const target = within(dropdown).getByText(label, { selector: '.ant-select-item-option-content' });
+    expect(target).toBeVisible();
+    expect(target.closest('.ant-select-item-option')).not.toHaveClass('ant-select-item-option-disabled');
+    // 等待目标及祖先的实际 pointer 状态，不关闭 userEvent 的 pointer 检查。
+    for (let node: HTMLElement | null = target; node; node = node.parentElement) {
+      expect(getComputedStyle(node).pointerEvents).not.toBe('none');
+    }
+    return target;
+  }, { timeout: 3000 });
   await userEvent.click(option);
+  expect(select.querySelector('.ant-select-selection-item')).toHaveTextContent(label);
 
-  await userEvent.click(within(dialog).getByRole('button', { name: 'OK' }));
+  const confirm = within(dialog).getByRole('button', { name: 'OK' });
+  expect(confirm).toBeEnabled();
+  await userEvent.click(confirm);
 }
 
 describe('SkillListPage', () => {
+  afterEach(cleanupSkillPage);
+
   it('renders consistent Chinese copy for skill management', async () => {
     server.use(
       http.get('/api/skills', () => {
@@ -76,7 +175,7 @@ describe('SkillListPage', () => {
     renderPage();
     expect(await screen.findByText('GitHub MCP')).toBeInTheDocument();
     expect(screen.getByText('Code Review')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /新增能力/ }).closest('.ant-card') ?? document.body).toHaveTextContent('能力库');
+    expect(screen.getByRole('heading', { name: '能力' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /新增能力/ })).toBeInTheDocument();
     expect(screen.getByText('全部')).toBeInTheDocument();
     expect(screen.getAllByText('MCP 服务').length).toBeGreaterThanOrEqual(1);
@@ -87,7 +186,7 @@ describe('SkillListPage', () => {
     expect(within(screen.getByRole('table')).queryByText('更新人')).toBeNull();
     expect(within(screen.getByRole('table')).queryByText('版本')).toBeNull();
     expect(screen.getAllByText('详情').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('删除')[0].closest('td')).toHaveClass('ant-table-cell-fix-right');
+    expect(screen.getAllByText('删除')[0].closest('.aw-skill-ops')).toBeInTheDocument();
     expect(screen.queryByText('npx @anthropic/mcp-server-github')).not.toBeInTheDocument();
     expect(screen.queryByText('built-in')).not.toBeInTheDocument();
   });
@@ -167,6 +266,7 @@ describe('SkillListPage', () => {
   });
 
   it('tests MCP connection and renders success feedback with latency', async () => {
+    let tests = 0;
     server.use(
       http.get('/api/skills', () => {
         return HttpResponse.json({
@@ -187,6 +287,7 @@ describe('SkillListPage', () => {
         });
       }),
       http.post('/api/skills/1/connection-test', ({ request }) => {
+        tests += 1;
         // MCP 连接测试必须带上所选 Runtime
         expect(new URL(request.url).searchParams.get('executorId')).toBe(String(onlineExecutor.id));
         return HttpResponse.json({
@@ -196,17 +297,20 @@ describe('SkillListPage', () => {
       }),
     );
 
-    renderPage();
-    await screen.findByText('GitHub MCP');
-    expect(screen.getAllByRole('button', { name: /测试连接/ })).toHaveLength(1);
+    const { container } = renderPage();
+    await within(container).findByText('GitHub MCP');
+    expect(within(container).getAllByRole('button', { name: /测试连接/ })).toHaveLength(1);
 
-    await pickRuntimeAndConfirm();
+    await pickRuntimeAndConfirm(container);
 
-    // 同一文案既出现在行内 Tag 也出现在 antd message 浮层，只断言行内结果
-    expect(await screen.findByText('连接成功（42ms）', { selector: '.ant-tag' })).toBeInTheDocument();
+    // 连接结果在名称同行：行内只留弱化的工具数，完整结果进 title
+    const suffix = await within(container).findByText('0 个工具', { selector: '.aw-skill-conn' });
+    expect(suffix).toHaveAttribute('title', '连接成功（42ms） · 查看 0 个工具');
+    expect(tests).toBe(1);
   });
 
   it('tests MCP connection and renders backend failure reason', async () => {
+    let tests = 0;
     server.use(
       http.get('/api/skills', () => {
         return HttpResponse.json({
@@ -225,7 +329,9 @@ describe('SkillListPage', () => {
           data: [onlineExecutor],
         });
       }),
-      http.post('/api/skills/1/connection-test', () => {
+      http.post('/api/skills/1/connection-test', ({ request }) => {
+        tests += 1;
+        expect(new URL(request.url).searchParams.get('executorId')).toBe(String(onlineExecutor.id));
         return HttpResponse.json({
           success: true, code: '0', message: '', traceId: null,
           data: { success: false, message: 'HTTP 401 Unauthorized', durationMs: 18 },
@@ -233,12 +339,14 @@ describe('SkillListPage', () => {
       }),
     );
 
-    renderPage();
-    await screen.findByText('Broken MCP');
+    const { container } = renderPage();
+    await within(container).findByText('Broken MCP');
 
-    await pickRuntimeAndConfirm();
+    await pickRuntimeAndConfirm(container);
 
-    expect(await screen.findByText('连接失败：HTTP 401 Unauthorized', { selector: '.ant-tag' })).toBeInTheDocument();
+    const suffix = await within(container).findByText('连接失败', { selector: '.aw-skill-conn' });
+    expect(suffix).toHaveAttribute('title', '连接失败：HTTP 401 Unauthorized');
+    expect(tests).toBe(1);
   });
 
   it('does not warn when the create modal form is closed', async () => {
@@ -402,14 +510,14 @@ function packageHandlers(options: PackageHandlerOptions = {}) {
   ];
 }
 
-function packageTreeTitles(): string[] {
-  const tree = screen.getByTestId('skill-package-tree');
+function packageTreeTitles(scope: HTMLElement = document.body): string[] {
+  const tree = within(scope).getByTestId('skill-package-tree');
   return Array.from(tree.querySelectorAll<HTMLElement>('.ant-tree-title'))
     .map((node) => node.textContent ?? '');
 }
 
-async function clickPackageNode(label: RegExp) {
-  const tree = screen.getByTestId('skill-package-tree');
+async function clickPackageNode(label: RegExp, scope: HTMLElement = document.body) {
+  const tree = within(scope).getByTestId('skill-package-tree');
   const target = Array.from(tree.querySelectorAll<HTMLElement>('.ant-tree-title'))
     .find((node) => label.test(node.textContent ?? ''));
   if (!target) {
@@ -418,8 +526,8 @@ async function clickPackageNode(label: RegExp) {
   await userEvent.click(target);
 }
 
-function packagePreview(): HTMLElement {
-  return screen.getByTestId('skill-package-preview');
+function packagePreview(scope: HTMLElement = document.body): HTMLElement {
+  return within(scope).getByTestId('skill-package-preview');
 }
 
 // click 被替换成空实现时链接仍挂在 body 上（remove 在 click 之后），从 DOM 取回即可断言。
@@ -433,27 +541,28 @@ function spyAnchorClick() {
 }
 
 describe('SkillListPage package content', () => {
+  afterEach(cleanupSkillPage);
+
   beforeEach(() => {
+    restoreAfterCompletion = () => {
+      useAuthStore.getState().clear();
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    };
     Object.defineProperty(URL, 'createObjectURL', {
       value: vi.fn(() => 'blob:skill-package'), configurable: true,
     });
     Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true });
   });
 
-  afterEach(() => {
-    useAuthStore.getState().clear();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
   async function openPackageDetail() {
-    renderPage();
-    await screen.findByText('custom-skill');
-    await userEvent.click(screen.getByRole('button', { name: /详情/ }));
-    const dialog = await screen.findByRole('dialog');
+    const { container } = renderPage();
+    await within(container).findByText('custom-skill');
+    await userEvent.click(within(container).getByRole('button', { name: /详情/ }));
+    const dialog = await pageDialog(container, '能力详情');
     expect(dialog).toHaveTextContent('能力详情');
-    await screen.findByTestId('skill-package-tree');
-    await waitFor(() => expect(packageTreeTitles().length).toBeGreaterThan(0));
+    await within(dialog).findByTestId('skill-package-tree');
+    await waitFor(() => expect(packageTreeTitles(dialog).length).toBeGreaterThan(0));
     return dialog;
   }
 
@@ -729,11 +838,14 @@ describe('SkillListPage package content', () => {
   });
 
   it('keeps the newer selection when an older single-file response arrives late', async () => {
-    let releaseStale: () => void = () => undefined;
-    const staleGate = new Promise<void>((resolve) => {
-      releaseStale = () => resolve(undefined);
-    });
     let completed = 0;
+    let dialog: HTMLElement | undefined;
+    const staleGate = fixtureGate<void>(undefined, async () => {
+      if (dialog?.isConnected) {
+        const preview = packagePreview(dialog);
+        await waitFor(() => expect(preview.querySelector('.ant-spin')).toBeNull());
+      }
+    });
     server.use(
       http.get('/api/skills', () => HttpResponse.json({
         success: true, code: '0', message: '', traceId: null, data: { list: [PACKAGE_SKILL], total: 1, pageNum: 1, pageSize: 20 },
@@ -742,31 +854,36 @@ describe('SkillListPage package content', () => {
         success: true, code: '0', message: '', traceId: null,
         data: { files: PACKAGE_FILES, format: 'zip' },
       })),
-      http.get('/api/skills/1/package/file', async ({ request }) => {
+      http.get('/api/skills/1/package/file', ({ request }) => staleGate.track((async () => {
         const path = new URL(request.url).searchParams.get('path');
         // SKILL.md 先发出但后返回：模拟慢响应在新选择之后才落地
         if (path === 'SKILL.md') {
-          await staleGate;
+          await staleGate.promise;
         }
         completed += 1;
         const content = FILE_CONTENTS[path ?? ''];
         return HttpResponse.json(content
           ? { success: true, code: '0', message: '', traceId: null, data: content }
           : { success: false, code: '10404', message: '包内不存在该文件', traceId: null });
-      }),
+      })())),
     );
-    await openPackageDetail();
+    try {
+      dialog = await openPackageDetail();
+      const preview = packagePreview(dialog);
+      await clickPackageNode(/SKILL\.md/, dialog);
+      await clickPackageNode(/guide\.md/, dialog);
+      await waitFor(() => expect(preview).toHaveTextContent('参考文档'));
 
-    await clickPackageNode(/SKILL\.md/);
-    await clickPackageNode(/guide\.md/);
-    await waitFor(() => expect(packagePreview()).toHaveTextContent('参考文档'));
-
-    releaseStale();
-    await waitFor(() => expect(completed).toBe(2));
-    // 给旧响应一次落地机会：序号守卫生效时预览不得被改写
-    await new Promise((resolve) => { setTimeout(resolve, 0); });
-    expect(packagePreview()).toHaveTextContent('参考文档');
-    expect(packagePreview()).not.toHaveTextContent('这是包内的 Markdown 文件。');
+      staleGate.release();
+      await waitFor(() => expect(completed).toBe(2));
+      // 给旧响应一次落地机会：序号守卫生效时预览不得被改写
+      await new Promise((resolve) => { setTimeout(resolve, 0); });
+      expect(preview).toHaveTextContent('参考文档');
+      expect(preview).not.toHaveTextContent('这是包内的 Markdown 文件。');
+    } finally {
+      staleGate.release();
+    }
+    await staleGate.complete();
   });
 });
 
@@ -825,6 +942,7 @@ function renderCategoryPage(accessLevel: 'READ_ONLY' | 'READ_WRITE' | 'ADMIN' = 
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  clients.push(queryClient);
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
@@ -834,12 +952,17 @@ function renderCategoryPage(accessLevel: 'READ_ONLY' | 'READ_WRITE' | 'ADMIN' = 
   );
 }
 
-function rowCheckboxes(): HTMLElement[] {
+function rowCheckboxes(scope: ParentNode = document): HTMLElement[] {
   // scroll.x 表格会渲染隐藏的 .ant-table-measure-row（表头宽度测量克隆，含全选项且 pointer-events: none），
   // 真正可交互的只有数据行上的复选框
-  return Array.from(document.querySelectorAll<HTMLElement>(
+  return Array.from(scope.querySelectorAll<HTMLElement>(
     '.ant-table-tbody tr:not(.ant-table-measure-row) .ant-checkbox-input',
   ));
+}
+
+// antd Segmented 的原生 radio 被隐藏成 pointer-events: none，点击其可见标签才会触发切换。
+async function clickViewOption(label: '分组' | '列表') {
+  await userEvent.click(screen.getByText(label, { selector: '.ant-segmented-item-label' }));
 }
 
 async function clickManageTreeNode(label: string) {
@@ -859,10 +982,14 @@ async function pickSelectOption(selector: HTMLElement, optionText: string) {
 }
 
 describe('SkillListPage categories', () => {
-  afterEach(() => {
-    useAuthStore.getState().clear();
-    window.localStorage.clear();
-    vi.restoreAllMocks();
+  afterEach(cleanupSkillPage);
+
+  beforeEach(() => {
+    restoreAfterCompletion = () => {
+      useAuthStore.getState().clear();
+      window.localStorage.clear();
+      vi.restoreAllMocks();
+    };
   });
 
   it('renders category text without a dropdown until clicked', async () => {
@@ -907,13 +1034,13 @@ describe('SkillListPage categories', () => {
     await screen.findByText('Vue 指南');
     expect(screen.getByText('共 2 条')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('switch', { name: '按分类展示' }));
+    await clickViewOption('分组');
 
     await screen.findByText(/按分类展示，类型筛选仍生效/);
-    // 两个 forceRender 弹窗的隐藏 DOM 会污染全局文本查询，这里按卡片/折叠头断言。
+    // 两个 forceRender 弹窗的隐藏 DOM 会污染全局文本查询，这里按页面容器/折叠头断言。
     // 顶层分组顺序：编码（含后代分组）→ 未分类置底；没有能力的分类整支剪掉
-    const card = screen.getByRole('button', { name: /新增能力/ }).closest('.ant-card') as HTMLElement;
-    const headers = Array.from(card.querySelectorAll<HTMLElement>('.ant-collapse-header'));
+    const card = screen.getByRole('button', { name: /新增能力/ }).closest('.aw-skill-page') as HTMLElement;
+    const headers = Array.from(card.querySelectorAll<HTMLElement>('.aw-skill-group-header'));
     expect(headers).toHaveLength(3);
     expect(headers[0]).toHaveTextContent('编码');
     expect(headers[0]).toHaveTextContent('1 项');
@@ -934,7 +1061,7 @@ describe('SkillListPage categories', () => {
 
     renderCategoryPage();
     await screen.findByText('Vue 指南');
-    await userEvent.click(screen.getByRole('switch', { name: '按分类展示' }));
+    await clickViewOption('分组');
     await screen.findByText(/按分类展示，类型筛选仍生效/);
 
     await userEvent.click(screen.getByText('技能', { selector: '.ant-segmented-item-label' }));
@@ -962,7 +1089,7 @@ describe('SkillListPage categories', () => {
     await screen.findByText(/按分类展示，类型筛选仍生效/);
 
     // 关闭后写回 off，重新挂载保持平铺
-    await userEvent.click(screen.getByRole('switch', { name: '按分类展示' }));
+    await clickViewOption('列表');
     await waitFor(() => expect(window.localStorage.getItem('autowonder.skills.groupByCategory.10002.7')).toBe('off'));
     await screen.findByText('共 2 条');
     unmount();
@@ -980,11 +1107,11 @@ describe('SkillListPage categories', () => {
     await userEvent.click(rowCheckboxes()[0]);
     expect(await screen.findByText('已选 1 项')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('switch', { name: '按分类展示' }));
+    await clickViewOption('分组');
     await screen.findByText(/按分类展示，类型筛选仍生效/);
     expect(screen.queryByText('已选 1 项')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('switch', { name: '按分类展示' }));
+    await clickViewOption('列表');
     await screen.findByText('共 2 条');
     // 切回平铺后选择已被清空，而不是恢复
     expect(screen.queryByText('已选 1 项')).not.toBeInTheDocument();
@@ -1430,7 +1557,9 @@ describe('SkillListPage categories', () => {
 });
 
 describe('SkillListPage package upload', () => {
-  afterEach(() => { vi.restoreAllMocks(); });
+  afterEach(cleanupSkillPage);
+
+  beforeEach(() => { restoreAfterCompletion = () => { vi.restoreAllMocks(); }; });
 
   it('shows Hook setup guidance and documentation links without replacing entered fields on a language switch', async () => {
     server.use(...packageHandlers());
@@ -1510,12 +1639,22 @@ describe('SkillListPage package upload', () => {
 
 
 describe('SkillListPage live locale', () => {
-  beforeEach(async () => { await i18n.changeLanguage('zh-CN'); });
-  afterEach(async () => { vi.restoreAllMocks(); useAuthStore.getState().clear(); window.localStorage.clear(); await i18n.changeLanguage('zh-CN'); });
+  afterEach(cleanupSkillPage);
+
+  beforeEach(async () => {
+    restoreAfterCompletion = async () => {
+      vi.restoreAllMocks();
+      useAuthStore.getState().clear();
+      window.localStorage.clear();
+      await i18n.changeLanguage('zh-CN');
+    };
+    await i18n.changeLanguage('zh-CN');
+  });
 
   function routed() {
     useAuthStore.setState({ accessLevel: 'ADMIN' });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    clients.push(client);
     const router = createMemoryRouter([{ path: '/skills', element: <SkillListPage /> }], { initialEntries: ['/skills'] });
     return render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
   }
@@ -1555,39 +1694,61 @@ describe('SkillListPage live locale', () => {
       : { transport, command: 'npx', args: ['--server-url'], env: { TOKEN: { kind: 'secretRef', ref: 'never-show' }, PUBLIC: '原文' } };
     const skill = { ...UNCATEGORIZED_SKILL, name: '<b>未分类</b>', installSpec: JSON.stringify(config) };
     let body: Record<string, unknown> | undefined;
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
+    let dialog: HTMLElement | undefined;
+    let confirm: HTMLElement | undefined;
     const success = vi.spyOn(message, 'success').mockImplementation(() => undefined as never);
-    server.use(http.get('/api/skills', () => ok({ list: [skill], total: 1 })), http.put('/api/skills/:id', async ({ request }) => { body = await request.json() as Record<string, unknown>; await gate; return ok(skill); }));
-    routed();
-    await screen.findByText(skill.name);
-    await userEvent.click(screen.getByRole('button', { name: '编辑' }));
-    const dialog = screen.getByRole('dialog');
-    const name = within(dialog).getByLabelText('名称');
-    const mask = within(dialog).getByDisplayValue('********');
-    await language('en-US');
-    expect(within(dialog).getByLabelText('Name')).toBe(name);
-    expect(name).toHaveValue(skill.name);
-    expect(mask).toHaveValue('********');
-    expect(within(dialog).getAllByRole('textbox', { name: transport === 'http' ? 'Header value' : 'Variable value' })).toContain(mask);
-    expect(dialog).not.toHaveTextContent('never-show');
-    expect(dialog).toHaveTextContent(transport === 'http' ? 'Streamable HTTP' : 'Local command (STDIO)');
-    if (replacement) {
-      await userEvent.click(mask);
-      expect(mask).toHaveValue('');
-      await userEvent.type(mask, 'new <秘密>');
+    const gate = fixtureGate<void>(undefined, async () => {
+      if (body && confirm?.isConnected) {
+        await waitFor(() => {
+          expect(success).toHaveBeenCalled();
+          expect(confirm).not.toHaveClass('ant-btn-loading');
+        });
+      }
+    });
+    server.use(
+      http.get('/api/skills', () => ok({ list: [skill], total: 1 })),
+      http.put('/api/skills/:id', ({ request }) => gate.track((async () => {
+        body = await request.json() as Record<string, unknown>;
+        await gate.promise;
+        return ok(skill);
+      })())),
+    );
+    const { container } = routed();
+    try {
+      await within(container).findByText(skill.name);
+      await userEvent.click(within(container).getByRole('button', { name: '编辑' }));
+      dialog = await pageDialog(container, '编辑能力');
+      const name = within(dialog).getByLabelText('名称');
+      const mask = within(dialog).getByDisplayValue('********');
+      expect(dialog).not.toHaveTextContent('never-show');
+      await language('en-US');
+      expect(within(dialog).getByLabelText('Name')).toBe(name);
+      expect(name).toHaveValue(skill.name);
+      expect(mask).toHaveValue('********');
+      expect(within(dialog).getAllByRole('textbox', { name: transport === 'http' ? 'Header value' : 'Variable value' })).toContain(mask);
+      expect(dialog).not.toHaveTextContent('never-show');
+      expect(dialog).toHaveTextContent(transport === 'http' ? 'Streamable HTTP' : 'Local command (STDIO)');
+      if (replacement) {
+        await userEvent.click(mask);
+        expect(mask).toHaveValue('');
+        await userEvent.type(mask, 'new <秘密>');
+        await language('zh-CN');
+        expect(mask).toHaveValue('new <秘密>');
+      }
+      confirm = within(dialog).getByRole('button', { name: 'OK' });
+      await userEvent.click(confirm);
+      await waitFor(() => expect(body).toBeDefined());
+      const submitted = JSON.parse(body!.installSpec as string);
+      expect(submitted).toEqual(transport === 'http'
+        ? { transport, url: 'https://example.com/mcp', headers: { Authorization: { secret: true, value: replacement ? 'new <秘密>' : '' }, Public: '原文' }, timeoutSeconds: 60 }
+        : { transport, command: 'npx', args: ['--server-url'], env: { TOKEN: { secret: true, value: replacement ? 'new <秘密>' : '' }, PUBLIC: '原文' } });
       await language('zh-CN');
-      expect(mask).toHaveValue('new <秘密>');
+      expect(dialog).not.toHaveTextContent('never-show');
+    } finally {
+      gate.release();
     }
-    await userEvent.click(within(dialog).getByRole('button', { name: 'OK' }));
-    await waitFor(() => expect(body).toBeDefined());
-    const submitted = JSON.parse(body!.installSpec as string);
-    expect(submitted).toEqual(transport === 'http'
-      ? { transport, url: 'https://example.com/mcp', headers: { Authorization: { secret: true, value: replacement ? 'new <秘密>' : '' }, Public: '原文' }, timeoutSeconds: 60 }
-      : { transport, command: 'npx', args: ['--server-url'], env: { TOKEN: { secret: true, value: replacement ? 'new <秘密>' : '' }, PUBLIC: '原文' } });
-    await language('zh-CN');
-    release();
     await waitFor(() => expect(success).toHaveBeenCalledWith('已保存'));
+    await gate.complete();
   });
 
   it.each([
@@ -1597,21 +1758,39 @@ describe('SkillListPage live locale', () => {
     [{ success: true, message: 'SDK 原文', tools: [] }, 'Connected', '连接成功'],
   ])('rerenders held connection data without retesting and keeps raw unknown origins', async (result, english, chinese) => {
     let tests = 0;
-    server.use(http.get('/api/skills', () => ok({ list: [UNCATEGORIZED_SKILL], total: 1 })), http.get('/api/executors', () => ok([onlineExecutor])), http.post('/api/skills/:id/connection-test', () => { tests += 1; return ok(result); }));
-    routed();
-    await screen.findByText('数据抓取');
-    await pickRuntimeAndConfirm();
-    await screen.findByText(chinese, { selector: '.ant-tag' });
-    await language('en-US');
-    expect(await screen.findByText(english, { selector: '.ant-tag' })).toBeInTheDocument();
-    expect(tests).toBe(1);
+    server.use(
+      http.get('/api/skills', () => ok({ list: [UNCATEGORIZED_SKILL], total: 1 })),
+      http.get('/api/executors', () => ok([onlineExecutor])),
+      http.post('/api/skills/:id/connection-test', ({ request }) => {
+        tests += 1;
+        expect(new URL(request.url).searchParams.get('executorId')).toBe(String(onlineExecutor.id));
+        return ok(result);
+      }),
+    );
+    const { container } = routed();
+    await within(container).findByText('数据抓取');
+    await pickRuntimeAndConfirm(container);
     if (result.success) {
-      await userEvent.click(screen.getByRole('button', { name: 'View 0 tools' }));
-      expect(screen.getByRole('dialog')).toHaveTextContent('MCP tools (0)');
-      expect(screen.getByRole('dialog')).toHaveTextContent('This MCP returned no tools.');
+      const suffix = await within(container).findByText('0 个工具', { selector: '.aw-skill-conn' });
+      expect(suffix).toHaveAttribute('title', '连接成功 · 查看 0 个工具');
+      await language('en-US');
+      const enSuffix = within(container).getByText('0 tools', { selector: '.aw-skill-conn' });
+      expect(enSuffix).toHaveAttribute('title', 'Connected · View 0 tools');
+      expect(tests).toBe(1);
+      // 工具数本身就是工具清单入口
+      await userEvent.click(enSuffix);
+      const dialog = await pageDialog(container, 'MCP tools (0)');
+      expect(dialog).toHaveTextContent('MCP tools (0)');
+      expect(dialog).toHaveTextContent('This MCP returned no tools.');
+    } else {
+      // 行内只留「连接失败」，完整原因进 title，原始未知来源也不改写
+      expect(await within(container).findByText('连接失败', { selector: '.aw-skill-conn' })).toHaveAttribute('title', chinese);
+      await language('en-US');
+      expect(within(container).getByText('Connection failed', { selector: '.aw-skill-conn' })).toHaveAttribute('title', english);
     }
     await language('zh-CN');
-    expect(screen.getByText(chinese, { selector: '.ant-tag' })).toBeInTheDocument();
+    expect(within(container).getByText(result.success ? '0 个工具' : '连接失败', { selector: '.aw-skill-conn' })).toBeInTheDocument();
+    expect(tests).toBe(1);
   });
 
   it.each([['USER_ID_FALLBACK', 'User #7'], [undefined, '用户 #7'], ['constructor', '用户 #7']])('uses explicit modifier provenance and preserves same-looking authored names', async (kind, displayed) => {
@@ -1625,62 +1804,100 @@ describe('SkillListPage live locale', () => {
 
   it('keeps raw package metadata and bytes through a pending inspection without inspecting again', async () => {
     const api = await import('./api');
-    let release!: (value: Awaited<ReturnType<typeof api.inspectSkillPackage>>) => void;
-    const gate = new Promise<Awaited<ReturnType<typeof api.inspectSkillPackage>>>(resolve => { release = resolve; });
-    const inspect = vi.spyOn(api, 'inspectSkillPackage').mockImplementation(() => gate);
+    const zip = new File(['原始 ZIP bytes'], '用户文件.zip', { type: 'application/zip' });
+    let dialog: HTMLElement | undefined;
+    let name: HTMLElement | undefined;
+    let confirm: HTMLElement | undefined;
+    const gate = fixtureGate<Awaited<ReturnType<typeof api.inspectSkillPackage>>>({
+      name: '<b>技能</b>', description: '用户 frontmatter 原文', fileName: zip.name, packageSize: zip.size,
+    }, async () => {
+      if (inspect.mock.calls.length && !create.mock.calls.length && name?.isConnected) {
+        await waitFor(() => expect(name).toHaveValue('<b>技能</b>'));
+      }
+      if (confirm?.isConnected) {
+        await waitFor(() => expect(confirm).not.toHaveClass('ant-btn-loading'));
+      }
+      if (create.mock.calls.length && dialog?.isConnected) {
+        await waitFor(() => expect(dialog).not.toBeVisible());
+      }
+    });
+    const inspect = vi.spyOn(api, 'inspectSkillPackage').mockImplementation(() => gate.track(gate.promise));
     const create = vi.spyOn(api, 'createSkillFromPackage').mockResolvedValue(PACKAGE_SKILL);
     server.use(...packageHandlers());
-    routed();
-    await screen.findByText('custom-skill');
-    await userEvent.click(screen.getByRole('button', { name: '新增能力' }));
-    const dialog = screen.getByRole('dialog');
-    await userEvent.click(within(dialog).getByText('上传文件夹 / ZIP'));
-    const zip = new File(['原始 ZIP bytes'], '用户文件.zip', { type: 'application/zip' });
-    const input = within(dialog).getByLabelText('选择能力 ZIP');
-    await userEvent.upload(input, zip);
-    await language('en-US');
-    expect(within(dialog).getByLabelText('Select a capability ZIP')).toBe(input);
-    await act(async () => { release({ name: '<b>技能</b>', description: '用户 frontmatter 原文', fileName: zip.name, packageSize: zip.size }); });
-    await waitFor(() => expect(within(dialog).getByLabelText('Name')).toHaveValue('<b>技能</b>'));
-    expect(within(dialog).getByLabelText('Description')).toHaveValue('用户 frontmatter 原文');
-    expect(dialog).toHaveTextContent('Selected 用户文件.zip');
-    expect(inspect).toHaveBeenCalledTimes(1);
-    await userEvent.click(within(dialog).getByRole('button', { name: 'OK' }));
-    await waitFor(() => expect(create).toHaveBeenCalledWith(zip, { type: 'SKILL', name: '<b>技能</b>', description: '用户 frontmatter 原文', providers: undefined }));
+    const { container } = routed();
+    try {
+      await within(container).findByText('custom-skill');
+      await userEvent.click(within(container).getByRole('button', { name: '新增能力' }));
+      dialog = await pageDialog(container, '新增能力');
+      await userEvent.click(within(dialog).getByText('上传文件夹 / ZIP'));
+      const input = within(dialog).getByLabelText('选择能力 ZIP');
+      name = within(dialog).getByLabelText('名称');
+      confirm = within(dialog).getByRole('button', { name: 'OK' });
+      await userEvent.upload(input, zip);
+      await language('en-US');
+      expect(within(dialog).getByLabelText('Select a capability ZIP')).toBe(input);
+      await act(async () => { gate.release(); });
+      await waitFor(() => expect(within(dialog!).getByLabelText('Name')).toHaveValue('<b>技能</b>'));
+      expect(within(dialog).getByLabelText('Description')).toHaveValue('用户 frontmatter 原文');
+      expect(dialog).toHaveTextContent('Selected 用户文件.zip');
+      expect(inspect).toHaveBeenCalledTimes(1);
+      await userEvent.click(confirm);
+      await waitFor(() => expect(create).toHaveBeenCalledWith(zip, { type: 'SKILL', name: '<b>技能</b>', description: '用户 frontmatter 原文', providers: undefined }));
+    } finally {
+      gate.release();
+    }
+    await gate.complete();
   });
 
   it('keeps newer file selection after locale switch and a late older response', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
     const requested: string[] = [];
     let listings = 0;
     let completed = 0;
-    server.use(http.get('/api/skills/1/package/files', () => { listings += 1; return ok({ files: PACKAGE_FILES, format: 'zip' }); }), http.get('/api/skills/1/package/file', async ({ request }) => {
-      const path = new URL(request.url).searchParams.get('path')!;
-      requested.push(path);
-      if (path === 'SKILL.md') await gate;
-      completed += 1;
-      return ok(FILE_CONTENTS[path]);
-    }), ...packageHandlers());
-    routed();
-    await screen.findByText('custom-skill');
-    await userEvent.click(screen.getByRole('button', { name: '详情' }));
-    await waitFor(() => expect(packageTreeTitles().length).toBeGreaterThan(0));
-    await clickPackageNode(/SKILL\.md/);
-    await waitFor(() => expect(requested).toEqual(['SKILL.md']));
-    await language('en-US');
-    await clickPackageNode(/guide\.md/);
-    await waitFor(() => expect(packagePreview()).toHaveTextContent('参考文档'));
-    await act(async () => { release(); await gate; });
-    await waitFor(() => expect(completed).toBe(2));
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(packagePreview().querySelector('.ant-spin')).toBeNull();
-    expect(packagePreview()).toHaveTextContent('参考文档');
-    expect(packagePreview()).not.toHaveTextContent('这是包内的 Markdown 文件。');
-    expect(requested).toEqual(['SKILL.md', 'references/guide.md']);
-    expect(listings).toBe(1);
-    await language('zh-CN');
-    expect(packagePreview()).toHaveTextContent('参考文档');
+    let dialog: HTMLElement | undefined;
+    const gate = fixtureGate<void>(undefined, async () => {
+      if (dialog?.isConnected) {
+        const preview = packagePreview(dialog);
+        await waitFor(() => expect(preview.querySelector('.ant-spin')).toBeNull());
+      }
+    });
+    server.use(
+      http.get('/api/skills/1/package/files', () => { listings += 1; return ok({ files: PACKAGE_FILES, format: 'zip' }); }),
+      http.get('/api/skills/1/package/file', ({ request }) => gate.track((async () => {
+        const path = new URL(request.url).searchParams.get('path')!;
+        requested.push(path);
+        if (path === 'SKILL.md') await gate.promise;
+        completed += 1;
+        return ok(FILE_CONTENTS[path]);
+      })())),
+      ...packageHandlers(),
+    );
+    const { container } = routed();
+    try {
+      await within(container).findByText('custom-skill');
+      await userEvent.click(within(container).getByRole('button', { name: '详情' }));
+      dialog = await pageDialog(container, '能力详情');
+      const tree = within(dialog).getByTestId('skill-package-tree');
+      const preview = packagePreview(dialog);
+      await waitFor(() => expect(tree.querySelectorAll('.ant-tree-title').length).toBeGreaterThan(0));
+      await clickPackageNode(/SKILL\.md/, dialog);
+      await waitFor(() => expect(requested).toEqual(['SKILL.md']));
+      await language('en-US');
+      await clickPackageNode(/guide\.md/, dialog);
+      await waitFor(() => expect(preview).toHaveTextContent('参考文档'));
+      await act(async () => { gate.release(); await gate.promise; });
+      await waitFor(() => expect(completed).toBe(2));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(preview.querySelector('.ant-spin')).toBeNull();
+      expect(preview).toHaveTextContent('参考文档');
+      expect(preview).not.toHaveTextContent('这是包内的 Markdown 文件。');
+      expect(requested).toEqual(['SKILL.md', 'references/guide.md']);
+      expect(listings).toBe(1);
+      await language('zh-CN');
+      expect(preview).toHaveTextContent('参考文档');
+    } finally {
+      gate.release();
+    }
+    await gate.complete();
   });
 
   it.each([undefined, new Error('操作失败')])('rerenders owned package fallback but preserves a same-looking external error', async (error) => {
@@ -1717,21 +1934,46 @@ describe('SkillListPage live locale', () => {
   });
 
   it('uses completion locale for partial batch failure and preserves raw reasons and null category', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
     let body: unknown;
+    let dialog: HTMLElement | undefined;
     const warning = vi.spyOn(message, 'warning').mockImplementation(() => undefined as never);
-    server.use(...categoryFixtureStore().handlers, http.post('/api/skills/category/batch', async ({ request }) => { body = await request.json(); await gate; return ok([{ skillId: 101, success: true }, { skillId: 102, success: false, message: '<b>能力不存在</b>' }]); }));
-    routed();
-    await screen.findByText('Vue 指南');
-    await userEvent.click(rowCheckboxes()[0]);
-    await userEvent.click(rowCheckboxes()[1]);
-    await userEvent.click(screen.getByRole('button', { name: '批量设置分类' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^应\s*用$/ }));
-    await waitFor(() => expect(body).toEqual({ skillIds: [101, 102], categoryId: null }));
-    await language('en-US');
-    await act(async () => { release(); await gate; });
+    const gate = fixtureGate<void>(undefined, async () => {
+      if (body && dialog?.isConnected) {
+        await waitFor(() => {
+          expect(warning).toHaveBeenCalled();
+          expect(dialog).not.toBeVisible();
+          expect(container).toBeInTheDocument();
+          expect(within(container).queryByRole('button', { name: i18n.t('skill:category.batch') })).not.toBeInTheDocument();
+          for (const checkbox of rowCheckboxes(container)) expect(checkbox).not.toBeChecked();
+        });
+      }
+    });
+    server.use(
+      ...categoryFixtureStore().handlers,
+      http.post('/api/skills/category/batch', ({ request }) => gate.track((async () => {
+        body = await request.json();
+        await gate.promise;
+        return ok([{ skillId: 101, success: true }, { skillId: 102, success: false, message: '<b>能力不存在</b>' }]);
+      })())),
+    );
+    const { container } = routed();
+    try {
+      await within(container).findByText('Vue 指南');
+      const checkboxes = rowCheckboxes(container);
+      await userEvent.click(checkboxes[0]);
+      await userEvent.click(checkboxes[1]);
+      await userEvent.click(within(container).getByRole('button', { name: '批量设置分类' }));
+      dialog = await pageDialog(container, '批量设置分类');
+      const apply = within(dialog).getByRole('button', { name: /^应\s*用$/ });
+      await userEvent.click(apply);
+      await waitFor(() => expect(body).toEqual({ skillIds: [101, 102], categoryId: null }));
+      await language('en-US');
+      await act(async () => { gate.release(); await gate.promise; });
+    } finally {
+      gate.release();
+    }
     await waitFor(() => expect(warning).toHaveBeenCalledWith('Succeeded: 1; failed: 1. #102 <b>能力不存在</b>'));
+    await gate.complete();
   });
 
   it('renders unknown prototype-like type values literally and preserves raw secret config in detail', async () => {
@@ -1800,14 +2042,16 @@ async function openEditModal(name: string, scope: HTMLElement = document.body) {
 }
 
 describe('SkillListPage refresh after save', () => {
+  afterEach(cleanupSkillPage);
+
   beforeEach(() => {
+    restoreAfterCompletion = () => {
+      useAuthStore.getState().clear();
+      window.localStorage.clear();
+      vi.restoreAllMocks();
+    };
     useAuthStore.getState().clear();
     window.localStorage.clear();
-  });
-  afterEach(() => {
-    useAuthStore.getState().clear();
-    window.localStorage.clear();
-    vi.restoreAllMocks();
   });
 
   it('re-displays a stdio MCP env after saving without reloading the page', async () => {
@@ -2050,9 +2294,9 @@ describe('SkillListPage refresh after save', () => {
 
     renderCategoryPage();
     await screen.findByText('Vue 指南');
-    await userEvent.click(screen.getByRole('switch', { name: '按分类展示' }));
+    await clickViewOption('分组');
     await screen.findByText(/按分类展示，类型筛选仍生效/);
-    const card = screen.getByRole('button', { name: /新增能力/ }).closest('.ant-card') as HTMLElement;
+    const card = screen.getByRole('button', { name: /新增能力/ }).closest('.aw-skill-page') as HTMLElement;
 
     const dialog = await openEditModal('Vue 指南', card);
     const nameInput = within(dialog).getByPlaceholderText('如: code-review-mcp');

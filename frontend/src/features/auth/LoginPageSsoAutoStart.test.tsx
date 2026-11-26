@@ -81,7 +81,7 @@ describe('LoginPage SSO auto start', () => {
 
     renderLogin();
 
-    await screen.findByRole('link', { name: '使用 统一认证 登录' });
+    await screen.findByRole('link', { name: '使用统一认证登录' });
     await act(async () => { await Promise.resolve(); });
     expect(beginSsoLoginMock).not.toHaveBeenCalled();
   });
@@ -92,7 +92,7 @@ describe('LoginPage SSO auto start', () => {
     renderLogin('/login?local=1');
 
     expect(await screen.findByLabelText(/用户名/)).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('link', { name: '使用 统一认证 登录' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('link', { name: '使用统一认证登录' })).toBeInTheDocument());
     expect(beginSsoLoginMock).not.toHaveBeenCalled();
   });
 
@@ -109,8 +109,8 @@ describe('LoginPage SSO auto start', () => {
 
     renderLogin();
 
-    await screen.findByRole('link', { name: '使用 统一认证 登录' });
-    expect(screen.queryByRole('link', { name: '没有账号？去注册' })).not.toBeInTheDocument();
+    await screen.findByRole('link', { name: '使用统一认证登录' });
+    expect(screen.queryByRole('link', { name: '去注册' })).not.toBeInTheDocument();
   });
 
   it('keeps the registration entry when the platform config cannot be loaded', async () => {
@@ -126,7 +126,7 @@ describe('LoginPage SSO auto start', () => {
 
     renderLogin();
 
-    expect(await screen.findByRole('link', { name: '没有账号？去注册' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: '去注册' })).toBeInTheDocument();
     expect(beginSsoLoginMock).not.toHaveBeenCalled();
   });
 });

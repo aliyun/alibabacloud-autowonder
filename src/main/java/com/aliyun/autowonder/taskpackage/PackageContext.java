@@ -42,6 +42,11 @@ public class PackageContext {
 
     /** sdlc.json: agent-internal workflow steps and currentStepId */
     private Map<String, Object> sdlc;
+
+    public boolean isStageTimingEnabled() {
+        return sdlc != null && Boolean.TRUE.equals(sdlc.get("stageTimingEnabled"));
+    }
+
     /** Internal serialization policy; false preserves the legacy always-present sdlc.json. */
     private boolean omitSdlcFileWhenAbsent;
 

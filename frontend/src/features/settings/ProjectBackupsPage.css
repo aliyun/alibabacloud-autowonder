@@ -1,0 +1,25 @@
+/* 原型 27-project-backups.html 页面级样式：
+ * 工具行无下分割线、mono 单元格（创建时间 / ossRef）、
+ * 失败原因描红、进行中行占位弱化。全部走 --aw-* 设计令牌。 */
+.aw-backup-alert {
+  margin-bottom: 14px;
+}
+
+/* 工具行与表格之间不加分割线（原型 27 为 border-bottom:none）。 */
+.aw-backups-page .aw-toolbar {
+  border-bottom: 0;
+}
+
+.aw-backup-mono {
+  font-family: var(--aw-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.aw-backup-reason {
+  color: var(--aw-error-deep);
+}
+
+.aw-backup-dim {
+  color: var(--aw-text-3);
+}

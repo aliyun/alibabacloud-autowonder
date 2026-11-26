@@ -1,7 +1,7 @@
 import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
 import { Popover, Tooltip, Typography } from 'antd';
-import { ThunderboltOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { ReactNode } from 'react';
 import type { UsageSummary } from '@/shared/types/workitem';
 import { formatCredits } from '@/shared/lib/tokenFormat';
@@ -56,7 +56,7 @@ export function TokenUsageBadge({ usage, showModel = true }: TokenUsageBadgeProp
   return (
     <Popover content={<UsagePopoverContent usage={usage} showModel={showModel} />} trigger="hover">
       <Text type="secondary" style={{ fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-        <ThunderboltOutlined style={{ marginRight: 2 }} />
+        <span style={{ display: 'inline-flex', verticalAlign: '-2px', marginRight: 2 }}><AwStrokeIcon name="zap" /></span>
         {creditsLabel(usage)}
       </Text>
     </Popover>
@@ -74,7 +74,7 @@ export function StepTokenBadge({ usage }: StepTokenBadgeProps) {
   return (
     <Tooltip title={<UsagePopoverContent usage={usage} showModel={false} tone="dark" />}>
       <Text type="secondary" style={{ fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-        <ThunderboltOutlined style={{ marginRight: 2 }} />
+        <span style={{ display: 'inline-flex', verticalAlign: '-2px', marginRight: 2 }}><AwStrokeIcon name="zap" size={13} /></span>
         {creditsLabel(usage)}
       </Text>
     </Tooltip>

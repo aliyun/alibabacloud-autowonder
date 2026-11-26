@@ -18,11 +18,9 @@
   "empty": "No notifications",
   "details": "Notification details",
   "viewDetail": "Details",
+  "moreActions": "More actions",
   "openRelated": "Open related item",
   "noBody": "No body",
-  "type": "Notification type",
-  "time": "Time",
-  "related": "Related item",
   "unknownRef": "Unknown type",
   "close": "Close",
   "submittedWorkitem": "Submitted work item",
@@ -78,12 +76,12 @@
   "reminderLoading": "Loading notification…",
   "reminderLoadFailed": "Could not load the notification",
   "reminderRetry": "Retry",
-  "browserNotifications": "Browser notifications",
   "browserPermissionDefault": "Not requested yet. Click to ask your browser.",
   "browserPermissionGranted": "Notifications are allowed in this browser.",
   "browserPermissionDenied": "Notifications are blocked. Change this in your browser site settings.",
   "browserPermissionUnsupported": "Browser notifications are unavailable here. In-app reminders still work.",
   "enableBrowserNotifications": "Enable browser notifications",
   "notificationNotFound": "This notification no longer exists",
-  "detailLoadFailed": "Could not load the notification details"
+  "detailLoadFailed": "Could not load the notification details",
+  "pageDesc": "Entry: the header bell (unread dot, polled every 30s) opens this page · {{total}} notifications · {{unread}} unread"
 }

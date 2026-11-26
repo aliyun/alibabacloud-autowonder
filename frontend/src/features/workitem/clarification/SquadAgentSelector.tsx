@@ -1,9 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Select, Space, Typography } from 'antd';
+import { Button, Select } from 'antd';
 import { listAllSquads, listSquads, getSquadMembers } from '@/features/squad/api';
-import type { SquadMember } from '@/features/squad/api';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { AgentInitial } from '../components/SquadMembers';
 
 export interface SquadAgentSelection {
   squadId: number;
@@ -46,60 +48,101 @@ export function SquadAgentSelector({ value, onChange, locked }: SquadAgentSelect
   });
 
   const squadId = value?.squadId ?? null;
-  const { data: members = [], isLoading: membersLoading } = useQuery({
+  const membersQuery = useQuery({
     queryKey: ['squad-members', 'clarification', squadId],
     queryFn: () => getSquadMembers(squadId!),
     enabled: !!squadId,
   });
+  const members = membersQuery.data ?? [];
 
   const squadOptions = useMemo(
     () => (squads?.list ?? []).map((s) => ({ value: s.id, label: s.name })),
     [squads],
   );
-  const agentOptions = useMemo(
-    () =>
-      members.map((m: SquadMember) => ({
-        value: m.agentId,
-        label: m.roleCode ? `${m.agentName} (${m.roleCode})` : m.agentName,
-      })),
-    [members],
-  );
+
+  let agentList: ReactNode;
+  if (!squadId) {
+    agentList = <p className="aw-cl-pick-intro" style={{ margin: 0 }}>{t('clarification.selectSquadFirst')}</p>;
+  } else if (membersQuery.isLoading) {
+    agentList = (
+      <div aria-busy="true">
+        <div className="aw-cl-skel" />
+        <div className="aw-cl-skel" />
+        <div className="aw-cl-skel" />
+      </div>
+    );
+  } else if (membersQuery.isError) {
+    agentList = (
+      <div className="aw-cl-note error">
+        <span className="ic"><AwStrokeIcon name="alert-c" /></span>
+        <span className="grow">{t('clarification.membersFailed')}</span>
+        <Button size="small" onClick={() => { membersQuery.refetch(); }}>{t('clarification.retry')}</Button>
+      </div>
+    );
+  } else if (members.length === 0) {
+    agentList = <p className="aw-cl-pick-intro" style={{ margin: 0 }}>{t('clarification.noMembers')}</p>;
+  } else {
+    agentList = (
+      <ul className="aw-cl-agents">
+        {members.map((m) => {
+          const selected = value?.agentId === m.agentId;
+          return (
+            <li key={m.agentId}>
+              <button
+                type="button"
+                className={selected ? 'aw-cl-agent is-selected' : 'aw-cl-agent'}
+                disabled={locked}
+                title={m.responsibilities || undefined}
+                aria-pressed={selected}
+                onClick={() => onChange({ squadId, agentId: m.agentId })}
+              >
+                <span className="aw-cl-av lg"><AgentInitial name={m.agentName} /></span>
+                <span style={{ minWidth: 0 }}>
+                  <span className="nm">{m.agentName}</span>
+                  <span className="sub">{t('clarification.metaJoin', { left: m.roleName || m.roleCode, right: m.agentId })}</span>
+                </span>
+                {m.executorOnline === undefined ? <span /> : (
+                  <span className={m.executorOnline ? 'st on' : 'st'}>
+                    {m.executorOnline ? t('clarification.online') : t('clarification.offline')}
+                  </span>
+                )}
+                <span className="go">
+                  {t('clarification.startClarify')}
+                  <AwStrokeIcon name="chev-r" size={12} />
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size={8}>
-      <div>
-        <Typography.Text strong style={{ display: 'block', marginBottom: 4 }}>
-          {t('clarification.squad')}
-        </Typography.Text>
+    <>
+      <div className="aw-cl-field">
+        <div className="aw-cl-field-label">{t('clarification.squad')}</div>
         <Select
-          style={{ width: '100%' }}
           placeholder={t('clarification.selectSquad')}
           loading={squadsLoading}
           options={squadOptions}
           value={squadId}
           disabled={locked}
+          aria-label={t('clarification.squad')}
           onChange={(next) => {
             onChange(next == null ? null : { squadId: next, agentId: 0 });
           }}
         />
       </div>
-      <div>
-        <Typography.Text strong style={{ display: 'block', marginBottom: 4 }}>
+      <div className="aw-cl-field">
+        <div className="aw-cl-field-label">
           {t('clarification.agent')}
-        </Typography.Text>
-        <Select
-          style={{ width: '100%' }}
-          placeholder={squadId ? t('clarification.selectAgent') : t('clarification.selectSquadFirst')}
-          disabled={!squadId || locked}
-          loading={membersLoading}
-          options={agentOptions}
-          value={value?.agentId && value.agentId > 0 ? value.agentId : undefined}
-          onChange={(next) => {
-            if (!squadId || next == null) return;
-            onChange({ squadId, agentId: next });
-          }}
-        />
+          {squadId && membersQuery.isSuccess
+            ? <span className="n">{t('clarification.memberCount', { count: members.length })}</span>
+            : null}
+        </div>
+        {agentList}
       </div>
-    </Space>
+    </>
   );
 }

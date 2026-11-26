@@ -1,0 +1,11 @@
+/* 新建工单弹窗（工作台 / 工单列表共用）：chrome 对齐原型 36。
+   样式随组件加载，不依赖入口页是否引入 workbench.css。 */
+.aw-create-modal .ant-modal-content { padding: 0; }
+.aw-create-modal .ant-modal-header { padding: 14px 20px; margin-bottom: 0; border-bottom: 1px solid var(--aw-border); }
+.aw-create-modal .ant-modal-body { padding: 16px 20px; }
+.aw-create-modal .ant-modal-close { top: 13px; inset-inline-end: 20px; width: 26px; height: 26px; }
+.aw-create-modal .ant-modal-close-x { width: 26px; height: 26px; font-size: 14px; line-height: 26px; }
+.aw-create-modal .ant-modal-footer { margin-top: 0; padding: 12px 20px; border-top: 1px solid var(--aw-border); text-align: start; }
+.aw-create-modal-foot { display: flex; align-items: center; gap: 8px; }
+
+.aw-workbench-timezone { margin-left: 8px; font-size: 12px; }

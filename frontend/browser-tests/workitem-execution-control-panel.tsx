@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { LocaleProvider } from '../src/shared/i18n/LocaleProvider';
+import { AppearanceProvider } from '../src/shared/theme/AppearanceProvider';
 import { ExecutionActionBar } from '../src/features/workitem/components/ExecutionActionBar';
 import { ExecutionControlTimeline } from '../src/features/workitem/components/ExecutionControlTimeline';
 import { DeliveryProgress } from '../src/features/workitem/components/DeliveryProgress';
@@ -356,16 +357,79 @@ function CommentStopShowcase() {
   );
 }
 
-const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+// A06-A08 approved UI acceptance: synthetic Dispatch snapshots, not real dispatch or business PASS.
+// Historical 301 shares stage IDs with current 304, deliberately with different status/plan/substeps.
+// This catches accidental reuse of the agent's latest stage list for a pinned historical Dispatch.
+const LONG_STAGE = 'Synthetic requirements analysis with an exceptionally long entry-stage name for truncation';
+const REPAIR_EXECUTIONS = [
+  attempt(301, 'PAUSED', { agentId: 21000, agentName: 'Synthetic analyst', durationMs: 120000,
+    startedAt: '2026-10-20T08:00:00Z', endedAt: '2026-10-20T08:02:00Z',
+    stepTimings: [{ stepId: 11, name: LONG_STAGE, status: 'done', durationMs: 80000 }, { stepId: 12, name: 'Historical review', status: 'paused', durationMs: 40000 }],
+    control: caps({ resume: { allowed: true } }) }),
+  attempt(302, 'SUCCEEDED', { agentId: 21001, agentName: 'Synthetic builder with a deliberately long lane name', durationMs: 60000,
+    startedAt: '2026-10-20T08:02:00Z', endedAt: '2026-10-20T08:03:00Z',
+    stepTimings: [{ stepId: 21, name: 'Synthetic implementation', status: 'done', durationMs: 60000 }] }),
+  attempt(303, 'SUCCEEDED', { agentId: 21001, agentName: 'Synthetic builder with a deliberately long lane name', durationMs: 30000,
+    startedAt: '2026-10-20T08:03:00Z', endedAt: '2026-10-20T08:03:30Z',
+    stepTimings: [{ stepId: 22, name: 'Synthetic verification', status: 'done', durationMs: 30000 }] }),
+  attempt(304, 'RUNNING', { agentId: 21000, agentName: 'Synthetic analyst', durationMs: 180000,
+    startedAt: '2026-10-20T08:04:00Z',
+    stepTimings: [{ stepId: 11, name: 'Latest analysis', status: 'reused', durationMs: 0 }, { stepId: 12, name: 'Latest review', status: 'done', durationMs: 60000 }, { stepId: 13, name: 'Latest delivery', status: 'active', durationMs: 120000 }],
+    control: caps({ pause: { allowed: true }, end: { allowed: true } }) }),
+];
+
+function RepairWorkbenchShowcase() {
+  return <section data-testid="repair-workbench-fixture" style={{ maxWidth: 960, marginTop: 24 }}>
+    <DeliveryProgress showWorkflowPlan={false} progress={{
+      executions: REPAIR_EXECUTIONS,
+      steps: [],
+      agents: [
+        { agentId: 21000, agentName: 'Synthetic analyst', status: 'active', durationMs: 300000,
+          steps: [11, 12, 13].map((stepId, index) => ({
+            stepId, name: ['Latest analysis', 'Latest review', 'Latest delivery'][index],
+            status: index === 2 ? 'active' as const : 'done' as const,
+            currentDispatchId: 304, planStatus: 'REUSED', sourceAttempt: 7,
+            agentName: 'Synthetic analyst', executorId: null, executorName: null, error: null,
+            subSteps: [{ name: 'LATEST_ONLY_SUBSTEP', status: 'done' as const }], durationMs: 60000,
+            attempts: [REPAIR_EXECUTIONS[0], REPAIR_EXECUTIONS[3]],
+          })) },
+        { agentId: 21001, agentName: 'Synthetic builder with a deliberately long lane name', status: 'finished', durationMs: 90000, steps: [] },
+      ],
+      processGraph: {
+        nodes: REPAIR_EXECUTIONS.map((execution, index) => ({
+          key: `dispatch-${execution.dispatchId}`, dispatchId: execution.dispatchId, agentId: execution.agentId,
+          agentName: execution.agentName!, stepId: execution.stepTimings![0].stepId,
+          stepName: index === 0 ? LONG_STAGE : execution.stepTimings![0].name,
+          status: execution.status, startedAt: execution.startedAt, durationMs: execution.durationMs,
+        })),
+        edges: [
+          { sourceKey: 'dispatch-301', targetKey: 'dispatch-302', type: 'HANDOFF', sourceDispatchId: 301, targetDispatchId: 302, label: 'Synthetic handoff' },
+          { sourceKey: 'dispatch-302', targetKey: 'dispatch-303', type: 'CONTINUE', sourceDispatchId: 302, targetDispatchId: 303, label: 'Synthetic continuation' },
+          { sourceKey: 'dispatch-303', targetKey: 'dispatch-304', type: 'COMMENT_REWORK', sourceDispatchId: 303, targetDispatchId: 304, commentId: 800, label: 'Synthetic rework' },
+        ],
+      },
+      totalDurationMs: 390000, closed: false,
+    }} artifacts={[]} renderControlTimeline={(dispatchId, compact) => <ExecutionControlTimeline dispatchId={dispatchId} compact={compact} items={[
+      sysItem(9500 + dispatchId, { action: 'PAUSE', phase: 'CONFIRMED', dispatchId, requestedByName: 'Synthetic operator' }),
+    ]} />} />
+  </section>;
+}
+
+const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false }, mutations: { retry: false } } });
 createRoot(document.getElementById('root')!).render(
   <LocaleProvider>
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/']}>
-        <ActionBarShowcase />
-        <ControlTimelineShowcase />
-        <WorkbenchShowcase />
-        <CommentStopShowcase />
-      </MemoryRouter>
-    </QueryClientProvider>
+    <AppearanceProvider accent="#2563eb">
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/']}>
+          <div style={{ padding: 24 }}>
+            <ActionBarShowcase />
+            <ControlTimelineShowcase />
+            <WorkbenchShowcase />
+            <RepairWorkbenchShowcase />
+            <CommentStopShowcase />
+          </div>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </AppearanceProvider>
   </LocaleProvider>,
 );

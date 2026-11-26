@@ -19,6 +19,9 @@ public class TimelineItemVO {
     private String fromValDisplay;
     private String toValDisplay;
     private String operatorDisplayName;
+    /** 状态变更备注原文（仅 STATUS_CHANGE 且存在非空 reason 时透出，纯文本）。 */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private String note;
     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     private ExecutionControlVO executionControl;
     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)

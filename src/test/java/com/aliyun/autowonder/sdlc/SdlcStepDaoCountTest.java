@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -48,6 +49,7 @@ class SdlcStepDaoCountTest {
         try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
              Statement st = c.createStatement()) {
             st.execute("DELETE FROM sdlc_step");
+            st.execute("DELETE FROM sdlc");
             st.execute("ALTER TABLE sdlc_step ALTER COLUMN id RESTART WITH 10000");
         }
     }
@@ -85,6 +87,22 @@ class SdlcStepDaoCountTest {
             counts.put(row.getSdlcId(), row.getCnt());
         }
         return counts;
+    }
+
+    @Test
+    void live_steps_remain_executable_when_the_workflow_header_is_missing_or_deleted() throws Exception {
+        insertStep(9L, 1);
+        insertStep(10L, 1);
+        insertStep(11L, 1);
+        try (Connection c = DriverManager.getConnection(JDBC_URL, "sa", "");
+             Statement st = c.createStatement()) {
+            st.execute("INSERT INTO sdlc (id, tenant_id, is_deleted, stage_timing_enabled) VALUES "
+                    + "(9, " + TENANT + ", 0, 1), (10, " + TENANT + ", 1, 1)");
+        }
+        assertTrue(dao.listForExecution(TENANT, 9L).get(0).isFlowStageTimingEnabled());
+        assertFalse(dao.listForExecution(TENANT, 10L).get(0).isFlowStageTimingEnabled());
+        assertFalse(dao.listForExecution(TENANT, 11L).get(0).isFlowStageTimingEnabled());
+        assertTrue(dao.listForExecution(TENANT + 1, 9L).isEmpty());
     }
 
     @Test

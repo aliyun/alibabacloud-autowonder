@@ -1,14 +1,15 @@
 import { useTranslation } from 'react-i18next';
 import { formatNumber } from '@/shared/i18n/format';
-import { Drawer, Descriptions, Tag, Button, Space, Empty, Spin, Alert, Timeline, List, Typography } from 'antd';
+import { Drawer, Alert, Button, Empty, Space, Spin } from 'antd';
 import { CloseCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from '../hooks';
-import { statusMeta, HAPPY_PATH, FAILURE_STATES, ACCENT } from '../statusMeta';
+import { statusMeta, HAPPY_PATH, FAILURE_STATES } from '../statusMeta';
+import { StatusTag } from '@/shared/ui/StatusTag';
+import { AiIdentity } from '@/shared/ui/AiIdentity';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { MarkdownView } from '@/shared/ui/MarkdownView';
 import './executionDetailDrawer.css';
-
-const { Text } = Typography;
 
 interface Props {
   dispatchId: number | null;
@@ -23,142 +24,132 @@ export function ExecutionDetailDrawer({ dispatchId, open, onClose }: Props) {
 
   const currentIdx = data ? HAPPY_PATH.indexOf(data.status) : -1;
   const isFailure = data ? FAILURE_STATES.includes(data.status) : false;
+  const meta = data ? statusMeta(data.status) : null;
 
-  const timelineItems = HAPPY_PATH.map((s, i) => {
+  // 六步时间线按源码 HAPPY_PATH 原序渲染；失败态在时间线后追加错误节点。
+  const steps = HAPPY_PATH.map((s, i) => {
     const reached = currentIdx >= 0 && i <= currentIdx;
-    return {
-      color: reached ? ACCENT : 'var(--aw-border)',
-      children: (
-        <Text
-          style={
-            reached
-              ? { color: 'var(--aw-text)', fontWeight: i === currentIdx ? 600 : 400 }
-              : { color: 'var(--aw-muted)' }
-          }
-        >
-          {statusMeta(s).label}
-        </Text>
-      ),
-    };
+    const running = !isFailure && i === currentIdx;
+    const state = running ? ' run' : reached ? ' done' : '';
+    return (
+      <div key={s} className={`exec-step${state}`}>
+        <span className="nd" aria-hidden="true" />
+        <span className="st">{statusMeta(s).label}</span>
+      </div>
+    );
   });
   if (isFailure && data) {
-    timelineItems.push({
-      color: 'var(--aw-error)',
-      children: (
-        <Text style={{ color: 'var(--aw-error)', fontWeight: 600 }}>{statusMeta(data.status).label}</Text>
-      ),
-    });
+    steps.push(
+      <div key={data.status} className="exec-step fail">
+        <span className="nd" aria-hidden="true" />
+        <span className="st">{statusMeta(data.status).label}</span>
+      </div>,
+    );
   }
 
   return (
     <Drawer
       title={
-        <span style={{ borderLeft: `4px solid ${ACCENT}`, paddingLeft: 10 }}>
-          {data ? t('detail.titleWithId', { id: data.id }) : t('detail.title')}
+        <span className="exec-drawer-title-row">
+          <span className="exec-drawer-title">{data ? t('detail.titleWithId', { id: data.id }) : t('detail.title')}</span>
+          {meta ? <StatusTag dot label={meta.label} colorKey={meta.color} /> : null}
         </span>
       }
       width={640}
       open={open}
       onClose={onClose}
-      closable={{ 'aria-label': t('detail.close') }}
+      closable={{ closeIcon: <AwStrokeIcon name="x" />, 'aria-label': t('detail.close') }}
       maskClosable
+      footer={
+        <Space>
+          <Button
+            type="primary"
+            disabled={!data?.workitemId}
+            onClick={() => { if (data?.workitemId) navigate(`/workitems/${data.workitemId}`); }}
+          >
+            {t('detail.openWorkitem')}
+          </Button>
+          <Button disabled={!data?.agentId} onClick={() => { if (data?.agentId) navigate(`/agents/${data.agentId}`); }}>
+            {t('detail.viewAgent')}
+          </Button>
+        </Space>
+      }
     >
       {isLoading || !data ? (
-        <Spin aria-label={t('detail.loading')} />
+        <div className="exec-drawer-loading">
+          <Spin aria-label={t('detail.loading')} />
+        </div>
       ) : (
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          <Timeline items={timelineItems} />
+        <>
+          <div className="exec-drawer-sec">
+            <div className="exec-steps">{steps}</div>
+          </div>
 
           {data.error ? (
-            <Alert type="error" message={t('detail.error')} description={data.error} showIcon icon={<CloseCircleOutlined aria-hidden="true" />} />
+            <div className="exec-drawer-sec">
+              <Alert type="error" message={t('detail.error')} description={data.error} showIcon icon={<CloseCircleOutlined aria-hidden="true" />} />
+            </div>
           ) : null}
 
-          <Descriptions
-            column={1}
-            size="small"
-            bordered
-            className="execution-detail-descriptions"
-            styles={{ label: { width: 100 } }}
-            items={[
-              {
-                key: 'wi',
-                label: t('detail.workitem'),
-                children: data.workitemId ? (
-                  <a
-                    title={`#${data.workitemId} ${data.workitemTitle}`}
-                    style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    onClick={() => navigate(`/workitems/${data.workitemId}`)}
-                  >
-                    #{data.workitemId} {data.workitemTitle}
-                  </a>
-                ) : (
-                  '—'
-                ),
-              },
-              { key: 'step', label: t('detail.step'), children: data.sdlcStepId ?? '—' },
-              {
-                key: 'agent',
-                label: t('detail.agent'),
-                children: data.agentName ? (
-                  <>
-                    {data.agentName}{' '}
-                    {data.agentVersionNo ? (
-                      <Text type="secondary">v{data.agentVersionNo}</Text>
-                    ) : null}
-                  </>
-                ) : (
-                  '—'
-                ),
-              },
-              { key: 'exec', label: t('detail.executor'), children: data.executorName ?? '—' },
-              { key: 'attempt', label: t('detail.attempt'), children: data.attempt ?? '—' },
-              {
-                key: 'status',
-                label: t('detail.status'),
-                children: (
-                  <Tag color={statusMeta(data.status).color}>
-                    {statusMeta(data.status).label}
-                  </Tag>
-                ),
-              },
-              {
-                key: 'result',
-                label: t('detail.summary'),
-                children: data.resultSummary ? <MarkdownView content={data.resultSummary} /> : '—',
-              },
-            ]}
-          />
+          <div className="exec-drawer-sec">
+            <div className="exec-kv-list">
+              <span className="k">{t('detail.workitem')}</span>
+              <span className="v">{data.workitemId ? (
+                <a
+                  title={`#${data.workitemId} ${data.workitemTitle}`}
+                  onClick={() => navigate(`/workitems/${data.workitemId}`)}
+                >
+                  #{data.workitemId} {data.workitemTitle}
+                </a>
+              ) : (
+                t('detail.emptyValue')
+              )}</span>
+              <span className="k">{t('detail.step')}</span>
+              <span className="v">{data.sdlcStepId ?? t('detail.emptyValue')}</span>
+              <span className="k">{t('detail.agent')}</span>
+              <span className="v">{data.agentName ? (
+                <span className="exec-agent-cell">
+                  <AiIdentity name={data.agentName} avatar icon size="sm" />
+                  {' '}
+                  {data.agentVersionNo ? (
+                    <StatusTag colorKey="outline" size="sm" label={<>v{data.agentVersionNo}</>} />
+                  ) : null}
+                </span>
+              ) : (
+                t('detail.emptyValue')
+              )}</span>
+              <span className="k">{t('detail.executor')}</span>
+              <span className="v">{data.executorName ? <AiIdentity name={data.executorName} avatar size="sm" /> : t('detail.emptyValue')}</span>
+              <span className="k">{t('detail.attempt')}</span>
+              <span className="v">{data.attempt ?? t('detail.emptyValue')}</span>
+              <span className="k">{t('detail.status')}</span>
+              <span className="v">{meta ? <StatusTag dot label={meta.label} colorKey={meta.color} /> : null}</span>
+            </div>
+          </div>
 
-          <div>
-            <Text type="secondary">{t('detail.artifacts', { count: data.artifacts?.length ?? 0, total: formatNumber(data.artifacts?.length ?? 0) })}</Text>
+          <div className="exec-drawer-sec">
+            <div className="sec-t">{t('detail.summary')}</div>
+            <div className="exec-result-summary">
+              {data.resultSummary ? <MarkdownView content={data.resultSummary} /> : t('detail.emptyValue')}
+            </div>
+          </div>
+
+          <div className="exec-drawer-sec">
+            <div className="sec-t">{t('detail.artifacts', { count: data.artifacts?.length ?? 0, total: formatNumber(data.artifacts?.length ?? 0) })}</div>
             {data.artifacts && data.artifacts.length > 0 ? (
-              <List
-                size="small"
-                dataSource={data.artifacts}
-                renderItem={(a) => (
-                  <List.Item style={{ paddingInline: 0 }}>
-                    <Tag color="orange">{a.type}</Tag> {a.name}
-                  </List.Item>
-                )}
-              />
+              <div>
+                {data.artifacts.map((a) => (
+                  <div key={a.id} className="exec-artifact-item">
+                    <StatusTag colorKey="outline" size="sm" label={a.type} />
+                    <span className="exec-artifact-name">{a.name}</span>
+                  </div>
+                ))}
+              </div>
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('detail.noArtifacts')} />
             )}
           </div>
-
-          <Space>
-            <Button
-              type="primary"
-              disabled={!data.workitemId}
-              onClick={() => navigate(`/workitems/${data.workitemId}`)}
-            >
-              {t('detail.openWorkitem')}
-            </Button>
-            <Button disabled={!data.agentId} onClick={() => navigate(`/agents/${data.agentId}`)}>
-              {t('detail.viewAgent')}
-            </Button>
-          </Space>
-        </Space>
+        </>
       )}
     </Drawer>
   );

@@ -91,6 +91,8 @@ class TenantInterceptorTest {
         Set<String> expected = new HashSet<>(SPACE_DASHBOARD_STATEMENTS);
         expected.add(WorkitemDao.class.getName() + ".findTenantIdById");
         expected.addAll(NOTIFICATION_READ_STATEMENTS);
+        expected.add("com.aliyun.autowonder.workspace.WorkspaceDao.countMembersByWorkspaceIds");
+        expected.add("com.aliyun.autowonder.workspace.WorkspaceDao.countWorkitemsByWorkspaceIds");
         assertEquals(expected, TenantInterceptor.CROSS_TENANT_STATEMENTS,
                 "every cross-tenant statement must be added deliberately together with its own authorization checks");
         for (String statement : TenantInterceptor.CROSS_TENANT_STATEMENTS) {
@@ -198,6 +200,30 @@ class TenantInterceptorTest {
     void everySpaceDashboardStatementIsRegisteredExplicitly() {
         assertTrue(TenantInterceptor.CROSS_TENANT_STATEMENTS.containsAll(SPACE_DASHBOARD_STATEMENTS),
                 "the dashboard scope replaces the tenant rewrite, so all of its statements stay registered");
+    }
+
+    @Test
+    void workspaceCardCountsKeepCrossWorkspaceReachButSimilarNamesStayIsolated() throws Throwable {
+        AutoWonderContext.get().setCurrentWorkspaceId(TENANT_ID);
+        try {
+            for (String method : List.of("countMembersByWorkspaceIds", "countWorkitemsByWorkspaceIds")) {
+                String statementId = "com.aliyun.autowonder.workspace.WorkspaceDao." + method;
+                // Probe a table the existing rewriter scopes. org/org_member are intentionally
+                // shared tables; their unchanged SQL alone cannot prove exact registration.
+                String sql = "SELECT m.tenant_id, COUNT(*) FROM workitem m "
+                        + "WHERE m.tenant_id IN (?, ?) GROUP BY m.tenant_id";
+                StatementHandler handler = statementHandler(statementId, sql, SqlCommandType.SELECT);
+                new TenantInterceptor().intercept(invocationOn(handler));
+                assertEquals(sql, handler.getBoundSql().getSql(), statementId);
+                for (String unregistered : List.of(statementId + "Extra", statementId + ".findById",
+                        "other.mapper." + method, "com.aliyun.autowonder.workspace.WorkspaceDao.findById")) {
+                    String scoped = TenantInterceptor.applyTenantScope(unregistered, sql, TENANT_ID);
+                    assertTrue(scoped.contains("tenant_id = 42"), unregistered + ": " + scoped);
+                }
+            }
+        } finally {
+            AutoWonderContext.destroy();
+        }
     }
 
     @Test

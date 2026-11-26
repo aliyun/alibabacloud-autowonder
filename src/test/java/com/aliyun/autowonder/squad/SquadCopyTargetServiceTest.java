@@ -833,7 +833,7 @@ class SquadCopyTargetServiceTest {
     @Test
     void copyToTarget_sdlcCopiedWithStepsEntryRemapAndDefaultFlag() {
         CopySourceSnapshot.SdlcSnapshot sdlc = new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", "流程描述",
-                "REQ", "ENABLED", 1, 501L, List.of(
+                "REQ", "ENABLED", 1, true, 501L, List.of(
                         new CopySourceSnapshot.StepSnapshot(501L, 0, "分析", "TASK", "instr", null, null,
                                 true, 600, 2, "ANALYZE", "AGENT", "ROLE", "IN_PROGRESS", "OK", "FAIL"),
                         new CopySourceSnapshot.StepSnapshot(502L, 1, "编码", "TASK", "instr", null, null,
@@ -873,6 +873,7 @@ class SquadCopyTargetServiceTest {
         assertEquals(TARGET, copiedSdlc.getTenantId());
         assertEquals("标准流程", copiedSdlc.getName());
         assertEquals("REQ", copiedSdlc.getWorkType());
+        assertTrue(copiedSdlc.isStageTimingEnabled());
         assertEquals("ENABLED", copiedSdlc.getStatus());
         assertEquals(1, copiedSdlc.getIsDefault(), "目标空间无同类型默认流程时保留默认标记");
         ArgumentCaptor<SdlcStepDO> stepCaptor = ArgumentCaptor.forClass(SdlcStepDO.class);
@@ -890,7 +891,7 @@ class SquadCopyTargetServiceTest {
     @Test
     void copyToTarget_sdlcDefaultNotKeptWhenTargetAlreadyHasOne() {
         CopySourceSnapshot.SdlcSnapshot sdlc = new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", null,
-                "REQ", "DRAFT", 1, null, List.of());
+                "REQ", "DRAFT", 1, false, null, List.of());
         CopySourceSnapshot snapshot = snapshot(squadSource("开发小队", null), List.of(),
                 List.of(sdlc), List.of(), List.of(), List.of(), List.of());
         when(sdlcDao.countByTenantAndName(TARGET, "标准流程")).thenReturn(0);
@@ -915,7 +916,7 @@ class SquadCopyTargetServiceTest {
     @Test
     void copyToTarget_sdlcDefaultWithoutWorkTypeStaysDefault() {
         CopySourceSnapshot.SdlcSnapshot sdlc = new CopySourceSnapshot.SdlcSnapshot(21L, "通用流程", null,
-                null, "DRAFT", 1, null, List.of());
+                null, "DRAFT", 1, false, null, List.of());
         CopySourceSnapshot snapshot = snapshot(squadSource("开发小队", null), List.of(),
                 List.of(sdlc), List.of(), List.of(), List.of(), List.of());
         when(sdlcDao.countByTenantAndName(TARGET, "通用流程")).thenReturn(0);
@@ -938,7 +939,7 @@ class SquadCopyTargetServiceTest {
     @Test
     void copyToTarget_enabledSdlcWithoutEntryStepFailsEntryUnresolved() {
         CopySourceSnapshot.SdlcSnapshot sdlc = new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", null,
-                "REQ", "ENABLED", 0, null, List.of());
+                "REQ", "ENABLED", 0, false, null, List.of());
         CopySourceSnapshot snapshot = snapshot(squadSource("开发小队", null), List.of(),
                 List.of(sdlc), List.of(), List.of(), List.of(), List.of());
         when(sdlcDao.countByTenantAndName(TARGET, "标准流程")).thenReturn(0);
@@ -956,7 +957,7 @@ class SquadCopyTargetServiceTest {
     @Test
     void copyToTarget_sdlcEntryStepOutsideStepsFailsEntryUnresolved() {
         CopySourceSnapshot.SdlcSnapshot sdlc = new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", null,
-                "REQ", "ENABLED", 0, 999L, List.of(
+                "REQ", "ENABLED", 0, false, 999L, List.of(
                         new CopySourceSnapshot.StepSnapshot(501L, 0, "分析", "TASK", null, null, null,
                                 true, 600, 2, "ANALYZE", "AGENT", "ROLE", "IN_PROGRESS", "OK", "FAIL")));
         CopySourceSnapshot snapshot = snapshot(squadSource("开发小队", null), List.of(),
@@ -979,7 +980,7 @@ class SquadCopyTargetServiceTest {
     @Test
     void copyToTarget_sdlcNameConflictAppendsSuffix() {
         CopySourceSnapshot.SdlcSnapshot sdlc = new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", null,
-                "REQ", "DRAFT", 0, null, List.of());
+                "REQ", "DRAFT", 0, false, null, List.of());
         CopySourceSnapshot snapshot = snapshot(squadSource("开发小队", null), List.of(),
                 List.of(sdlc), List.of(), List.of(), List.of(), List.of());
         when(sdlcDao.countByTenantAndName(TARGET, "标准流程")).thenReturn(1);
@@ -1104,7 +1105,7 @@ class SquadCopyTargetServiceTest {
     @Test
     void copyToTarget_sdlcStatusUpdateGuardRejectsFailsSystemError() {
         CopySourceSnapshot.SdlcSnapshot sdlc = new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", null,
-                "REQ", "DRAFT", 0, null, List.of());
+                "REQ", "DRAFT", 0, false, null, List.of());
         CopySourceSnapshot snapshot = snapshot(squadSource("开发小队", null), List.of(),
                 List.of(sdlc), List.of(), List.of(), List.of(), List.of());
         when(sdlcDao.countByTenantAndName(TARGET, "标准流程")).thenReturn(0);
@@ -1124,7 +1125,7 @@ class SquadCopyTargetServiceTest {
     @Test
     void copyToTarget_sdlcNameExhaustionThrowsConflict() {
         CopySourceSnapshot.SdlcSnapshot sdlc = new CopySourceSnapshot.SdlcSnapshot(21L, "标准流程", null,
-                "REQ", "DRAFT", 0, null, List.of());
+                "REQ", "DRAFT", 0, false, null, List.of());
         CopySourceSnapshot snapshot = snapshot(squadSource("开发小队", null), List.of(),
                 List.of(sdlc), List.of(), List.of(), List.of(), List.of());
         when(sdlcDao.countByTenantAndName(eq(TARGET), anyString())).thenReturn(1);

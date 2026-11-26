@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Button, Empty, Segmented, Spin, Tooltip } from 'antd';
-import { HeartOutlined, QuestionCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { formatMinutesCompact } from '@/shared/lib/duration';
 import { usePipelineHealth } from './hooks';
+import { splitStatValue } from '../components/StatValue';
 import FlashValue from './FlashValue';
 import type { PipelineRange } from './api';
 
@@ -54,6 +55,8 @@ export default function PipelineHealthPanel() {
   });
 
   const emptyValue = t('pipeline.emptyValue');
+  const avgDuration = data?.avgWorkitemDurationMinutes == null ? emptyValue : formatMinutesCompact(data.avgWorkitemDurationMinutes);
+  const [avgDurationNum, avgDurationUnit] = splitStatValue(avgDuration);
   const showRealtimeTag = range === 'today';
   const avgTooltip = data ? (
     <div className="insight-pl-tip">
@@ -82,9 +85,6 @@ export default function PipelineHealthPanel() {
     <section className="insight-panel insight-panel--pl" aria-label={t('pipeline.title')}>
       <div className="insight-panel-head">
         <div className="insight-panel-id">
-          <span className="insight-panel-glyph insight-panel-glyph--pl" aria-hidden="true">
-            <HeartOutlined />
-          </span>
           <h2>{t('pipeline.title')}</h2>
           <span className="insight-pl-chip" title={windowLabel} aria-label={windowLabel}>
             <span>{t('pipeline.chipPrefix')}</span>
@@ -124,7 +124,7 @@ export default function PipelineHealthPanel() {
           action={(
             <Button
               size="small"
-              icon={<ReloadOutlined aria-hidden="true" />}
+              icon={<AwStrokeIcon name="refresh" />}
               onClick={() => { void refetch(); }}
             >
               {t('pipeline.retry')}
@@ -161,7 +161,7 @@ export default function PipelineHealthPanel() {
                   if (event.key === 'Escape') event.currentTarget.blur();
                 }}
               >
-                <QuestionCircleOutlined className="insight-pl-tip-dot" aria-hidden="true" />
+                <AwStrokeIcon name="help" className="insight-pl-tip-dot" />
                 <span className="insight-pl-label">{t('pipeline.reworkRate')}</span>
                 <span className="insight-pl-value"><FlashValue value={formatRate(data.rework.rate, emptyValue)} /></span>
                 <span className="insight-pl-sub">
@@ -177,10 +177,10 @@ export default function PipelineHealthPanel() {
                   if (event.key === 'Escape') event.currentTarget.blur();
                 }}
               >
-                <QuestionCircleOutlined className="insight-pl-tip-dot" aria-hidden="true" />
+                <AwStrokeIcon name="help" className="insight-pl-tip-dot" />
                 <span className="insight-pl-label">{t('pipeline.avgDuration')}</span>
                 <span className="insight-pl-value">
-                  <FlashValue value={data.avgWorkitemDurationMinutes == null ? emptyValue : formatMinutesCompact(data.avgWorkitemDurationMinutes)} />
+                  <FlashValue value={avgDurationNum} />{avgDurationUnit && <small>{avgDurationUnit}</small>}
                 </span>
                 <span className="insight-pl-sub">{t('pipeline.avgSub')}</span>
               </div>

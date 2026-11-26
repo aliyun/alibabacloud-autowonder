@@ -9,25 +9,33 @@
   },
   "page": {
     "title": "Memory",
-    "create": "Add memory",
+    "description": "A persistent memory library organized by owner: project / squad / Agent scopes, with topic documents, index, history, access control and import sources.",
+    "loading": "Loading…",
+    "create": "New memory",
     "loadError": "Could not load the memory directory. Refresh and try again.",
-    "owners": "Memory owners",
+    "owners": "Owners",
+    "filterOwners": "Filter owners",
+    "noMatchingOwners": "No matching owners",
     "noOwners": "No owners available",
     "selectOwner": "Select a memory owner",
-    "noWritableMemory": "No memory yet. Use “Add memory” to create one.",
+    "noWritableMemory": "No memory yet. Use “New memory” to create one.",
     "noReadableMemory": "No memory available to view",
-    "revision": "Memory store revision {{revision}}",
-    "topics": "Memory content ({{count}})",
-    "index": "Memory index",
+    "revision": "Current revision {{revision}}",
+    "revisionShort": "Revision {{revision}}",
+    "topics": "Topics",
+    "index": "Index",
     "editIndex": "Edit index",
-    "indexHint": "Records available memories and when to read them. Details are stored in the topics below.",
-    "noTopics": "No memory content",
-    "history": "Change history",
+    "indexHint": "The index is the entry point Agents use to load memory. Keep relative paths to each topic.",
+    "noTopics": "No topics yet",
+    "history": "History",
     "noHistory": "No changes",
-    "acl": "Access permissions",
-    "imports": "Local sources",
-    "agentImports": "Local sources belong to an Agent’s personal memory. Select an Agent to view them.",
-    "deleteConfirm": "Delete this memory and its index reference?"
+    "acl": "Access control",
+    "imports": "Import sources",
+    "groupProject": "Project memory",
+    "groupSquad": "Squad memory",
+    "groupAgent": "Agent memory",
+    "agentImports": "Import sources belong to an Agent’s personal memory. Select an Agent to view them.",
+    "deleteConfirm": "Delete this topic and its index reference?"
   },
   "commands": {
     "saveMemory": "Save memory",
@@ -39,13 +47,15 @@
     "indexSaved": "Index saved"
   },
   "scope": {
-    "ORG": "Organization shared",
-    "SQUAD": "Squad shared",
-    "AGENT": "Agent personal"
+    "ORG": "Project",
+    "SQUAD": "Squad",
+    "AGENT": "Agent"
   },
   "owner": {
-    "organization": "Organization shared memory",
-    "description": "{{squads}}{{scope}}{{ownerRef}}",
+    "organization": "Project memory",
+    "project": "Project shared · Readable by all Agents in this Workspace",
+    "squad": "Squad shared · #{{ownerRef}}",
+    "agent": "{{squads}}Agent personal · #{{ownerRef}}",
     "option": "{{squads}}{{name}}",
     "squadSeparator": ", "
   },
@@ -58,16 +68,19 @@
   "migration": {
     "summary": "Legacy memory migration: {{migrated}}; {{pending}}",
     "hint": "Migration and retries continue automatically in the background. Original memories are retained. Migration counts do not indicate index capacity or recall quality.",
+    "note": "{{summary}} · {{hint}}",
     "migrated_one": "{{count}} memory migrated",
     "migrated_other": "{{count}} memories migrated",
     "pending_one": "{{count}} memory pending",
     "pending_other": "{{count}} memories pending"
   },
   "document": {
-    "version": "File version {{version}}",
+    "version": "Version {{version}}",
     "metadataParseWarning": "Metadata could not be parsed. View the original text in the file details.",
-    "summary": "{{description}} · {{bytes}} · {{version}}",
-    "viewer": "{{path}} · File version {{version}}"
+    "summary": "{{description}} · {{size}} · {{version}}",
+    "viewer": "{{path}} · Version {{version}}",
+    "updatedAt": "Updated {{time}}",
+    "metaSeparator": " · "
   },
   "operations": {
     "CREATE": "Created",
@@ -80,9 +93,10 @@
     "scope": "Owner scope",
     "owner": "Owner",
     "type": "Memory type",
+    "lockedSuffix": " (locked while editing)",
     "title": "Title",
     "description": "When to use",
-    "body": "Body",
+    "body": "Body (Markdown)",
     "descriptionPlaceholder": "Describe the tasks or situations where this memory is useful"
   },
   "validation": {
@@ -112,27 +126,27 @@
     "subjects": {
       "USER": "Platform user",
       "AGENT": "Agent",
-      "SQUAD": "Squad members",
-      "ROLE": "All Agents"
+      "SQUAD": "Squad member",
+      "ROLE": "Role"
     },
     "permissions": {
       "READ": "View",
       "WRITE": "Edit",
       "ADMIN": "Manage"
     },
-    "adminOnly": "Only Workspace administrators can manage access permissions",
+    "adminOnly": "Only Workspace administrators can manage access control",
     "setCommand": "Set memory access permissions",
     "removeCommand": "Remove memory access permissions",
-    "hint": "Access permissions determine who can view or edit this memory.",
-    "help": "Organization shared memory is readable by Agents in this Workspace by default; Squad shared memory is readable by its members. Agents can edit only their own personal memory, cannot edit shared memory, and cannot access other Agents’ personal memory. Platform users may receive separate edit permissions.",
+    "hint": "Grant View / Edit / Manage to subjects (platform users, Agents, Squads, roles). Adding or removing grants is an administrator action.",
     "add": "Add access permission",
+    "allAgents": "All Agents",
     "empty": "No additional grants. Workspace administrators can still manage memory, and Agents can maintain their own personal memory.",
     "deleteConfirm": "Remove this access grant?",
-    "create": "Add memory permission",
+    "create": "Add access permission",
     "subjectType": "Subject",
     "subjectRef": "Subject ID",
-    "subjectHelp": "Enter a user, Agent or Squad ID, such as Agent 40013. For all Agents, enter ALL_AGENTS.",
-    "subjectPlaceholder": "For example, 40013",
+    "subjectHelp": "Enter a user, Agent or Squad ID, such as Agent 40013. For role grants, enter the role name.",
+    "subjectPlaceholder": "For example, Agent 40013",
     "permission": "Permission",
     "permissionHelp": "View: read content. Edit: create, update and delete. Manage: includes edit permissions. Agents can still write only to their own personal memory."
   },
@@ -140,11 +154,11 @@
     "resume": "Resume",
     "pause": "Pause",
     "recurate": "Recurate",
-    "retire": "Retire",
-    "retireConfirm": "Retiring stops further imports from this source. Continue?",
+    "retire": "Stop",
+    "retireConfirm": "Stopping ends further imports from this source. Continue?",
     "status": {
       "MISSING": "Local file not found",
-      "ACTIVE": "Ready to import",
+      "ACTIVE": "Active",
       "PAUSED": "Paused",
       "RETIRED": "Imports stopped",
       "RECURATE_REQUESTED": "Waiting for recuration",
@@ -152,8 +166,7 @@
       "TOO_LARGE": "File too large"
     },
     "adminOnly": "Only Workspace administrators can manage local memory sources",
-    "hint": "Local sources are legacy Qoder/QoderCN memory files, separate from platform legacy memory migration.",
-    "help": "A missing local file does not mean platform memory was lost. It may not exist yet, may have moved, or may not be a readable regular file. Imported platform memory is retained even if the local file disappears.",
+    "notice": "Local sources are legacy Qoder/QoderCN memory files, separate from platform legacy memory migration. Recuration rebuilds the index without rewriting the original text, and a missing local file does not mean platform memory was lost: it may not exist yet, may have moved, or may not be a readable regular file. Imported platform memory is retained when the local file disappears.",
     "empty": "No local files available to import",
     "summary": "Agent #{{agentId}} · {{imports}} · Last checked {{date}}",
     "title": "AI memory import",
@@ -167,6 +180,7 @@
     "total_other": "{{count}} items in total",
     "bytes_one": "{{value}} byte",
     "bytes_other": "{{value}} bytes",
+    "kilobytes": "{{value}} KB",
     "lines_one": "{{value}} line",
     "lines_other": "{{value}} lines",
     "measurements": "{{lines}} · {{bytes}}"

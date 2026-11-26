@@ -2,7 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 
 /**
  * Legacy-route redirect that keeps the incoming query string. `<Navigate to="/x" />`
- * would silently drop it, breaking deep links such as `/squads?squadId=7`.
+ * would silently drop it, breaking deep links such as `/agents/reviews?foo=1`.
  * `tab` leads the query so the URL matches the canonical hub deep-link format.
  */
 export function RedirectWithQuery({ to, tab }: { to: string; tab?: string }) {

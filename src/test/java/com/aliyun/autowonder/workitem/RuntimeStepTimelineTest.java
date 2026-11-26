@@ -43,6 +43,33 @@ class RuntimeStepTimelineTest {
     }
 
     @Test
+    void outOfOrderTimingDoesNotBecomeTheCursorComparisonBaseline() {
+        var first = step(1, 1, "first"); var second = step(2, 2, "second");
+        var timeline = RuntimeStepTimeline.from(List.of(event(1, 1, "step.started", 0),
+                event(4, 1, "step.timing", 3000), event(3, 2, "step.started", 2000)), List.of(first, second), new Date(4000));
+        assertEquals(true, timeline.isCurrent(second));
+        assertEquals("active", timeline.statusOf(second));
+    }
+
+    @Test
+    void lateTimingSnapshotCannotMoveTheCursorOrHideTheActiveSubstep() {
+        for (String timingType : List.of("step.timing", "operation.timing")) {
+            var first = step(1L, 1, "code");
+            var later = step(2L, 2, "report");
+            var timeline = RuntimeStepTimeline.from(List.of(
+                    event(1, 1, "step.started", 0), event(2, 1, "step.completed", 1000),
+                    event(3, 2, "step.started", 2000), event(4, 2, timingType, 3000),
+                    event(5, 1, timingType, 3500)), List.of(first, later), new Date(4000));
+            assertEquals("done", timeline.statusOf(first));
+            assertEquals("active", timeline.statusOf(later));
+            assertEquals(true, timeline.isCurrent(later));
+            assertEquals(1, timeline.subStepsOf(later, "active").size());
+            assertEquals("active", timeline.subStepsOf(later, "active").getFirst().getStatus());
+            assertEquals("step.completed", timeline.lastEventOf(first).getEventType());
+        }
+    }
+
+    @Test
     void acceptedCompletionSurvivesTelemetryButNotAReopenedStep() {
         var first = step(1L, 1, "code");
         var later = step(2L, 2, "report");

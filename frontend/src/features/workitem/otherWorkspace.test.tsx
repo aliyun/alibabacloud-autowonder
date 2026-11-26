@@ -42,10 +42,11 @@ describe('readWorkitemOwningWorkspace', () => {
 
 const OTHER_WORKSPACE_ID = 250;
 const OTHER_WORKSPACE_NAME = '项目B';
-/** 服务端 13023 的诊断文案：取消切换后将作为普通错误态的第二行展示。 */
+/** 服务端 13023 的诊断文案：只在回退到普通错误态时展示，交接卡本身不读它。 */
 const OWNING_DIAGNOSTIC = '该工单属于工作空间「项目B」，是否切换到该项目并打开？';
-const PROMPT_TITLE = '该工单属于项目「项目B」';
+const PROMPT_TITLE = '打开其他项目的工单';
 const SWITCH_BUTTON = '切换到「项目B」并打开';
+const BACK_TO_LIST = '返回工单列表';
 
 const workitemInOtherWorkspace = {
   id: '55698', workType: 'REQ', title: '项目B的工单', contentMd: '# 背景\nB 项目需求',
@@ -140,8 +141,11 @@ describe('WorkitemDetailPage across projects', () => {
 
     renderPage('/workitems/55698?from=notification');
 
-    expect(await screen.findByText(PROMPT_TITLE)).toBeInTheDocument();
-    expect(screen.getByText('是否切换到该项目并打开工单？取消将停留在当前项目。')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: PROMPT_TITLE })).toBeInTheDocument();
+    expect(screen.getByText('这张工单不在你当前的项目里，需要切换后打开。')).toBeInTheDocument();
+    // 交接卡列出当前项目与目标项目，顺序即切换方向
+    expect(screen.getByText('项目A')).toBeInTheDocument();
+    expect(screen.getByText(OTHER_WORKSPACE_NAME)).toBeInTheDocument();
     expect(screen.queryByText('加载失败')).not.toBeInTheDocument();
     expect(switchCalls).toBe(0);
     expect(useAuthStore.getState().currentWorkspace?.id).toBe(100);
@@ -180,7 +184,7 @@ describe('WorkitemDetailPage across projects', () => {
     expect(state.accessLevel).toBe('READ_WRITE');
   });
 
-  it('cancel keeps the current project and offers a re-entry point without switching', async () => {
+  it('returns to the work item list instead of a failed-load page when the user backs out', async () => {
     let switchCalls = 0;
     server.use(
       http.get('/api/workitems/55698', () => owningEnvelope()),
@@ -190,20 +194,16 @@ describe('WorkitemDetailPage across projects', () => {
 
     renderPage('/workitems/55698?from=notification');
     const user = userEvent.setup();
-    // antd 对恰好两个中文字的按钮插入空格，按文本匹配需容忍
-    await user.click(await screen.findByRole('button', { name: /取\s*消/ }));
+    await user.click(await screen.findByRole('button', { name: BACK_TO_LIST }));
 
-    expect(await screen.findByText('加载失败')).toBeInTheDocument();
-    expect(screen.getByText(OWNING_DIAGNOSTIC)).toBeInTheDocument();
+    expect(await screen.findByText('工单列表页')).toBeInTheDocument();
+    expect(screen.queryByText('加载失败')).not.toBeInTheDocument();
+    expect(screen.queryByText(OWNING_DIAGNOSTIC)).not.toBeInTheDocument();
     expect(screen.queryByText(PROMPT_TITLE)).not.toBeInTheDocument();
     expect(switchCalls).toBe(0);
     expect(useAuthStore.getState().currentWorkspace?.id).toBe(100);
     expect(useAuthStore.getState().accessToken).toBe('token-a');
-    expect(screen.getByTestId('location')).toHaveTextContent('/workitems/55698?from=notification');
-
-    await user.click(screen.getByRole('button', { name: SWITCH_BUTTON }));
-    expect(await screen.findByText(PROMPT_TITLE)).toBeInTheDocument();
-    expect(switchCalls).toBe(0);
+    expect(screen.getByTestId('location')).toHaveTextContent('/workitems');
   });
 
   it('keeps the prompt and surfaces the server message when switching is rejected', async () => {
@@ -212,7 +212,7 @@ describe('WorkitemDetailPage across projects', () => {
       http.get('/api/workitems/55698', () => owningEnvelope()),
       http.post(`/api/workspaces/${OTHER_WORKSPACE_ID}/switch`, () => {
         switchCalls += 1;
-        return failed('13010', '切换项目失败：服务暂时不可用');
+        return failed('13010', '服务暂时不可用');
       }),
       ...pageHandlers(),
     );
@@ -221,8 +221,9 @@ describe('WorkitemDetailPage across projects', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: SWITCH_BUTTON }));
 
+    // 交接卡用本地化外壳包住服务端诊断，不重复前缀
     expect(await screen.findByText('切换项目失败：服务暂时不可用')).toBeInTheDocument();
-    expect(screen.getByText(PROMPT_TITLE)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: PROMPT_TITLE })).toBeInTheDocument();
     expect(switchCalls).toBe(1);
     expect(useAuthStore.getState().currentWorkspace?.id).toBe(100);
     expect(useAuthStore.getState().accessToken).toBe('token-a');

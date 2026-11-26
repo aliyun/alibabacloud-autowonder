@@ -103,7 +103,7 @@ public class ScheduledTaskRunDeliveryProgressService {
         for (DispatchDO dispatch : dispatches) {
             DispatchAttemptVO attempt = buildExecution(dispatch, executorNames);
             if (!isInteractionDispatch(dispatch) && !stepDefs.isEmpty()) {
-                attempt.setStepTimings(DispatchStepTimings.build(dispatch,
+                attempt.setStepTimings(DispatchStepTimings.buildProgress(dispatch,
                         eventsByDispatch.getOrDefault(dispatch.getId(), List.of()), stepDefs, timingNow));
             }
             executions.add(attempt);

@@ -46,7 +46,7 @@ class PlatformSkillCatalogOnboardingTest {
 
     @Test
     void everyPlatformSkillUsesCanonicalSkillType() {
-        assertEquals(9, catalog.list().size());
+        assertEquals(10, catalog.list().size());
         for (PlatformSkillVO skill : catalog.list()) {
             assertEquals(PlatformSkillCatalog.PLATFORM_SKILL_TYPE, skill.getType(), skill.getId());
             assertEquals("SKILL", skill.getType(), skill.getId());

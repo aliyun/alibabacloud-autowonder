@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Image, message } from 'antd';
-import {
-  CloseOutlined,
-  DownloadOutlined,
-  FileOutlined,
-  LoadingOutlined,
-} from '@ant-design/icons';
+import { LoadingOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useTranslation } from 'react-i18next';
 import * as api from './api';
 import {
@@ -47,7 +43,7 @@ export function PendingAttachments({ attachments, disabled, onRemove }: PendingA
               />
             ) : (
               <span className="aw-clarify-attachment-file-icon" aria-hidden="true">
-                <FileOutlined />
+                <AwStrokeIcon name="file" />
               </span>
             )}
             <span className="aw-clarify-attachment-meta">
@@ -68,7 +64,7 @@ export function PendingAttachments({ attachments, disabled, onRemove }: PendingA
               type="text"
               size="small"
               className="aw-clarify-attachment-remove"
-              icon={<CloseOutlined />}
+              icon={<AwStrokeIcon name="x" />}
               aria-label={t('clarification.attachmentRemove', { name })}
               disabled={disabled}
               onClick={() => onRemove(attachment.key)}
@@ -193,7 +189,7 @@ function SentImageAttachment({ workitemId, conversationId, attachment }: {
         type="text"
         size="small"
         className="aw-clarify-sent-image-download"
-        icon={<DownloadOutlined />}
+        icon={<AwStrokeIcon name="dl" />}
         aria-label={t('clarification.attachmentDownload', { name: attachment.name })}
         onClick={() => { void download(attachment); }}
       />
@@ -218,7 +214,7 @@ function SentFileAttachment({ workitemId, conversationId, attachment }: {
       onClick={() => { void download(attachment); }}
     >
       <span className="aw-clarify-attachment-file-icon" aria-hidden="true">
-        <FileOutlined />
+        <AwStrokeIcon name="file" />
       </span>
       <span className="aw-clarify-attachment-meta">
         <span className="aw-clarify-attachment-name">{attachment.name}</span>
@@ -226,7 +222,7 @@ function SentFileAttachment({ workitemId, conversationId, attachment }: {
           {formatAttachmentSize(attachment.size)}
         </span>
       </span>
-      <DownloadOutlined className="aw-clarify-sent-file-download" />
+      <AwStrokeIcon name="dl" className="aw-clarify-sent-file-download" />
     </button>
   );
 }

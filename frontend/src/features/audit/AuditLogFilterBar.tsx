@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, DatePicker, Input, Select } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { Agent } from '@/features/agent/api';
 import type { AuditFilterState } from './auditFilters';
 import { isAuditActorType, normalizeRange } from './auditFilters';
@@ -20,12 +21,13 @@ interface AuditLogFilterBarProps {
   value: AuditFilterState;
   keywordInput: string;
   agents: Agent[];
+  total: number;
   onChange: (next: AuditFilterState) => void;
   onKeywordChange: (keyword: string) => void;
   onReset: () => void;
 }
 
-export function AuditLogFilterBar({ value, keywordInput, agents, onChange, onKeywordChange, onReset }: AuditLogFilterBarProps) {
+export function AuditLogFilterBar({ value, keywordInput, agents, total, onChange, onKeywordChange, onReset }: AuditLogFilterBarProps) {
   const { t } = useTranslation('audit');
   const activeClass = (active: boolean) => (active ? 'audit-filter is-active' : 'audit-filter');
   const showAgentFilter = value.actorType === 'AGENT';
@@ -58,104 +60,105 @@ export function AuditLogFilterBar({ value, keywordInput, agents, onChange, onKey
 
   return (
     <div className="audit-filter-bar">
-      <Select
-        aria-label={t('actorType')}
-        className={activeClass(value.actorType !== '')}
-        value={value.actorType}
-        style={{ width: 140 }}
-        options={[
-          { value: '', label: t('allActors') },
-          ...ACTOR_VALUES.map((actor) => ({ value: actor, label: t(ACTOR_KEYS[actor]) })),
-        ]}
-        onChange={(actorType: string) => handleActorType(actorType)}
-      />
-      {showAgentFilter && (
+      <div className="audit-filter-primary">
+        <Input
+          aria-label={t('keywords')}
+          className={activeClass(keywordInput.trim() !== '') + ' audit-filter-kw'}
+          allowClear
+          prefix={<AwStrokeIcon name="search" size={14} />}
+          placeholder={t('keywordPlaceholder')}
+          value={keywordInput}
+          onChange={(event) => onKeywordChange(event.target.value)}
+        />
+        <span ref={rangePickerRef} style={{ display: 'contents' }}>
+          <RangePicker
+            aria-label={t('timeRange')}
+            className={activeClass(value.range !== null)}
+            allowClear
+            placeholder={[t('rangeStart'), t('rangeEnd')]}
+            presets={PRESET_DAYS.map((days) => ({
+              label: t('lastDays', { count: days }),
+              value: [dayjs().subtract(days - 1, 'day'), dayjs()] as [Dayjs, Dayjs],
+            }))}
+            panelRender={(panel) => (
+              <div role="dialog" aria-label={t('timeRangeDialog')}>{panel}</div>
+            )}
+            onOpenChange={setRangeOpen}
+            disabledDate={(current) => current != null && current > dayjs().endOf('day')}
+            value={value.range}
+            onChange={handleRange}
+          />
+        </span>
+        <div className="audit-filter-meta">
+          <span className="audit-count-chip" aria-live="polite">{t('countChip', { count: total })}</span>
+          <Button className="audit-filter-reset" onClick={onReset}>{t('resetFilters')}</Button>
+        </div>
+      </div>
+      <div className="audit-filter-secondary">
         <Select
-          aria-label={t('agent')}
-          className={activeClass(value.actorId != null)}
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          placeholder={t('allActors')}
-          value={value.actorId}
-          style={{ width: 180 }}
-          options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
-          onChange={(actorId?: number) => onChange({ ...value, actorId })}
+          aria-label={t('actorType')}
+          className={activeClass(value.actorType !== '')}
+          value={value.actorType}
+          options={[
+            { value: '', label: t('allActors') },
+            ...ACTOR_VALUES.map((actor) => ({ value: actor, label: t(ACTOR_KEYS[actor]) })),
+          ]}
+          onChange={(actorType: string) => handleActorType(actorType)}
         />
-      )}
-      <Select
-        aria-label={t('module')}
-        className={activeClass(value.module !== '')}
-        value={value.module}
-        style={{ width: 140 }}
-        options={[
-          { value: '', label: t('allModules') },
-          ...MODULE_VALUES.map((module) => ({ value: module, label: t(MODULE_KEYS[module]) })),
-        ]}
-        onChange={(module: string) => onChange({ ...value, module })}
-      />
-      <Select
-        aria-label={t('action')}
-        className={activeClass(value.action !== '')}
-        value={value.action}
-        style={{ width: 150 }}
-        options={[
-          { value: '', label: t('allActions') },
-          ...ACTION_VALUES.map((action) => ({ value: action, label: t(ACTION_KEYS[action]) })),
-        ]}
-        onChange={(action: string) => onChange({ ...value, action })}
-      />
-      <Select
-        aria-label={t('risk')}
-        className={activeClass(value.riskLevel !== '')}
-        value={value.riskLevel}
-        style={{ width: 130 }}
-        options={[
-          { value: '', label: t('allRisks') },
-          ...RISK_VALUES.map((risk) => ({ value: risk, label: t(RISK_KEYS[risk]) })),
-        ]}
-        onChange={(riskLevel: string) => onChange({ ...value, riskLevel })}
-      />
-      <Select
-        aria-label={t('targetType')}
-        className={activeClass(value.targetType !== '')}
-        value={value.targetType}
-        style={{ width: 170 }}
-        options={[
-          { value: '', label: t('allTargetTypes') },
-          ...TARGET_VALUES.map((targetType) => ({ value: targetType, label: t(TARGET_KEYS[targetType]) })),
-        ]}
-        onChange={(targetType: string) => onChange({ ...value, targetType })}
-      />
-      <span ref={rangePickerRef} style={{ display: 'contents' }}>
-        <RangePicker
-          aria-label={t('timeRange')}
-          className={activeClass(value.range !== null)}
-          allowClear
-          placeholder={[t('rangeStart'), t('rangeEnd')]}
-          presets={PRESET_DAYS.map((days) => ({
-            label: t('lastDays', { count: days }),
-            value: [dayjs().subtract(days - 1, 'day'), dayjs()] as [Dayjs, Dayjs],
-          }))}
-          panelRender={(panel) => (
-            <div role="dialog" aria-label={t('timeRangeDialog')}>{panel}</div>
-          )}
-          onOpenChange={setRangeOpen}
-          disabledDate={(current) => current != null && current > dayjs().endOf('day')}
-          value={value.range}
-          onChange={handleRange}
+        {showAgentFilter && (
+          <Select
+            aria-label={t('agent')}
+            className={activeClass(value.actorId != null)}
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder={t('allActors')}
+            value={value.actorId}
+            options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+            onChange={(actorId?: number) => onChange({ ...value, actorId })}
+          />
+        )}
+        <Select
+          aria-label={t('module')}
+          className={activeClass(value.module !== '')}
+          value={value.module}
+          options={[
+            { value: '', label: t('allModules') },
+            ...MODULE_VALUES.map((module) => ({ value: module, label: t(MODULE_KEYS[module]) })),
+          ]}
+          onChange={(module: string) => onChange({ ...value, module })}
         />
-      </span>
-      <Input
-        aria-label={t('keywords')}
-        className={activeClass(keywordInput.trim() !== '')}
-        allowClear
-        placeholder={t('keywordPlaceholder')}
-        value={keywordInput}
-        style={{ width: 220 }}
-        onChange={(event) => onKeywordChange(event.target.value)}
-      />
-      <Button className="audit-filter-reset" onClick={onReset}>{t('resetFilters')}</Button>
+        <Select
+          aria-label={t('action')}
+          className={activeClass(value.action !== '')}
+          value={value.action}
+          options={[
+            { value: '', label: t('allActions') },
+            ...ACTION_VALUES.map((action) => ({ value: action, label: t(ACTION_KEYS[action]) })),
+          ]}
+          onChange={(action: string) => onChange({ ...value, action })}
+        />
+        <Select
+          aria-label={t('risk')}
+          className={activeClass(value.riskLevel !== '')}
+          value={value.riskLevel}
+          options={[
+            { value: '', label: t('allRisks') },
+            ...RISK_VALUES.map((risk) => ({ value: risk, label: t(RISK_KEYS[risk]) })),
+          ]}
+          onChange={(riskLevel: string) => onChange({ ...value, riskLevel })}
+        />
+        <Select
+          aria-label={t('targetType')}
+          className={activeClass(value.targetType !== '')}
+          value={value.targetType}
+          options={[
+            { value: '', label: t('allTargetTypes') },
+            ...TARGET_VALUES.map((targetType) => ({ value: targetType, label: t(TARGET_KEYS[targetType]) })),
+          ]}
+          onChange={(targetType: string) => onChange({ ...value, targetType })}
+        />
+      </div>
     </div>
   );
 }

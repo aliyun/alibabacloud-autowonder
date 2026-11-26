@@ -1,32 +1,26 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
-import { RepoListPage } from './RepoListPage';
+import { ReposHubPage } from './ReposHubPage';
 import { useAuthStore } from '@/shared/auth/store';
 import { message } from 'antd';
-
-function LocationProbe() {
-  const location = useLocation();
-  return <span data-testid="location">{location.pathname}{location.search || '(empty)'}</span>;
-}
 
 function renderPage(accessLevel: 'READ_ONLY' | 'READ_WRITE' = 'READ_WRITE') {
   useAuthStore.setState({ accessLevel });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter><RepoListPage /></MemoryRouter>
+      <MemoryRouter><ReposHubPage /></MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
 describe('RepoListPage', () => {
-  it('renders repo table and switches to the relation map tab in place', async () => {
-    const user = userEvent.setup();
+  it('renders repo table rows with links to detail', async () => {
     server.use(
       http.get('/api/repos', () => {
         return HttpResponse.json({
@@ -35,20 +29,9 @@ describe('RepoListPage', () => {
         });
       }),
     );
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/repos']}>
-          <RepoListPage />
-          <LocationProbe />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByText('auto-wonder')).toBeInTheDocument();
-    const mapButton = screen.getByRole('button', { name: /关系图/ });
-    await user.click(mapButton);
-    // 关系图是 /repos hub 的兄弟 Tab：就地写 tab 参数，而不是跳转到独立路由。
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/repos?tab=map'));
+    renderPage();
+    const nameLink = await screen.findByRole('link', { name: 'auto-wonder' });
+    expect(nameLink).toHaveAttribute('href', '/repos/1');
   });
 
   it('creates repo from add repo modal', async () => {
@@ -82,11 +65,11 @@ describe('RepoListPage', () => {
 
     renderPage();
 
-    await user.click(screen.getByRole('button', { name: /添加仓库/ }));
+    await user.click(screen.getByRole('button', { name: /新建仓库/ }));
     await user.type(screen.getByLabelText('仓库名称'), 'new-repo');
     await user.type(screen.getByLabelText('仓库地址'), sshRepoUrl);
     await user.type(screen.getByLabelText('默认分支'), 'main');
-    await user.click(screen.getByRole('button', { name: '确 定' }));
+    await user.click(screen.getByRole('button', { name: '创 建' }));
 
     await waitFor(() => expect(createdPayload).toEqual({
       name: 'new-repo',
@@ -105,7 +88,7 @@ describe('RepoListPage', () => {
 
     renderPage();
 
-    await user.click(screen.getByRole('button', { name: /添加仓库/ }));
+    await user.click(screen.getByRole('button', { name: /新建仓库/ }));
     expect(screen.queryByText(/推荐使用仓库级 SSH Deploy Key/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Write access/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText('认证方式')).not.toBeInTheDocument();
@@ -129,11 +112,11 @@ describe('RepoListPage', () => {
     );
 
     renderPage('READ_ONLY');
-    const addButton = await screen.findByRole('button', { name: /添加仓库/ });
+    const addButton = await screen.findByRole('button', { name: /新建仓库/ });
     await userEvent.click(addButton);
 
-    expect(errorSpy).toHaveBeenCalledWith('当前为只读权限，添加仓库需要读写权限');
-    expect(screen.queryByRole('dialog', { name: /添加仓库/ })).not.toBeInTheDocument();
+    expect(errorSpy).toHaveBeenCalledWith('当前为只读权限，新建仓库需要读写权限');
+    expect(screen.queryByRole('dialog', { name: /新建仓库/ })).not.toBeInTheDocument();
     expect(createRequests).toBe(0);
     errorSpy.mockRestore();
   });
@@ -153,10 +136,10 @@ describe('RepoListPage', () => {
 
     renderPage();
 
-    await user.click(screen.getByRole('button', { name: /添加仓库/ }));
+    await user.click(screen.getByRole('button', { name: /新建仓库/ }));
     await user.type(screen.getByLabelText('仓库名称'), 'api-tool-agent/terraform-provider-alicloud');
     await user.type(screen.getByLabelText('仓库地址'), 'https://github.com/api-tool-agent/terraform-provider-alicloud.git');
-    await user.click(screen.getByRole('button', { name: '确 定' }));
+    await user.click(screen.getByRole('button', { name: '创 建' }));
 
     expect(await screen.findByText(/仓库名称必须为单级目录名/)).toBeInTheDocument();
     expect(screen.getByText(/namespace\/repo-name/)).toBeInTheDocument();
@@ -178,10 +161,10 @@ describe('RepoListPage', () => {
 
     renderPage();
 
-    await user.click(screen.getByRole('button', { name: /添加仓库/ }));
+    await user.click(screen.getByRole('button', { name: /新建仓库/ }));
     await user.type(screen.getByLabelText('仓库名称'), 'terraform-provider-alicloud');
     await user.type(screen.getByLabelText('仓库地址'), 'https://github.com/api-tool-agent/terraform-provider-alicloud.git');
-    await user.click(screen.getByRole('button', { name: '确 定' }));
+    await user.click(screen.getByRole('button', { name: '创 建' }));
 
     await waitFor(() => expect(createRequests).toBe(1));
     expect(screen.queryByText(/仓库名称必须为单级目录名/)).not.toBeInTheDocument();

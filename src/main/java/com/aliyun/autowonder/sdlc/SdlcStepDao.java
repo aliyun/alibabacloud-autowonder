@@ -11,6 +11,7 @@ public interface SdlcStepDao {
     void insert(SdlcStepDO step);
     SdlcStepDO findById(@Param("id") Long id);
     List<SdlcStepDO> listBySdlc(@Param("sdlcId") Long sdlcId);
+    List<SdlcStepDO> listForExecution(@Param("tenantId") long tenantId, @Param("sdlcId") Long sdlcId);
     List<SdlcStepDO> listBySdlcForUpdate(@Param("sdlcId") Long sdlcId, @Param("tenantId") Long tenantId);
     Integer minNegativeOrderForUpdate(@Param("sdlcId") Long sdlcId, @Param("tenantId") Long tenantId);
     List<Integer> negativeOrdersForUpdate(@Param("sdlcId") Long sdlcId, @Param("tenantId") Long tenantId,

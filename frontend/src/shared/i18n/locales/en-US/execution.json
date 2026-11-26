@@ -16,6 +16,8 @@
     "last7Days": "Last 7 days",
     "last30Days": "Last 30 days",
     "last90Days": "Last 90 days",
+    "rangeAria": "Time range",
+    "autoRefresh": "Auto-refreshes every 10 seconds",
     "total_one": "{{total}} execution",
     "total_other": "{{total}} executions",
     "empty": "No executions"
@@ -31,6 +33,7 @@
     "attempt": "Attempts",
     "status": "Status",
     "summary": "Result summary",
+    "emptyValue": "—",
     "artifacts_one": "{{total}} artifact",
     "artifacts_other": "{{total}} artifacts",
     "noArtifacts": "No artifacts",

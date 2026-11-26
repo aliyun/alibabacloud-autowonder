@@ -433,10 +433,15 @@ class SquadServiceTest {
         step2.setHandlerType("AGENT");
         step2.setHandlerRoleRef("DEVELOPER");
         when(sdlcStepDao.listBySdlc(200L)).thenReturn(List.of(step2, step1));
+        when(executorDao.listByAgentIds(100L, List.of(1L, 2L)))
+                .thenReturn(List.of(squadExecutor(91L, 1L, "测试Agent"), squadExecutor(92L, 2L, "测试Agent2")));
+        when(executorRegistry.isOnline(91L)).thenReturn(true);
 
         List<SquadMemberVO> result = service.listMembers(10L, 100L);
         assertEquals(2, result.size());
         assertEquals(1L, result.get(0).getAgentId());
+        assertTrue(result.get(0).isExecutorOnline());
+        assertFalse(result.get(1).isExecutorOnline());
         assertEquals("测试Agent", result.get(0).getAgentName());
         assertEquals("DEVELOPER", result.get(0).getRoleCode());
         assertEquals("前端开发工程师", result.get(0).getRoleName());

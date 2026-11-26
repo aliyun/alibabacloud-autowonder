@@ -7,12 +7,13 @@ Standardize the complete AutoWonder community release path:
 1. synchronize the internal `origin/master` into `community`;
 2. preserve documented community-only boundaries;
 3. version and document the resulting community release;
-4. copy the verified community tree into the public GitHub fork;
-5. provide an upstream Pull Request creation link targeting `aliyun/master`.
+4. mirror the verified Community tree to the standalone public GitHub repository;
+5. submit a GitHub pull request targeting `main`;
+6. publish the version tag and GitHub Release after human merge for releases.
 
 The digital employee may analyze, resolve permitted conflicts, test, push
-temporary branches, and prepare MR/PR links. A human must merge every MR/PR and
-approve any release tag.
+temporary branches, and submit MR/PRs. A human merges each MR/PR. For an
+authorized version publication, publish the tag and GitHub Release after merge.
 
 ## AutoWonder Resources
 
@@ -20,8 +21,8 @@ Create these resources in organization `Autowonder 自迭代`:
 
 | Resource | Value |
 | --- | --- |
-| Hosted GitHub repository | `git@github.com:caihe-ch/alibabacloud-landing-zone.git` |
-| Public community directory | `ai-sdlc/auto-wonder` |
+| Hosted GitHub repository | `https://github.com/aliyun/alibabacloud-autowonder.git` |
+| Public community directory | repository root |
 | Digital employee | `社区同步发布工程师` |
 | Role code | `COMMUNITY_RELEASE_ENGINEER` |
 | Squad | `社区版本同步与发布小队` |
@@ -51,8 +52,8 @@ Its SOUL and AGENT instructions must require it to:
   commits, comments, evidence, and command arguments;
 - create and push temporary branches but never merge protected branches;
 - propose SemVer changes from evidence rather than release cadence or guesswork;
-- report actual commands, commits, test results, risks, MR link, and upstream PR
-  creation link using the standard final comment.
+- report actual commands, commits, test results, risks, the MR and GitHub PR, and
+  release links using the standard final comment.
 
 The agent must not broaden scope into unrelated refactoring, deploy production,
 alter repository permissions, rewrite published history, modify a published
@@ -74,18 +75,14 @@ current `community`; never infer it from a local `master` branch.
 
 ### Public GitHub repository
 
-- `origin` is `git@github.com:caihe-ch/alibabacloud-landing-zone.git`.
-- `upstream` is `git@github.com:aliyun/alibabacloud-landing-zone.git`.
-- `upstream/master` is the authoritative public PR base.
-- After the internal Community MR is merged, create a temporary branch from an
-  exact fetched `upstream/master` commit.
-- Copy the complete verified `community` tree into `ai-sdlc/auto-wonder`.
-- Push the branch to the `caihe-ch` fork.
-- Do not call `gh pr create`. Provide a compare link targeting `aliyun/master`:
-
-```text
-https://github.com/aliyun/alibabacloud-landing-zone/compare/master...caihe-ch:<branch>?expand=1
-```
+- `origin` is `https://github.com/aliyun/alibabacloud-autowonder.git`.
+- Freeze the exact fetched `origin/main` commit during preflight.
+- After the internal Community MR is merged, branch from that frozen base and
+  copy the complete accepted Community tree to the public repository root.
+- Commit and push as `caihe-ch <caihe.ch@alibaba-inc.com>` using existing
+  authorized credentials. Push only the temporary branch.
+- Submit or reuse a PR to `main`. If submission is blocked, report the reason and
+  the repository's `main...<branch>` compare link as a pending handoff.
 
 ## Conflict Policy
 
@@ -103,16 +100,14 @@ The first community release is `0.1.0`. The source of truth consists of:
 
 - repository-root `VERSION`, containing only `X.Y.Z` and a trailing newline;
 - `releases/release_vX.Y.Z_YYYYMMDD.md`;
-- optional annotated tag `autowonder-community-vX.Y.Z` after the upstream PR is
-  merged and a human explicitly confirms tag creation.
+- An annotated `X.Y.Z` Git tag and a GitHub Release on the same tag for every
+  authorized version publication after the public PR merges.
 
-The external copy places the same files at:
-
-- `ai-sdlc/auto-wonder/VERSION`;
-- `ai-sdlc/auto-wonder/releases/release_vX.Y.Z_YYYYMMDD.md`.
-
-Before proposing a version, compare `VERSION`, the newest release file, and any
-existing `autowonder-community-v*` tag. A mismatch is blocking.
+The standalone repository keeps `VERSION` at its root and the release note under
+`releases/`. Verify the tag
+resolves to the PR merge commit and the merged root matches the accepted tree.
+Stop on a conflicting tag. A docs-only update with unchanged `VERSION` ends
+after public merge.
 
 Use Semantic Versioning:
 
@@ -176,23 +171,23 @@ from an unmerged branch as if it were the Community baseline.
 
 ### 7. Public GitHub Output
 
-After confirming the internal MR is merged, fetch `upstream/master`, create a
-temporary output branch from its exact commit, copy `community` into
-`ai-sdlc/auto-wonder`, and verify byte-level tree consistency within documented
-exclusions. Push to the `caihe-ch` fork.
+Mirror the merged Community tree onto the branch from the frozen public base.
+Run the root-mode verifier, independently review the evidence, then push and
+read back that exact output commit.
 
-### 8. Upstream PR Handoff
+### 8. GitHub PR Handoff
 
-Provide a Markdown-formatted compare link for creating an upstream PR against
-`aliyun/master`. Do not claim that a PR exists when only a creation link is
-available. Post the standardized final summary and wait for human merge.
+Submit or reuse a PR to `main`. Include version, user-facing changes, upgrade
+and rollback notes, and the actual test scope. Record the real PR and wait for
+human merge. When submission is blocked, report the compare link and pending
+submission status.
 
 ### 9. Release Finalization
 
-After the upstream PR is merged, record the final commit and PR link. Propose the
-annotated tag. Create or push a tag only with explicit human confirmation and
-sufficient repository permission; lack of tag permission does not invalidate the
-`VERSION` and release-file record.
+Verify the merged commit and accepted root. For version publication, create or
+verify the annotated tag named by `VERSION` and publish or verify the GitHub
+Release on it. Record their URLs and commit IDs. For docs-only updates, record
+the merge and leave the existing tag and Release attached to the original version.
 
 ## Standard Final Comment
 
@@ -206,7 +201,7 @@ links. Omit no section; use `None` only when verified as not applicable.
 - 版本：`<old>` -> `<new>`
 - Master 基线：`<previous>` -> `<target>`
 - Community Commit：`<commit>`
-- GitHub Upstream Base：`<commit>`
+- GitHub Main Base：`<commit>`
 - 发布文件：[release_vX.Y.Z_YYYYMMDD.md](<release-file-url>)
 
 ### 功能更新
@@ -220,7 +215,7 @@ links. Omit no section; use `None` only when verified as not applicable.
 - 前端：<result>
 - 部署 Skill：<result>
 - 依赖与内部引用扫描：<result>
-- Community/GitHub 目录一致性：<result>
+- Community/GitHub 根树一致性：<result>
 
 ### 风险总结
 | 风险 | 等级 | 处理结论 |
@@ -229,22 +224,23 @@ links. Omit no section; use `None` only when verified as not applicable.
 
 ### 交付链接
 - [内部 Community MR](<mr-url>)
-- [创建 GitHub Upstream PR](<compare-url>)
+- [GitHub PR](<pr-url>)，创建受阻时记录 [compare 入口](<compare-url>)及原因
+- 正式版本记录 [Tag](<tag-url>) 和 [GitHub Release](<release-url>)
 
 ### 待真人操作
 1. 审核并合并内部 MR。
-2. 创建、审核并合并 GitHub Upstream PR。
-3. 确认是否创建 `autowonder-community-vX.Y.Z` Tag。
+2. 审核并合并 GitHub PR。
+3. 正式版本确认发布授权。执行者回读合并提交后创建并验证 Tag 和 Release。
 ```
 
 ## Acceptance
 
-- The hosted GitHub fork belongs to organization `Autowonder 自迭代`.
+- The standalone GitHub repository is registered in workspace `Autowonder 自迭代`.
 - The digital employee, one-member squad, repository permission, and dedicated
   SDLC exist and are active.
 - The SDLC encodes exact baseline sources, both temporary-branch flows, conflict
   tiers, human merge gates, version rules, release-file rules, and the final
   Markdown summary.
-- The current `feat/autowonder-safe-upgrade-sop-20260806` output is updated to
-  include initial version `0.1.0` and its release file.
+- The root verifier checks coverage and identity for the standalone repository.
+- Version publication records the verified Tag and GitHub Release.
 - No step claims an MR/PR/tag was created when only a link or proposal exists.

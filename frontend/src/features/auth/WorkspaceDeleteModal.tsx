@@ -33,6 +33,8 @@ export function WorkspaceDeleteModal({ workspace, onDeleted, onClose }: Workspac
 
   return (
     <Modal
+      // 原型用原生 dialog，关闭后不把焦点还给「删除」触发按钮；antd 默认还原会留下 :focus-visible 主题色描边。
+      focusTriggerAfterClose={false}
       title={workspace ? t('workspace.deleteTitle', { name: workspace.name }) : ''}
       open={workspace !== null}
       okText={t('workspace.confirmDelete')}

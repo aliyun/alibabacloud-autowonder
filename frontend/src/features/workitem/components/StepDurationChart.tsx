@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Empty, Space, Tag, Typography } from 'antd';
+import { Button, Empty, Tag, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { StepTiming } from '@/shared/types/workitem';
 import { formatNumber } from '@/shared/i18n/format';
@@ -46,20 +46,16 @@ export function StepDurationChart({ dispatchId, steps }: Props) {
       <ol className="step-duration-rows">
         {visibleRows.map(step => {
           const isLongest = longest > 0 && step.durationMs === longest;
-          return <li key={step.stepId} className={isLongest ? 'step-duration-row is-longest' : 'step-duration-row'}>
-            <div className="step-duration-label">
-              <span>{step.name}</span>
-              <Space size={4} wrap>
-                {isLongest && <Tag color="orange">{t('stepTiming.longest')}</Tag>}
-                <Text type="secondary">{t(`stepTiming.status.${step.status}`)}</Text>
-              </Space>
-            </div>
+          return <li key={step.stepId} className={`step-duration-row is-${step.status}${isLongest ? ' is-longest' : ''}`}>
+            <span className="step-duration-label" title={step.name}>{step.name}</span>
             <div className="step-duration-meter" aria-hidden="true">
               <div style={{ width: `${total > 0 ? (step.durationMs ?? 0) / total * 100 : 0}%` }} />
             </div>
             <div className="step-duration-value">
-              <Text strong>{step.durationMs == null ? t('stepTiming.unmeasured') : formatDuration(step.durationMs)}</Text>
-              {step.durationMs != null && total > 0 && <Text type="secondary">{t('stepTiming.percentage', { value: percentage(step.durationMs) })}</Text>}
+              <span>{step.durationMs == null ? t('stepTiming.unmeasured') : formatDuration(step.durationMs)}</span>
+              {step.durationMs != null && total > 0 && <span>{t('stepTiming.percentage', { value: percentage(step.durationMs) })}</span>}
+              <span>{t(`stepTiming.status.${step.status}`)}</span>
+              {isLongest && <Tag color="orange">{t('stepTiming.longest')}</Tag>}
             </div>
           </li>;
         })}

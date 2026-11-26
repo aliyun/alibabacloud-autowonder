@@ -277,6 +277,15 @@ describe('WorkitemClarificationPanel', () => {
     realtime.callback = null;
   });
 
+  // 选中页是「小队下拉 + 成员卡片按钮」，不再有第二级 agent 下拉。
+  async function pickSquadAgent(agentName = 'Agent-X') {
+    const squadSelect = await screen.findByRole('combobox');
+    await waitFor(() => expect(squadSelect).not.toBeDisabled());
+    fireEvent.mouseDown(squadSelect);
+    fireEvent.click(await screen.findByText('交付小队'));
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(agentName) }));
+  }
+
   // 工单 56281：澄清候选只来自「小队 → 成员」。以前面板在有交付进度时改列交付历史里的
   // 数字人，评论 @ 出来的执行历史会反过来把候选限死，未参与过交付的澄清数字人直接消失。
   it('reaches a clarification worker that never appeared in any delivery history', async () => {
@@ -295,13 +304,7 @@ describe('WorkitemClarificationPanel', () => {
     // 首帧是「解析最近一次会话」加载态：该工单没有会话时才落到选人页。
     expect(await screen.findByText('选择小队和数字员工')).toBeInTheDocument();
 
-    const comboboxes = await screen.findAllByRole('combobox');
-    await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[0]);
-    fireEvent.click(await screen.findByText('交付小队'));
-    await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[1]);
-    fireEvent.click(await screen.findByText('Agent-X (AW_FS_DEV)'));
+    await pickSquadAgent();
 
     expect(await screen.findByText('历史澄清记录')).toBeInTheDocument();
   });
@@ -312,21 +315,14 @@ describe('WorkitemClarificationPanel', () => {
     expect(await screen.findByText('选择小队和数字员工')).toBeInTheDocument();
     // Antd Select renders its placeholder inside a span, not an input attribute;
     // wait for the squad input to become enabled (squads loaded).
-    const comboboxes = await screen.findAllByRole('combobox');
-    expect(comboboxes.length).toBeGreaterThanOrEqual(2);
-    await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
+    const squadSelect = await screen.findByRole('combobox');
+    await waitFor(() => expect(squadSelect).not.toBeDisabled());
   });
 
   it('persists the selection to localStorage for delivery prefill', async () => {
     mockSquads();
     renderPanel();
-    const comboboxes = await screen.findAllByRole('combobox');
-    await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[0]);
-    fireEvent.click(await screen.findByText('交付小队'));
-    await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[1]);
-    fireEvent.click(await screen.findByText('Agent-X (AW_FS_DEV)'));
+    await pickSquadAgent();
     await waitFor(() => {
       const prefill = readClarificationPrefill('100');
       expect(prefill).not.toBeNull();
@@ -588,7 +584,7 @@ describe('WorkitemClarificationPanel', () => {
     // 用户侧仍是有底色的气泡
     const userMsg = screen.getByText('你好，我想讨论需求').closest('[data-testid="clarification-user-bubble"]');
     expect(userMsg).not.toBeNull();
-    expect(userMsg).toHaveStyle({ borderRadius: '14px' });
+    expect(userMsg).toHaveStyle({ borderRadius: '8px' });
     const client = new QueryClient();
     client.setQueryData(['workitem', '100', 'clarification-conversation', 1], makeConversation(1, '用户气泡主题校验'));
     writeClarificationPrefill('100', { squadId: 9, agentId: 42 });
@@ -596,7 +592,7 @@ describe('WorkitemClarificationPanel', () => {
       <WorkitemClarificationPanel workitemId="100" initialConversationId={1} />
     </QueryClientProvider>);
     const bubbleMarkup = html.match(/<div[^>]*data-testid="clarification-user-bubble"[^>]*>/)?.[0];
-    expect(bubbleMarkup).toContain('background-color:var(--aw-raised)');
+    expect(bubbleMarkup).toContain('background-color:var(--aw-gray-bg)');
     client.clear();
 
     // AI 侧平铺：先确认 AI 文本真的渲染出来了（否则下面的 toBeNull 会空洞地通过），
@@ -686,8 +682,8 @@ describe('WorkitemClarificationPanel', () => {
     const bubble = await screen.findByTestId('clarification-streaming-bubble');
     await waitFor(() => expect(bubble.textContent).toContain('流式回复中'));
     expect(bubble).toHaveStyle({
-      fontSize: '16px',
-      lineHeight: '1.75',
+      fontSize: '13px',
+      lineHeight: '22px',
     });
     expect(bubble.style.backgroundColor).toBe('');
     expect(bubble.style.border).toBe('');
@@ -958,14 +954,16 @@ describe('WorkitemClarificationPanel', () => {
 
     expect(await screen.findByText('我的需求')).toBeInTheDocument();
     expect(screen.getByText('历史需求')).toBeInTheDocument();
-    // 「你」标签已按方案 A 移除，用户侧改以「右对齐 + 用户气泡底色」为证据
+    // 「你」标签已按方案 A 移除，用户侧改以「右对齐（.aw-cl-turn.user）+ 用户气泡底色」为证据
     const userRowOf = (text: string) => {
       const bubble = screen.getByText(text).closest('[data-testid="clarification-user-bubble"]');
-      expect(bubble).toHaveStyle({ borderRadius: '14px' });
-      return bubble!.closest('div[style*="justify-content"]');
+      expect(bubble).toHaveStyle({ borderRadius: '8px' });
+      const row = bubble!.closest('.aw-cl-turn.user');
+      expect(row).not.toBeNull();
+      return row as HTMLElement;
     };
-    expect(userRowOf('我的需求')).toHaveStyle({ justifyContent: 'flex-end' });
-    expect(userRowOf('历史需求')).toHaveStyle({ justifyContent: 'flex-end' });
+    expect(userRowOf('我的需求')).toBeInTheDocument();
+    expect(userRowOf('历史需求')).toBeInTheDocument();
     // 两条都不该走 AI 平铺分支
     expect(screen.queryByTestId('clarification-agent-block')).toBeNull();
   });
@@ -1127,13 +1125,7 @@ describe('WorkitemClarificationPanel', () => {
 
     renderPanel();
 
-    const comboboxes = await screen.findAllByRole('combobox');
-    await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[0]);
-    fireEvent.click(await screen.findByText('交付小队'));
-    await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[1]);
-    fireEvent.click(await screen.findByText('Agent-X (AW_FS_DEV)'));
+    await pickSquadAgent();
 
     await waitFor(() => expect(createCalls).toBe(1));
     expect(await screen.findByPlaceholderText('输入消息...')).toBeInTheDocument();
@@ -1158,13 +1150,7 @@ describe('WorkitemClarificationPanel', () => {
 
     renderPanel();
 
-    const comboboxes = await screen.findAllByRole('combobox');
-    await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[0]);
-    fireEvent.click(await screen.findByText('交付小队'));
-    await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[1]);
-    fireEvent.click(await screen.findByText('Agent-X (AW_FS_DEV)'));
+    await pickSquadAgent();
 
     await waitFor(() => expect(createCalls).toBe(1));
     expect(await screen.findByText('自动创建会话失败，请点击「新对话」重试')).toBeInTheDocument();
@@ -1336,16 +1322,14 @@ describe('WorkitemClarificationPanel', () => {
     await typeComposer('只属于数字员工 A 的草稿');
 
     const switchButton = screen.getByRole('button', { name: '切换数字员工' });
-    expect(switchButton.querySelector('.anticon-user-switch')).toBeInTheDocument();
+    expect(switchButton.querySelector('[data-glyph="transfer"]')).toBeInTheDocument();
     fireEvent.click(switchButton);
 
-    const comboboxes = await screen.findAllByRole('combobox');
-    await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[0]);
+    const squadSelect = await screen.findByRole('combobox');
+    await waitFor(() => expect(squadSelect).not.toBeDisabled());
+    fireEvent.mouseDown(squadSelect);
     fireEvent.click(await screen.findByText('澄清小队'));
-    await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-    fireEvent.mouseDown(comboboxes[1]);
-    fireEvent.click(await screen.findByText('Agent-Y (AW_CR)'));
+    fireEvent.click(await screen.findByRole('button', { name: /Agent-Y/ }));
 
     expect(await screen.findByText('数字员工 B 的会话消息')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('输入消息...')).toHaveValue('');
@@ -1764,14 +1748,14 @@ describe('WorkitemClarificationPanel', () => {
       return screen.getByTestId('clarification-composer');
     }
 
-    /** 工单 53035：全屏后正文/选人/输入行共用一条跟着视口铺满的列，
-     *  只由外层容器内距留小幅左右边距。曾经这里的 760px 限宽是超宽屏
-     *  横向空出大半空间的唯一来源，三处节点都要钉住。 */
-    function expectFluidColumn(column: HTMLElement) {
+    /** 工单 53035：全屏后正文/选人/输入行共用同一条居中列（1080 上限），
+     *  由外层容器内距留出左右边距。三处节点都要钉住。 */
+    function expectFullscreenColumn(column: HTMLElement) {
       expect(column.style.width).toBe('100%');
       expect(column).toHaveStyle({ minWidth: 0, overflowWrap: 'break-word' });
-      expect(column.style.maxWidth).toBe('');
-      expect(column.style.margin).toBe('');
+      expect(column.style.maxWidth).toBe('1080px');
+      expect(column.style.marginLeft).toBe('auto');
+      expect(column.style.marginRight).toBe('auto');
     }
 
     it('fills the viewport with the body column inside the scroll container when fullscreen', async () => {
@@ -1782,10 +1766,10 @@ describe('WorkitemClarificationPanel', () => {
       // 滚动元素仍必须是 scrollRef 那层：铺满列在它内部
       expect(scroll).toContainElement(column);
       expect(column).toContainElement(await screen.findByText('你好，我想讨论需求'));
-      expectFluidColumn(column);
+      expectFullscreenColumn(column);
 
       const inputRow = composerColumn();
-      expectFluidColumn(inputRow);
+      expectFullscreenColumn(inputRow);
       // 铺满只是叠加，flex 行本身的排布不能被覆盖掉
       expect(inputRow.style.display).toBe('flex');
       const handle = screen.getByTestId('resize-handle-vertical');
@@ -1808,19 +1792,22 @@ describe('WorkitemClarificationPanel', () => {
       expect(inputRow.style.display).toBe('flex');
     });
 
-    it('widens the panel header padding when fullscreen', async () => {
+    it('switches the panel header to the fullscreen class styling', async () => {
       await renderActiveConversation({ fullscreen: true });
 
-      // 全屏态整屏内距放宽，面板头部要跟着走，否则和外层 clarify 头部（RightPanel）错半档
       const header = screen.getByTestId('clarification-panel-header');
-      expect(header.style.padding).toBe('12px 24px');
+      const panel = header.closest('.aw-clarification-panel') as HTMLElement;
+      expect(header).toHaveClass('aw-cl-head');
+      expect(panel).toHaveClass('is-fullscreen');
     });
 
-    it('keeps the compact header padding when docked', async () => {
+    it('keeps the compact header styling when docked', async () => {
       await renderActiveConversation();
 
       const header = screen.getByTestId('clarification-panel-header');
-      expect(header.style.padding).toBe('10px 14px');
+      const panel = header.closest('.aw-clarification-panel') as HTMLElement;
+      expect(header).toHaveClass('aw-cl-head');
+      expect(panel).not.toHaveClass('is-fullscreen');
     });
 
     it('fills the viewport with the agent selection screen when fullscreen', async () => {
@@ -1832,11 +1819,11 @@ describe('WorkitemClarificationPanel', () => {
 
       const column = await screen.findByTestId('clarification-selection-column');
       expect(column).toContainElement(await screen.findByText('选择小队和数字员工'));
-      expectFluidColumn(column);
+      expectFullscreenColumn(column);
 
       // 等小队加载落定，避免 act 警告
-      const comboboxes = await screen.findAllByRole('combobox');
-      await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
+      const squadSelect = await screen.findByRole('combobox');
+      await waitFor(() => expect(squadSelect).not.toBeDisabled());
     });
 
     it('leaves the docked agent selection screen unconstrained', async () => {
@@ -1850,8 +1837,8 @@ describe('WorkitemClarificationPanel', () => {
       expect(column.style.width).toBe('');
       expect(column.style.minWidth).toBe('');
 
-      const comboboxes = await screen.findAllByRole('combobox');
-      await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
+      const squadSelect = await screen.findByRole('combobox');
+      await waitFor(() => expect(squadSelect).not.toBeDisabled());
     });
   });
 
@@ -2086,8 +2073,8 @@ describe('WorkitemClarificationPanel', () => {
       const onContextChange = vi.fn();
       renderPanel({ onContextChange });
 
-      const comboboxes = await screen.findAllByRole('combobox');
-      await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
+      const squadSelect = await screen.findByRole('combobox');
+      await waitFor(() => expect(squadSelect).not.toBeDisabled());
       expect(onContextChange).not.toHaveBeenCalled();
     });
 
@@ -2226,12 +2213,7 @@ describe('WorkitemClarificationPanel', () => {
       );
 
       // 恢复窗口内：用户自己选了小队 9 的成员 42
-      const comboboxes = await screen.findAllByRole('combobox');
-      fireEvent.mouseDown(comboboxes[0]);
-      fireEvent.click(await screen.findByText('交付小队'));
-      await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-      fireEvent.mouseDown(comboboxes[1]);
-      fireEvent.click(await screen.findByText('Agent-X (AW_FS_DEV)'));
+      await pickSquadAgent();
 
       await waitFor(() => expect(createdAgentIds).toEqual([42]));
 
@@ -2439,15 +2421,11 @@ describe('WorkitemClarificationPanel', () => {
       const onAgentConfirmed = vi.fn();
       renderPanel({ onAgentConfirmed });
 
-      const comboboxes = await screen.findAllByRole('combobox');
-      await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
+      const squadSelect = await screen.findByRole('combobox');
+      await waitFor(() => expect(squadSelect).not.toBeDisabled());
       expect(onAgentConfirmed).not.toHaveBeenCalled();
 
-      fireEvent.mouseDown(comboboxes[0]);
-      fireEvent.click(await screen.findByText('交付小队'));
-      await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-      fireEvent.mouseDown(comboboxes[1]);
-      fireEvent.click(await screen.findByText('Agent-X (AW_FS_DEV)'));
+      await pickSquadAgent();
 
       await waitFor(() => expect(onAgentConfirmed).toHaveBeenCalledTimes(1));
     });
@@ -2525,21 +2503,13 @@ describe('WorkitemClarificationPanel', () => {
       const onAgentConfirmed = vi.fn();
       renderPanel({ onAgentConfirmed });
 
-      const pickAgent = async () => {
-        const comboboxes = await screen.findAllByRole('combobox');
-        await waitFor(() => expect(comboboxes[0]).not.toBeDisabled());
-        fireEvent.mouseDown(comboboxes[0]);
-        fireEvent.click(await screen.findByText('交付小队'));
-        await waitFor(() => expect(comboboxes[1]).not.toBeDisabled());
-        fireEvent.mouseDown(comboboxes[1]);
-        fireEvent.click(await screen.findByText('Agent-X (AW_FS_DEV)'));
-      };
+      const pickAgent = () => pickSquadAgent();
 
       await pickAgent();
       await waitFor(() => expect(onAgentConfirmed).toHaveBeenCalledTimes(1));
 
       // 回到选择页：派生值被清回 null，选人列表重新挂载，元素需重新查询
-      fireEvent.click(screen.getByText('切换数字员工'));
+      fireEvent.click(screen.getByRole('button', { name: '切换数字员工' }));
       expect(await screen.findByText('选择小队和数字员工')).toBeInTheDocument();
       expect(onAgentConfirmed).toHaveBeenCalledTimes(1);
 

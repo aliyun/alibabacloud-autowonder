@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  groupPendingDecisionsByAssignee,
   isMyPendingDecision,
   isPendingDecision,
 } from './decisionGrouping';
@@ -33,62 +32,6 @@ function mk(partial: Partial<Workitem>): Workitem {
   } as Workitem;
 }
 
-describe('groupPendingDecisionsByAssignee', () => {
-  it('groups external decisions as unclaimed and excludes them from my decisions', () => {
-    const item = mk({ statusCategory: 'PENDING_DECISION', assigneeType: 'EXTERNAL',
-      assigneeRef: 42, assigneeDisplayName: '来源负责人' });
-    expect(groupPendingDecisionsByAssignee([item])[0].label).toBe('待认领（外部负责人）');
-    expect(isMyPendingDecision(item, 42)).toBe(false);
-  });
-  it('groups only pending-decision workitems by assignee identity', () => {
-    const items = [
-      mk({ id: 1, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 10, assigneeDisplayName: '张三' }),
-      mk({ id: 2, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 10, assigneeName: '张三' }),
-      mk({ id: 3, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 20, assigneeDisplayName: '李四' }),
-      mk({ id: 4, statusCategory: 'NEW', assigneeType: 'HUMAN', assigneeRef: 10, assigneeDisplayName: '张三' }),
-    ];
-    const groups = groupPendingDecisionsByAssignee(items);
-    expect(groups).toHaveLength(2);
-    // 数量多的组在前
-    expect(groups[0].label).toBe('张三');
-    expect(groups[0].items).toHaveLength(2);
-    expect(groups[1].label).toBe('李四');
-    expect(groups[1].items).toHaveLength(1);
-  });
-
-  it('puts unassigned pending decisions into 未指派 group', () => {
-    const items = [
-      mk({ id: 1, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: null, assigneeName: null, assigneeDisplayName: null }),
-    ];
-    const groups = groupPendingDecisionsByAssignee(items);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe('未指派');
-  });
-
-  it('strips id suffixes from group labels', () => {
-    const items = [
-      mk({ id: 1, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 10, assigneeDisplayName: '淘飞(10018)' }),
-      mk({ id: 2, statusCategory: 'PENDING_DECISION', assigneeType: 'AGENT', assigneeRef: 40013, assigneeDisplayName: 'AW全栈开发(40013)' }),
-    ];
-    const groups = groupPendingDecisionsByAssignee(items);
-    expect(groups.map(g => g.label).sort()).toEqual(['AW全栈开发', '淘飞']);
-  });
-
-  it('keeps distinct assignees with the same display name in separate groups', () => {
-    const items = [
-      mk({ id: 1, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 10, assigneeDisplayName: '同名' }),
-      mk({ id: 2, statusCategory: 'PENDING_DECISION', assigneeType: 'HUMAN', assigneeRef: 20, assigneeDisplayName: '同名' }),
-    ];
-    const groups = groupPendingDecisionsByAssignee(items);
-    expect(groups).toHaveLength(2);
-  });
-
-  it('returns empty array when no pending decisions', () => {
-    expect(groupPendingDecisionsByAssignee([mk({ statusCategory: 'NEW' })])).toEqual([]);
-    expect(groupPendingDecisionsByAssignee([])).toEqual([]);
-  });
-});
-
 describe('isPendingDecision', () => {
   it('true when the server category is PENDING_DECISION', () => {
     expect(isPendingDecision(mk({ statusCategory: 'PENDING_DECISION', statusName: '开发中' }))).toBe(true);
@@ -112,6 +55,10 @@ describe('isMyPendingDecision', () => {
   });
   it('rejects agent assignment even if ref matches', () => {
     const item = mk({ statusCategory: 'PENDING_DECISION', assigneeType: 'AGENT', assigneeRef: 42 });
+    expect(isMyPendingDecision(item, 42)).toBe(false);
+  });
+  it('rejects external assignment even if ref matches', () => {
+    const item = mk({ statusCategory: 'PENDING_DECISION', assigneeType: 'EXTERNAL', assigneeRef: 42 });
     expect(isMyPendingDecision(item, 42)).toBe(false);
   });
   it('rejects non-pending', () => {

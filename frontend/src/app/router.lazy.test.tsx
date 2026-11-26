@@ -22,7 +22,10 @@ vi.mock('@/features/repo/ReposHubPage', () => {
 
 describe('workitem entry route loading', () => {
   it('loads the editor and repository map only when navigating to their pages', async () => {
-    const routes = createAppRoutes().flatMap(route => route.children ?? [])
+    // 仓库页现在挂在空间页框（SettingsShell）下，需递归收集路由才能找到。
+    const flatten = (routes: ReturnType<typeof createAppRoutes>): ReturnType<typeof createAppRoutes> => routes
+      .flatMap((route) => [route, ...(route.children ? flatten(route.children) : [])]);
+    const routes = flatten(createAppRoutes())
       .filter(route => ['/workitems', '/workitems/:id', '/repos'].includes(route.path ?? ''));
     const router = createMemoryRouter(routes, { initialEntries: ['/workitems'] });
     render(<RouterProvider router={router} />);

@@ -2,16 +2,16 @@ import { useTranslation } from 'react-i18next';
 import { useSystemLabel } from '@/shared/i18n/systemLabels';
 import { i18n } from '@/shared/i18n';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
-import { PageHeading } from '@/shared/ui/PageHeading';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
 import { useEffect, useMemo, useState } from 'react';
 import { type FocusEvent, useRef, type KeyboardEvent } from 'react';
 import type { TextAreaRef } from 'antd/es/input/TextArea';
 import {
-  Alert, AutoComplete, Button, Card, Divider, Form, Input, Modal, Popconfirm, Result, Select,
-  Empty, Space, Spin, Tag, Typography, message} from 'antd';
+  Alert, AutoComplete, Button, Form, Input, Modal, Popconfirm, Radio, Result, Select,
+  Empty, Space, Spin, Typography, message} from 'antd';
+import { StatusTag, type StatusColorKey } from '@/shared/ui/StatusTag';
 import { Table } from '@/shared/theme/ThemedTable';
-import { SaveOutlined, SendOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,7 +21,10 @@ import {
 } from './hooks';
 import { listRepos } from '@/features/repo/api';
 import { listSkills } from '@/features/skill/api';
-import { getAgentRoleCodeOptions, getAgentRoleNameOptions, getEvolutionModeOptions, getRoleCodeByName, getRoleNameByCode } from './constants';
+import {
+  getAgentRoleCodeOptions, getAgentRoleNameOptions, getEvolutionModeOptions, getRoleCodeByName, getRoleNameByCode,
+  withCustomRoleOption,
+} from './constants';
 import type { ColumnsType } from 'antd/es/table';
 import type { EvolutionMode, UpdateAgentRequest, UpdateConfigRequest } from './api';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
@@ -29,8 +32,13 @@ import { useAuthStore } from '@/shared/auth/store';
 import { environmentVariablesQueryKey, useEnvironmentVariables } from '@/features/environmentVariables/hooks';
 import type { AgentEnvironmentVariableRef } from './api';
 import type { WorkspaceAccessLevel } from '@/shared/types/common';
+import './AgentForm.css';
 
 const { TextArea } = Input;
+
+const permLevelColorKeys: Record<string, StatusColorKey> = {
+  READ: 'gray', WRITE: 'blue', ADMIN: 'violet',
+};
 
 interface RepoPermRow {
   repoId: number;
@@ -164,6 +172,8 @@ export function AgentEditPage() {
   const [repoPerms, setRepoPerms] = useState<RepoPermRow[]>([]);
   const [skills, setSkills] = useState<SkillRow[]>([]);
   const [saveFeedback, setSaveFeedback] = useState<boolean | null>(null);
+  const [roleNameQuery, setRoleNameQuery] = useState('');
+  const [roleCodeQuery, setRoleCodeQuery] = useState('');
 
   // Selector state
   const [repoModalOpen, setRepoModalOpen] = useState(false);
@@ -681,24 +691,24 @@ export function AgentEditPage() {
   ]);
   const repoColumns: ColumnsType<RepoPermRow> = [
     { title: t('fields.repository'), dataIndex: 'repoName' },
-    { title: t('fields.permission'), dataIndex: 'permLevel', width: 100, render: (v: string) => <Tag>{permissionLabels.get(v) || v}</Tag> },
+    { title: t('fields.permission'), dataIndex: 'permLevel', width: 100, render: (v: string) => <StatusTag label={permissionLabels.get(v) || v} colorKey={permLevelColorKeys[v] ?? 'gray'} /> },
     ...(isPlatform ? [] : ([
       {
         title: t('fields.commitBranches'), dataIndex: 'allowedBranchPatterns',
         render: (patterns: string[]) => patterns.length === 0
-          ? <span style={{ color: 'var(--aw-muted)' }}>{t('repository.unrestricted')}</span>
-          : <Space size={[0, 4]} wrap>{patterns.map(pattern => <Tag key={pattern}>{pattern}</Tag>)}</Space>,
+          ? <span style={{ color: 'var(--aw-text-3)' }}>{t('repository.unrestricted')}</span>
+          : <span className="aw-agent-branches">{patterns.map(pattern => <StatusTag key={pattern} size="sm" colorKey="gray" className="aw-agent-mono" label={pattern} />)}</span>,
       },
       {
-        title: t('fields.actions'), width: 120,
+        title: t('fields.actions'), width: 72,
         render: (_: unknown, r: RepoPermRow) => (
-          <Space size={0}>
-            <Button type="link" size="small" aria-label={t('repository.editBranchesLabel', { name: r.repoName })}
-              icon={<EditOutlined aria-hidden="true" />} onClick={() => openEditRepoPerm(r)} />
+          <span className="aw-agent-ops">
+            <Button type="text" size="small" className="aw-op-btn" aria-label={t('repository.editBranchesLabel', { name: r.repoName })}
+              icon={<AwStrokeIcon name="edit" />} onClick={() => openEditRepoPerm(r)} />
             <Popconfirm title={t('actions.confirmRemove')} onConfirm={() => handleRemoveRepo(r.repoId)}>
-              <Button type="link" size="small" danger aria-label={t('repository.removeLabel', { name: r.repoName })} icon={<DeleteOutlined aria-hidden="true" />} />
+              <Button type="text" size="small" danger className="aw-op-btn aw-op-btn--del" aria-label={t('repository.removeLabel', { name: r.repoName })} icon={<AwStrokeIcon name="trash" />} />
             </Popconfirm>
-          </Space>
+          </span>
         ),
       },
     ] as ColumnsType<RepoPermRow>)),
@@ -706,31 +716,31 @@ export function AgentEditPage() {
 
   const skillColumns: ColumnsType<SkillRow> = [
     { title: t('fields.capability'), dataIndex: 'skillName' },
-    { title: t('fields.type'), dataIndex: 'type', width: 110, render: (value: string) => <Tag>{capabilityTypeLabels.get(value) || value}</Tag> },
+    { title: t('fields.type'), dataIndex: 'type', width: 110, render: (value: string) => <StatusTag label={capabilityTypeLabels.get(value) || value} colorKey="gray" /> },
     { title: t('fields.version'), dataIndex: 'version', width: 80, render: (value?: number) => value ?? '-' },
     {
-      title: t('fields.actions'), width: 80,
+      title: t('fields.actions'), width: 72,
       render: (_: unknown, r: SkillRow) => (
         <Popconfirm title={t('actions.confirmRemove')} onConfirm={() => handleRemoveSkill(r.skillId)}>
-          <Button type="link" size="small" danger aria-label={t('capability.removeLabel', { name: r.skillName })} icon={<DeleteOutlined aria-hidden="true" />} />
+          <Button type="text" size="small" danger className="aw-op-btn aw-op-btn--del" aria-label={t('capability.removeLabel', { name: r.skillName })} icon={<AwStrokeIcon name="trash" />} />
         </Popconfirm>
       ),
     },
   ];
 
   const environmentVariableColumns: ColumnsType<AgentEnvironmentVariableRef> = [
-    { title: t('fields.variableName'), dataIndex: 'name', align: 'left', width: '36%' },
+    { title: t('fields.variableName'), dataIndex: 'name', align: 'left', width: '36%', render: (name: string) => <span className="aw-agent-mono">{name}</span> },
     {
       title: t('fields.description'),
       dataIndex: 'description', align: 'left',
       render: (description: string | null, variable: AgentEnvironmentVariableRef) => {
         const text = description ? systemLabel(variable.descriptionLabelKey, description) : '';
-        return text || <span style={{ color: 'var(--aw-muted)' }}>{t('environment.noDescription')}</span>;
+        return text || <span style={{ color: 'var(--aw-text-3)' }}>{t('environment.noDescription')}</span>;
       },
     },
     ...(canManageEnvironmentVariables ? ([{
       title: t('fields.actions'),
-      width: 80,
+      width: 72,
       render: (_: unknown, variable: AgentEnvironmentVariableRef) => (
         <Popconfirm
           title={t('environment.confirmUnbind', { name: variable.name })}
@@ -739,17 +749,23 @@ export function AgentEditPage() {
           onConfirm={() => handleRemoveEnvironmentVariable(variable)}
         >
           <Button
-            type="link"
+            type="text"
             size="small"
             danger
+            className="aw-op-btn aw-op-btn--del"
             aria-label={t('environment.unbindLabel', { name: variable.name })}
-            icon={<DeleteOutlined aria-hidden="true" />}
+            icon={<AwStrokeIcon name="trash" />}
             disabled={environmentOperationPending}
           />
         </Popconfirm>
       ),
     }] as ColumnsType<AgentEnvironmentVariableRef>) : []),
   ];
+  const evolutionDescriptions: Record<string, string> = {
+    MANUAL: t('evolutionDescription.MANUAL'),
+    ASSISTED: t('evolutionDescription.ASSISTED'),
+    AUTO_PROPOSAL: t('evolutionDescription.AUTO_PROPOSAL'),
+  };
   return (
     <div>
 
@@ -763,62 +779,70 @@ export function AgentEditPage() {
         />
       )}
 
-      <Card className="aw-content-card" title={<PageHeading title={<span className="aw-detail-title"><PageBackButton to={`/agents/${agentId}`} label={t('actions.backDetail')} /><span>{t('edit.title', { name: agent.name })}</span></span>} />}
-        extra={
-          <Space>
-            <Button icon={<SaveOutlined aria-hidden="true" />} onClick={handleSave}
-              loading={editConfig.isPending || updateAgent.isPending}
-              disabled={environmentServerOperationPending}>
-              {t('actions.saveDraft')}
-            </Button>
-            <Button type="primary" icon={<SendOutlined aria-hidden="true" />} onClick={handleSubmit}
-              loading={submitForReview.isPending}
-              disabled={environmentServerOperationPending}>
-              {t('actions.submitButton')}
-            </Button>
-          </Space>
-        }
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item
-            label={t('fields.agentName')}
-            name="name"
-            rules={[{ required: true, message: t('validation.agentName') }]}
-            extra={isPlatform
-              ? t('edit.platformName')
-              : t('edit.nameHint')}
-          >
-            <Input placeholder={t('placeholders.agentName')} maxLength={64} disabled={isPlatform} />
-          </Form.Item>
-          <Form.Item
-            label={t('fields.avatar')}
-            name="avatarUrl"
-            extra={isPlatform
-              ? t('edit.platformAvatar')
-              : t('edit.avatarHint')}
-          >
-            <Input placeholder="https://..." allowClear disabled={isPlatform} />
-          </Form.Item>
-          <Form.Item label={t('fields.roleName')} name="roleName" rules={[{ required: true, message: t('validation.roleName') }]}>
-            <AutoComplete
-              options={getAgentRoleNameOptions()}
-              allowClear
-              placeholder={t('placeholders.roleName')}
-              onSelect={handleRoleNameSelect}
-            />
-          </Form.Item>
-          <Form.Item label={t('fields.roleCode')} name="roleCode" rules={[{ required: true, message: t('validation.roleCode') }]}>
-            <AutoComplete
-              options={getAgentRoleCodeOptions()}
-              allowClear
-              placeholder={t('placeholders.roleCode')}
-              onSelect={handleRoleCodeSelect}
-              onBlur={handleRoleCodeBlur}
-              onKeyDown={handleRoleCodeKeyDown}
-            />
-          </Form.Item>
+      <div className="aw-form-head">
+        <PageBackButton to={`/agents/${agentId}`} label={t('actions.backDetail')} />
+        <span className="aw-form-title">{t('edit.title', { name: agent.name })}</span>
+      </div>
+        <Form form={form} className="aw-create-form" layout="vertical">
+          <div className="aw-agent-sec">
+            <div className="aw-agent-sec-title">{t('form.sections.basic')}</div>
+            <Form.Item
+              label={t('fields.agentName')}
+              name="name"
+              rules={[{ required: true, message: t('validation.agentName') }]}
+              extra={isPlatform
+                ? t('edit.platformName')
+                : t('edit.nameHint')}
+            >
+              <Input placeholder={t('placeholders.agentName')} maxLength={64} disabled={isPlatform} />
+            </Form.Item>
+            <Form.Item
+              label={t('fields.avatar')}
+              name="avatarUrl"
+              extra={isPlatform
+                ? t('edit.platformAvatar')
+                : t('edit.avatarHint')}
+            >
+              <Input placeholder="https://..." allowClear disabled={isPlatform} />
+            </Form.Item>
+            <div className="aw-agent-grid">
+              <Form.Item label={t('fields.roleName')} name="roleName" rules={[{ required: true, message: t('validation.roleName') }]}>
+                <AutoComplete
+                  options={withCustomRoleOption(
+                    getAgentRoleNameOptions(),
+                    roleNameQuery,
+                    value => t('roleCustomOption.name', { value }),
+                  )}
+                  allowClear
+                  placeholder={t('placeholders.roleName')}
+                  onSearch={setRoleNameQuery}
+                  onSelect={handleRoleNameSelect}
+                  onDropdownVisibleChange={open => { if (!open) setRoleNameQuery(''); }}
+                />
+              </Form.Item>
+              <Form.Item label={t('fields.roleCode')} name="roleCode" rules={[{ required: true, message: t('validation.roleCode') }]} extra={t('form.roleCodeHelp')}>
+                <AutoComplete
+                  className="aw-agent-code"
+                  options={withCustomRoleOption(
+                    getAgentRoleCodeOptions(),
+                    roleCodeQuery,
+                    value => t('roleCustomOption.code', { value }),
+                    value => value.toUpperCase(),
+                  )}
+                  allowClear
+                  placeholder={t('placeholders.roleCode')}
+                  onSearch={setRoleCodeQuery}
+                  onSelect={handleRoleCodeSelect}
+                  onBlur={handleRoleCodeBlur}
+                  onKeyDown={handleRoleCodeKeyDown}
+                  onDropdownVisibleChange={open => { if (!open) setRoleCodeQuery(''); }}
+                />
+              </Form.Item>
+            </div>
+          </div>
           {!isPlatform && (
-            <>
+            <div className="aw-agent-sec">
+              <div className="aw-agent-sec-title">{t('form.sections.workflow')}<span className="aw-agent-opt">{t('placeholders.optional')}</span></div>
               <Form.Item label={t('fields.sdlc')} name="sdlcId">
                 <Select allowClear showSearch optionFilterProp="label"
                   placeholder={t('placeholders.sdlc')}
@@ -829,6 +853,7 @@ export function AgentEditPage() {
               </Form.Item>
               {sdlcOptions.isError && (
                 <Alert
+                  className="aw-agent-warn"
                   type="warning"
                   showIcon
                   message={t('edit.sdlcLoadFailed')}
@@ -839,159 +864,168 @@ export function AgentEditPage() {
                   }
                 />
               )}
-            </>
+            </div>
           )}
-          <Form.Item
-            label={t('fields.evolution')}
-            name="evolutionMode"
-            tooltip={t('evolution.tooltip')}
-          >
-            <Select
-              aria-label={t('fields.evolution')}
-              options={getEvolutionModeOptions()}
-              optionRender={(option) => {
-                const descriptions: Record<string, string> = {
-                  MANUAL: t('evolutionDescription.MANUAL'),
-                  ASSISTED: t('evolutionDescription.ASSISTED'),
-                  AUTO_PROPOSAL: t('evolutionDescription.AUTO_PROPOSAL'),
-                };
-                return (
-                  <Space direction="vertical" size={0}>
-                    <span>{option.label}</span>
-                    <span style={{ fontSize: 12, color: 'var(--aw-muted)' }}>{descriptions[String(option.value)]}</span>
-                  </Space>
-                );
-              }}
-            />
-          </Form.Item>
-          <Form.Item label="SOUL.md" name={isPlatform ? undefined : "businessBackground"}>
-            <TextArea
-              readOnly={isPlatform}
-              value={isPlatform ? agent?.officialConfiguration?.businessBackground ?? versionDetail?.businessBackground : undefined}
-              ref={businessBackgroundRef}
-              rows={10}
-              placeholder={t('placeholders.background')}
-            />
-          </Form.Item>
-          <Form.Item label="AGENT.md" name={isPlatform ? undefined : "responsibilities"}>
-            <TextArea readOnly={isPlatform} value={isPlatform ? agent?.officialConfiguration?.responsibilities ?? versionDetail?.responsibilities : undefined} rows={10} placeholder={t('placeholders.responsibilities')} />
-          </Form.Item>
+          <div className="aw-agent-sec">
+            <div className="aw-agent-sec-title">{t('form.sections.role')}</div>
+            <Form.Item
+              label={t('fields.evolution')}
+              name="evolutionMode"
+              tooltip={t('evolution.tooltip')}
+            >
+              <Radio.Group className="aw-agent-evo" aria-label={t('fields.evolution')}>
+                {getEvolutionModeOptions().map(option => (
+                  <Radio key={option.value} value={option.value} className="aw-agent-evo-opt">
+                    <span className="aw-agent-evo-name">{option.label}</span>
+                    <span className="aw-agent-evo-desc">{evolutionDescriptions[String(option.value)]}</span>
+                  </Radio>
+                ))}
+              </Radio.Group>
+            </Form.Item>
+            <Form.Item label="SOUL.md" name={isPlatform ? undefined : "businessBackground"}>
+              <TextArea
+                readOnly={isPlatform}
+                value={isPlatform ? agent?.officialConfiguration?.businessBackground ?? versionDetail?.businessBackground : undefined}
+                ref={businessBackgroundRef}
+                rows={10}
+                placeholder={t('placeholders.background')}
+              />
+            </Form.Item>
+            <Form.Item label="AGENT.md" name={isPlatform ? undefined : "responsibilities"}>
+              <TextArea readOnly={isPlatform} value={isPlatform ? agent?.officialConfiguration?.responsibilities ?? versionDetail?.responsibilities : undefined} rows={10} placeholder={t('placeholders.responsibilities')} />
+            </Form.Item>
+          </div>
         </Form>
-      </Card>
 
-      <Divider />
-
-      {/* Repo Permissions */}
-      <Card title={t('repository.title')} style={{ marginTop: 16 }}
-        extra={isPlatform ? null : (
-          <Button size="small" icon={<PlusOutlined aria-hidden="true" />}
-            onClick={() => accessCommand('READ_WRITE', t('actions.addRepo'), () => setRepoModalOpen(true))}>
-            {t('repository.add')}
-          </Button>
-        )}
-      >
-        {isPlatform && (
-          <Alert
-            type="info"
-            showIcon
-            message={t('repository.platformTitle')}
-            description={t('repository.platformHint')}
-            style={{ marginBottom: 12 }}
-          />
-        )}
-        <Table rowKey="repoId" columns={repoColumns} dataSource={repoPerms} pagination={false} size="small" />
-      </Card>
-
-      {/* Capabilities */}
-      <Card title={t('capability.title')} style={{ marginTop: 16 }}
-        extra={<Button size="small" icon={<PlusOutlined aria-hidden="true" />}
-          onClick={() => accessCommand('READ_WRITE', t('actions.addCapability'), () => setSkillModalOpen(true))}>
-          {t('capability.add')}
-        </Button>}
-      >
-        <Alert
-          type="info"
-          showIcon
-          message={t('capability.builtIn')}
-          description={t('capability.builtInHint')}
-          style={{ marginBottom: 12 }}
-        />
-        <Table rowKey="skillId" columns={skillColumns} dataSource={skills} pagination={false} size="small" />
-      </Card>
-
-      {/* Environment variables are metadata-only here; saved values are never returned to the browser. */}
-      <Card title={t('environment.title')} style={{ marginTop: 16 }}
-        extra={canManageEnvironmentVariables ? (
-          <Button
-            size="small"
-            icon={<PlusOutlined aria-hidden="true" />}
-            onClick={() => {
-              environmentOperationTokens.current.clear();
-              setEnvironmentBindingError(undefined);
-              setEnvironmentMountError(undefined);
-              setEnvironmentModalOpen(true);
-            }}
-            disabled={environmentOperationPending || !environmentVersionReady}
-          >
-            {t('environment.mount')}
-          </Button>
-        ) : null}
-      >
-        <Alert
-          type="info"
-          showIcon
-          message={t('environment.draftHint')}
-          description={t('environment.valueHint')}
-          style={{ marginBottom: 12 }}
-        />
-        {environmentBindingError && (
-          <Alert
-            type="error"
-            showIcon
-            message={errorMessage(environmentBindingError.error, t('errors.unmount'))}
-            closable
-            onClose={() => setEnvironmentBindingError(undefined)}
-            style={{ marginBottom: 12 }}
-          />
-        )}
-        {isVersionDetailLoading ? (
-          <Space>
-            <Spin size="small" />
-            <span>{t('environment.loading')}</span>
-          </Space>
-        ) : isVersionDetailError ? (
-          <Alert
-            type="error"
-            showIcon
-            message={t('errors.bindingsLoad')}
-            description={errorMessage(versionDetailError, t('errors.versionLoad'))}
-            action={(
-              <Button size="small" loading={isVersionDetailFetching} onClick={() => refetchVersionDetail()}>
-                {t('actions.retry')}
-              </Button>
+        <div className="aw-create-form aw-agent-rel">
+          <div className="aw-agent-sec" data-sec="repo">
+            <div className="aw-agent-sec-title">
+              {t('repository.title')}
+              {!isPlatform && (
+                <span className="aw-agent-sec-acts">
+                  <Button size="small" icon={<AwStrokeIcon name="plus" />}
+                    onClick={() => accessCommand('READ_WRITE', t('actions.addRepo'), () => setRepoModalOpen(true))}>
+                    {t('repository.add')}
+                  </Button>
+                </span>
+              )}
+            </div>
+            {isPlatform && (
+              <div className="aw-agent-sec-desc"><b>{t('repository.platformTitle')}</b>{t('repository.platformHint')}</div>
             )}
-          />
-        ) : (
-          <Table
-            rowKey="id"
-            columns={environmentVariableColumns}
-            dataSource={mountedEnvironmentVariables}
-            pagination={false}
-            size="small"
-            locale={{ emptyText: t('environment.empty') }}
-          />
-        )}
-      </Card>
+            <div className="aw-agent-rel-table">
+              <Table rowKey="repoId" columns={repoColumns} dataSource={repoPerms} pagination={false} size="small" />
+            </div>
+          </div>
+
+          <div className="aw-agent-sec" data-sec="capability">
+            <div className="aw-agent-sec-title">
+              {t('capability.title')}
+              <span className="aw-agent-sec-acts">
+                <Button size="small" icon={<AwStrokeIcon name="plus" />}
+                  onClick={() => accessCommand('READ_WRITE', t('actions.addCapability'), () => setSkillModalOpen(true))}>
+                  {t('capability.add')}
+                </Button>
+              </span>
+            </div>
+            <div className="aw-agent-sec-desc"><b>{t('capability.builtIn')}</b>{t('capability.builtInHint')}</div>
+            <div className="aw-agent-rel-table">
+              <Table rowKey="skillId" columns={skillColumns} dataSource={skills} pagination={false} size="small" />
+            </div>
+          </div>
+
+          {/* Environment variables are metadata-only here; saved values are never returned to the browser. */}
+          <div className="aw-agent-sec" data-sec="env">
+            <div className="aw-agent-sec-title">
+              {t('environment.title')}
+              {canManageEnvironmentVariables && (
+                <span className="aw-agent-sec-acts">
+                  <Button
+                    size="small"
+                    icon={<AwStrokeIcon name="plus" />}
+                    onClick={() => {
+                      environmentOperationTokens.current.clear();
+                      setEnvironmentBindingError(undefined);
+                      setEnvironmentMountError(undefined);
+                      setEnvironmentModalOpen(true);
+                    }}
+                    disabled={environmentOperationPending || !environmentVersionReady}
+                  >
+                    {t('environment.mount')}
+                  </Button>
+                </span>
+              )}
+            </div>
+            <div className="aw-agent-sec-desc"><b>{t('environment.draftHint')}</b>{t('environment.valueHint')}</div>
+            {environmentBindingError && (
+              <Alert
+                className="aw-agent-rel-alert"
+                type="error"
+                showIcon
+                message={errorMessage(environmentBindingError.error, t('errors.unmount'))}
+                closable
+                onClose={() => setEnvironmentBindingError(undefined)}
+              />
+            )}
+            {isVersionDetailLoading ? (
+              <div className="aw-agent-rel-loading">
+                <Spin size="small" />
+                <span>{t('environment.loading')}</span>
+              </div>
+            ) : isVersionDetailError ? (
+              <Alert
+                className="aw-agent-rel-alert"
+                type="error"
+                showIcon
+                message={t('errors.bindingsLoad')}
+                description={errorMessage(versionDetailError, t('errors.versionLoad'))}
+                action={(
+                  <Button size="small" loading={isVersionDetailFetching} onClick={() => refetchVersionDetail()}>
+                    {t('actions.retry')}
+                  </Button>
+                )}
+              />
+            ) : (
+              <div className="aw-agent-rel-table">
+                <Table
+                  rowKey="id"
+                  columns={environmentVariableColumns}
+                  dataSource={mountedEnvironmentVariables}
+                  pagination={false}
+                  size="small"
+                  locale={{ emptyText: t('environment.empty') }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="aw-form-foot aw-agent-foot">
+          <Button icon={<AwStrokeIcon name="check" />} onClick={handleSave}
+            loading={editConfig.isPending || updateAgent.isPending}
+            disabled={environmentServerOperationPending}>
+            {t('actions.saveDraft')}
+          </Button>
+          <Button type="primary" icon={<AwStrokeIcon name="send" />} onClick={handleSubmit}
+            loading={submitForReview.isPending}
+            disabled={environmentServerOperationPending}>
+            {t('actions.submitButton')}
+          </Button>
+        </div>
 
       {/* Add Repo Modal */}
       <Modal title={t('repository.addPermission')} open={repoModalOpen} onOk={handleAddRepo} onCancel={() => setRepoModalOpen(false)}
         okButtonProps={{ disabled: selectedRepoIds.length === 0 }}>
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <div className="aw-agent-modal-field">
+          <div className="aw-agent-modal-label">{t('fields.repository')}</div>
           <Select mode="multiple" placeholder={t('placeholders.repositories')} style={{ width: '100%' }} value={selectedRepoIds}
             onChange={setSelectedRepoIds} showSearch optionFilterProp="label"
             options={reposList.filter(r => !repoPerms.some(p => p.repoId === r.id))
               .map(r => ({ value: r.id, label: r.name })) || []}
           />
+        </div>
+        <div className="aw-agent-modal-field">
+          <div className="aw-agent-modal-label">{t('fields.permission')}</div>
           <Select value={selectedPermLevel} onChange={setSelectedPermLevel} style={{ width: '100%' }}
             options={[
               { value: 'READ', label: t('permissions.READ') },
@@ -999,17 +1033,24 @@ export function AgentEditPage() {
               { value: 'ADMIN', label: t('permissions.ADMIN') },
             ]}
           />
+        </div>
+        <div className="aw-agent-modal-field">
+          <div className="aw-agent-modal-label">{t('fields.allowedBranches')}</div>
           <Select mode="tags" aria-label={t('fields.allowedBranches')} value={selectedBranchPatterns}
             onChange={setSelectedBranchPatterns} tokenSeparators={[',']} style={{ width: '100%' }}
             placeholder={t('placeholders.branches')} maxCount={32}
           />
-        </Space>
+        </div>
       </Modal>
 
       <Modal title={t('repository.editPermission')} open={editingRepoPerm !== null} onOk={handleEditRepoPerm}
         onCancel={() => setEditingRepoPerm(null)}>
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <div className="aw-agent-modal-field">
+          <div className="aw-agent-modal-label">{t('fields.repository')}</div>
           <Input value={editingRepoPerm?.repoName} disabled />
+        </div>
+        <div className="aw-agent-modal-field">
+          <div className="aw-agent-modal-label">{t('fields.permission')}</div>
           <Select value={editingPermLevel} onChange={setEditingPermLevel} style={{ width: '100%' }}
             options={[
               { value: 'READ', label: t('permissions.READ') },
@@ -1017,11 +1058,14 @@ export function AgentEditPage() {
               { value: 'ADMIN', label: t('permissions.ADMIN') },
             ]}
           />
+        </div>
+        <div className="aw-agent-modal-field">
+          <div className="aw-agent-modal-label">{t('fields.allowedBranches')}</div>
           <Select mode="tags" aria-label={t('fields.allowedBranches')} value={editingBranchPatterns}
             onChange={setEditingBranchPatterns} tokenSeparators={[',']} style={{ width: '100%' }}
             placeholder={t('placeholders.editBranches')} maxCount={32}
           />
-        </Space>
+        </div>
       </Modal>
 
       {/* Add Capability Modal */}

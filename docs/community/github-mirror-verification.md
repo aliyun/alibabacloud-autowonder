@@ -21,6 +21,7 @@ python3 "$VERIFIER_REPO/scripts/verify-community-mirror.py" \
   --community-commit "$COMMUNITY_COMMIT" \
   --github-commit "$GITHUB_OUTPUT_COMMIT" \
   --github-base "$GITHUB_BASE" \
+  --github-root . \
   --output "$EVIDENCE_DIR/mirror-verification.json"
 ```
 
@@ -38,12 +39,14 @@ and non-ASCII filenames. Git does not track empty directories or untracked/
 ignored checkout files. Gitlink/LFS entries identify committed references or
 pointers; this is not validation of their external payloads.
 
-Changes outside ai-sdlc/auto-wonder/ relative to the ancestor base are rejected.
-Publish GitHub runbook changes separately, without adding mirror exceptions.
+Use `--github-root .` for the standalone `aliyun/alibabacloud-autowonder`
+repository. The entire GitHub root must match. The default historical mode
+reads `ai-sdlc/auto-wonder/` and rejects changes outside that directory.
+The report records the selected mode in `githubSubtree`.
 Commit before verification; push precisely that commit, with no later staging.
 
-- Exit 0 / MATCH: accepted root = merged Community root = GitHub subtree,
-  and no outside-subtree changes.
+- Exit 0 / MATCH: accepted root = merged Community root = selected GitHub tree.
+  Historical subtree verification also requires zero outside changes.
 - Exit 1 / MISMATCH: stop; inspect structured differences. Reports contain
   exact counts and up to 50 differing entries per comparison.
 - Exit 2 / ERROR: invalid/missing objects or inputs, non-ancestor base or
@@ -52,18 +55,23 @@ Commit before verification; push precisely that commit, with no later staging.
 ## Fixed publication sequence
 
 1. Consume accepted Community evidence and merged internal MR state.
-2. Pin source/base; git archive the Community commit, mirror only the application
-   subtree with deletion semantics and commit.
+2. Pin the Community source and the standalone repository’s `origin/main` base.
+   Mirror the entire committed Community tree to the GitHub root with deletion
+   semantics. Commit on a unique public branch as
+   `caihe-ch <caihe.ch@alibaba-inc.com>`.
 3. Execute the script once. One independent reviewer checks input identities,
    exit code, JSON and acceptance provenance. No manual per-file comparison or
    repeated product review.
 4. Record verificationMode=REUSED, original evidence references and the new
    mirror report. This is inherited acceptance, not tests executed on GitHub.
-5. Push and verify remote SHA. Create/reuse the upstream PR; await human CR.
-   Never automatically merge protected branches.
-6. After merge, verify PR state and resulting application tree equals the
-   recorded Community tree. No repeated tests. Clean up only this run's owned
-   resources that have not already been cleaned.
+5. Push the publication branch and verify the remote SHA. Open or reuse a PR
+   targeting `main`. Include the version, changes, upgrade and rollback notes,
+   and test scope. Record a compare link as a pending handoff if blocked.
+6. After human merge, verify the merged commit is reachable from `main` and
+   its root matches the accepted tree. For a version publication, create and
+   verify the annotated `VERSION` tag and publish a GitHub Release on that
+   tag. For a docs-only change with an unchanged version, finish after merge.
+   Clean up only this run’s remaining resources.
 
 Do not build/test the old GitHub baseline. For identical accepted trees, do not
 repeat Maven/frontend builds, unit/integration tests, deployment/upgrade Skill

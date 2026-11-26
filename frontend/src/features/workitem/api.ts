@@ -69,7 +69,7 @@ export async function createWorkitem(params: CreateWorkitemParams): Promise<Work
 
 export async function transitionWorkitem(
   id: number | string, toNodeId: number | string,
-  expected?: { fromNodeId: number | string; expectedVersion: number },
+  expected?: { fromNodeId?: number | string; expectedVersion?: number; reason?: string },
 ): Promise<Workitem> {
   const resp = await apiClient.post<Workitem>(`/api/workitems/${id}/transition`, { toNodeId, ...expected });
   return resp.data;

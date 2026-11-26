@@ -90,23 +90,24 @@ describe('ReplyingIndicator', () => {
     expect(seen.size).toBeGreaterThan(2);
   });
 
-  it('draws the spinner track with the control-weight border, not the hairline divider', () => {
+  it('keeps the prototype dots while the rotated style value changes', () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const { getByTestId } = render(<ReplyingIndicator agentName="AW需求澄清" />);
+    const row = getByTestId('clarification-replying-indicator');
+    expect(row).toHaveClass('aw-cl-replying');
+    expect(row).toHaveAttribute('data-indicator-style', 'dots');
 
     // pick 恒为 0：一次轮换把样式从 dots 推到 spinner，因此这条是确定性的。
     act(() => {
       vi.advanceTimersByTime(REPLYING_INDICATOR_ROTATE_INTERVAL_MS);
     });
 
-    const ring = getByTestId('clarification-replying-indicator').querySelector('span[aria-hidden]');
-    expect(ring).not.toBeNull();
-    // 2px 圆环用 6% 的分割线灰（hairline）几乎看不见，必须是 10% 的控件描边。
-    expect((ring as HTMLElement).style.borderStyle).toBe('solid');
-    expect((ring as HTMLElement).style.borderLeftWidth).toBe('2px');
-    // 旋转头保持 textMuted，动效才读得出来
-    expect((ring as HTMLElement).style.animation).toContain('aw-clarify-spin');
+    // 样式值仍轮换，但视觉统一为原型的三点
+    expect(row).toHaveAttribute('data-indicator-style', 'spinner');
+    const dots = row.querySelector('.dots[aria-hidden]');
+    expect(dots).not.toBeNull();
+    expect(dots!.children).toHaveLength(3);
   });
 });
 

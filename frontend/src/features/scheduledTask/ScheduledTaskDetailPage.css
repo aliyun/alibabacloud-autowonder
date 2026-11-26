@@ -1,0 +1,61 @@
+/* 原型 30 定时任务详情：头部 / meta / 健康度 / 失败连续条 / 主栏 + 右栏 360 */
+.aw-sched-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.aw-sched-name { font-size: 16px; font-weight: 600; line-height: 24px; color: var(--aw-text); min-width: 0; overflow-wrap: anywhere; margin: 0; }
+.aw-sched-tid { font-family: var(--aw-font-mono); font-size: 12px; color: var(--aw-text-3); }
+.aw-sched-ops { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+html .aw-sched-ops .ant-btn { padding: 0 12px; }
+html .aw-sched-ops .ant-btn .aw-stroke-icon { width: 14px; height: 14px; }
+html .aw-sched-ops .aw-sched-more.ant-btn { width: 32px; min-width: 32px; padding: 0; }
+
+.aw-sched-meta { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 12px; line-height: 1.6; color: var(--aw-text-3); margin-bottom: 14px; }
+.aw-sched-strong { color: var(--aw-text-2); font-weight: 600; }
+.aw-sched-kw { font-family: var(--aw-font-mono); font-size: 11px; background: var(--aw-gray-bg); border-radius: 3px; padding: 0 4px; color: var(--aw-text-2); }
+
+.aw-sched-panel + .aw-sched-panel { margin-top: 12px; }
+.aw-sched-sub { font-size: 11px; color: var(--aw-text-3); font-weight: 400; }
+.aw-sched-panel > .aw-card-body { padding: 14px 16px; }
+
+.aw-sched-health { display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 12px; }
+.aw-sched-health .aw-stat-card + .aw-stat-card { border-left: 1px solid var(--aw-border); }
+.aw-sched-health .aw-stat-value.is-ok { color: var(--aw-success-deep); }
+.aw-sched-health .aw-stat-value.is-warn { color: var(--aw-warning-deep); }
+.aw-sched-health .aw-stat-value.is-bad { color: var(--aw-error-deep); }
+.aw-sched-health .aw-stat-value.is-none { color: var(--aw-text-3); }
+.aw-sched-health .aw-stat-value.is-sm { font-size: 14px; line-height: 30px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.aw-sched-health .aw-stat-value.is-sm a { color: var(--aw-link); font-weight: 500; font-size: 12px; font-family: var(--aw-font-mono); }
+
+.aw-sched-alert { display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 12px; background: var(--aw-error-bg); color: var(--aw-error-deep); }
+.aw-sched-alert .aw-stroke-icon { width: 13px; height: 13px; margin-top: 2px; flex-shrink: 0; }
+.aw-sched-alert a { color: inherit; font-weight: 600; }
+
+.aw-sched-split { display: flex; gap: 16px; align-items: flex-start; }
+.aw-sched-main { flex: 1; min-width: 0; }
+.aw-sched-side { width: 360px; flex-shrink: 0; }
+
+.aw-sched-history .ant-table-tbody > tr { cursor: pointer; }
+.aw-sched-run { color: var(--aw-link); font-family: var(--aw-font-mono); }
+.aw-sched-tnum { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.aw-sched-reason { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-sched-reason.is-err { color: var(--aw-error-deep); font-family: var(--aw-font-mono); font-size: 11px; }
+.aw-sched-dim { color: var(--aw-text-3); }
+
+.aw-sched-md { font-size: 13px; line-height: 22px; color: var(--aw-text); }
+.aw-sched-md.is-folded { max-height: 132px; overflow: hidden; position: relative; }
+.aw-sched-md.is-folded::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(transparent, var(--aw-panel)); }
+html .aw-sched-fold-toggle.ant-btn { margin-top: 6px; padding: 0; height: auto; }
+
+.aw-sched-kv { display: flex; gap: 8px; padding: 6px 0; font-size: 13px; line-height: 20px; }
+.aw-sched-kv .k { width: 96px; flex-shrink: 0; color: var(--aw-text-3); }
+.aw-sched-kv .v { flex: 1; min-width: 0; color: var(--aw-text); overflow-wrap: anywhere; }
+.aw-sched-kv .v.is-dim { color: var(--aw-text-3); }
+.aw-sched-note { display: block; font-size: 11px; color: var(--aw-text-3); line-height: 16px; }
+.aw-sched-sep { border-top: 1px solid var(--aw-border); margin: 8px 0; }
+.aw-sched-cap { font-size: 11px; color: var(--aw-text-3); margin: 2px 0; }
+.aw-sched-panel .aw-sched-fires { margin-top: 4px; }
+
+.aw-sched-doc { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 12px; }
+.aw-sched-doc:hover { background: var(--aw-gray-bg); }
+.aw-sched-doc > .aw-stroke-icon { width: 14px; height: 14px; color: var(--aw-text-3); flex-shrink: 0; }
+.aw-sched-doc .dn { color: var(--aw-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-sched-doc .dm { color: var(--aw-text-3); margin-left: auto; font-size: 11px; white-space: nowrap; }
+.aw-sched-empty { padding: 18px 0; text-align: center; font-size: 12px; color: var(--aw-text-3); }

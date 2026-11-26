@@ -7,6 +7,18 @@
   "account": { "settings": "个人设置", "logout": "退出登录", "menu": "用户菜单", "login": "登录", "expired": "未登录或登录已失效", "networkError": "网络错误", "workspaceRecoveryFailed": "暂时无法恢复账号会话", "workspaceRecoveryHint": "已退出失效空间，登录状态仍保留。请重试以更新会话；平台功能可继续使用。", "retryWorkspaceRecovery": "重试恢复会话" },
   "workspace": { "switched": "已切换到 {{name}}", "switchFailed": "切换工作空间失败", "notMember": "你不在该工单所属工作空间中", "linkedSwitchFailed": "切换到工单所属工作空间失败", "manage": "管理工作空间...", "unselected": "未选择" },
   "navigation": { "expand": "展开菜单", "collapse": "折叠菜单", "help": "帮助中心", "content": "页面内容" },
+  "mention": {
+    "label": "提及成员",
+    "select": "选择",
+    "insert": "插入",
+    "close": "关闭",
+    "offline": "离线",
+    "unavailable": "不可提及",
+    "emptyTitle": "没有匹配「{{query}}」的成员",
+    "emptyPlain": "没有可提及的成员",
+    "emptyHint": "试试输入名字或账号的一部分",
+    "searching": "正在搜索成员"
+  },
   "duration": {
     "second_other": "{{count}}秒",
     "minute_other": "{{count}}分钟",

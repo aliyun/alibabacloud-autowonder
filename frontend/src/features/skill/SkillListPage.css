@@ -1,0 +1,342 @@
+/* 23-skills.html 页面级样式：
+ * - .aw-skill-toolbar-filters / -actions = 原型 .aw-toolbar 左右栏：左侧视图切换 + 类型筛选，
+ *   右侧管理分类/新增能力；与数字员工页一致去掉下边框，避免工具条和表头之间出现双重分割线。
+ * - .aw-skill-batch-bar = 原型 .batch-bar（勾选行后出现的批量归类工具条：浅灰底、边框、右侧取消选择）
+ * - .aw-skill-ops = 原型 .op-link（文字链接、2px 4px 内边距、单行不换行）
+ * - .aw-skill-group = 数字员工分组样式：每组一圈 1px 外框 + 圆角 8，组头白底 40px 无分割线，
+ *   组间 20px；子分类在组内缩进，不再套第二层边框。
+ * - .aw-category-* = 管理分类弹窗：左侧目录卡 + 右侧编辑区，无分割线，底部操作独立一行。
+ * 全局骨架（PageHead/表格密度/op 按钮）由 crystal.css 与 shared/ui 承担。 */
+.aw-skill-page .aw-toolbar {
+  border-bottom: none;
+}
+
+.aw-skill-toolbar-filters {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aw-skill-toolbar-filters + .aw-toolbar-gap {
+  display: none;
+}
+
+.aw-skill-toolbar-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-self: flex-start;
+  gap: 8px;
+}
+
+.aw-skill-batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  background: var(--aw-header-bg);
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--aw-text);
+}
+
+.aw-skill-batch-gap {
+  flex: 1;
+}
+
+.aw-skill-cat-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--aw-text-2);
+  cursor: pointer;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.aw-skill-cat-btn:hover:not(:disabled) {
+  color: var(--aw-primary);
+}
+
+.aw-skill-cat-btn:disabled {
+  cursor: default;
+}
+
+.aw-skill-cat-btn--empty {
+  color: var(--aw-muted);
+}
+
+.aw-skill-ops {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aw-skill-ops .aw-skill-op.ant-btn {
+  flex: none;
+  padding-inline: 4px;
+  white-space: nowrap;
+}
+
+/* 连接结果跟名称同行：工具数是弱化的小字，计数入口点开工具清单；失败只留红字，完整原因走 title。 */
+.aw-skill-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aw-skill-name-line > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.aw-skill-conn {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--aw-text-3);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.aw-skill-conn:hover {
+  color: var(--aw-primary);
+}
+
+.aw-skill-conn.is-err {
+  color: var(--aw-error-deep);
+  cursor: default;
+}
+
+/* 工具名可能非常长：让 Collapse 头部可收缩，名称单行省略、hover 看全文。 */
+.aw-tool-list-modal .ant-collapse-header-text {
+  min-width: 0;
+}
+
+.aw-skill-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.aw-skill-group {
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  background: var(--aw-panel);
+  overflow: hidden;
+}
+
+.aw-skill-group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 40px;
+  padding: 10px 12px;
+  background: var(--aw-panel);
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.aw-skill-group-caret {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--aw-text-3);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.aw-skill-group-caret:focus-visible {
+  outline: 2px solid var(--aw-accent-text);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.aw-skill-group-header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.aw-skill-group-count {
+  color: var(--aw-text-3);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.aw-skill-group-body {
+  padding: 0 12px 12px;
+}
+
+.aw-skill-group-body .ant-table {
+  border-radius: 0;
+}
+
+.aw-skill-group-body .ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
+}
+
+/* 子分类已在父组卡内，去掉第二层外框，仅靠缩进表达层级。 */
+.aw-skill-subgroups {
+  padding: 0;
+}
+
+.aw-skill-group.is-nested {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.aw-skill-group.is-nested .aw-skill-group-header {
+  min-height: 36px;
+  padding-left: 4px;
+  font-size: 12px;
+}
+
+.aw-skill-group.is-nested .aw-skill-group-header strong {
+  font-size: 12px;
+}
+
+.aw-skill-group-summary {
+  display: block;
+  margin-top: 12px;
+}
+
+.aw-category-manage {
+  display: flex;
+  gap: 20px;
+  height: 420px;
+}
+
+.aw-category-pane {
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  flex-shrink: 0;
+  min-height: 0;
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  background: var(--aw-panel);
+  overflow: hidden;
+}
+
+.aw-category-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 6px 0 12px;
+}
+
+.aw-category-pane-head strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.aw-category-pane-count {
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.aw-category-pane-head .ant-btn {
+  margin-left: auto;
+}
+
+.aw-category-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 6px 8px;
+}
+
+.aw-category-tree .ant-tree {
+  background: transparent;
+}
+
+.aw-category-tree-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px 12px;
+  text-align: center;
+}
+
+.aw-category-pane-foot {
+  margin: 0;
+  padding: 8px 12px 10px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-category-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.aw-category-editor-head {
+  min-height: 40px;
+  padding-bottom: 8px;
+}
+
+.aw-category-editor-head strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.aw-category-editor-sub {
+  margin-top: 2px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-category-form {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.aw-category-editor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.aw-category-editor-hint {
+  margin-right: auto;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}

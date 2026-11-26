@@ -4,19 +4,9 @@ import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ApiOutlined,
-  AppstoreOutlined,
-  CopyOutlined,
-  CloseOutlined,
-  RightOutlined,
-  DeleteOutlined,
-  KeyOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  RocketOutlined,
-} from '@ant-design/icons';
-import { Alert, Button, Card, Col, Collapse, Form, Input, message, Modal, Row, Space, Statistic, Tabs, Tag, Typography } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
+import { Alert, Button, Collapse, Form, Input, message, Modal, Segmented, Space, Tag, Typography } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -33,9 +23,12 @@ import {
 } from './api';
 import { copyTextToClipboard } from '@/shared/lib/clipboard';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 const TOKEN_PLACEHOLDER = '<MCP_TOKEN>';
+const MISSING_VALUE = '—';
+const INPUT_SCHEMA_TEST_ID = 'mcp-input-schema-table';
+const OUTPUT_SCHEMA_TEST_ID = 'mcp-output-schema-table';
 
 export function getMcpPermissionHint() {
   return i18n.t('mcp:permissionHint');
@@ -50,7 +43,9 @@ type CapabilityMeta = {
 };
 
 type SchemaRow = {
-  name: string;
+  key: string;
+  label: string;
+  depth: number;
   type: string;
   required: boolean;
   description: string;
@@ -126,38 +121,37 @@ function capabilityFor(toolName: string) {
   };
 }
 
-function schemaRows(schema?: SchemaProperty, prefix = ''): SchemaRow[] {
-  if (schema?.type === 'array') {
-    const arrayPrefix = prefix ? `${prefix}[]` : '[]';
-    return [
-      {
-        name: arrayPrefix,
-        type: 'array',
-        required: false,
-        description: String(schema.description ?? ''),
-      },
-      ...schemaRows(schema.items, arrayPrefix),
-    ];
-  }
+function schemaType(config: SchemaProperty): string {
+  const raw = config?.type;
+  const types = (Array.isArray(raw) ? raw : raw ? [raw] : ['object']).map(String);
+  const base = types.filter((type) => type !== 'null')[0] ?? 'object';
+  const label = base === 'array' ? `array<${config.items ? schemaType(config.items) : 'any'}>` : base;
+  return types.includes('null') ? `${label} | null` : label;
+}
+
+function schemaRows(schema?: SchemaProperty, prefix = '', depth = 0): SchemaRow[] {
   const properties = schema?.properties;
   if (!properties || typeof properties !== 'object') {
     return [];
   }
   const required = new Set(Array.isArray(schema?.required) ? schema.required.map(String) : []);
   return Object.entries(properties).flatMap(([name, config]) => {
-    const fullName = prefix ? `${prefix}.${name}` : name;
-    const type = String(config?.type ?? 'object');
+    const key = prefix ? `${prefix}.${name}` : name;
+    const type = schemaType(config);
     const row = {
-      name: fullName,
+      key,
+      label: name,
+      depth,
       type,
       required: required.has(name),
       description: String(config?.description ?? ''),
     };
-    if (type === 'array') {
-      return [row, ...schemaRows(config.items, `${fullName}[]`)];
+    const baseType = String(Array.isArray(config?.type) ? config.type.filter((item) => item !== 'null')[0] : config?.type ?? 'object');
+    if (baseType === 'array') {
+      return [row, ...schemaRows(config.items, key, depth + 1)];
     }
-    if (type === 'object') {
-      return [row, ...schemaRows(config, fullName)];
+    if (baseType === 'object') {
+      return [row, ...schemaRows(config, key, depth + 1)];
     }
     return [row];
   });
@@ -220,7 +214,18 @@ export function McpTokenSettingsPanel() {
   const queryClient = useQueryClient();
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const [mcpView, setMcpView] = useState(0);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const [form] = Form.useForm<{ name: string }>();
+  const tokenName = Form.useWatch('name', form) ?? 'MCP Token';
 
   const tokensQuery = useQuery({ queryKey: ['mcp-tokens'], queryFn: listMcpTokens });
   const toolsQuery = useQuery({ queryKey: ['mcp-tools'], queryFn: listMcpTools });
@@ -297,7 +302,7 @@ export function McpTokenSettingsPanel() {
         <Button
           danger
           type="text"
-          icon={<DeleteOutlined aria-hidden="true" />}
+          icon={<AwStrokeIcon name="trash" />}
           disabled={Boolean(record.revokedAt)}
           onClick={() => revokeTokenMutation.mutate(record.id)}
           aria-label={t('revokeNamed', { name: record.name })}
@@ -306,54 +311,55 @@ export function McpTokenSettingsPanel() {
     },
   ];
 
-  const schemaColumns: ColumnsType<SchemaRow> = [
-    { title: t('field'), dataIndex: 'name', align: 'left', width: 260, render: (value: string) => <Text code style={{ whiteSpace: 'nowrap' }}>{value}</Text> },
-    { title: t('type'), dataIndex: 'type', width: 120, render: (value: string) => <Tag>{value}</Tag> },
-    { title: t('required'), dataIndex: 'required', width: 90, render: (value: boolean) => value ? <Tag color="red">{t('yes')}</Tag> : <Tag>{t('no')}</Tag> },
-    { title: t('description'), dataIndex: 'description', align: 'left', width: 480, render: (value: string) => value || '-' },
-  ];
-
-  const renderToolDetail = (tool: McpTool) => {
-    const inputRows = schemaRows(tool.inputSchema);
-    const outputRows = schemaRows(tool.outputSchema);
-    return (
-      <div style={{ padding: 12, background: 'var(--aw-raised)' }}>
-        <Paragraph style={{ marginBottom: 12 }}>{tool.description}</Paragraph>
-        <Row gutter={[12, 12]}>
-          <Col xs={24} lg={24} xl={12}>
-            <Text strong>{t('input')}</Text>
-            <Table
-              rowKey="name"
-              size="small"
-              columns={schemaColumns}
-              dataSource={inputRows}
-              locale={{ emptyText: t('noInput') }}
-              pagination={false}
-              scroll={{ x: 950 }}
-              data-testid="mcp-input-schema-table"
-            />
-          </Col>
-          <Col xs={24} lg={24} xl={12}>
-            <Text strong>{t('output')}</Text>
-            <Table
-              rowKey="name"
-              size="small"
-              columns={schemaColumns}
-              dataSource={outputRows}
-              locale={{ emptyText: t('result') }}
-              pagination={false}
-              scroll={{ x: 950 }}
-              data-testid="mcp-output-schema-table"
-            />
-          </Col>
-        </Row>
+  const renderSchemaSection = (title: string, rows: SchemaRow[], emptyText: string, testId: string) => (
+    <div className="mcp-schema-section" data-testid={testId}>
+      <div className="mcp-schema-head">
+        <b>{title}</b>
+        <span>{t('fieldCount', { count: rows.length })}</span>
       </div>
-    );
-  };
+      {rows.length === 0 ? (
+        <div className="mcp-schema-empty">{emptyText}</div>
+      ) : (
+        <div className="mcp-schema-table" role="table" aria-label={title}>
+          <div className="mcp-schema-row mcp-schema-row-head" role="row">
+            <span role="columnheader">{t('field')}</span>
+            <span role="columnheader">{t('type')}</span>
+            <span role="columnheader">{t('required')}</span>
+            <span role="columnheader">{t('description')}</span>
+          </div>
+          {rows.map((row) => (
+            <div className="mcp-schema-row" role="row" key={row.key}>
+              <span
+                className="mcp-schema-field"
+                role="cell"
+                style={{ paddingLeft: row.depth * 14 }}
+                title={row.key}
+              >
+                {row.depth > 0 ? <i className="mcp-schema-branch" aria-hidden="true" /> : null}
+                {row.label}
+              </span>
+              <span className="mcp-schema-type" role="cell" title={row.type}>{row.type}</span>
+              <span className="mcp-schema-req" role="cell">
+                {row.required ? <i className="mcp-schema-req-dot" aria-label={t('required')} title={t('required')} /> : null}
+              </span>
+              <span className="mcp-schema-desc" role="cell">{row.description || MISSING_VALUE}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderToolDetail = (tool: McpTool) => (
+    <div className="mcp-tool-detail">
+      {renderSchemaSection(t('input'), schemaRows(tool.inputSchema), t('noInput'), INPUT_SCHEMA_TEST_ID)}
+      {renderSchemaSection(t('output'), schemaRows(tool.outputSchema), t('result'), OUTPUT_SCHEMA_TEST_ID)}
+    </div>
+  );
 
   const toolColumns: ColumnsType<McpTool> = [
-    { title: t('tools'), dataIndex: 'name', align: 'left', width: 360, render: (value: string) => <Text code style={{ whiteSpace: 'nowrap' }}>{value}</Text> },
-    { title: t('description'), dataIndex: 'description', align: 'left', width: 720 },
+    { title: t('tools'), dataIndex: 'name', align: 'left', width: 260, render: (value: string) => <span className="mcp-tool-name" title={value}>{value}</span> },
+    { title: t('description'), dataIndex: 'description', align: 'left' },
   ];
 
   const endpointUnavailableText = brandingQuery.isLoading
@@ -373,138 +379,174 @@ export function McpTokenSettingsPanel() {
     key: client.key,
     label: t('clientConfig', { client: client.label }),
     children: <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12 }}>{client.command}</pre>,
-    extra: <Button aria-label={t('copy')} size="small" icon={<CopyOutlined aria-hidden="true" />} onClick={(event) => {
+    extra: <Button aria-label={t('copy')} size="small" icon={<AwStrokeIcon name="copy" />} onClick={(event) => {
       event.stopPropagation();
       copyText(client.command);
     }}>{t('copy')}</Button>,
   });
 
   return (
-    <div>
-      <Alert type="info" showIcon style={{ marginBottom: 12 }} message={getMcpPermissionHint()} />
-      <Space wrap style={{ marginBottom: 12 }}>
-        <Button aria-label={t('refresh')} icon={<ReloadOutlined aria-hidden="true" />} onClick={() => {
-          tokensQuery.refetch();
-          toolsQuery.refetch();
-          brandingQuery.refetch();
-        }}>{t('refresh')}</Button>
-        <Button aria-label={t('newToken')}
-          type="primary"
-          icon={<PlusOutlined aria-hidden="true" />}
-          loading={brandingQuery.isLoading}
-          disabled={!mcpEndpoint}
-          onClick={() => setTokenModalOpen(true)}
-        >{t('newToken')}</Button>
-      </Space>
+    <section className="aw-card prof-panel" aria-label={t('title')}>
+      <div className="prof-sec-head">
+        <div className="prof-sec-head-text">
+          <b>{t('title')}</b>
+          <div className="prof-sec-desc">{getMcpPermissionHint()}</div>
+        </div>
+        <div className="prof-sec-extra">
+          <Button aria-label={t('refresh')} size="small" icon={<AwStrokeIcon name="refresh" />} onClick={() => {
+            tokensQuery.refetch();
+            toolsQuery.refetch();
+            brandingQuery.refetch();
+          }}>{t('refresh')}</Button>
+          <Button aria-label={t('newToken')}
+            size="small"
+            type="primary"
+            icon={<AwStrokeIcon name="plus" />}
+            loading={brandingQuery.isLoading}
+            disabled={!mcpEndpoint}
+            onClick={() => setTokenModalOpen(true)}
+          >{t('newToken')}</Button>
+        </div>
+      </div>
+      <div className="prof-sec-body">
+        <Segmented
+          value={mcpView}
+          onChange={(value) => setMcpView(Number(value))}
+          options={[
+            { label: t('overview'), value: 0 },
+            { label: t('tools'), value: 1 },
+            { label: t('install'), value: 2 },
+          ]}
+          style={{ marginBottom: 14 }}
+        />
 
-      <Tabs
-        defaultActiveKey="overview"
-        items={[
-          {
-            key: 'overview',
-            label: t('overview'),
-            children: (
-              <>
-                <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
-                  <Col xs={24} md={8}><Card size="small"><Statistic title={t('activeTokens')} value={activeTokens} prefix={<KeyOutlined aria-hidden="true" />} /></Card></Col>
-                  <Col xs={24} md={8}><Card size="small"><Statistic title={t('openTools')} value={tools.length} prefix={<ApiOutlined aria-hidden="true" />} /></Card></Col>
-                  <Col xs={24} md={8}><Card size="small"><Statistic title={t('capabilityGroups')} value={toolGroups.length} prefix={<AppstoreOutlined aria-hidden="true" />} /></Card></Col>
-                </Row>
-                <Card size="small" title={t('endpoint')} style={{ marginBottom: 12 }}>
-                  <Space.Compact style={{ width: '100%' }}>
-                    <Input aria-label={t('endpoint')} readOnly value={displayMcpUrl} />
-                    <Button
-                      icon={<CopyOutlined aria-hidden="true" />}
-                      disabled={!mcpEndpoint}
-                      onClick={() => copyText(displayMcpUrl)}
-                      aria-label={t('copyEndpoint')}
-                    />
-                  </Space.Compact>
-                  <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>{t('oneTimeUrl')}</Paragraph>
-                </Card>
-                <Card size="small" title={t('tokens')}>
-                  <Table
-                    rowKey="id"
-                    size="small"
-                    columns={tokenColumns}
-                    dataSource={tokensQuery.data ?? []}
-                    loading={tokensQuery.isLoading}
-                    pagination={false}
-                    scroll={{ x: 720 }}
-                  />
-                </Card>
-              </>
-            ),
-          },
-          {
-            key: 'tools',
-            label: t('tools'),
-            children: (
-              <Row gutter={[12, 12]}>
-                {toolGroups.map((group) => (
-                  <Col span={24} key={group.meta.key}>
-                    <Card
-                      size="small"
-                      title={<Space><Tag color={group.meta.color}>{group.meta.title}</Tag><span>{t('toolCount', { count: group.tools.length })}</span></Space>}
-                    >
-                      <Paragraph type="secondary" style={{ marginTop: 0 }}>{group.meta.description}</Paragraph>
-                      <Table
-                        rowKey="name"
-                        size="small"
-                        columns={toolColumns}
-                        locale={{ expand: t('expandRow'), collapse: t('collapseRow') }}
-                        dataSource={group.tools}
-                        loading={toolsQuery.isLoading}
-                        pagination={false}
-                        expandable={{
-                          expandedRowRender: renderToolDetail,
-                          defaultExpandedRowKeys: group.tools.slice(0, 1).map((tool) => tool.name),
-                        }}
-                        scroll={{ x: 1120 }}
-                        data-testid="mcp-tools-table"
-                      />
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-            ),
-          },
-          {
-            key: 'install',
-            label: t('install'),
-            children: (
-              <>
-                <Alert
-                  type={mcpEndpoint ? 'info' : 'error'}
-                  showIcon
-                  style={{ marginBottom: 12 }}
-                  message={mcpEndpoint
-                    ? t('installHint')
-                    : endpointUnavailableText}
+        {mcpView === 0 ? (
+          <>
+            <div className="prof-stats">
+              <div className="prof-stat">
+                <div className="prof-stat-label"><AwStrokeIcon name="key" size={13} />{t('activeTokens')}</div>
+                <div className="prof-stat-value">{activeTokens}</div>
+              </div>
+              <div className="prof-stat">
+                <div className="prof-stat-label"><AwStrokeIcon name="api" size={13} />{t('openTools')}</div>
+                <div className="prof-stat-value">{tools.length}</div>
+              </div>
+              <div className="prof-stat">
+                <div className="prof-stat-label"><AwStrokeIcon name="appstore" size={13} />{t('capabilityGroups')}</div>
+                <div className="prof-stat-value">{toolGroups.length}</div>
+              </div>
+            </div>
+
+            <div className="prof-block">
+              <div className="prof-block-head">
+                <b>{t('endpoint')}</b>
+                <span className="prof-block-extra"><Tag>{t('readOnly')}</Tag></span>
+              </div>
+              <Space.Compact style={{ width: '100%' }}>
+                <Input aria-label={t('endpoint')} readOnly value={displayMcpUrl} />
+                <Button
+                  icon={<AwStrokeIcon name="copy" />}
+                  disabled={!mcpEndpoint}
+                  onClick={() => copyText(displayMcpUrl)}
+                  aria-label={t('copyEndpoint')}
                 />
-                <Row gutter={[12, 12]}>
-                  {installCards.map((client) => (
-                    <Col xs={24} lg={12} key={client.key}>
-                      <Card
-                        size="small"
-                        title={<Space><RocketOutlined aria-hidden="true" />{client.label}</Space>}
-                        extra={<Button aria-label={t('copy')} size="small" icon={<CopyOutlined aria-hidden="true" />} onClick={() => copyText(client.command)}>{t('copy')}</Button>}
-                      >
-                        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12 }}>{client.command}</pre>
-                      </Card>
-                    </Col>
-                  ))}
-                </Row>
-              </>
-            ),
-          },
-        ]}
-      />
+              </Space.Compact>
+              <div className="prof-foot-hint" style={{ marginTop: 8 }}>{t('oneTimeUrl')}</div>
+            </div>
+
+            <div className="prof-block">
+              <div className="prof-block-head">
+                <b>{t('tokens')}</b>
+                <span className="prof-block-extra prof-foot-hint">
+                  {t('tokenSummary', { total: tokensQuery.data?.length ?? 0, active: activeTokens })}
+                </span>
+              </div>
+              <Table
+                rowKey="id"
+                size="small"
+                columns={tokenColumns}
+                dataSource={tokensQuery.data ?? []}
+                loading={tokensQuery.isLoading}
+                pagination={false}
+                scroll={{ x: 720 }}
+              />
+            </div>
+          </>
+        ) : null}
+
+        {mcpView === 1 ? (
+          <>
+            <NoticeTip
+              kind="info"
+              title={t('toolsSummary', { groups: toolGroups.length, tools: tools.length })}
+              style={{ marginBottom: 12 }}
+            />
+            {toolGroups.map((group) => (
+              <div className="prof-block" key={group.meta.key}>
+                <button
+                  type="button"
+                  className="prof-block-head mcp-group-toggle"
+                  aria-expanded={expandedGroups.has(group.meta.key)}
+                  onClick={() => toggleGroup(group.meta.key)}
+                >
+                  <span className="mcp-group-chevron" aria-hidden="true" data-open={expandedGroups.has(group.meta.key)}>
+                    <AwStrokeIcon name="chev-r" size={14} />
+                  </span>
+                  <Tag color={group.meta.color}>{group.meta.title}</Tag>
+                  <b>{t('toolCount', { count: group.tools.length })}</b>
+                  <span className="prof-block-extra prof-foot-hint">{group.meta.description}</span>
+                </button>
+                {expandedGroups.has(group.meta.key) ? (
+                  <Table
+                    className="mcp-tools-table"
+                    rowKey="name"
+                    size="small"
+                    tableLayout="fixed"
+                    columns={toolColumns}
+                    locale={{ expand: t('expandRow'), collapse: t('collapseRow') }}
+                    dataSource={group.tools}
+                    loading={toolsQuery.isLoading}
+                    pagination={false}
+                    expandable={{ expandedRowRender: renderToolDetail }}
+                    data-testid="mcp-tools-table"
+                  />
+                ) : null}
+              </div>
+            ))}
+          </>
+        ) : null}
+
+        {mcpView === 2 ? (
+          <>
+            <NoticeTip
+              kind={mcpEndpoint ? 'info' : 'error'}
+              title={mcpEndpoint ? t('installHint') : endpointUnavailableText}
+              style={{ marginBottom: 12 }}
+            />
+            <div className="prof-install-grid">
+              {installCards.map((client) => (
+                <div className="prof-block" key={client.key} style={{ marginBottom: 0 }}>
+                  <div className="prof-block-head">
+                    <b><AwStrokeIcon name="rocket" size={14} />{client.label}</b>
+                    <span className="prof-block-extra">
+                      <Button aria-label={t('copy')} size="small" icon={<AwStrokeIcon name="copy" />} onClick={() => copyText(client.command)} />
+                    </span>
+                  </div>
+                  <pre className="prof-code">{client.command}</pre>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
 
       <Modal
-        closable={{ closeIcon: <CloseOutlined aria-hidden="true" />, 'aria-label': t('close') }}
+        closable={{ closeIcon: <AwStrokeIcon name="x" size={14} />, 'aria-label': t('close') }}
         cancelText={t('cancel')}
-        okButtonProps={{ 'aria-label': issuedToken ? t('done') : t('create') }}
+        okButtonProps={{
+          'aria-label': issuedToken ? t('done') : t('create'),
+          disabled: !issuedToken && !tokenName.trim(),
+        }}
         title={t('newTitle')}
         open={tokenModalOpen}
         onOk={issuedToken ? closeTokenModal : submitToken}
@@ -518,15 +560,15 @@ export function McpTokenSettingsPanel() {
             <Alert type="warning" showIcon message={t('oneTimeToken')} />
             <Space.Compact style={{ width: '100%' }}>
               <Input aria-label={t('tokenLabel')} readOnly value={issuedToken} />
-              <Button icon={<CopyOutlined aria-hidden="true" />} onClick={() => copyText(issuedToken)} aria-label={t('copyToken')} />
+              <Button icon={<AwStrokeIcon name="copy" />} onClick={() => copyText(issuedToken)} aria-label={t('copyToken')} />
             </Space.Compact>
             <Space.Compact style={{ width: '100%' }}>
               <Input aria-label={t('urlLabel')} readOnly value={mcpUrl(mcpEndpoint, issuedToken)} />
-              <Button icon={<CopyOutlined aria-hidden="true" />} onClick={() =>
+              <Button icon={<AwStrokeIcon name="copy" />} onClick={() =>
                 copyText(mcpUrl(mcpEndpoint, issuedToken))} aria-label={t('copyUrl')} />
             </Space.Compact>
             <Collapse
-              expandIcon={({ isActive }) => <RightOutlined aria-hidden="true" rotate={isActive ? 90 : 0} />}
+              expandIcon={({ isActive }) => <span aria-hidden="true" style={{ display: 'inline-flex', transform: `rotate(${isActive ? 90 : 0}deg)` }}><AwStrokeIcon name="chev-r" size={14} /></span>}
               size="small"
               defaultActiveKey={['qoder']}
               items={[
@@ -535,7 +577,7 @@ export function McpTokenSettingsPanel() {
                   key: 'more-clients',
                   label: t('moreClients'),
                   children: (
-                    <Collapse expandIcon={({ isActive }) => <RightOutlined aria-hidden="true" rotate={isActive ? 90 : 0} />} size="small" items={otherClientSnippets.map(snippetCollapseItem)} />
+                    <Collapse expandIcon={({ isActive }) => <span aria-hidden="true" style={{ display: 'inline-flex', transform: `rotate(${isActive ? 90 : 0}deg)` }}><AwStrokeIcon name="chev-r" size={14} /></span>} size="small" items={otherClientSnippets.map(snippetCollapseItem)} />
                   ),
                 }]),
               ]}
@@ -549,6 +591,6 @@ export function McpTokenSettingsPanel() {
           </Form>
         )}
       </Modal>
-    </div>
+    </section>
   );
 }

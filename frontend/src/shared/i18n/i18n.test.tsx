@@ -150,7 +150,7 @@ it.each(['zh-CN', 'en-US'])('final widget language icon stays decorative in %s',
   const button = screen.getByRole('button', { name: locale === 'en-US' ? 'Switch language' : '切换语言' });
   expect(button).toBeEnabled();
   expect(screen.queryByRole('img', { name: 'global' })).not.toBeInTheDocument();
-  expect(button.querySelector('.anticon-global')).not.toBeNull();
+  expect(button.querySelector('.aw-stroke-icon')).not.toBeNull();
   fireEvent.click(button);
   expect(await screen.findByText('English')).toBeInTheDocument();
   expect(screen.getByText('中文')).toBeInTheDocument();

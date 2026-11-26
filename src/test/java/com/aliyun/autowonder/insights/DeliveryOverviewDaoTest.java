@@ -1,5 +1,6 @@
 package com.aliyun.autowonder.insights;
 
+import com.aliyun.autowonder.insights.dto.DeliveryOverviewVO;
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
 import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.Configuration;
@@ -173,14 +174,19 @@ class DeliveryOverviewDaoTest {
         jdbc.execute("INSERT INTO status_node (id, tenant_id, template_id, code, name, category) VALUES "
                 + "(1,9,500,'INIT','待处理','INIT'),(2,9,500,'IN_PROGRESS','进行中','IN_PROGRESS'),"
                 + "(3,9,500,'DONE','已完成','DONE'),(4,9,500,'CANCELED','已取消','CANCELED'),"
-                + "(5,99,500,'DONE','已完成','DONE')");
+                + "(5,99,500,'DONE','已完成','DONE'),(6,9,500,'RELEASED','已发布','DONE'),"
+                + "(7,9,501,'DONE','其他模板完成','DONE'),(8,99,500,'FOREIGN_TENANT','他租户完成','DONE'),"
+                + "(9,9,501,'FOREIGN_TEMPLATE','其他模板完成','DONE')");
         jdbc.execute("INSERT INTO workitem (id,tenant_id,title,template_id,status_node_id,is_deleted) VALUES "
-                + "(301,9,'首次完成',500,3,0),(302,9,'重复完成',500,3,0),(303,9,'上界前一秒',500,3,0),"
+                + "(301,9,'下界首次完成',500,3,0),(302,9,'重开再完成',500,3,0),(303,9,'上界前一秒',500,3,0),"
                 + "(304,9,'上界排他',500,3,0),(305,9,'仅备注事件',500,3,0),(306,9,'已取消',500,4,0),"
                 + "(307,9,'重开未再完成',500,2,0),(308,99,'其他租户',500,5,0),(309,9,'已删除',500,3,1),"
-                + "(310,9,'上期完成',500,3,0),(311,9,'未知目标状态',500,3,0),(312,9,'模板不符',501,3,0)");
+                + "(310,9,'上期完成',500,3,0),(311,9,'未知目标状态',500,3,0),(312,9,'模板无匹配事件',502,3,0),"
+                + "(313,9,'没有事件',500,3,0),(314,9,'多个DONE节点',500,6,0),"
+                + "(315,9,'仅外租户事件',500,3,0),(316,9,'仅外模板节点事件',500,3,0),"
+                + "(317,9,'仅外租户节点事件',500,3,0),(318,9,'最近完成在本期之后',500,3,0)");
         jdbc.execute("INSERT INTO workitem_event (id,tenant_id,workitem_id,event_type,to_val,gmt_create) VALUES "
-                + "(1,9,301,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-06 10:00:00'),"
+                + "(1,9,301,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-05 00:00:00'),"
                 + "(2,9,302,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-04 10:00:00'),"
                 + "(3,9,302,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-06 11:00:00'),"
                 + "(4,9,303,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-07 23:59:59'),"
@@ -192,17 +198,94 @@ class DeliveryOverviewDaoTest {
                 + "(10,9,309,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-06 12:00:00'),"
                 + "(11,9,310,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-03 10:00:00'),"
                 + "(12,9,311,'STATUS_CHANGE','UNKNOWN_CODE',TIMESTAMP '2026-01-06 12:00:00'),"
-                + "(13,9,312,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-06 12:00:00')");
+                + "(13,9,312,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-06 12:00:00'),"
+                + "(14,9,302,'STATUS_CHANGE','IN_PROGRESS',TIMESTAMP '2026-01-05 09:00:00'),"
+                + "(15,9,314,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-05 10:00:00'),"
+                + "(16,9,314,'STATUS_CHANGE','RELEASED',TIMESTAMP '2026-01-07 10:00:00'),"
+                + "(17,99,315,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-06 12:00:00'),"
+                + "(18,9,316,'STATUS_CHANGE','FOREIGN_TEMPLATE',TIMESTAMP '2026-01-06 12:00:00'),"
+                + "(19,9,317,'STATUS_CHANGE','FOREIGN_TENANT',TIMESTAMP '2026-01-06 12:00:00'),"
+                + "(20,9,318,'STATUS_CHANGE','DONE',TIMESTAMP '2026-01-06 12:00:00'),"
+                + "(21,9,318,'STATUS_CHANGE','RELEASED',TIMESTAMP '2026-01-09 12:00:00')");
 
         try (var session = factory(ds).openSession()) {
             var dao = session.getMapper(DeliveryOverviewDao.class);
+            var from = Timestamp.valueOf("2026-01-05 00:00:00");
+            var to = Timestamp.valueOf("2026-01-08 00:00:00");
+            var rows = dao.listDeliveredWorkitems(9L, from, to);
 
-            assertEquals(3L, dao.countDeliveredWorkitems(9L, Timestamp.valueOf("2026-01-05 00:00:00"),
-                    Timestamp.valueOf("2026-01-08 00:00:00")));
-            assertEquals(1L, dao.countDeliveredWorkitems(9L, Timestamp.valueOf("2026-01-02 00:00:00"),
-                    Timestamp.valueOf("2026-01-05 00:00:00")));
+            assertEquals(List.of(301L, 302L, 314L, 303L),
+                    rows.stream().map(DeliveryOverviewService.DeliveredWorkitem::getId).toList());
+            assertEquals(List.of("2026-01-05 00:00:00", "2026-01-06 11:00:00",
+                            "2026-01-07 10:00:00", "2026-01-07 23:59:59").stream()
+                            .map(value -> Timestamp.valueOf(value).getTime()).toList(),
+                    rows.stream().map(row -> row.getDeliveredAt().getTime()).toList());
+            assertEquals(4L, dao.countDeliveredWorkitems(9L, from, to));
+            assertEquals(rows.size(), dao.countDeliveredWorkitems(9L, from, to));
+            assertEquals(1L, dao.countDeliveredWorkitems(9L, Timestamp.valueOf("2026-01-02 00:00:00"), from));
+            assertEquals(List.of(310L), dao.listDeliveredWorkitems(9L,
+                            Timestamp.valueOf("2026-01-02 00:00:00"), from).stream()
+                    .map(DeliveryOverviewService.DeliveredWorkitem::getId).toList());
             assertEquals(0L, dao.countDeliveredWorkitems(9L, Timestamp.valueOf("2026-01-01 00:00:00"),
                     Timestamp.valueOf("2026-01-02 00:00:00")));
+            assertTrue(dao.listDeliveredWorkitems(9L, Timestamp.valueOf("2026-01-01 00:00:00"),
+                    Timestamp.valueOf("2026-01-02 00:00:00")).isEmpty());
+            assertEquals(List.of(304L), dao.listDeliveredWorkitems(9L, to,
+                            Timestamp.valueOf("2026-01-09 00:00:00")).stream()
+                    .map(DeliveryOverviewService.DeliveredWorkitem::getId).toList());
+            assertEquals(List.of(308L), dao.listDeliveredWorkitems(99L, from, to).stream()
+                    .map(DeliveryOverviewService.DeliveredWorkitem::getId).toList());
+        }
+    }
+
+    @Test
+    void deliveredQueriesShareScopeAndKeepOuterTemplateReferenceInWhere() throws Exception {
+        var configuration = factory(dataSource()).getConfiguration();
+        var params = java.util.Map.of("tenantId", 9L,
+                "start", Timestamp.valueOf("2026-01-05 00:00:00"),
+                "end", Timestamp.valueOf("2026-01-08 00:00:00"));
+        String namespace = "com.aliyun.autowonder.insights.DeliveryOverviewDao.";
+        String countSql = configuration.getMappedStatement(namespace + "countDeliveredWorkitems")
+                .getBoundSql(params).getSql().replaceAll("\\s+", " ");
+        String listSql = configuration.getMappedStatement(namespace + "listDeliveredWorkitems")
+                .getBoundSql(params).getSql().replaceAll("\\s+", " ");
+
+        assertEquals(countSql.substring(countSql.indexOf("FROM (")),
+                listSql.substring(listSql.indexOf("FROM ("), listSql.indexOf(" ORDER BY")));
+        int join = listSql.indexOf("JOIN status_node done_node");
+        int where = listSql.indexOf("WHERE e.tenant_id = w.tenant_id", join);
+        assertTrue(where > join);
+        assertTrue(listSql.indexOf("done_node.template_id = w.template_id") > where);
+        org.junit.jupiter.api.Assertions.assertFalse(listSql.substring(join, where).contains("w."));
+    }
+
+    @Test
+    void mapperRowsProduceShanghaiTrendWithExclusiveEndAndConsistentSum() throws Exception {
+        var ds = dataSource();
+        var jdbc = new JdbcTemplate(ds);
+        createSchema(jdbc);
+        jdbc.execute("INSERT INTO status_node (id, tenant_id, template_id, code, name, category) VALUES "
+                + "(3,9,500,'DONE','已完成','DONE')");
+        jdbc.execute("INSERT INTO workitem (id,tenant_id,template_id,status_node_id,is_deleted) VALUES "
+                + "(1,9,500,3,0),(2,9,500,3,0),(3,9,500,3,0),(4,9,500,3,0),(5,9,500,3,0)");
+        List<String> instants = List.of("2026-01-04T15:59:59.999Z", "2026-01-04T16:00:00Z",
+                "2026-01-05T15:59:59.999Z", "2026-01-07T15:59:59.999Z", "2026-01-07T16:00:00Z");
+        for (int i = 0; i < instants.size(); i++) {
+            jdbc.update("INSERT INTO workitem_event (id,tenant_id,workitem_id,event_type,to_val,gmt_create) "
+                            + "VALUES (?,9,?,'STATUS_CHANGE','DONE',?)",
+                    i + 1, i + 1, Timestamp.from(java.time.Instant.parse(instants.get(i))));
+        }
+        try (var session = factory(ds).openSession()) {
+            var dao = session.getMapper(DeliveryOverviewDao.class);
+            var result = new DeliveryOverviewService(dao).overview(9L,
+                    java.time.LocalDate.of(2026, 1, 5), java.time.LocalDate.of(2026, 1, 7)).getDelivered();
+            assertEquals(List.of(2L, 0L, 1L), result.getDaily().stream()
+                    .map(DeliveryOverviewVO.DailyCount::getCount).toList());
+            assertEquals(3L, result.getCount());
+            assertEquals(result.getCount(), result.getDaily().stream()
+                    .mapToLong(DeliveryOverviewVO.DailyCount::getCount).sum());
+            assertEquals(1L, result.getPrevious().getCount());
+            assertEquals(200.0, result.getChangePercent());
         }
     }
 

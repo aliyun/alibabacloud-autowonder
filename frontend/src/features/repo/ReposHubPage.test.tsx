@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   DEFAULT_REPOS_HUB_TAB,
   REPOS_HUB_TAB_KEYS,
@@ -18,11 +19,14 @@ function LocationProbe() {
 }
 
 function renderHub(url = '/repos') {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={[url]}>
-      <ReposHubPage />
-      <LocationProbe />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[url]}>
+        <ReposHubPage />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -40,8 +44,8 @@ describe('ReposHubPage', () => {
   it('renders the merged hub with list and map tabs', () => {
     renderHub();
     expect(screen.getByRole('heading', { name: '仓库' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '仓库' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '关系图' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '仓库列表' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '关系图谱' })).toBeInTheDocument();
     expect(screen.getByTestId('repo-list-pane')).toBeInTheDocument();
     expect(screen.queryByTestId('repo-map-pane')).not.toBeInTheDocument();
   });
@@ -62,11 +66,11 @@ describe('ReposHubPage', () => {
     renderHub();
     expect(screen.getByTestId('hub-location')).toHaveTextContent('/repos(empty)');
 
-    await user.click(screen.getByRole('tab', { name: '关系图' }));
+    await user.click(screen.getByRole('tab', { name: '关系图谱' }));
     expect(await screen.findByTestId('repo-map-pane')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('hub-location')).toHaveTextContent('/repos?tab=map'));
 
-    await user.click(screen.getByRole('tab', { name: '仓库' }));
+    await user.click(screen.getByRole('tab', { name: '仓库列表' }));
     await waitFor(() => expect(screen.getByTestId('hub-location')).toHaveTextContent('/repos(empty)'));
   });
 });

@@ -1,13 +1,13 @@
 import { useTranslation } from 'react-i18next';
-import { LineChartOutlined } from '@ant-design/icons';
 import { Tag } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { InsightCard, Severity } from '../types';
 
 const SEVERITY_STYLES: Record<Severity, { bg: string; border: string; color: string }> = {
-  critical: { bg: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-error) 30%, var(--aw-border))', color: 'var(--aw-error)' },
-  warning: { bg: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border))', color: 'var(--aw-warning)' },
+  critical: { bg: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-error) 30%, var(--aw-border))', color: 'var(--aw-error-deep)' },
+  warning: { bg: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border))', color: 'var(--aw-warning-deep)' },
   info: { bg: 'color-mix(in srgb, var(--aw-info) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-info) 30%, var(--aw-border))', color: 'var(--aw-info)' },
-  good: { bg: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-success) 30%, var(--aw-border))', color: 'var(--aw-success)' },
+  good: { bg: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-success) 30%, var(--aw-border))', color: 'var(--aw-success-deep)' },
 };
 
 interface KeyInsightsProps {
@@ -20,7 +20,7 @@ export function KeyInsights({ cards, workerLabel }: KeyInsightsProps) {
   return (
     <div style={{ background: 'var(--aw-panel)', border: '1px solid var(--aw-border)', borderRadius: 10, padding: '18px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <LineChartOutlined aria-hidden="true" style={{ color: 'var(--aw-info)' }} />
+        <span style={{ color: 'var(--aw-info)', display: 'inline-flex' }}><AwStrokeIcon name="chart" /></span>
         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--aw-text)' }}>{t('panels.keyInsights')}</span>
         <Tag style={{ marginLeft: 'auto', borderRadius: 4 }}>{workerLabel}</Tag>
       </div>

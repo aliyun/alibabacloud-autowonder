@@ -34,6 +34,8 @@
   "title": "审计日志",
   "description": "默认查看人工操作；可切换数字员工与系统事件，完整字段见详情。",
   "subtitle": "工作空间内人工与数字员工的操作留痕",
+  "headDescription": "{{subtitle}} · {{description}}",
+  "emptyValue": "-",
   "countChip_other": "当前筛选 {{count}} 条",
   "actorSource": "操作来源",
   "actorType": "操作人类型",

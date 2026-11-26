@@ -18,6 +18,8 @@ export interface DeliveryOverviewCreated {
 
 export interface DeliveryOverviewDelivered {
   count: number;
+  /** 后端按 Asia/Shanghai 自然日零填充的完成数，与 count 同源且求和一致。 */
+  daily: DeliveryOverviewDailyCount[];
   dailyAverage: number;
   previous: DeliveryOverviewPeriod;
   /** 上期为 0 时无可比基数，为 null。 */

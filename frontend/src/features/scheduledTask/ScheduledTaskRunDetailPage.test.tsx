@@ -51,7 +51,9 @@ describe('ScheduledTaskRunDetailPage', () => {
     expect(within(screen.getByTestId('delivery-step-1')).getByText(/已完成/)).toBeInTheDocument();
     expect(within(screen.getByTestId('delivery-step-2')).getByText('失败')).toBeInTheDocument();
     expect(screen.queryByText('执行中')).not.toBeInTheDocument();
-    expect(await screen.findByText('成员')).toBeInTheDocument();
+    // 成员面板与其他右栏面板统一为卡片，「成员」作为成员页签组的无障碍名称
+    expect(screen.getByText('小队成员')).toBeInTheDocument();
+    expect(await screen.findByRole('tablist', { name: '成员' })).toBeInTheDocument();
     expect(await screen.findByText('缺陷分析数字人')).toBeInTheDocument();
     expect(await screen.findByText('代码分析')).toBeInTheDocument();
     expect(await screen.findByText('修复验证')).toBeInTheDocument();
@@ -63,10 +65,14 @@ describe('ScheduledTaskRunDetailPage', () => {
     const scrollRegion = screen.getByTestId('scheduled-run-scroll-region');
     const scrollArea = screen.getByTestId('scheduled-run-left-scroll');
     const commentBar = screen.getByTestId('scheduled-run-sticky-comment');
-    expect(scrollRegion).toHaveStyle({ position: 'relative', flex: '1', minHeight: '0', overflow: 'hidden' });
+    expect(scrollRegion).toHaveStyle({ position: 'relative', flex: '1', minHeight: '0', overflow: 'visible' });
     expect(scrollRegion.contains(scrollArea)).toBe(true);
-    expect(scrollArea).toHaveStyle({ overflowY: 'auto', paddingRight: '38px' });
-    expect(commentBar.previousElementSibling).toBe(scrollRegion);
+    // 与 05 工单详情同构：左栏是灰画布上的白块分块，不再是整页页框
+    expect(scrollArea).toHaveClass('aw-detail-canvas');
+    expect(scrollArea).toHaveStyle({ overflowY: 'auto' });
+    // 原型 12：评论框停靠在评论 & 时间线卡内底部（.aw-review-composer），随左栏一起滚动
+    expect(scrollArea.contains(commentBar)).toBe(true);
+    expect(commentBar.closest('.aw-review-composer')).not.toBeNull();
   });
 
   it('posts a comment to the Run resource', async () => {
@@ -145,6 +151,7 @@ describe('ScheduledTaskRunDetailPage', () => {
         }],
       } })),
       http.get('/api/dispatches/555/runtime-trace/activities', () => HttpResponse.json({ success: true, code: '0', message: '', data: { dispatchId: 555, activities: [] } })),
+      http.get('/api/dispatches/555/runtime-trace/events', () => HttpResponse.json({ success: true, code: '0', message: '', data: { events: [], changed: true } })),
       http.get('/api/dispatches/555/live-activity', () => HttpResponse.json({ success: true, code: '0', message: '', data: {
         schemaVersion: '1', dispatchId: 555, agentId: 12, workitemId: null, sourceType: 'SCHEDULED_TASK_RUN',
         attempt: 1, dispatchStatus: 'RUNNING', changed: true, lastSeq: 1, lastUpdatedAt: '2026-09-02T10:00:00Z',
@@ -158,9 +165,27 @@ describe('ScheduledTaskRunDetailPage', () => {
     expect(screen.getByTestId('current-agent-name')).toHaveTextContent('缺陷分析数字人');
     expect(await screen.findByText('命令执行')).toBeInTheDocument();
     expect(screen.queryByText('正在运行测试')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '近期动作' }));
-    expect(screen.queryByRole('tab', { name: '控制记录' })).not.toBeInTheDocument();
-    expect(await screen.findByText('正在运行测试')).toBeInTheDocument();
+    // 近期动作明细在工作台模态内：控制记录是独立 tab，不混入近期动作。
+    fireEvent.click(screen.getByTestId('delivery-agent-row'));
+    const workbench = await screen.findByTestId('delivery-workbench');
+    expect(within(workbench).getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+      'Terminal', '近期动作', '控制记录', '执行详情', 'Trace 时间线', 'SDLC 阶段耗时', '产物（0）',
+    ]);
+    fireEvent.click(within(workbench).getByRole('tab', { name: '控制记录' }));
+    expect(within(workbench).getByRole('tab', { name: '控制记录' })).toHaveAttribute('aria-selected', 'true');
+    const controls = within(workbench).getByRole('tabpanel', { name: '控制记录' });
+    await waitFor(() => expect(within(controls).getByText('暂无控制记录')).toBeVisible());
+    expect(within(controls).queryByText('正在运行测试')).not.toBeInTheDocument();
+    fireEvent.click(within(workbench).getByRole('tab', { name: '近期动作' }));
+    expect(within(workbench).getByRole('tab', { name: '近期动作' })).toHaveAttribute('aria-selected', 'true');
+    const activity = within(workbench).getByRole('tabpanel', { name: '近期动作' });
+    // 工作台「近期动作」tab 使用平铺 feed：标题行展示计数，时间线直接展开，不再是可折叠按钮。
+    const livePanel = await within(activity).findByTestId('live-activity-panel');
+    expect(within(livePanel).getByText('近期动作（1）')).toBeInTheDocument();
+    expect(within(livePanel).queryByRole('button', { name: /近期动作/ })).not.toBeInTheDocument();
+    const timeline = within(livePanel).getByTestId('live-activity-timeline');
+    await waitFor(() => expect(within(timeline).getByText('正在运行测试')).toBeVisible());
+    expect(within(timeline).getAllByText('命令执行')).toHaveLength(1);
   });
 
   it('renders both stages of the selected dispatch snapshot in the details and timing views', async () => {
@@ -189,6 +214,10 @@ describe('ScheduledTaskRunDetailPage', () => {
           ],
         }],
       } })),
+      http.get('/api/dispatches/12238/runtime-trace', () => HttpResponse.json({ success: true, code: '0', data: {
+        dispatchId: 12238, changed: true, events: [], sessions: [],
+        tokenUsage: { available: false, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0 },
+      } })),
       http.get('/api/dispatches/12238/runtime-trace/activities', () => HttpResponse.json({ success: true, code: '0', data: { dispatchId: 12238, activities: [] } })),
       http.get('/api/dispatches/12238/runtime-trace/events/window', () => HttpResponse.json({ success: true, code: '0', data: { dispatchId: 12238, events: [], changed: true } })),
       http.get('/api/dispatches/12238/live-activity', () => HttpResponse.json({ success: true, code: '0', data: {
@@ -199,7 +228,7 @@ describe('ScheduledTaskRunDetailPage', () => {
       http.get('/api/dispatches/12238/guidance', () => HttpResponse.json({ success: true, code: '0', data: [] })),
     );
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '查看执行' }));
+    fireEvent.click(await screen.findByTestId('delivery-agent-row'));
     const workbench = await screen.findByTestId('delivery-workbench');
     fireEvent.click(within(workbench).getByRole('tab', { name: '执行详情' }));
     expect(within(workbench).getByTestId('delivery-step-10088')).toHaveTextContent(/已完成/);
@@ -256,7 +285,7 @@ describe('ScheduledTaskRunDetailPage', () => {
 
 it('switches the cached run route while retaining raw result and millisecond duration', async () => {
   server.use(
-    http.get('/api/scheduled-task-runs/10482', () => HttpResponse.json({ success: true, code: '0', data: { id: 10482, scheduledTaskId: 901, status: 'TIMED_OUT', triggerType: 'MANUAL', sessionMode: 'CONTINUOUS', scheduledAt: '2026-08-12T18:00:00Z', startedAt: '2026-08-12T18:00:00Z', finishedAt: '2026-08-12T19:00:00Z', version: 2, resultSummary: '## 原始AI结果', resumeFromRunId: 7 } })),
+    http.get('/api/scheduled-task-runs/10482', () => HttpResponse.json({ success: true, code: '0', data: { id: 10482, scheduledTaskId: 901, status: 'TIMED_OUT', triggerType: 'MANUAL', sessionMode: 'CONTINUOUS', scheduledAt: '2026-08-12T18:00:00Z', startedAt: '2026-08-12T18:00:00Z', finishedAt: '2026-08-12T19:00:00Z', version: 2, resultSummary: '## 原始AI结果', resumeFromRunId: 7, degradedResume: true, degradedReason: 'executor lost' } })),
     ...['comments', 'artifacts', 'derived-workitems', 'participants'].map(resource => http.get(`/api/scheduled-task-runs/10482/${resource}`, () => HttpResponse.json({ success: true, code: '0', data: [] }))),
     http.get('/api/scheduled-task-runs/10482/delivery-progress', () => HttpResponse.json({ success: true, code: '0', data: { steps: [] } })),
   );
@@ -267,13 +296,18 @@ it('switches the cached run route while retaining raw result and millisecond dur
   await screen.findByRole('heading', { name: '原始AI结果' });
   await act(() => i18n.changeLanguage('en-US'));
   expect(screen.getByText('Timed out')).toBeInTheDocument();
-  expect(screen.getByText(/Trigger: Manual.*Duration: 1h/)).toBeInTheDocument();
+  // 原型 12 run-meta：值在 <b> 内，跨节点断言取容器 textContent。
+  const runMetaText = () => document.querySelector('.aw-run-meta')?.textContent ?? '';
+  expect(runMetaText()).toContain('Trigger: Manual');
+  expect(runMetaText()).toContain('Duration: 1h');
+  expect(runMetaText()).toContain('Realtime channel: scheduled-run:10482');
   expect(screen.getByText('Continuous session')).toBeInTheDocument();
   expect(screen.getByText('Run #7')).toBeInTheDocument();
+  expect(screen.getByText('Degraded resume: this run was restored from the snapshot of Run #7 after it was interrupted (degradedReason: executor lost).')).toBeInTheDocument();
   expect(screen.getByText('Derived work items')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: '原始AI结果' })).toBeInTheDocument();
   await act(() => i18n.changeLanguage('zh-CN'));
-  expect(screen.getByText(/耗时：1时/)).toBeInTheDocument();
+  expect(runMetaText()).toContain('耗时：1时');
 });
 
 it('refuses run mutations for read-only members in the current language', async () => {
@@ -310,11 +344,26 @@ it.each([
     http.get('/api/scheduled-task-runs/10482/delivery-progress', () => HttpResponse.json({ success: true, code: '0', data: { steps: [] } })),
   );
   renderPage();
-  expect(await screen.findByText(new RegExp(`耗时：${chinese}$`))).toBeInTheDocument();
+  const durationText = () => Array.from(document.querySelectorAll('.aw-run-meta > span'))
+    .map((span) => span.textContent).find((text) => text?.startsWith('耗时：')) ?? '';
+  await waitFor(() => expect(durationText()).toBe(`耗时：${chinese}`));
   await act(() => i18n.changeLanguage('en-US'));
-  expect(screen.getByText(new RegExp(`Duration: ${english}$`))).toBeInTheDocument();
+  const englishText = () => Array.from(document.querySelectorAll('.aw-run-meta > span'))
+    .map((span) => span.textContent).find((text) => text?.startsWith('Duration:')) ?? '';
+  expect(englishText()).toBe(`Duration: ${english}`);
 });
 
+it('shows an ongoing duration for active runs', async () => {
+  const startedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  server.use(http.get('/api/scheduled-task-runs/10482', () => HttpResponse.json({ success: true, code: '0', data: { id: 10482, scheduledTaskId: 901, status: 'RUNNING', triggerType: 'SCHEDULED', startedAt, version: 2 } })),
+    ...['comments', 'artifacts', 'derived-workitems', 'participants'].map(resource => http.get(`/api/scheduled-task-runs/10482/${resource}`, () => HttpResponse.json({ success: true, code: '0', data: [] }))),
+    http.get('/api/scheduled-task-runs/10482/delivery-progress', () => HttpResponse.json({ success: true, code: '0', data: { steps: [] } })),
+  );
+  renderPage();
+  const durationText = () => Array.from(document.querySelectorAll('.aw-run-meta > span'))
+    .map((span) => span.textContent).find((text) => text?.startsWith('耗时：')) ?? '';
+  await waitFor(() => expect(durationText()).toMatch(/^耗时：.+…$/));
+});
 
 it('projects only explicit frozen-origin reasons in the held cache with no locale query or draft reset', async () => {
   let reads = 0;
@@ -331,7 +380,7 @@ it('projects only explicit frozen-origin reasons in the held cache with no local
     http.get('/api/scheduled-task-runs/10482/delivery-progress', () => { reads += 1; return HttpResponse.json({ success: true, code: '0', data: { steps: [] } }); }),
     http.get('/api/scheduled-task-runs/10482/mention-candidates', () => { reads += 1; return HttpResponse.json({ success: true, code: '0', data: candidates }); }),
   );
-  const { container } = renderPage();
+  renderPage();
   const textarea = await screen.findByRole('textbox', { name: '评论本次运行' }) as HTMLTextAreaElement;
   fireEvent.change(textarea, { target: { value: 'draft @', selectionStart: 7 } });
   fireEvent.keyUp(textarea);
@@ -346,7 +395,8 @@ it('projects only explicit frozen-origin reasons in the held cache with no local
   expect(screen.getByRole('menuitem', { name: /legacy/ }).textContent).toContain(raw);
   expect(screen.getByRole('menuitem', { name: /unknown/ }).textContent).toContain('<b>raw {0}</b>');
   expect(screen.getByRole('menuitem', { name: /Not in this run’s frozen snapshot Agent/ })).toBeEnabled();
-  expect(container.querySelector('b')).toBeNull();
+  // 原因原文按纯文本渲染（unknown 项的 '<b>raw {0}</b>' 不得被解析成 HTML）；run-meta 自身的 <b> 不在此范围。
+  expect(screen.getByRole('menuitem', { name: /unknown/ }).querySelector('b')).toBeNull();
   expect(reads).toBe(readCount);
   expect(candidates[1].mentionDisabledReason).toBe(raw);
   await act(() => i18n.changeLanguage('zh-CN'));

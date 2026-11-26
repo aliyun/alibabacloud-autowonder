@@ -1,6 +1,7 @@
 {
   "page": {
     "title": "Status template management",
+    "description": "Maintain status nodes and recommended transitions per work item type; editing nodes and transitions requires read-write access",
     "create": "New template",
     "empty": "No templates"
   },
@@ -29,11 +30,13 @@
   "templates": {
     "current": "Current template:",
     "default": "Default",
+    "defaultOption": "{{name}} · Default",
     "setDefault": "Set as default",
     "confirmDelete": "Delete this template?",
     "name": "Template name",
     "nameRequired": "Enter a template name",
-    "namePlaceholder": "e.g. Custom requirement workflow"
+    "namePlaceholder": "e.g. Custom requirement workflow",
+    "nameHelp": "A new template starts with an empty node list; add status nodes and recommended transitions one by one."
   },
   "categories": {
     "INIT": "Initial",
@@ -51,6 +54,7 @@
     "code": "Code",
     "codeRequired": "Enter a status code",
     "codeHelp": "English identifier, e.g. developing or verifying",
+    "codeHelpLocked": "English identifier, e.g. developing or verifying; it cannot be changed while editing.",
     "codePlaceholder": "e.g. developing",
     "name": "Display name",
     "nameRequired": "Enter a display name",
@@ -58,7 +62,7 @@
     "category": "Category",
     "categoryRequired": "Select a category",
     "sort": "Sort order",
-    "sortHelp": "Lower numbers appear first"
+    "sortHelp": "Lower numbers appear first; a new node defaults to the current maximum plus 1."
   },
   "transitions": {
     "title": "Recommended transitions (quick actions)",

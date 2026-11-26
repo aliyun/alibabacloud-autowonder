@@ -229,6 +229,7 @@
   },
   "brand": {
     "workspaces": "{{name}}，返回工作空间列表",
+    "workbench": "{{name}}，返回工作台",
     "workitems": "{{name}}，返回工单列表"
   },
   "bootstrap": {
@@ -237,5 +238,8 @@
     "failedDetail": "请检查网络连接后重试。",
     "retry": "重试",
     "retrying": "重试中…"
+  },
+  "table": {
+    "total_other": "共 {{count}} 条"
   }
 }

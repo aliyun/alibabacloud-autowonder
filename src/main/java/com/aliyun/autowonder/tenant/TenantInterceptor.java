@@ -50,7 +50,10 @@ public class TenantInterceptor implements Interceptor {
             "com.aliyun.autowonder.spacedashboard.SpaceDashboardDao.countCreatedWorkitems",
             "com.aliyun.autowonder.spacedashboard.SpaceDashboardDao.countCompletedWorkitems",
             "com.aliyun.autowonder.spacedashboard.SpaceDashboardDao.countInProgressWorkitems",
-            "com.aliyun.autowonder.spacedashboard.SpaceDashboardDao.sumCredits");
+            "com.aliyun.autowonder.spacedashboard.SpaceDashboardDao.sumCredits",
+            // Card IDs are server-derived; both statements also bind caller read authorization.
+            "com.aliyun.autowonder.workspace.WorkspaceDao.countMembersByWorkspaceIds",
+            "com.aliyun.autowonder.workspace.WorkspaceDao.countWorkitemsByWorkspaceIds");
 
     @Override
     public Object intercept(Invocation invocation) throws Throwable {

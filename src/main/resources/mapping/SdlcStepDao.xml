@@ -20,6 +20,14 @@
         SELECT * FROM sdlc_step WHERE sdlc_id = #{sdlcId} AND is_deleted = 0
         ORDER BY step_order ASC
     </select>
+    <select id="listForExecution" resultType="com.aliyun.autowonder.sdlc.SdlcStepDO">
+        SELECT step.*, COALESCE(flow.stage_timing_enabled, 0) AS flow_stage_timing_enabled
+        FROM sdlc_step step
+        LEFT JOIN sdlc flow ON flow.id = step.sdlc_id AND flow.tenant_id = step.tenant_id AND flow.is_deleted = 0
+        WHERE step.tenant_id = #{tenantId} AND step.sdlc_id = #{sdlcId}
+          AND step.is_deleted = 0
+        ORDER BY step.step_order ASC
+    </select>
     <select id="listBySdlcForUpdate" resultType="com.aliyun.autowonder.sdlc.SdlcStepDO" useCache="false" flushCache="true">
         SELECT * FROM sdlc_step
         WHERE tenant_id = #{tenantId} AND sdlc_id = #{sdlcId} AND is_deleted = 0

@@ -102,7 +102,7 @@ describe('HubPageShell', () => {
     await waitFor(() => expect(screen.getByTestId('hub-location')).toHaveTextContent('/repos?tab=map'));
   });
 
-  it('renders the extra slot only when provided', () => {
+  it('renders the actions slot only when provided', () => {
     render(
       <MemoryRouter>
         <HubPageShell
@@ -121,7 +121,7 @@ describe('HubPageShell', () => {
         <HubPageShell
           title="仓库"
           description="描述"
-          extra={<button type="button" data-testid="hub-extra">操作</button>}
+          actions={<button type="button" data-testid="hub-extra">操作</button>}
           activeTab="list"
           onTabChange={() => {}}
           items={[{ key: 'list', label: '仓库', children: <div /> }]}

@@ -171,7 +171,7 @@ export function RegisterPage() {
         <Title level={3} className="auth-entry-title">{t('register.title')}</Title>
         <p className="auth-entry-subtitle">{t('register.description')}</p>
         {error && <Alert message={errorText} type="error" showIcon icon={<CloseCircleFilled aria-hidden="true" />} style={{ marginBottom: 16 }} />}
-        <Form form={form} onFinish={onFinish} layout="vertical">
+        <Form className="auth-register-form" form={form} onFinish={onFinish} layout="vertical">
           <Form.Item label={t('fields.username')} name="username" rules={[{ required: true, message: t('fields.usernameRequired') }]}>
             <Input placeholder={t('fields.username')} />
           </Form.Item>
@@ -215,11 +215,11 @@ export function RegisterPage() {
               icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />} style={{ padding: 0, width: 16, height: 16 }} />}
               placeholder={t('fields.password')} />
           </Form.Item>
-          <Form.Item>
+          <Form.Item className="auth-register-submit">
             <Button type="primary" htmlType="submit" aria-label={t('register.submit')} loading={loading ? { icon: <LoadingOutlined aria-hidden="true" /> } : false} block>{t('register.submit')}</Button>
           </Form.Item>
           <div className="auth-entry-link">
-            <Link to="/login">{t('register.loginLink')}</Link>
+            {t('register.loginPrompt')}<Link to="/login">{t('register.loginLink')}</Link>
           </div>
         </Form>
       </Card>

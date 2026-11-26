@@ -6,6 +6,11 @@ package com.aliyun.autowonder.storage;
  */
 public interface ObjectStorage {
 
+    /** The object exists but exceeds this caller's bounded read. */
+    class SizeLimitExceededException extends IllegalArgumentException {
+        public SizeLimitExceededException() { super("Object exceeds size limit"); }
+    }
+
     /** Store bytes at bucket/key. Returns the ossRef plus computed md5 (hex) and size. */
     StoredObject put(String bucket, String key, byte[] data);
 
@@ -21,6 +26,12 @@ public interface ObjectStorage {
 
     /** Fetch bytes by ossRef, or null if absent. */
     byte[] get(String ossRef);
+
+    /** Fetch the whole object, rejecting it if it exceeds maxBytes. Returns null if absent.
+     * @throws SizeLimitExceededException when the stored object exceeds maxBytes
+     * @throws IllegalArgumentException when maxBytes is negative
+     */
+    byte[] get(String ossRef, int maxBytes);
 
     /** Short-lived, externally reachable presigned download URL for the ossRef. */
     String presignGet(String ossRef, int ttlSeconds);

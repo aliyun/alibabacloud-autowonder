@@ -72,6 +72,10 @@ describe('审核角标与待审核列表联动', () => {
   beforeEach(() => {
     useAuthStore.getState().clear();
     useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
+    // 审核行的「提交时间」按版本列表取，逐行请求 /versions；用例只关心角标与列表联动
+    server.use(
+      http.get('/api/agents/:id/versions', () => jsonOk([])),
+    );
   });
 
   afterEach(() => {

@@ -26,22 +26,21 @@ it('updates a routed login form in place and preserves entered credentials acros
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><LocaleProvider><RouterProvider router={router} /></LocaleProvider></QueryClientProvider>);
   const languageSwitch = screen.getByRole('button', { name: '切换语言' });
   const appearanceSwitch = screen.getByRole('button', { name: '切换外观' });
-  expect(languageSwitch.closest('.aw-page-header-actions')).not.toBeNull();
-  expect(languageSwitch.closest('.aw-page-header-actions')).toBe(appearanceSwitch.closest('.aw-page-header-actions'));
-  const username = screen.getByLabelText('用户名');
-  const password = screen.getByLabelText('密码');
+  expect(languageSwitch.closest('.login-topbar-right')).not.toBeNull();
+  expect(languageSwitch.closest('.login-topbar-right')).toBe(appearanceSwitch.closest('.login-topbar-right'));
+  const username = screen.getByLabelText(/^用户名\*?$/);
+  const password = screen.getByLabelText(/^密码\*?$/);
   fireEvent.change(username, { target: { value: '用户名' } });
   fireEvent.change(password, { target: { value: 'secret-draft' } });
-  fireEvent.click(screen.getByRole('button', { name: '切换语言' }));
-  fireEvent.click(await screen.findByText('English'));
+  await act(async () => { await i18n.changeLanguage('en-US'); });
   expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
-  expect(screen.getByLabelText('Username')).toBe(username);
-  expect(screen.getByLabelText('Password')).toBe(password);
+  expect(screen.getByLabelText(/^Username\*?$/)).toBe(username);
+  expect(screen.getByLabelText(/^Password\*?$/)).toBe(password);
   expect(username).toHaveValue('用户名');
   expect(password).toHaveValue('secret-draft');
   await act(async () => { await i18n.changeLanguage('zh-CN'); });
   expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument();
-  expect(screen.getByLabelText('用户名')).toBe(username);
+  expect(screen.getByLabelText(/^用户名\*?$/)).toBe(username);
   expect(password).toHaveValue('secret-draft');
 });
 
@@ -89,7 +88,7 @@ it('updates an existing preview error in place without reloading the artifact', 
 it('refreshes existing login validation errors when the routed form changes language', async () => {
   const router = createMemoryRouter([{ path: '/login', element: <LoginPage /> }], { initialEntries: ['/login'] });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>);
-  const username = screen.getByLabelText('用户名');
+  const username = screen.getByLabelText(/^用户名\*?$/);
   fireEvent.change(username, { target: { value: 'draft' } });
   fireEvent.change(username, { target: { value: '' } });
   expect(await screen.findByText('请输入用户名')).toBeInTheDocument();
@@ -98,7 +97,7 @@ it('refreshes existing login validation errors when the routed form changes lang
   expect(await screen.findByText('Enter your username')).toBeInTheDocument();
   expect(screen.queryByText('请输入用户名')).not.toBeInTheDocument();
   expect(screen.queryByText('Enter your password')).not.toBeInTheDocument();
-  expect(screen.getByLabelText('Username')).toBe(username);
+  expect(screen.getByLabelText(/^Username\*?$/)).toBe(username);
 });
 
 it('translates known timeline event codes without changing the actor name', async () => {

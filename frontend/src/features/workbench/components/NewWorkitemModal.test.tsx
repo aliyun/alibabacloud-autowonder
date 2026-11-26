@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,19 +8,14 @@ import { server } from '@/test/mocks/server';
 import { useAuthStore } from '@/shared/auth/store';
 import { NewWorkitemModal } from './NewWorkitemModal';
 
-const { createMock, assignMock, openChiefMock } = vi.hoisted(() => ({
+const { createMock, assignMock } = vi.hoisted(() => ({
   createMock: vi.fn(),
   assignMock: vi.fn(),
-  openChiefMock: vi.fn(),
 }));
 
 vi.mock('@/features/workitem/hooks', () => ({
   useCreateWorkitem: () => ({ mutateAsync: createMock, isPending: false }),
   useAssignWorkitem: () => ({ mutateAsync: assignMock, isPending: false }),
-}));
-
-vi.mock('@/features/workspaceGuide/bridge', () => ({
-  openChiefPanel: openChiefMock,
 }));
 
 function ok(data: unknown) {
@@ -29,7 +24,7 @@ function ok(data: unknown) {
 
 function renderModal(onClose = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/workbench']}>
         <Routes>
@@ -39,7 +34,7 @@ function renderModal(onClose = vi.fn()) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return { onClose };
+  return { onClose, unmount: view.unmount };
 }
 
 const deliveryHandlers = [
@@ -54,9 +49,9 @@ const deliveryHandlers = [
 ];
 
 async function pickSquadAndAgent() {
-  await userEvent.click(screen.getByLabelText('小队'));
+  await userEvent.click(screen.getByLabelText(/交付小队/));
   await userEvent.click(await screen.findByText('AW交付组'));
-  await userEvent.click(await screen.findByLabelText('首步执行 Agent'));
+  await userEvent.click(await screen.findByLabelText(/交付数字员工/));
   await userEvent.click(await screen.findByText('Agent-77 (AW_FS_DEV)'));
 }
 
@@ -81,7 +76,6 @@ beforeEach(() => {
   useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'W', description: '' }, 'READ_WRITE');
   createMock.mockReset();
   assignMock.mockReset();
-  openChiefMock.mockReset();
   URL.createObjectURL = vi.fn(() => 'blob:preview');
   URL.revokeObjectURL = vi.fn();
   server.use(...deliveryHandlers);
@@ -105,7 +99,7 @@ describe('NewWorkitemModal', () => {
     createMock.mockResolvedValue({ id: 100 });
     const { onClose } = renderModal();
 
-    expect(screen.getByRole('tab', { name: '默认创建' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('新建工单')).toBeInTheDocument();
     await fillRequiredFields();
     await userEvent.click(screen.getByRole('button', { name: '创建工单' }));
 
@@ -159,59 +153,6 @@ describe('NewWorkitemModal', () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it('does not call Chief until the smart tab is entered and disables it when not ready', async () => {
-    let setupCalls = 0;
-    server.use(http.get('/api/platform-agent/setup', () => {
-      setupCalls += 1;
-      return ok({ agentId: null, executorId: null, agentConfigured: false, skillsConfigured: false, executorConfigured: false, launchConfigured: false, ready: false, missingSkills: [] });
-    }));
-    renderModal();
-
-    expect(setupCalls).toBe(0);
-    await userEvent.click(screen.getByRole('tab', { name: '智能创建' }));
-
-    expect(await screen.findByText('Chief 暂不可用，请使用默认创建')).toBeInTheDocument();
-    expect(setupCalls).toBe(1);
-    expect(openChiefMock).not.toHaveBeenCalled();
-  });
-
-  it('opens the single Chief panel with the draft when Chief is ready', async () => {
-    server.use(http.get('/api/platform-agent/setup', () => ok({
-      agentId: 1, executorId: 2, agentConfigured: true, skillsConfigured: true,
-      executorConfigured: true, launchConfigured: true, ready: true, missingSkills: [],
-    })));
-    renderModal();
-
-    await userEvent.click(screen.getByRole('tab', { name: '智能创建' }));
-    await waitFor(() => expect(openChiefMock).toHaveBeenCalled());
-    expect(openChiefMock.mock.calls[0][0]).toEqual(expect.objectContaining({ expanded: true }));
-
-    await userEvent.type(screen.getByLabelText('目标与背景'), '增加负责人筛选');
-    await userEvent.click(screen.getByRole('button', { name: '在 Chief 中继续' }));
-
-    expect(openChiefMock).toHaveBeenLastCalledWith(expect.objectContaining({
-      expanded: true,
-      prefill: '增加负责人筛选',
-    }));
-  });
-
-  it('warns when Chief keeps its existing draft instead of the prefill', async () => {
-    server.use(http.get('/api/platform-agent/setup', () => ok({
-      agentId: 1, executorId: 2, agentConfigured: true, skillsConfigured: true,
-      executorConfigured: true, launchConfigured: true, ready: true, missingSkills: [],
-    })));
-    renderModal();
-
-    await userEvent.click(screen.getByRole('tab', { name: '智能创建' }));
-    await waitFor(() => expect(openChiefMock).toHaveBeenCalled());
-
-    await act(async () => {
-      openChiefMock.mock.calls[0][0].onPrefillResult(false);
-    });
-
-    expect(await screen.findByText('Chief 当前已有草稿，已保留你的输入，请先发送当前内容后再试')).toBeInTheDocument();
-  });
-
   it('keeps the form open when creation fails so the user can retry', async () => {
     createMock.mockRejectedValue(new Error('boom'));
     renderModal();
@@ -244,30 +185,6 @@ describe('NewWorkitemModal', () => {
       expect(Number.isNaN(scheduledAt)).toBe(false);
       expect(scheduledAt).toBeGreaterThan(Date.now());
     });
-  });
-
-  /** NB3：浏览器缺少 randomUUID 时使用降级的 clientMessageId，不影响智能入口。 */
-  it('falls back to a generated client message id when randomUUID is unavailable', async () => {
-    const realCrypto = globalThis.crypto;
-    vi.stubGlobal('crypto', {
-      getRandomValues: realCrypto.getRandomValues.bind(realCrypto),
-      subtle: realCrypto.subtle,
-    });
-    try {
-      server.use(http.get('/api/platform-agent/setup', () => ok({
-        agentId: 1, executorId: 2, agentConfigured: true, skillsConfigured: true,
-        executorConfigured: true, launchConfigured: true, ready: true, missingSkills: [],
-      })));
-      renderModal();
-
-      await userEvent.click(screen.getByRole('tab', { name: '智能创建' }));
-      await waitFor(() => expect(openChiefMock).toHaveBeenCalled());
-
-      const options = openChiefMock.mock.calls[0][0] as { clientMessageId?: string };
-      expect(options.clientMessageId).toMatch(/^workbench-create-/);
-    } finally {
-      vi.unstubAllGlobals();
-    }
   });
 
   function clipboardWith(files: File[]) {

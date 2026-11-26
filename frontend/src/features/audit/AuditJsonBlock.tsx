@@ -1,8 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
-import { Button, Typography, message } from 'antd';
-import { CopyOutlined } from '@ant-design/icons';
+import { Button, message } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { copyTextToClipboard } from '@/shared/lib/clipboard';
+import './AuditLogPageV2.css';
+
+function jsonTokenClass(token: string): string {
+  if (token.startsWith('"')) return token.endsWith(':') ? 'audit-jk' : 'audit-js';
+  return /^(true|false|null)$/.test(token) ? 'audit-jb' : 'audit-jn';
+}
 
 export function AuditJsonBlock({ titleKey, value }: { titleKey: 'fullRecord' | 'eventDetail'; value: object }) {
   const { t } = useTranslation('audit');
@@ -17,18 +23,15 @@ export function AuditJsonBlock({ titleKey, value }: { titleKey: 'fullRecord' | '
   }
 
   return (
-    <section aria-label={title} style={{ marginTop: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <Typography.Title level={5} style={{ margin: 0 }}>{title}</Typography.Title>
-        <Button size="small" icon={<CopyOutlined aria-hidden="true" />} aria-label={t('copyNamed', { title })} onClick={() => void copy()}>{t('copy')}</Button>
+    <section aria-label={title} className="audit-json-sec">
+      <div className="audit-json-head">
+        <div className="audit-json-title">{title}</div>
+        <Button size="small" icon={<AwStrokeIcon name="copy" />} aria-label={t('copyNamed', { title })} onClick={() => void copy()}>{t('copy')}</Button>
       </div>
-      <pre style={{ margin: 0, padding: 16, border: '1px solid var(--aw-border)', borderRadius: 8, background: 'var(--aw-raised)', color: 'var(--aw-text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 13, lineHeight: 1.6 }}>
+      <pre className="audit-json-box">
         <code>{tokens.map((token, index) => {
           if (index % 2 === 0) return token;
-          const color = token.startsWith('"')
-            ? (token.endsWith(':') ? 'var(--aw-info)' : 'var(--aw-success)')
-            : (/^(true|false|null)$/.test(token) ? 'var(--aw-accent-text)' : 'var(--aw-warning)');
-          return <span key={index} style={{ color }}>{token}</span>;
+          return <span key={index} className={jsonTokenClass(token)}>{token}</span>;
         })}</code>
       </pre>
     </section>

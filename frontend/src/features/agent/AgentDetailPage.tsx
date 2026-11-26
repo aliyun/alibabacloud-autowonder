@@ -2,13 +2,16 @@ import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { getAgentRoleLabel, getEvolutionModeLabel, getAgentStatusLabel } from './constants';
-import { PageHeading } from '@/shared/ui/PageHeading';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
-import { Alert, Card, Tag, Button, Space, Popconfirm, message, Spin, Result, Tabs, Typography } from 'antd';
+import { Alert, Tag, Button, Space, Popconfirm, message, Spin, Result, Tabs, Typography } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
+import { StatusTag, type StatusColorKey } from '@/shared/ui/StatusTag';
+import { AiIdentity } from '@/shared/ui/AiIdentity';
+import { TableCard, TableFooter } from '@/shared/ui/TableCard';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { RollbackOutlined, EditOutlined, PoweroffOutlined, PlayCircleOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PoweroffOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAgent, useAgentVersions, useAgentVersion, useRollback, useOfflineAgent, useOnlineAgent, useDeleteAgent, useAgentWorkitems, useAgentMemories } from './hooks';
@@ -18,22 +21,28 @@ import type { ColumnsType } from 'antd/es/table';
 import { AgentStatCards } from './components/AgentStatCards';
 import { AgentWorkitemList } from './components/AgentWorkitemList';
 import { AgentVersionDiff } from './components/AgentVersionDiff';
+import { AgentTagList } from './components/AgentTagList';
 import { MarkdownView } from '@/shared/ui/MarkdownView';
 import { EllipsisText } from '@/shared/ui/EllipsisText';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 
 import { usePageSizePreference } from '@/shared/lib/usePageSizePreference';
+import './AgentForm.css';
+import './AgentDetailPage.css';
 
 const { Text } = Typography;
 const EMPTY_CELL = '-';
 
-const versionStatusColors = new Map<string, string>([
-  ['DRAFT', 'default'], ['PENDING_REVIEW', 'processing'], ['APPROVED', 'success'],
-  ['REJECTED', 'error'], ['ONLINE', 'success'], ['ROLLED_BACK', 'warning'],
-]);
-const agentStatusColors = new Map<string, string>([
-  ['DRAFT', 'default'], ['ONLINE', 'success'], ['OFFLINE', 'default'], ['PENDING_REVIEW', 'processing'],
-]);
+const versionStatusColorKeys: Record<string, StatusColorKey> = {
+  DRAFT: 'gray', PENDING_REVIEW: 'amber', APPROVED: 'green',
+  REJECTED: 'red', ONLINE: 'green', ROLLED_BACK: 'gray',
+};
+const agentStatusColorKeys: Record<string, StatusColorKey> = {
+  DRAFT: 'gray', ONLINE: 'green', OFFLINE: 'gray', PENDING_REVIEW: 'amber',
+};
+const permLevelColorKeys: Record<string, StatusColorKey> = {
+  READ: 'gray', WRITE: 'blue', ADMIN: 'violet',
+};
 
 /** 优先显示模板名称（当前生效值可复用已查到的 name）；未知/未加载时退回 #id。 */
 function sdlcLabel(sdlcId?: number | null, name?: string) {
@@ -41,19 +50,13 @@ function sdlcLabel(sdlcId?: number | null, name?: string) {
   return name || `#${sdlcId}`;
 }
 
-function countSuffix(count?: number) {
-  return count ? ` (${count})` : '';
-}
-
 function AgentIdentitySection({ title, content }: { title: string; content?: string | null }) {
   const { t } = useTranslation('agent');
   const value = content?.trim();
   return (
-    <div style={{ flex: 1, minWidth: 280 }}>
-      <Text strong>{title}</Text>
-      <div style={{ marginTop: 8 }}>
-        {value ? <MarkdownView content={value} /> : <Text type="secondary">{t('display.notConfigured')}</Text>}
-      </div>
+    <div style={{ width: '100%', minWidth: 0 }}>
+      <div className="aw-agent-sub-title">{title}</div>
+      {value ? <MarkdownView content={value} /> : <Text type="secondary">{t('display.notConfigured')}</Text>}
     </div>
   );
 }
@@ -62,12 +65,12 @@ function EmptyHint({ text }: { text: string }) {
   return <Text type="secondary">{text}</Text>;
 }
 
-/** One labelled identity attribute: the label sits above its value and wraps with it on narrow screens. */
+/** 原型 13 id-item：标签 11px text-3 在上，值 12px 在下。 */
 function NamedAttribute({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div style={{ flex: '1 1 160px', minWidth: 140, maxWidth: 320 }}>
-      <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>{label}</Text>
-      <div style={{ marginTop: 4, wordBreak: 'break-word' }}>{children}</div>
+    <div className="aw-desc-item">
+      <div className="aw-dk">{label}</div>
+      <div className="aw-dv">{children}</div>
     </div>
   );
 }
@@ -89,12 +92,16 @@ export function AgentDetailPage() {
 
   const repoPermColumns: ColumnsType<RepoPermItem> = [
     { title: t('fields.repository'), dataIndex: 'repoName', render: (v: string, r) => v || `#${r.repoId}` },
-    { title: t('fields.permission'), dataIndex: 'permLevel', width: 100, render: (v: string) => <Tag>{permissionLabels.get(v) || v}</Tag> },
+    { title: t('fields.permission'), dataIndex: 'permLevel', width: 100, render: (v: string) => <StatusTag label={permissionLabels.get(v) || v} colorKey={permLevelColorKeys[v] ?? 'gray'} /> },
     {
       title: t('fields.commitBranches'), dataIndex: 'allowedBranchPatterns',
       render: (patterns?: string[]) => !patterns || patterns.length === 0
         ? <Text type="secondary">{t('repository.unrestricted')}</Text>
-        : <Space size={[0, 4]} wrap>{patterns.map(pattern => <Tag key={pattern}>{pattern}</Tag>)}</Space>,
+        : (
+          <span className="aw-agent-branches">
+            {patterns.map(pattern => <StatusTag key={pattern} size="sm" label={pattern} colorKey="gray" className="aw-agent-mono" />)}
+          </span>
+        ),
     },
   ];
 
@@ -225,7 +232,7 @@ export function AgentDetailPage() {
         return <EllipsisText tooltip={label}>{label}</EllipsisText>;
       },
     },
-    { title: t('display.statusTitle'), dataIndex: 'status', width: 100, render: (s: string) => <Tag color={versionStatusColors.get(s)}>{getAgentStatusLabel(s)}</Tag> },
+    { title: t('display.statusTitle'), dataIndex: 'status', width: 100, render: (s: string) => <StatusTag dot label={getAgentStatusLabel(s)} colorKey={versionStatusColorKeys[s] ?? 'gray'} /> },
     { title: t('display.createdAt'), dataIndex: 'gmtCreate', width: 160, render: (t: string) => formatDateTime(t) },
     {
       title: t('display.submitNoteColumn'), dataIndex: 'submitNote', ellipsis: { showTitle: false },
@@ -252,25 +259,30 @@ export function AgentDetailPage() {
               handleRollback(record.versionNo);
             }}
           >
-            <Button type="link" size="small" icon={<RollbackOutlined aria-hidden />}>{t('display.rollback')}</Button>
+            <Button type="link" size="small" icon={<AwStrokeIcon name="back" />}>{t('display.rollback')}</Button>
           </Popconfirm>
         ) : null,
     },
   ];
 
-  const statusInfo = { color: agentStatusColors.get(agent.status) || 'default', label: getAgentStatusLabel(agent.status) };
+  const statusInfo = { colorKey: agentStatusColorKeys[agent.status] ?? 'gray', label: getAgentStatusLabel(agent.status) };
   const isPlatform = agent.kind === 'PLATFORM';
 
   const sdlcNameOf = (sdlcId: number) => (sdlcId === agent.sdlcId ? sdlcName : undefined);
 
   return (
     <div>
-      <Card
-        className="aw-content-card"
-        title={<PageHeading title={<span className="aw-detail-title"><PageBackButton to="/agents" label={t('actions.backList')} /><span>{agent.name}</span><Tag color={statusInfo.color}>{statusInfo.label}</Tag>{isPlatform && <Tag color="gold">{t('display.platform')}</Tag>}</span>}
-          description={t('display.versionDescription', { version: agent.latestVersionNo ? `v${agent.latestVersionNo}` : '-', date: formatDateTime(agent.gmtCreate) })} />}
-        extra={
-          <Space>
+      {/* 原型 13 agent-head：返回 + AI 头像 + 名称/tags + 版本 sub，操作按钮右置 */}
+      <div style={{ marginBottom: 16 }}>
+        <div className="aw-detail-title" style={{ gap: 10 }}>
+          <PageBackButton to="/agents" label={t('actions.backList')} />
+          <Typography.Title level={5} className="aw-agent-head-name" style={{ margin: 0, fontSize: 16, lineHeight: '24px', minWidth: 0, overflowWrap: 'anywhere' }}>
+            <AiIdentity name={agent.name} avatar icon />
+          </Typography.Title>
+          <StatusTag dot label={statusInfo.label} colorKey={statusInfo.colorKey} />
+          {!isPlatform && <StatusTag label={t('display.standard')} colorKey="outline" />}
+          {isPlatform && <StatusTag label={t('display.platform')} colorKey="violet" />}
+          <Space style={{ marginLeft: 'auto' }}>
             {agent.status === 'ONLINE' && !isPlatform && (
               <Popconfirm
                 title={t('display.confirmOffline')}
@@ -298,7 +310,7 @@ export function AgentDetailPage() {
                   handleOnline();
                 }}
               >
-                <Button icon={<PlayCircleOutlined aria-hidden />}>{t('display.online')}</Button>
+                <Button icon={<AwStrokeIcon name="play" />}>{t('display.online')}</Button>
               </Popconfirm>
             )}
             {agent.status !== 'ONLINE' && !isPlatform && (
@@ -313,17 +325,19 @@ export function AgentDetailPage() {
                   handleDelete();
                 }}
               >
-                <Button danger icon={<DeleteOutlined aria-hidden />}>{t('display.delete')}</Button>
+                <Button danger icon={<AwStrokeIcon name="trash" />}>{t('display.delete')}</Button>
               </Popconfirm>
             )}
-            <Button type="primary" icon={<EditOutlined aria-hidden />}
+            <Button type="primary" icon={<AwStrokeIcon name="edit" />}
               onClick={() => accessCommand('READ_WRITE', t('display.editAction'), () => navigate(`/agents/${agentId}/edit`))}>
               {t('display.editConfig')}
             </Button>
           </Space>
-        }
-      >
-      </Card>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--aw-text-3)', marginTop: 4 }}>
+          {t('display.versionDescription', { version: agent.latestVersionNo ? `v${agent.latestVersionNo}` : '-', date: formatDateTime(agent.gmtCreate) })}
+        </div>
+      </div>
 
 
       {actionFeedback != null && (
@@ -378,7 +392,8 @@ export function AgentDetailPage() {
       )}
 
       {draftDiffOpen && draftVersionNo != null && (
-        <Card size="small" title={t('display.diffTitle', { version: draftVersionNo })} style={{ marginBottom: 16 }}>
+        <div className="aw-agent-sec aw-agent-detail-diff" data-sec="diff">
+          <div className="aw-agent-sec-title">{t('display.diffTitle', { version: draftVersionNo })}</div>
           {!draftVersion || draftBaseLoading ? (
             <Spin style={{ display: 'block', margin: '24px auto' }} />
           ) : (
@@ -390,126 +405,146 @@ export function AgentDetailPage() {
               sdlcNameOf={sdlcNameOf}
             />
           )}
-        </Card>
+        </div>
       )}
-
-      <Card title={t('display.identity')} style={{ marginBottom: 16 }}>
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }} data-testid="agent-attributes">
-            <NamedAttribute label={t('fields.roleName')}>
-              {getAgentRoleLabel(agent.roleCode, agent.roleName) || <Text type="secondary">{t('display.notConfigured')}</Text>}
-            </NamedAttribute>
-            <NamedAttribute label={t('fields.roleCode')}>
-              {agent.roleCode || <Text type="secondary">{t('display.notConfigured')}</Text>}
-            </NamedAttribute>
-            <NamedAttribute label={t('fields.evolution')}>
-              {getEvolutionModeLabel(agent.evolutionMode)}
-            </NamedAttribute>
-            <NamedAttribute label={t('fields.sdlc')}>
-              {agent.sdlcId == null ? (
-                <Text type="secondary">{t('display.notBound')}</Text>
-              ) : (
-                <Link to={`/sdlcs/${agent.sdlcId}`}>{sdlcLabel(agent.sdlcId, sdlcName)}</Link>
-              )}
-            </NamedAttribute>
-            <NamedAttribute label={t('display.executor')}>
-              {agent.executorTotalCount == null ? (
-                <Text type="secondary">{t('display.executorUnknown')}</Text>
-              ) : agent.executorTotalCount === 0 ? (
-                <Text type="secondary">{t('display.executorNone')}</Text>
-              ) : (
-                <Link to={`/executors?agentId=${agentId}&view=agent`}>
-                  {t('display.onlineRatio', { online: agent.executorOnlineCount ?? 0, total: agent.executorTotalCount })}
-                </Link>
-              )}
-            </NamedAttribute>
-          </div>
-          {!!agent.squadNames?.length && (
-            <Space size={8} wrap>
-              {agent.squadNames.map((name, i) => <Tag key={name + i} color="cyan">{name}</Tag>)}
-            </Space>
-          )}
-          {agent.officialConfiguration && (
-            <Space wrap>
-              <Typography.Text>{t('display.officialCapabilities')}</Typography.Text>
-              {agent.officialConfiguration.capabilities.map(capability => (
-                <Tag key={capability.id}>{capability.name}</Tag>
-              ))}
-            </Space>
-          )}
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            <AgentIdentitySection title="SOUL.md" content={agent.officialConfiguration?.businessBackground ?? agent.businessBackground} />
-            <AgentIdentitySection title="AGENT.md" content={agent.officialConfiguration?.responsibilities ?? agent.responsibilities} />
-          </div>
-        </Space>
-      </Card>
 
       <AgentStatCards workitems={workitems} memoryCount={memories.length} />
 
-      <Card>
-        <Tabs
-          items={[
-            {
-              key: 'workitems',
-              label: t('display.workitems'),
-              children: <AgentWorkitemList agentId={agentId} />,
-            },
-            {
-              key: 'repos',
-              label: t('display.repositoryTab', { suffix: countSuffix(onlineVersion?.repoPerms?.length) }),
-              children: isPlatform ? (
-                <Alert
-                  type="info" showIcon
-                  message={t('repository.platformTitle')}
-                  description={t('repository.platformHint')}
-                />
-              ) : (
-                <Table rowKey="repoId" size="small" columns={repoPermColumns}
-                  dataSource={onlineVersion?.repoPerms ?? []} pagination={false}
-                  loading={versionDetailLoading}
-                  locale={{ emptyText: <EmptyHint text={t('display.emptyRepos')} /> }} />
-              ),
-            },
-            {
-              key: 'skills',
-              label: t('display.capabilityTab', { suffix: countSuffix(onlineVersion?.skills?.length) }),
-              children: (
-                <Table rowKey="skillId" size="small" columns={skillColumns}
-                  dataSource={onlineVersion?.skills ?? []} pagination={false}
-                  loading={versionDetailLoading}
-                  locale={{ emptyText: <EmptyHint text={t('display.emptySkills')} /> }} />
-              ),
-            },
-            {
-              key: 'envvars',
-              label: t('display.environmentTab', { suffix: countSuffix(agent.environmentVariables?.length) }),
-              children: (
-                <Table rowKey="id" size="small" columns={environmentVariableColumns}
-                  dataSource={agent.environmentVariables ?? []} pagination={false}
-                  locale={{ emptyText: <EmptyHint text={t('environment.empty')} /> }} />
-              ),
-            },
-            {
-              key: 'versions',
-              label: t('display.versions'),
-              children: (
-                <Table rowKey="id" columns={versionColumns} dataSource={versions}
-                  pagination={{
-                    current: versionPageNo,
-                    pageSize: versionPageSize,
-                    total: versions.length,
-                    onChange: (nextPage, nextSize) => {
+      <div className="aw-agent-sec" data-sec="identity">
+        <div className="aw-agent-sec-title">{t('display.identity')}</div>
+        <div className="aw-id-grid" data-testid="agent-attributes">
+          <NamedAttribute label={t('fields.roleName')}>
+            {getAgentRoleLabel(agent.roleCode, agent.roleName) || <Text type="secondary">{t('display.notConfigured')}</Text>}
+          </NamedAttribute>
+          <NamedAttribute label={t('fields.roleCode')}>
+            {agent.roleCode ? <span style={{ fontFamily: 'var(--aw-mono)' }}>{agent.roleCode}</span> : <Text type="secondary">{t('display.notConfigured')}</Text>}
+          </NamedAttribute>
+          <NamedAttribute label={t('fields.evolution')}>
+            {getEvolutionModeLabel(agent.evolutionMode)}
+          </NamedAttribute>
+          <NamedAttribute label={t('fields.sdlc')}>
+            {agent.sdlcId == null ? (
+              <Text type="secondary">{t('display.notBound')}</Text>
+            ) : (
+              <Link to={`/sdlcs/${agent.sdlcId}`}>{sdlcLabel(agent.sdlcId, sdlcName)}</Link>
+            )}
+          </NamedAttribute>
+          <NamedAttribute label={t('display.executor')}>
+            {agent.executorTotalCount == null ? (
+              <Text type="secondary">{t('display.executorUnknown')}</Text>
+            ) : agent.executorTotalCount === 0 ? (
+              <Text type="secondary">{t('display.executorNone')}</Text>
+            ) : (
+              <Link to={`/executors?agentId=${agentId}&view=agent`}>
+                {t('display.onlineRatio', { online: agent.executorOnlineCount ?? 0, total: agent.executorTotalCount })}
+              </Link>
+            )}
+          </NamedAttribute>
+        </div>
+        {/* Tags are maintained inline in the list; the detail page only mirrors the current value. */}
+        <div className="aw-agent-tags-row" data-testid="agent-detail-tags-row">
+          <div className="aw-dk">{t('tags.title')}</div>
+          <div className="aw-dv">
+            <AgentTagList
+              systemTags={agent.systemTags}
+              customTags={agent.customTags}
+              emptyText={t('tags.emptyDetail')}
+              testId="agent-detail-tags"
+            />
+          </div>
+        </div>
+        {!!agent.squadNames?.length && (
+          <Space size={6} wrap style={{ display: 'flex', marginTop: 10 }}>
+            {agent.squadNames.map((name, i) => <StatusTag key={name + i} size="sm" label={name} colorKey="gray" />)}
+          </Space>
+        )}
+        {agent.officialConfiguration && (
+          <Space wrap style={{ display: 'flex', marginTop: 10 }}>
+            <Typography.Text>{t('display.officialCapabilities')}</Typography.Text>
+            {agent.officialConfiguration.capabilities.map(capability => (
+              <Tag key={capability.id}>{capability.name}</Tag>
+            ))}
+          </Space>
+        )}
+        <AgentIdentitySection title={t('diff.group.soul')} content={agent.officialConfiguration?.businessBackground ?? agent.businessBackground} />
+        <AgentIdentitySection title={t('diff.group.agentMd')} content={agent.officialConfiguration?.responsibilities ?? agent.responsibilities} />
+      </div>
+
+      <Tabs
+        className="aw-agent-detail-tabs"
+        items={[
+          {
+            key: 'workitems',
+            label: t('display.workitems'),
+            children: <AgentWorkitemList agentId={agentId} />,
+          },
+          {
+            key: 'config',
+            label: t('display.configTab'),
+            children: (
+              <>
+                <div className="aw-agent-sec" data-sec="repo">
+                  <div className="aw-agent-sec-title">
+                    {t('repository.title')}
+                    {!isPlatform && onlineVersion && <span className="aw-agent-sec-count">{onlineVersion.repoPerms?.length ?? 0}</span>}
+                  </div>
+                  {isPlatform ? (
+                    <div className="aw-agent-sec-desc"><b>{t('repository.platformTitle')}</b>{t('repository.platformHint')}</div>
+                  ) : (
+                    <Table rowKey="repoId" size="small" columns={repoPermColumns}
+                      dataSource={onlineVersion?.repoPerms ?? []} pagination={false}
+                      loading={versionDetailLoading}
+                      locale={{ emptyText: <EmptyHint text={t('display.emptyRepos')} /> }} />
+                  )}
+                </div>
+                <div className="aw-agent-sec" data-sec="capability">
+                  <div className="aw-agent-sec-title">
+                    {t('capability.title')}
+                    {onlineVersion && <span className="aw-agent-sec-count">{onlineVersion.skills?.length ?? 0}</span>}
+                  </div>
+                  <Table rowKey="skillId" size="small" columns={skillColumns}
+                    dataSource={onlineVersion?.skills ?? []} pagination={false}
+                    loading={versionDetailLoading}
+                    locale={{ emptyText: <EmptyHint text={t('display.emptySkills')} /> }} />
+                </div>
+                <div className="aw-agent-sec" data-sec="env">
+                  <div className="aw-agent-sec-title">
+                    {t('environment.title')}
+                    <span className="aw-agent-sec-count">{agent.environmentVariables?.length ?? 0}</span>
+                  </div>
+                  <Table rowKey="id" size="small" columns={environmentVariableColumns}
+                    dataSource={agent.environmentVariables ?? []} pagination={false}
+                    locale={{ emptyText: <EmptyHint text={t('environment.empty')} /> }} />
+                </div>
+              </>
+            ),
+          },
+          {
+            key: 'versions',
+            label: t('display.versions'),
+            children: (
+              <TableCard
+                flush
+                footer={
+                  <TableFooter
+                    total={versions.length}
+                    page={versionPageNo}
+                    pageSize={versionPageSize}
+                    totalText={t('display.total', { count: versions.length })}
+                    onPageChange={(nextPage, nextSize) => {
                       setVersionPageNo(nextPage);
                       if (nextSize !== versionPageSize) setVersionPageSize(nextSize);
-                    },
-                    showSizeChanger: true,
-                    showTotal: (count) => t('display.total', { count }),
-                  }} />
-              ),
-            },
-          ]}
-        />
-      </Card>
+                    }}
+                    onPageSizeChange={setVersionPageSize}
+                  />
+                }
+              >
+                <Table rowKey="id" columns={versionColumns} dataSource={versions} pagination={false} />
+              </TableCard>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

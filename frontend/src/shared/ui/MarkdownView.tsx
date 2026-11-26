@@ -21,6 +21,8 @@ interface MarkdownViewProps {
   artifacts?: Artifact[];
   onArtifactClick?: (artifact: Artifact) => void;
   copyCodeBlocks?: boolean;
+  /** 相对链接（如 MEMORY.md 里指向同目录 .md 的链接）交给调用方在应用内处理；返回 null 表示解析不到目标，降级为纯文本。 */
+  resolveRelativeLink?: (href: string) => (() => void) | null;
 }
 
 export const markdownAllowedElements = [
@@ -126,7 +128,7 @@ function mermaidSource(children: unknown): string | null {
   return childrenText(props.children).replace(/\r?\n$/, '');
 }
 
-export const MarkdownView = memo(function MarkdownView({ content, className, mentionNames, artifacts, onArtifactClick, copyCodeBlocks = false }: MarkdownViewProps) {
+export const MarkdownView = memo(function MarkdownView({ content, className, mentionNames, artifacts, onArtifactClick, copyCodeBlocks = false, resolveRelativeLink }: MarkdownViewProps) {
   const { t } = useTranslation('shared');
   const plainText = (content?.length ?? 0) > 100_000;
   const renderedContent = useMemo(() => {
@@ -183,9 +185,16 @@ export const MarkdownView = memo(function MarkdownView({ content, className, men
         components={{
           // 链接统一在新标签页打开，避免把读者带离当前页面（如工单评论）；
           // 显式属性写在展开之后，覆盖原始 HTML 已声明的 target/rel，保证取值一致。
-          a: ({ node: _node, href, children, ...props }) => (
-            <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-          ),
+          // 相对链接交给调用方在应用内解析（如 MEMORY.md 指向同目录记忆文档），解析不到就降级为纯文本，不做无效跳转。
+          a: ({ node: _node, href, children, ...props }) => {
+            if (resolveRelativeLink && href && !/^(?:[a-z][a-z0-9+.-]*:|\/|#)/i.test(href)) {
+              const open = resolveRelativeLink(href);
+              return open
+                ? <button type="button" className="aw-markdown-relative-link" onClick={open}>{children}</button>
+                : <span className="aw-markdown-unresolved-link">{children}</span>;
+            }
+            return <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+          },
           input: ({ node: _node, checked }) => <input type="checkbox" checked={checked} disabled aria-label={checked ? t('markdown.completed') : t('markdown.todo')} />,
           // pre 的 UA 默认 white-space:pre 会关闭折行，外层 div 的 overflowWrap/wordBreak
           // 因此对代码块整体失效，超长行会溢出正文右边界。这里只把溢出收敛成块内横向滚动。

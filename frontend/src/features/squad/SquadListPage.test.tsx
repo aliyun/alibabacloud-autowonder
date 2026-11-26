@@ -72,17 +72,22 @@ describe('SquadListPage', () => {
         });
       }),
     );
-    renderPage();
+    const { container } = renderPage();
     expect(await screen.findByText('Team Alpha')).toBeInTheDocument();
     expect(screen.getByText('Frontend squad')).toBeInTheDocument();
-    expect(screen.getByText('3 个数字员工')).toBeInTheDocument();
-    expect(screen.getByText('2 类角色')).toBeInTheDocument();
-    expect(screen.getByText('1/2 在线')).toBeInTheDocument();
-    expect(screen.getByText('1 个 SDLC')).toBeInTheDocument();
-    expect(screen.getByText('新建小队')).toBeInTheDocument();
-    expect(screen.getByText('成员')).toBeInTheDocument();
-    expect(screen.getByText('编辑')).toBeInTheDocument();
-    expect(screen.getByText('删除')).toBeInTheDocument();
+    const card = container.querySelector('.squad-summary-card') as HTMLElement;
+    const metrics = [...card.querySelectorAll('.squad-metric')].map((metric) => metric.textContent);
+    expect(metrics).toEqual(['数字员工3', '角色2', 'SDLC1']);
+    expect(within(card).getByText('执行器 1/2 在线')).toBeInTheDocument();
+    const createButton = screen.getByRole('button', { name: '新建小队' });
+    expect(createButton).toHaveTextContent(/^新建$/);
+    const toolbar = createButton.closest('.aw-toolbar') as HTMLElement;
+    expect(within(toolbar).getByRole('button', { name: /刷新/ })).toBeInTheDocument();
+    expect(within(toolbar).getByText(/^小队总数/)).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: '查看小队 Team Alpha' })).toBeInTheDocument();
+    for (const name of ['成员', '编辑', '复制到工作空间', '删除']) {
+      expect(within(card).getByRole('button', { name })).toBeInTheDocument();
+    }
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
@@ -120,10 +125,10 @@ describe('SquadListPage', () => {
       }),
     );
 
-    renderPage();
+    const { container } = renderPage();
 
     expect(await screen.findByText('AutoWonder项目开发组')).toBeInTheDocument();
-    expect(screen.getByText('0 个数字员工')).toBeInTheDocument();
+    expect(container.querySelector('.squad-metric')).toHaveTextContent('数字员工0');
   });
 
   it('opens a visual squad detail modal with member role and SDLC details', async () => {
@@ -166,17 +171,17 @@ describe('SquadListPage', () => {
     renderPage();
 
     expect(await screen.findByText('Team Alpha')).toBeInTheDocument();
-    await user.click(screen.getByText('详情'));
+    await user.click(screen.getByRole('button', { name: /^查看小队/ }));
 
-    expect(await screen.findByText('数字员工阵容')).toBeInTheDocument();
-    expect(screen.getByText('前端 Alpha')).toBeInTheDocument();
+    expect(await screen.findByText('SDLC 流程')).toBeInTheDocument();
+    expect(screen.getAllByText('前端 Alpha').length).toBeGreaterThan(0);
     expect(screen.getAllByText('前端开发工程师').length).toBeGreaterThan(0);
     expect(screen.getByText('负责页面实现、组件拆分、接口联调')).toBeInTheDocument();
-    expect(screen.getByText('前端标准流')).toBeInTheDocument();
+    expect(screen.getAllByText('前端标准流').length).toBeGreaterThan(0);
     expect(screen.getByText('需求澄清')).toBeInTheDocument();
     expect(screen.getByText('开发实现')).toBeInTheDocument();
-    expect(screen.getByText('测试 Beta')).toBeInTheDocument();
-    expect(screen.getByText('质量保障流')).toBeInTheDocument();
+    expect(screen.getAllByText('测试 Beta').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('质量保障流').length).toBeGreaterThan(0);
     expect(screen.getByText('测试设计')).toBeInTheDocument();
     expect(screen.getByText('回归验证')).toBeInTheDocument();
   });
@@ -229,7 +234,7 @@ describe('SquadListPage', () => {
     // 卡片上出现 Debug 标记
     expect(screen.getByText('Debug')).toBeInTheDocument();
 
-    await user.click(screen.getByText('编辑'));
+    await user.click(screen.getByRole('button', { name: '编辑' }));
     const debugSwitch = await screen.findByTestId('debug-log-switch');
     expect(debugSwitch).toHaveAttribute('aria-checked', 'true');
 
@@ -254,7 +259,7 @@ describe('SquadListPage', () => {
     );
 
     renderPage();
-    await user.click(screen.getByText('新建小队'));
+    await user.click(screen.getByRole('button', { name: /新建小队/ }));
     await screen.findByLabelText('小队名称');
 
     expect(screen.queryByTestId('debug-log-switch')).not.toBeInTheDocument();
@@ -289,7 +294,7 @@ describe('SquadListPage', () => {
     await screen.findByText('Team Alpha');
     expect(screen.queryByText('Debug')).not.toBeInTheDocument();
 
-    await user.click(screen.getByText('编辑'));
+    await user.click(screen.getByRole('button', { name: '编辑' }));
     const debugSwitch = await screen.findByTestId('debug-log-switch');
     expect(debugSwitch).toHaveAttribute('aria-checked', 'false');
 
@@ -327,19 +332,18 @@ describe('SquadListPage', () => {
         },
       })),
       http.get('/api/squads/1/members', () => HttpResponse.json({
-        success: true, code: '0', message: '', traceId: null, data: [],
+        success: true, code: '0', message: '', traceId: null,
+        data: [{ agentId: 10, agentName: 'Alpha', roleCode: 'FRONTEND_DEV', roleName: '', sdlcId: null, sdlcSteps: [] }],
       })),
     );
 
-    renderPageAt('/agents?tab=squads&squadId=1');
+    renderPageAt('/squads?squadId=1');
 
     // Squad tags on the agent / SDLC / executor pages link here; no click is involved.
     expect(await screen.findByText('dev-machine-01')).toBeInTheDocument();
-    expect(screen.getByText('关联执行器')).toBeInTheDocument();
     // Consumed once matched, otherwise closing the modal would immediately reopen it.
-    // Only squadId is consumed; the hub keeps its tab param so the pane stays put.
     await waitFor(() => expect(screen.getByTestId('location-search')).not.toHaveTextContent('squadId'));
-    expect(screen.getByTestId('location-search')).toHaveTextContent('tab=squads');
+    expect(screen.getByTestId('location-search')).toHaveTextContent('(empty)');
   });
 
   it('resolves a ?squadId= deep link whose squad sits beyond the first page', async () => {
@@ -374,11 +378,12 @@ describe('SquadListPage', () => {
         });
       }),
       http.get('/api/squads/25/members', () => HttpResponse.json({
-        success: true, code: '0', message: '', traceId: null, data: [],
+        success: true, code: '0', message: '', traceId: null,
+        data: [{ agentId: 20, agentName: 'Gamma', roleCode: 'QA', roleName: '', sdlcId: null, sdlcSteps: [] }],
       })),
     );
 
-    renderPageAt('/agents?tab=squads&squadId=25');
+    renderPageAt('/squads?squadId=25');
 
     // 第 1 页的 20 行里没有 id=25，只能按 id 直取详情；旧实现在这里静默什么都不做。
     expect(await screen.findByText('paged-executor')).toBeInTheDocument();
@@ -387,8 +392,7 @@ describe('SquadListPage', () => {
 
     // 分页已移除：所有小队一次拉全，第 2 页的行直接可见，参数也不会写回 URL。
     expect(await screen.findByText('小队 21')).toBeInTheDocument();
-    expect(screen.getByTestId('location-search')).toHaveTextContent('tab=squads');
-    expect(screen.getByTestId('location-search')).not.toHaveTextContent('squadId');
+    expect(screen.getByTestId('location-search')).toHaveTextContent('(empty)');
   });
 
   it('warns instead of failing silently when a deep-linked squad cannot be resolved', async () => {
@@ -408,7 +412,7 @@ describe('SquadListPage', () => {
       })),
     );
 
-    renderPageAt('/agents?tab=squads&squadId=999');
+    renderPageAt('/squads?squadId=999');
 
     // 深链失败不得阻塞列表页，也不得静默：给出可见提示，且参数照样被消费。
     expect(await screen.findByText('Team Alpha')).toBeInTheDocument();
@@ -417,7 +421,7 @@ describe('SquadListPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('shows a placeholder when the squad derives no executors', async () => {
+  it('shows placeholders when the squad has no members or SDLC flows', async () => {
     const user = userEvent.setup();
     server.use(
       http.get('/api/squads', () => HttpResponse.json({
@@ -435,10 +439,10 @@ describe('SquadListPage', () => {
 
     renderPage();
     expect(await screen.findByText('Team Beta')).toBeInTheDocument();
-    await user.click(screen.getByText('详情'));
+    await user.click(screen.getByRole('button', { name: /^查看小队/ }));
 
-    expect(await screen.findByText('关联执行器')).toBeInTheDocument();
-    expect(screen.getByText('暂无执行器')).toBeInTheDocument();
+    expect(await screen.findByText('暂无成员')).toBeInTheDocument();
+    expect(screen.getByText('暂无 SDLC 流程')).toBeInTheDocument();
   });
 
   it('opens the copy modal from the squad card for a write member', async () => {
@@ -526,7 +530,7 @@ describe('routed squad localization', () => {
       await responseReady;
       return HttpResponse.json({ success: true, data: { id: 9, ...payload as object } });
     }));
-    const router = createMemoryRouter([{ path: '/agents', element: <SquadListPage /> }], { initialEntries: ['/agents?tab=squads'] });
+    const router = createMemoryRouter([{ path: '/squads', element: <SquadListPage /> }], { initialEntries: ['/squads'] });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
     await userEvent.click(await screen.findByRole('button', { name: /新建小队$/ }));
@@ -554,7 +558,7 @@ describe('routed squad localization', () => {
 
 
 function renderSquadRoute() {
-  const router = createMemoryRouter([{ path: '/agents', element: <SquadListPage /> }], { initialEntries: ['/agents?tab=squads'] });
+  const router = createMemoryRouter([{ path: '/squads', element: <SquadListPage /> }], { initialEntries: ['/squads'] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
 }
@@ -572,8 +576,8 @@ describe('routed squad detail and member localization', () => {
       http.get('/api/squads', () => HttpResponse.json({ success: true, data: [{ id: 1, name: '<b>自定义小队</b>', memberCount: 3 }] })),
       http.get('/api/squads/1', () => HttpResponse.json({ success: true, data: {
         id: 1, name: '<b>自定义小队</b>', sdlcs: [], executors: [
-          { id: 7, name: '原始执行器', agentName: null, status: 'ONLINE' },
-          { id: 8, name: '未来执行器', agentName: '原始名字', status: 'FUTURE_STATE' },
+          { id: 7, agentId: 10, name: '原始执行器', agentName: null, status: 'ONLINE' },
+          { id: 8, agentId: 11, name: '未来执行器', agentName: '原始名字', status: 'FUTURE_STATE' },
         ],
       } })),
       http.get('/api/squads/1/members', () => HttpResponse.json({ success: true, data: [
@@ -583,24 +587,23 @@ describe('routed squad detail and member localization', () => {
       ] })),
     );
     renderSquadRoute();
-    await userEvent.click(await screen.findByRole('button', { name: /详情$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^查看小队/ }));
     const dialog = await screen.findByRole('dialog');
     const zhRole = within(dialog).getAllByText('前端开发工程师', { selector: 'span' })[0];
     const customRole = within(dialog).getAllByText('Frontend developer', { selector: 'span' })[0];
-    const rawFlow = within(dialog).getByText('<b>原始流程</b>');
+    const rawFlow = within(dialog).getByText('<b>原始流程</b>', { selector: '.squad-flow-name' });
     await act(async () => { await i18n.changeLanguage('en-US'); });
     expect(within(dialog).getAllByText('Frontend developer', { selector: 'span' })).toEqual([zhRole, customRole]);
-    expect(zhRole.parentElement).toHaveTextContent('1');
-    expect(customRole.parentElement).toHaveTextContent('1');
-    expect(within(dialog).getByText('<b>原始流程</b>')).toBe(rawFlow);
-    expect(within(dialog).getByText('Frontend developer / Frontend developer')).toBeInTheDocument();
+    expect(within(dialog).getByText('<b>原始流程</b>', { selector: '.squad-flow-name' })).toBe(rawFlow);
+    expect(within(dialog).getByText('<img>原始员工, 自定义员工')).toBeInTheDocument();
+    expect(within(dialog).getByText('Not bound')).toBeInTheDocument();
     expect(within(dialog).getByText('<img>原始员工')).toBeInTheDocument();
     expect(within(dialog).getByText('<b>原始职责</b>')).toBeInTheDocument();
     expect(within(dialog).getByText('<i>原始步骤</i>')).toBeInTheDocument();
     expect(within(dialog).getByText('Agent', { exact: true })).toBeInTheDocument();
-    expect(within(dialog).getByText('Unknown Agent')).toBeInTheDocument();
-    expect(within(dialog).getByText('Online')).toBeInTheDocument();
+    expect(within(dialog).getByText('原始执行器')).toBeInTheDocument();
     expect(within(dialog).getByText('FUTURE_STATE')).toBeInTheDocument();
+    expect(within(dialog).getByText('No Executor')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
     await act(async () => { await i18n.changeLanguage('zh-CN'); });
     expect(within(dialog).getByText('前端开发工程师', { selector: 'span' })).toBe(zhRole);
@@ -628,7 +631,7 @@ describe('routed squad detail and member localization', () => {
     await userEvent.click(await screen.findByRole('button', { name: /成员$/ }));
     const combo = await screen.findByRole('combobox', { name: '选择数字员工添加到小队' });
     await userEvent.click(combo);
-    await userEvent.click(await screen.findByText('<img>原始员工', { selector: '.ant-select-item-option-content' }));
+    await userEvent.click(await screen.findByText('<img>原始员工', { selector: '.squad-opt-name' }));
     await act(async () => { await i18n.changeLanguage('en-US'); });
     expect(screen.getByRole('combobox', { name: 'Select an Agent to add to the squad' })).toBe(combo);
     expect(combo.closest('.ant-select')).toHaveTextContent('<img>原始员工');

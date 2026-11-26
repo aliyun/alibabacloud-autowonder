@@ -9,4 +9,5 @@ public class CreateSdlcRequest {
     private String name;
     private String description;
     private String workType;
+    private boolean stageTimingEnabled;
 }

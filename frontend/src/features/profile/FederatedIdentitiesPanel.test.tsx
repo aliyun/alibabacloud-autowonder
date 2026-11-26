@@ -74,6 +74,14 @@ describe('FederatedIdentitiesPanel', () => {
     useAuthStore.getState().clear();
     server.use(
       http.get('/api/users/me/im-identities', () => HttpResponse.json(imIdentityPayload())),
+      // 设置页头部会拉取资料与邮箱验证策略，与本页用例无关但要避免 MSW 未处理请求
+      http.get('/api/users/me/profile', () => HttpResponse.json(payload({
+        id: 1, username: 'alice', nickname: '爱丽丝', email: 'alice@corp.example', phone: null, emailVerified: false,
+      }))),
+      http.get('/api/auth/email-verification/policy', () => HttpResponse.json(payload({
+        verificationEnabled: false, suffixRestrictionEnabled: false, allowedSuffixes: [],
+        codeLength: 6, codeTtlSeconds: 600, resendIntervalSeconds: 60, maxAttempts: 5,
+      }))),
     );
   });
 
@@ -96,7 +104,7 @@ describe('FederatedIdentitiesPanel', () => {
     expect(screen.queryByTestId('federated-bind-7')).not.toBeInTheDocument();
     expect(await screen.findByTestId('federated-bind-9')).toBeInTheDocument();
     expect(screen.getByText('绑定 Contoso')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '企业身份' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /企业身份/ })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('shows the empty hint and still offers every enabled provider', async () => {

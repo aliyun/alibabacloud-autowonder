@@ -1,8 +1,9 @@
 import { formatDateTime } from '@/shared/i18n/format';
 import { Trans, useTranslation } from 'react-i18next';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { CommentRobotIcon } from './CommentRobotIcon';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { MarkdownView } from '@/shared/ui/MarkdownView';
 import { CopyContentMenu } from '@/shared/ui/CopyContentMenu';
 import type { Artifact, CommentInteraction, RuntimeTraceEvent } from '@/shared/types/workitem';
@@ -14,6 +15,9 @@ import { FailureHistoryPanel } from './FailureHistoryPanel';
 import './CommentInteractionCard.css';
 
 const ACTIVITY_TIME_FORMAT: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+// 与评论正文折叠同阈值：回复渲染高度超过限高 + 余量时整卡默认折叠成头部一行。
+const REPLY_FOLD_MAX = 220;
+const REPLY_FOLD_GUARD = 24;
 
 type Interaction = CommentInteraction;
 export const CommentInteractionCard = memo(function CommentInteractionCard({ interaction, createdAt, artifacts, onArtifactClick, actions }: {
@@ -31,6 +35,27 @@ export const CommentInteractionCard = memo(function CommentInteractionCard({ int
   const failed = interaction.status === 'FAILED' || traceTerminal === 'dispatch.failed';
   const canceled = interaction.status === 'CANCELED' || traceTerminal === 'dispatch.canceled';
   const [expanded, setExpanded] = useState(false);
+  // 默认折叠：长回复（foldable）初始即收起；短回复不受 folded 影响。
+  const [replyFolded, setReplyFolded] = useState(true);
+  const [replyFoldable, setReplyFoldable] = useState(false);
+  const replyHidden = replyFoldable && replyFolded;
+  const answerRef = useRef<HTMLDivElement>(null);
+  const answerOverflows = (element: HTMLDivElement | null) =>
+    element != null && element.isConnected && element.scrollHeight > REPLY_FOLD_MAX + REPLY_FOLD_GUARD;
+  // 回复内容同步渲染，挂载即可测高；useLayoutEffect 在首帧绘制前折叠，无闪烁。
+  useLayoutEffect(() => {
+    setReplyFoldable(answerOverflows(answerRef.current));
+  }, [interaction.replyContent, artifacts]);
+  // 列宽变化（窗口缩放、侧栏折叠、主列被挤压）后重测，避免挂载瞬间的宽度污染折叠判定。
+  useEffect(() => {
+    const element = answerRef.current;
+    if (element == null || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      setReplyFoldable(answerOverflows(answerRef.current));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [interaction.replyContent, artifacts, replyFolded]);
   const [events, setEvents] = useState<RuntimeTraceEvent[]>([]);
   const [loadError, setLoadError] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -91,6 +116,7 @@ export const CommentInteractionCard = memo(function CommentInteractionCard({ int
   const state = failed ? t('interaction.failed') : canceling ? t('interaction.ending')
     : canceled ? t('interaction.canceled') : active ? t('interaction.processing')
       : interaction.replyContent ? t('interaction.replied') : t('interaction.awaitingSync');
+  const stateTone = failed ? 'failed' : canceled ? '' : active ? 'active' : interaction.replyContent ? 'success' : '';
   const showLog = active || expanded;
   return <section className={`aw-comment-reply${failed ? ' aw-comment-reply--failed' : ''}`}
     data-testid={interaction.replyContent ? 'comment-interaction-reply' : 'comment-interaction-status'}>
@@ -99,9 +125,17 @@ export const CommentInteractionCard = memo(function CommentInteractionCard({ int
       <strong>{!active && !failed && !canceled
         ? <Trans ns="workitem" i18nKey="interaction.repliedBy" components={{ agent: <span>{interaction.targetAgentName}</span> }} />
         : interaction.targetAgentName}</strong>
-      <span className="aw-comment-state" role="status">{state}</span>
-      {interaction.replyContent && <CopyContentMenu contentMd={interaction.replyContent} tooltip={t('interaction.copyReply')} />}
+      <span className={`aw-comment-state${stateTone ? ` ${stateTone}` : ''}`} role="status">{state}</span>
+      {interaction.replyContent && <span className="aw-tlc-ops"><CopyContentMenu contentMd={interaction.replyContent} tooltip={t('interaction.copyReply')} /></span>}
+      {replyFoldable && <button type="button"
+        className={replyHidden ? 'aw-comment-fold' : 'aw-comment-fold aw-comment-fold--open'}
+        aria-expanded={!replyHidden}
+        onClick={() => setReplyFolded((value) => !value)}>
+        {replyHidden ? t('interaction.expandReply') : t('interaction.collapseReply')}
+        <AwStrokeIcon name="chev-d" />
+      </button>}
     </header>
+    {!replyHidden && (<>
     <div className="aw-comment-stage">
       <span>{failed ? t('interaction.replyFailed') : canceling ? t('interaction.endingHint')
         : canceled ? t('interaction.interactionCanceled') : active ? latest?.text || fallback
@@ -128,7 +162,7 @@ export const CommentInteractionCard = memo(function CommentInteractionCard({ int
     {/* stopPending also covers a normal cancel while the executor is still running; only a
         terminal execution means the platform ended it without stop confirmation. */}
     {interaction.stopPending && executionTerminal && <div className="aw-comment-stop-warning" role="status">{t('interaction.stopPending')}</div>}
-    {interaction.replyContent && <div className="aw-comment-answer"><MarkdownView content={interaction.replyContent} artifacts={artifacts} onArtifactClick={onArtifactClick} /></div>}
+    {interaction.replyContent && <div className="aw-comment-answer" ref={answerRef}><MarkdownView className="aw-feed-md" content={interaction.replyContent} artifacts={artifacts} onArtifactClick={onArtifactClick} /></div>}
     {failed && <div className="aw-comment-error">
       <p>{t('interaction.unconfirmed')}</p>
       <strong>{interaction.dispatchId ? t('interaction.underlyingErrorDispatch', { id: interaction.dispatchId }) : t('interaction.underlyingError')}</strong>
@@ -136,5 +170,6 @@ export const CommentInteractionCard = memo(function CommentInteractionCard({ int
         : errors.length ? <pre data-testid="comment-provider-error">{errors.join('\n\n')}</pre>
           : <p>{t('interaction.noError')}</p>}
     </div>}
+    </>)}
   </section>;
 });

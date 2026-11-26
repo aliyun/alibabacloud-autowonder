@@ -7,11 +7,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ParticipationTab } from './ParticipationTab';
-import { useForceRefreshParticipation, useHumanAgentParticipation } from '../hooks';
+import { useForceRefreshParticipation, useHumanAgentParticipation, useHumanAgentSlowTail } from '../hooks';
 import dayjs from 'dayjs';
-vi.mock('../hooks', () => ({ useHumanAgentParticipation: vi.fn(), useForceRefreshParticipation: vi.fn(() => ({ mutate: vi.fn() })) }));
-vi.mock('./SlowTailTable', () => ({ SlowTailTable: ({ workType }: { workType: string }) => <div data-testid="slow-tail" data-worktype={workType}>慢尾数据</div> }));
-vi.mock('./ParticipationChart', () => ({ default: () => <div>交互图表</div> }));
+vi.mock('../hooks', () => ({
+  useHumanAgentParticipation: vi.fn(),
+  useForceRefreshParticipation: vi.fn(() => ({ mutate: vi.fn() })),
+  useHumanAgentSlowTail: vi.fn(() => ({ data: { items: [] }, isLoading: false })),
+}));
 it('keeps the date control available when data is empty or fails and omits granularity', async () => {
   vi.mocked(useHumanAgentParticipation).mockReturnValue({ data: { available: false }, isLoading: false } as ReturnType<typeof useHumanAgentParticipation>);
   const { container, rerender } = render(<ParticipationTab />);
@@ -45,7 +47,7 @@ it('renders only completion stat cards, labels the slow tail as top 10 and expos
   vi.mocked(useHumanAgentParticipation).mockReturnValue({ data, isLoading: false } as unknown as ReturnType<typeof useHumanAgentParticipation>);
   const { container } = render(<ParticipationTab />);
   expect(screen.getByText('50.0%')).toBeInTheDocument();
-  expect(container.querySelectorAll('.participation-stat')).toHaveLength(3);
+  expect(container.querySelectorAll('.participation-stat')).toHaveLength(4);
   expect(container.querySelector('.participation-stats')).not.toHaveTextContent('Agent 平均会话执行时长');
   expect(screen.getByText('Top 10')).toBeInTheDocument();
   await userEvent.hover(screen.getByRole('button', { name: '查看人机协作统计口径' }));
@@ -118,7 +120,7 @@ it('applies the work type filter to the whole tab and persists the selection', a
 
   const select = screen.getByRole('combobox', { name: '工单类型筛选' });
   expect(container.querySelector('.ant-select-selection-item')).toHaveTextContent('全部工单');
-  expect(container.querySelector('[data-testid="slow-tail"]')).toHaveAttribute('data-worktype', 'ALL');
+  expect(vi.mocked(useHumanAgentSlowTail).mock.calls.at(-1)).toEqual([expect.any(String), expect.any(String), 'ALL']);
 
   await userEvent.click(select);
   const labels = await waitFor(() => {
@@ -133,7 +135,7 @@ it('applies the work type filter to the whole tab and persists the selection', a
 
   await waitFor(() => expect(vi.mocked(useHumanAgentParticipation).mock.calls.at(-1))
     .toEqual([expect.any(String), expect.any(String), 'BUG']));
-  expect(container.querySelector('[data-testid="slow-tail"]')).toHaveAttribute('data-worktype', 'BUG');
+  expect(vi.mocked(useHumanAgentSlowTail).mock.calls.at(-1)).toEqual([expect.any(String), expect.any(String), 'BUG']);
   const storedKey = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
     .find(key => key?.endsWith(':participation.workType'));
   expect(storedKey).toBeTruthy();
@@ -163,7 +165,7 @@ it('shows the filtered empty state when the selected work type has no samples', 
 
   expect(screen.getByText('当前工单类型与日期范围下暂无完成样本')).toBeInTheDocument();
   expect(container.querySelector('.participation-stat')).toBeNull();
-  expect(container.querySelector('[data-testid="slow-tail"]')).toBeNull();
+  expect(screen.queryByText('慢尾工单')).toBeNull();
 });
 
 it('maps busy refresh rejections to the retry-later message and keeps the generic failure otherwise', async () => {

@@ -37,20 +37,20 @@ describe('ScheduledTaskDetailPage', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/scheduled-tasks/901']}><Routes><Route path="/scheduled-tasks/:id" element={<ScheduledTaskDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText('主干夜间回归')).toBeInTheDocument();
-    expect(screen.getByText('运行历史')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Run #10482' })).toHaveAttribute('href', '/scheduled-task-runs/10482');
-    expect(await screen.findByText('功能增量分析小队 (2)')).toBeInTheDocument();
-    expect(screen.getByText('功能增量分析员 (5)')).toBeInTheDocument();
+    const historyRegion = screen.getByText('运行历史').closest('[data-region="history"]') as HTMLElement;
+    expect(await within(historyRegion).findByRole('link', { name: 'Run #10482' })).toHaveAttribute('href', '/scheduled-task-runs/10482');
+    expect(await screen.findByText('功能增量分析小队')).toBeInTheDocument();
+    expect(screen.getByText('功能增量分析员')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '返回定时任务' })).toBeInTheDocument();
-    expect(screen.getAllByText('成功')).toHaveLength(10);
+    expect(within(historyRegion).getAllByText('成功')).toHaveLength(10);
     const pagination = document.querySelector('.ant-table-pagination') as HTMLElement;
     expect(pagination).toHaveClass('ant-table-pagination-right');
     const history = pagination.parentElement as HTMLElement;
     expect(history).toHaveStyle({ minHeight: '650px' });
     await user.click(within(pagination).getByTitle('2'));
-    expect(screen.getByRole('link', { name: 'Run #10482' })).toBeInTheDocument();
+    expect(within(historyRegion).getByRole('link', { name: 'Run #10482' })).toBeInTheDocument();
     finishSecondPage();
-    expect(await screen.findByRole('link', { name: 'Run #10492' })).toBeInTheDocument();
+    expect(await within(historyRegion).findByRole('link', { name: 'Run #10492' })).toBeInTheDocument();
     expect(history).toHaveStyle({ minHeight: '650px' });
     heightSpy.mockRestore();
   });
@@ -90,7 +90,8 @@ describe('ScheduledTaskDetailPage', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/scheduled-tasks/901']}><Routes><Route path="/scheduled-tasks/:id" element={<ScheduledTaskDetailPage />} /><Route path="/scheduled-tasks" element={<div>定时任务列表</div>} /></Routes></MemoryRouter></QueryClientProvider>);
 
-    await user.click(await screen.findByRole('button', { name: '删除' }));
+    await user.click(await screen.findByRole('button', { name: '更多操作' }));
+    await user.click(await screen.findByRole('menuitem', { name: /删除任务/ }));
     const titles = await screen.findAllByText('删除后不再调度，且不可恢复');
     const popup = titles[titles.length - 1].closest('.ant-popconfirm') ?? document;
     const buttons = popup.querySelectorAll('.ant-popconfirm-buttons button');
@@ -126,7 +127,7 @@ describe('ScheduledTaskDetailPage', () => {
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/scheduled-tasks/901']}><Routes><Route path="/scheduled-tasks/:id" element={<ScheduledTaskDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>);
 
     const artifactName = await screen.findByText('需求说明.md');
-    const artifactCard = artifactName.closest('.ant-card') as HTMLElement;
+    const artifactCard = artifactName.closest('[data-region="documents"]') as HTMLElement;
     await user.click(within(artifactCard).getByRole('button', { name: '删除' }));
     const titles = await screen.findAllByText('删除后不可恢复，同名文件可重新上传');
     const popup = titles[titles.length - 1].closest('.ant-popconfirm') ?? document;
@@ -136,7 +137,7 @@ describe('ScheduledTaskDetailPage', () => {
 
     await waitFor(() => expect(deletedUrl).toContain('/api/scheduled-tasks/901/documents/77'));
     expect(successSpy).toHaveBeenCalledWith('附件已删除');
-    expect(await screen.findByText('暂无产物')).toBeInTheDocument();
+    expect(await screen.findByText('暂无需求文档，可在编辑页上传')).toBeInTheDocument();
     successSpy.mockRestore();
   });
 
@@ -161,7 +162,7 @@ describe('ScheduledTaskDetailPage', () => {
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/scheduled-tasks/901']}><Routes><Route path="/scheduled-tasks/:id" element={<ScheduledTaskDetailPage />} /></Routes></MemoryRouter></QueryClientProvider>);
 
     const artifactName = await screen.findByText('需求说明.md');
-    const artifactCard = artifactName.closest('.ant-card') as HTMLElement;
+    const artifactCard = artifactName.closest('[data-region="documents"]') as HTMLElement;
     await user.click(within(artifactCard).getByRole('button', { name: '删除' }));
     const titles = await screen.findAllByText('删除后不可恢复，同名文件可重新上传');
     const popup = titles[titles.length - 1].closest('.ant-popconfirm') ?? document;
@@ -191,13 +192,18 @@ it('switches the cached detail policy, history and open confirmation while prese
   await act(() => i18n.changeLanguage('en-US'));
   expect(screen.getByRole('button', { name: 'Create run' })).toBeInTheDocument();
   expect(screen.getByText('Active')).toBeInTheDocument();
-  expect(screen.getByText('Isolated session / Skip this run')).toBeInTheDocument();
+  expect(screen.getByText('Isolated session')).toBeInTheDocument();
+  expect(screen.getByText('Skip this run')).toBeInTheDocument();
   expect(screen.getByText('Run the latest missed trigger')).toBeInTheDocument();
-  expect(screen.getByText('Timed out')).toBeInTheDocument();
+  expect(screen.getAllByText('Timed out').length).toBeGreaterThan(0);
   expect(screen.getByText('Catch-up')).toBeInTheDocument();
   expect(screen.getByText('CUSTOM')).toBeInTheDocument();
   expect(screen.getByText('toString')).toBeInTheDocument();
-  expect(screen.getByText('Succeeded 1/2 (50%)')).toBeInTheDocument();
+  const health = container.querySelector('[data-region="health"]') as HTMLElement;
+  expect(within(health).getByText('Success rate (30 days)')).toBeInTheDocument();
+  expect(within(health).getByText('50')).toHaveClass('is-warn');
+  expect(within(health).getByText(/^Succeeded/)).toHaveTextContent('Succeeded 1 / Completed 2');
+  expect(within(health).getByRole('link', { name: 'Run #7' })).toHaveAttribute('href', '/scheduled-task-runs/7');
   expect(screen.getByText('<b>任务名</b>')).toBeInTheDocument();
   expect(container.querySelector('b')).toBeNull();
   expect(screen.getByRole('heading', { name: '原始任务指令' })).toBeInTheDocument();

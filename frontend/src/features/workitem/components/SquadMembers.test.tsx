@@ -6,7 +6,7 @@ import { SquadMembers } from './SquadMembers';
 import type { Participant } from '@/shared/types/workitem';
 
 describe('SquadMembers', () => {
-  it('renders full agent identity and executor-derived online state', () => {
+  it('renders full agent identity and executor-derived online state', async () => {
     const participants: Participant[] = [
       {
         userId: 41,
@@ -35,11 +35,14 @@ describe('SquadMembers', () => {
     render(<SquadMembers participants={participants} />);
 
     expect(screen.getByText('Agent Dev')).toBeInTheDocument();
-    expect(screen.getByText(/工号: 41/)).toBeInTheDocument();
+    expect(screen.getByText('41 · 开发小队成员')).toBeInTheDocument();
     expect(screen.getByText('离线')).toBeInTheDocument();
     expect(screen.getByText('Agent CR')).toBeInTheDocument();
-    expect(screen.getByText(/工号: 42/)).toBeInTheDocument();
+    expect(screen.getByText('42 · 开发小队成员')).toBeInTheDocument();
     expect(screen.getByText('执行中')).toBeInTheDocument();
+    expect(screen.queryByText(/Executor:/)).not.toBeInTheDocument();
+    await userEvent.hover(screen.getByText('执行中', { selector: '.aw-task-status' }));
+    expect(await screen.findByText('Agent状态: 在线 · Executor: 执行中')).toBeInTheDocument();
   });
 
   it('separates human participants from development squad members', async () => {
@@ -72,19 +75,20 @@ describe('SquadMembers', () => {
 
     render(<SquadMembers participants={participants} />);
 
-    expect(screen.getByText('成员')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '数字员工成员' })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: '成员' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '数字员工' })).toBeInTheDocument();
     expect(screen.getByText('Agent Dev')).toBeInTheDocument();
     expect(screen.queryByText('蔡何')).not.toBeInTheDocument();
-    expect(screen.getByText(/Executor: 离线/)).toBeInTheDocument();
+    expect(screen.getByText('离线', { selector: '.aw-task-status' })).toBeInTheDocument();
+    expect(screen.getByLabelText('数字员工头像')).toHaveTextContent('A');
 
     await act(async () => {
-      await user.click(screen.getByRole('tab', { name: '真人参与者' }));
+      await user.click(screen.getByRole('tab', { name: '真人' }));
     });
 
     expect(await screen.findByText('蔡何')).toBeInTheDocument();
-    expect(screen.getByText('工号: 10000 · 真人')).toBeInTheDocument();
-    expect(screen.getByLabelText('真人参与者头像')).toContainElement(screen.getByLabelText('user'));
+    expect(screen.getByText('10000 · 真人')).toBeInTheDocument();
+    expect(screen.getByLabelText('真人参与者头像')).toHaveTextContent('蔡');
     expect(screen.queryByText('Agent Dev')).not.toBeInTheDocument();
     expect(screen.queryByText('离线')).not.toBeInTheDocument();
     expect(screen.queryByText(/Executor:/)).not.toBeInTheDocument();
@@ -101,16 +105,20 @@ it('switches coded participant identities and runtime statuses, preserving unkno
   const { container } = render(<SquadMembers participants={participants} />);
   await act(async () => { await i18n.changeLanguage('en-US'); });
   try {
-    expect(screen.getByText('ID: 1 · Squad member')).toBeInTheDocument();
-    expect(screen.getByText('Agent status: Pending review · Executor: Offline')).toBeInTheDocument();
-    expect(screen.getByText('ID: 2 · <em>我的身份</em>')).toBeInTheDocument();
-    expect(screen.getByText('CUSTOM_STATE', { selector: '.ant-tag' })).toBeInTheDocument();
-    expect(screen.getByText('Agent status: constructor · Executor: CUSTOM_STATE')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'Human participants' }));
-    expect(screen.getByText('ID: 3 · Human')).toBeInTheDocument();
+    expect(screen.getByText('1 · Squad member')).toBeInTheDocument();
+    expect(screen.getByText('Offline', { selector: '.aw-task-status' })).toBeInTheDocument();
+    expect(screen.getByText('2 · <em>我的身份</em>')).toBeInTheDocument();
+    expect(screen.getByText('CUSTOM_STATE', { selector: '.aw-task-status' })).toBeInTheDocument();
+    await userEvent.hover(screen.getByText('Offline', { selector: '.aw-task-status' }));
+    expect(await screen.findByText('Agent status: Pending review · Executor: Offline')).toBeInTheDocument();
+    await userEvent.hover(screen.getByText('CUSTOM_STATE', { selector: '.aw-task-status' }));
+    expect(await screen.findByText('Agent status: constructor · Executor: CUSTOM_STATE')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Agent avatar').map((el) => el.textContent)).toEqual(['员', '自']);
+    await userEvent.click(screen.getByRole('tab', { name: 'Humans' }));
+    expect(screen.getByText('3 · Human')).toBeInTheDocument();
     expect(screen.getByText('用户原名')).toBeInTheDocument();
     expect(container.querySelector('em')).toBeNull();
     await act(async () => { await i18n.changeLanguage('zh-CN'); });
-    expect(screen.getByText('工号: 3 · 真人')).toBeInTheDocument();
+    expect(screen.getByText('3 · 真人')).toBeInTheDocument();
   } finally { await act(async () => { await i18n.changeLanguage('zh-CN'); }); }
 });
