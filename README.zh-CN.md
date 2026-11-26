@@ -59,6 +59,8 @@ AutoWonder 源于阿里云内部的 AI 原生工程实践，**推动软件交付
 部署详情请参阅[社区运行指南](docs/community/README.md)和
 [阿里云部署 Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md)。
 
+版本亮点和升级注意事项请参阅[变更日志](CHANGELOG.md)。
+
 ## 开源许可证
 
 AutoWonder 社区版的原创代码和文档按 [MIT 许可证](LICENSE) 分发。

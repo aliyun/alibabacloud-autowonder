@@ -35,7 +35,7 @@ history, not in the published community tree.
 - `docs/community/environment-variable-operations.md`: encrypted environment variables and upgrade safeguards.
 - `docs/community/runtime-configuration.md`: optional runtime tuning and deployment configuration bindings.
 - `docs/community/README.md`: community runtime entry point.
-- `docs/community/CHANGELOG.md`: Community release history and upgrade highlights.
+- `CHANGELOG.md`: Community release history and upgrade highlights.
 - `docs/community/application.env.example`: runtime configuration inventory.
 - `docs/community/docker-compose.dependencies.yml`: local dependencies.
 - `docs/community/verification.md`: release verification gates.

@@ -69,8 +69,7 @@ Deployment details are in the
 [community runtime guide](docs/community/README.md) and the
 [Alibaba Cloud deployment Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md).
 
-See the [changelog](docs/community/CHANGELOG.md) for release highlights and
-upgrade notes.
+See the [changelog](CHANGELOG.md) for release highlights and upgrade notes.
 
 ## License
 
