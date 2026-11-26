@@ -79,6 +79,7 @@ public class AgentConversationService {
     private final ConversationExecutorRouter executorRouter;
     private TransactionTemplate failureTransactionTemplate;
     private ConversationBrowserEventPublisher browserEventPublisher;
+    private ConversationTurnEventService turnEventService;
     private ConversationElicitationService conversationElicitationService;
     private ClarificationAttachmentService clarificationAttachmentService;
     private com.aliyun.autowonder.aiusage.AgentConversationUsageService conversationUsageService;
@@ -257,6 +258,11 @@ public class AgentConversationService {
     }
 
     @Autowired(required = false)
+    void setTurnEventService(ConversationTurnEventService turnEventService) {
+        this.turnEventService = turnEventService;
+    }
+
+    @Autowired(required = false)
     void setConversationElicitationService(
             ConversationElicitationService conversationElicitationService) {
         this.conversationElicitationService = conversationElicitationService;
@@ -389,19 +395,20 @@ public class AgentConversationService {
 
     private PendingDispatch insertAndPrepareDispatch(Long tenantId, Long agentId, String content,
             String externalMsgId, String sourceContext, AgentConversationDO conv, Long submittedUserId) {
-        ExecutorSelection selection = trySelectExecutor(tenantId, conv.getAgentId(), conv.getExecutorId(),
-                usesPlatformRouting(conv.getChannel()));
+        ExecutorSelection selection = trySelectConversationExecutor(tenantId, conv);
         if (selection == null) {
             // Only authenticated web submissions to an already persisted conversation may
             // wait for capacity. Keep legacy IM and new logical-conversation admission strict.
             boolean web = WorkitemClarificationConversationService.CHANNEL.equals(conv.getChannel())
-                    || PlatformConversationChannel.CHANNEL.equals(conv.getChannel());
+                    || PlatformConversationChannel.CHANNEL.equals(conv.getChannel()) || managedPrd(conv);
             if (web && submittedUserId != null && submittedUserId > 0) {
                 AgentDO agent = agentDao.findById(conv.getAgentId());
                 if (agent != null && agent.getOnlineVersionId() != null
-                        && executorRouter.canQueueOnOwner(tenantId, conv.getAgentId(),
+                        && (managedPrd(conv) ? executorRouter.canQueueDesignOnOwner(tenantId, conv.getAgentId(),
+                                agent.getOnlineVersionId(), conv.getExecutorId())
+                            : executorRouter.canQueueOnOwner(tenantId, conv.getAgentId(),
                                 agent.getOnlineVersionId(), conv.getExecutorId(),
-                                usesPlatformRouting(conv.getChannel()))) {
+                                usesPlatformRouting(conv.getChannel())))) {
                     insertInboundTurn(tenantId, conv.getId(), content, externalMsgId,
                             sourceContext, STATUS_QUEUED, submittedUserId);
                     return null;
@@ -604,14 +611,17 @@ public class AgentConversationService {
                 convDao.updateCliSessionRef(tenantId, conversationId, cliSessionId);
                 conv.setCliSessionRef(cliSessionId);
             }
+            String resolvedReply = STATUS_CANCELED.equalsIgnoreCase(status)
+                    ? canceledPartialContent(tenantId, conversationId, turnId, inboundTurn, replyMarkdown)
+                    : replyMarkdown;
             AgentConversationTurnDO out = new AgentConversationTurnDO();
             out.setTenantId(tenantId);
             out.setConversationId(conversationId);
             out.setDirection("OUT");
             out.setContent(STATUS_CANCELED.equalsIgnoreCase(status)
-                    ? canceledReplyContent(replyMarkdown)
-                    : outboundReplyContent(replyMarkdown, error));
-            if (inboundTurn.getSourceContext() == null && (replyMarkdown == null || replyMarkdown.isBlank())) {
+                    ? canceledReplyContent(resolvedReply)
+                    : outboundReplyContent(resolvedReply, error));
+            if (inboundTurn.getSourceContext() == null && (resolvedReply == null || resolvedReply.isBlank())) {
                 String code = STATUS_CANCELED.equalsIgnoreCase(status) ? "CANCELED"
                         : error != null && !error.isBlank() ? "REPLY_FAILED" : "EMPTY_OUTPUT";
                 out.setSourceContext(ConversationTurnDisplay.source(conv.getChannel(), "content", code,
@@ -621,7 +631,7 @@ public class AgentConversationService {
             out.setStatus(status);
             out.setError(error);
             preserveFullError(out, error);
-            boolean replyToChannel = "SUCCESS".equalsIgnoreCase(status) && replyMarkdown != null;
+            boolean replyToChannel = "SUCCESS".equalsIgnoreCase(status) && resolvedReply != null;
             boolean deliveryMarked = replyToChannel && markImReplyDeliverable(conv, turnId, out);
             turnDao.insert(out);
             convDao.updateStatusAndLastTurn(tenantId, conversationId, "ACTIVE", new Date());
@@ -634,7 +644,7 @@ public class AgentConversationService {
             PendingChannelReply channelReply = null;
             if (replyToChannel) {
                 String sourceExternalMsgId = inboundTurn == null ? null : inboundTurn.getExternalMsgId();
-                channelReply = new PendingChannelReply(conv, replyMarkdown, sourceExternalMsgId,
+                channelReply = new PendingChannelReply(conv, resolvedReply, sourceExternalMsgId,
                         currentRequestId(), deliveryMarked ? out.getId() : null);
             }
             return new PostCommitEffects(channelReply, nextQueuedDispatch(tenantId, conv),
@@ -669,6 +679,16 @@ public class AgentConversationService {
             return replyMarkdown;
         }
         return CANCELED_FALLBACK_CONTENT;
+    }
+
+    private String canceledPartialContent(Long tenantId, Long conversationId, Long turnId,
+            AgentConversationTurnDO turn, String replyMarkdown) {
+        if ((replyMarkdown != null && !replyMarkdown.isBlank()) || turnEventService == null) {
+            return replyMarkdown;
+        }
+        String streamed = turnEventService.streamedReplyText(tenantId, conversationId, turnId,
+                turn == null ? null : turn.getDispatchAttempt());
+        return streamed == null || streamed.isBlank() ? replyMarkdown : streamed;
     }
 
     private void publishCanceledStatusEvent(Long tenantId, Long conversationId, Long turnId) {
@@ -965,19 +985,21 @@ public class AgentConversationService {
             var settled = conversationElicitationService.settlePendingForTurn(tenantId, conv.getId(), turnId);
             runAfterCommit(() -> conversationElicitationService.notifySystemStopped(settled));
         }
+        String resolvedPartial = canceledPartialContent(tenantId, conv.getId(), turnId, turn,
+                partialContent);
         AgentConversationTurnDO out = new AgentConversationTurnDO();
         out.setTenantId(tenantId);
         out.setConversationId(conv.getId());
         out.setDirection("OUT");
         boolean questionExpired = questionExpiryStop(turn) != null;
-        out.setContent(questionExpired && (partialContent == null || partialContent.isBlank())
+        out.setContent(questionExpired && (resolvedPartial == null || resolvedPartial.isBlank())
                 ? com.aliyun.autowonder.common.i18n.SystemMessages.render("conversation.question_wait_expired", null,
                         "The waiting period for an answer ended. Continue with a new message.")
-                : canceledReplyContent(partialContent));
+                : canceledReplyContent(resolvedPartial));
         if (questionExpired) {
             out.setSourceContext(ConversationTurnDisplay.source(conv.getChannel(),
-                    partialContent == null || partialContent.isBlank() ? "content" : "error", "QUESTION_EXPIRED", java.util.Map.of()));
-        } else if (turn.getSourceContext() == null && (partialContent == null || partialContent.isBlank())) {
+                    resolvedPartial == null || resolvedPartial.isBlank() ? "content" : "error", "QUESTION_EXPIRED", java.util.Map.of()));
+        } else if (turn.getSourceContext() == null && (resolvedPartial == null || resolvedPartial.isBlank())) {
             out.setSourceContext(ConversationTurnDisplay.source(conv.getChannel(), "content", "CANCELED", java.util.Map.of()));
         }
         out.setRequestId(currentRequestId());
@@ -985,7 +1007,7 @@ public class AgentConversationService {
         turnDao.insert(out);
         convDao.updateStatusAndLastTurn(tenantId, conv.getId(), "ACTIVE", new Date());
         return new PostCommitEffects(null, nextQueuedDispatch(tenantId, conv),
-                terminalNotice(conv, STATUS_CANCELED, partialContent));
+                terminalNotice(conv, STATUS_CANCELED, resolvedPartial));
     }
 
     private boolean isActiveInboundTurn(AgentConversationTurnDO inboundTurn, Long conversationId) {
@@ -1091,8 +1113,7 @@ public class AgentConversationService {
             }
             ExecutorSelection selection;
             try {
-                selection = trySelectExecutor(stale.getTenantId(), conv.getAgentId(),
-                        conv.getExecutorId(), usesPlatformRouting(conv.getChannel()));
+                selection = trySelectConversationExecutor(stale.getTenantId(), conv);
             } catch (ExecutorProtocolCompatibilityException compatibilityFailure) {
                 deferSelectionCompatibilityFailure(stale.getTenantId(), conv, current,
                         STATUS_PROCESSING, compatibilityFailure);
@@ -1133,8 +1154,7 @@ public class AgentConversationService {
         }
         ExecutorSelection selection;
         try {
-            selection = trySelectExecutor(tenantId, conv.getAgentId(), conv.getExecutorId(),
-                    usesPlatformRouting(conv.getChannel()));
+            selection = trySelectConversationExecutor(tenantId, conv);
         } catch (ExecutorProtocolCompatibilityException compatibilityFailure) {
             deferSelectionCompatibilityFailure(tenantId, conv, next, STATUS_QUEUED,
                     compatibilityFailure);
@@ -1278,10 +1298,21 @@ public class AgentConversationService {
         log.info("conversation turn dispatch conversationId={} turnId={} executorId={} attempt={}",
                 dispatch.conv().getId(), dispatch.turnId(), dispatch.conv().getExecutorId(),
                 dispatch.dispatchAttempt());
-        withRequestId(dispatch.requestId(), () ->
-                transport.send(dispatch.conv(), dispatch.turnId(), contentForRuntime(dispatch),
-                        dispatch.systemPrompt(), dispatch.dispatchAttempt()));
+        String content = contentForRuntime(dispatch);
+        String runtimePrompt = runtimePromptForDispatch(dispatch);
+        withRequestId(dispatch.requestId(), () -> {
+            if (runtimePrompt == null || runtimePrompt.isBlank()) {
+                transport.send(dispatch.conv(), dispatch.turnId(), content,
+                        dispatch.systemPrompt(), dispatch.dispatchAttempt());
+            } else {
+                transport.send(dispatch.conv(), dispatch.turnId(), content,
+                        dispatch.systemPrompt(), runtimePrompt, dispatch.dispatchAttempt());
+            }
+        });
     }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.aliyun.autowonder.prd.PrdDesignRuntimeService prdDesignRuntime;
 
     private String contentForRuntime(PendingDispatch dispatch) {
         if (dispatch == null || dispatch.conv() == null) {
@@ -1343,6 +1374,41 @@ public class AgentConversationService {
             return dispatch.content();
         }
         return prefix + "\nUser message:\n" + (dispatch.content() == null ? "" : dispatch.content());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired private com.aliyun.autowonder.prd.WorkitemLaunchAccess workitemLaunchAccess;
+    private String runtimePromptForDispatch(PendingDispatch dispatch) {
+        if (dispatch != null && dispatch.conv() != null && workitemLaunchAccess != null
+                && WorkitemClarificationConversationService.CHANNEL.equals(dispatch.conv().getChannel())) {
+            return workitemLaunchAccess.referencePrompt(dispatch.conv());
+        }
+        if (dispatch == null || dispatch.conv() == null
+                || !"WORKITEM_PRD".equals(dispatch.conv().getChannel())
+                || prdDesignRuntime == null) {
+            return null;
+        }
+        String managed = prdDesignRuntime.managedWorkspacePrompt(dispatch.conv());
+        if (managed != null) {
+            prdDesignRuntime.bindTurn(dispatch.conv(), dispatch.turnId(), dispatch.dispatchAttempt());
+            return managed;
+        }
+        String action = prdRuntimeAction(dispatch.sourceContext());
+        if (action != null) {
+            return prdDesignRuntime.runtimePrompt(dispatch.conv(), dispatch.turnId(),
+                    dispatch.dispatchAttempt(), action);
+        }
+        prdDesignRuntime.bindTurn(dispatch.conv(), dispatch.turnId(), dispatch.dispatchAttempt());
+        return null;
+    }
+
+    private static String prdRuntimeAction(String sourceContext) {
+        if (sourceContext == null || sourceContext.isBlank()) return null;
+        try {
+            String action = JSON.parseObject(sourceContext).getString("runtimeAction");
+            return "PREPARE".equals(action) || "RECOVER".equals(action) ? action : null;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private void logActorIdentity(PendingDispatch dispatch, Long actorUserId, ActorName name) {
@@ -1743,10 +1809,30 @@ public class AgentConversationService {
                 : new ExecutorSelection(executorId, agent.getOnlineVersionId());
     }
 
+    private boolean managedPrd(AgentConversationDO conv) {
+        return "WORKITEM_PRD".equals(conv.getChannel()) && prdDesignRuntime != null
+                && prdDesignRuntime.managedWorkspacePrompt(conv) != null;
+    }
+
+    private ExecutorSelection trySelectConversationExecutor(Long tenantId, AgentConversationDO conv) {
+        if (!managedPrd(conv)) return trySelectExecutor(tenantId, conv.getAgentId(), conv.getExecutorId(),
+                usesPlatformRouting(conv.getChannel()));
+        AgentDO agent = agentDao.findById(conv.getAgentId());
+        if (agent == null || agent.getOnlineVersionId() == null)
+            throw new IllegalStateException("agent has no online version: " + conv.getAgentId());
+        Long executor = executorRouter.selectDesignOwner(tenantId, conv.getAgentId(),
+                agent.getOnlineVersionId(), conv.getExecutorId());
+        return executor == null ? null : new ExecutorSelection(executor, agent.getOnlineVersionId());
+    }
+
     private void bindSelectedExecutor(Long tenantId, AgentConversationDO conv,
             ExecutorSelection selection) {
         Long executorId = selection.executorId();
         if (!executorId.equals(conv.getExecutorId())) {
+            if ("WORKITEM_PRD".equals(conv.getChannel()) && prdDesignRuntime != null
+                    && prdDesignRuntime.managedWorkspacePrompt(conv) != null) {
+                throw com.aliyun.autowonder.prd.WorkitemLaunchAccess.failure("not_ready");
+            }
             conv.setExecutorId(executorId);
             convDao.updateExecutor(tenantId, conv.getId(), executorId);
         }

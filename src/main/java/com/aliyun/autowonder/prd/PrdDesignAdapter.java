@@ -73,18 +73,47 @@ public class PrdDesignAdapter implements SceneAdapter {
 
     @Override
     public String buildSystemPrompt(AiSessionDO session) {
+        return systemPrompt(false);
+    }
+
+    public String buildConversationSystemPrompt() {
+        return systemPrompt(true);
+    }
+
+    public String managedConversationPrompt() {
+        return systemPrompt(true, true) + "\n" + PrdPrompts.DESIGN + "\n" + PrdPrompts.HANDOFF;
+    }
+
+    private String systemPrompt(boolean collaborative) {
+        return systemPrompt(collaborative,false);
+    }
+    private String systemPrompt(boolean collaborative,boolean managed) {
         StringBuilder sb = new StringBuilder();
         sb.append("你是资深产品设计师，负责为 AutoWonder 平台的工单编写 PRD 设计。\n\n");
         sb.append("硬性规则，必须遵守：\n");
-        sb.append("1. 仅进行需求澄清与设计，不修改仓库或发起交付。可以读取本次会话提供的截图和附件作为设计参考；目标项目技术事实以用户配置及已有上下文为准，不臆测仓库内容。\n");
-        sb.append("2. 最终答案只输出一个 JSON 对象，不要输出解释、前言、后记或 Markdown 代码块标记。\n");
-        sb.append("3. 顶层输出结构化 JSON。pages[].mockHtml 必须包含可直接预览的 HTML/CSS 原型，使用模拟数据，禁止外部请求；不要用文字描述代替页面。系统会在隔离预览中渲染它。优先输出 pages 以便用户尽早看到原型。\n");
+        sb.append(managed
+                ? "1. 在执行器已经准备并启动的独立工程中实现前端，使用原有服务实时预览。不要修改源仓库、发起交付、发布或分享。\n"
+                : collaborative
+                ? "1. 进行产品与交互设计，在任务指定的独立设计工程中实现可运行前端并启动本机Vite，使用模拟数据。不得修改源工程、发起正式交付、发布或分享。读取截图、附件及指定工程，未知事实不臆测。\n"
+                : "1. 仅进行需求澄清与设计，不修改仓库或发起交付。可以读取本次会话提供的截图和附件作为设计参考；目标项目技术事实以用户配置及已有上下文为准，不臆测仓库内容。\n");
+        sb.append(collaborative
+                ? "2. 对话回复、设计工程和PRD文档是三种独立结果。使用 autowonder.report_prd_design 保存完整结构化PRD；最终答案只用自然语言回复用户，不粘贴JSON，也不用changeLog代替对话。\n"
+                : "2. 最终答案只输出一个 JSON 对象，不要输出解释、前言、后记或 Markdown 代码块标记。\n");
+        sb.append(managed
+                ? "3. 编辑同一份工程，发生有效变更时用 PRD 工具上报与页面一致的设计文档。预览生命周期由执行器管理。\n"
+                : collaborative
+                ? "3. 先完成真实设计工程和运行状态报告；发生有效设计变更时调用PRD上报工具。pages描述工程实际页面、交互和需求，mockHtml可省略；文档必须与工程一致，不能用静态HTML替代工程。没有设计变更时直接正常回复，不重复上报。\n"
+                : "3. 顶层输出结构化 JSON。pages[].mockHtml 必须包含可直接预览的 HTML/CSS 原型，使用模拟数据，禁止外部请求；不要用文字描述代替页面。系统会在隔离预览中渲染它。优先输出 pages 以便用户尽早看到原型。\n");
         sb.append("4. 需求项必须带稳定编号 key（形如 REQ-001）和至少一条 acceptanceCriteria。");
         sb.append("修改既有版本时，沿用原 key，不要重新编号。\n");
         sb.append("5. 画像中标记为「未知项」的内容不得写成既有能力；涉及尚未实现的接口，status 必须填 PLANNED 或 TO_BE_CONFIRMED，");
         sb.append("只有画像证据支持已存在的接口才填 EXISTING。\n");
         sb.append("6. 无法确定的事项写入 openQuestions；会阻塞开发或验收的标记 blocking=true，不要臆测答案。\n");
         sb.append("7. 用户自行编写的名称与文案保持原样，不要翻译或改写。\n\n");
+        if (collaborative) {
+            sb.append("8. PRD版本号只以 autowonder.report_prd_design 返回的 versionNo 为准。重复上报只更新当前草稿，"
+                    + "不会递增版本号；最终回复不得自行宣称保存为 vN。\n\n");
+        }
         sb.append("生成内容默认中文；用户指定英文时使用英文并设置 language=en-US。修改版本时保留原 language，除非用户要求切换。\n");
         sb.append("JSON Schema：\n").append(schema());
         return sb.toString();
@@ -116,18 +145,26 @@ public class PrdDesignAdapter implements SceneAdapter {
 
         if (userInput != null && !userInput.isBlank()) {
             sb.append("【本次修改意见】\n").append(truncate(userInput)).append("\n\n");
-            sb.append("请在当前版本基础上按修改意见产出新的完整 JSON。未涉及的部分保持不变，需求 key 不要重新编号。");
+            sb.append("请按修改意见更新当前草稿并上报完整 JSON。未涉及的部分保持不变，需求 key 不要重新编号；"
+                    + "版本号只以PRD上报工具的返回值为准。");
         } else {
             sb.append("请依据上述需求与项目画像，产出完整 PRD 设计 JSON。");
         }
         return sb.toString();
     }
 
+    @org.springframework.beans.factory.annotation.Autowired private WorkitemLaunchDao launches;
+
     private void appendTargetProfile(StringBuilder sb, Long workspaceId, Long workitemId) {
         if (workspaceId == null || workitemId == null) {
             return;
         }
         PrdDesignDO design = designDao.findByWorkitem(workspaceId, workitemId);
+        if (design != null && design.getTargetRepoId() == null && launches != null
+                && launches.latest(workspaceId, workitemId, "DESIGN") != null) {
+            sb.append("【设计来源】用户选择了新项目。请在执行器准备好的独立工程中实现页面。\n");
+            return;
+        }
         if (design != null && design.getTargetConfigJson() != null) {
             PrdProjectSnapshot config = designService.targetSnapshot(design);
             sb.append("【用户配置的目标前端项目】\n")

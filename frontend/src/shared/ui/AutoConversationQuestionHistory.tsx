@@ -100,6 +100,13 @@ function Question({ card, base, conversationId, turnId, enabled, onContinue, can
   const [full, setFull] = useState<ClarificationElicitation | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
+  const automaticRetries = useRef(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    automaticRetries.current = 0;
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    retryTimer.current = null;
+  }, [base, conversationId, turnId, card.historyId, card.requestId]);
   useEffect(() => {
     setFull(null); setError(false);
     if (!visible || !card.contentHasMore) return;
@@ -108,10 +115,23 @@ function Question({ card, base, conversationId, turnId, enabled, onContinue, can
       release = slot;
       const result = await readConversationQuestion(base, conversationId, turnId, card, controller.signal);
       if (controller.signal.aborted) return;
+      automaticRetries.current = 0;
       setFull(result.card);
       if (result.bytes <= 64 * 1024) { release(); release = undefined; }
-    }).catch(() => { if (!controller.signal.aborted) setError(true); release?.(); release = undefined; });
-    return () => { controller.abort(); release?.(); };
+    }).catch(() => {
+      if (!controller.signal.aborted) {
+        if (automaticRetries.current < 2) {
+          const delay = 300 * 2 ** automaticRetries.current++;
+          retryTimer.current = setTimeout(() => { retryTimer.current = null; setRetry(value => value + 1); }, delay);
+        } else setError(true);
+      }
+      release?.(); release = undefined;
+    });
+    return () => {
+      controller.abort(); release?.();
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+    };
   }, [base, conversationId, turnId, card, visible, retry, ref]);
   const ready = !card.contentHasMore ? card : full;
   const height = useRetainedHeight(ref, visible && !!ready, 70, heights, card.historyId ?? undefined);
@@ -119,7 +139,9 @@ function Question({ card, base, conversationId, turnId, enabled, onContinue, can
   return <div ref={ref} data-question-id={card.historyId} style={{ minHeight: visible && (ready || error) ? 1 : height.current }}>
     {visible && ready ? <AnswerHistory entries={projectQuestionHistory(turnId, [{ ...ready, deliveryStatus: deliveryStatus ?? ready.deliveryStatus }])} onContinue={onContinue} canContinue={canContinue} />
       : visible ? <div aria-live="polite"><Typography.Text>{card.message}</Typography.Text>
-        {error && <div>{t('clarification.history.contentFailed')}<Button size="small" onClick={() => setRetry(value => value + 1)}>{t('clarification.history.retry')}</Button></div>}</div> : null}
+        {error && <div>{t('clarification.history.contentFailed')}<Button size="small" onClick={() => {
+          automaticRetries.current = 0; setRetry(value => value + 1);
+        }}>{t('clarification.history.retry')}</Button></div>}</div> : null}
   </div>;
 }
 
@@ -131,7 +153,10 @@ function QuestionWindow({ entries, enabled = true, onSettledQuestions, ...props 
   const [page, setPage] = useState<{ items: ClarificationElicitation[]; older: boolean; newer: boolean } | null>(null);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [retry, setRetry] = useState(0);
   const active = useRef<AbortController | null>(null);
+  const automaticRetries = useRef(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryBefore = useRef(false);
   const generation = useRef(0);
   const refreshKey = useRef(props.refreshKey);
@@ -155,6 +180,7 @@ function QuestionWindow({ entries, enabled = true, onSettledQuestions, ...props 
     void admittedEventRead(props.conversationId, false, controller.signal, () => apiClient.get<Page>(`${props.base}/turns/${props.turnId}/questions/page`, { params, signal: controller.signal }))
       .then(({ data }) => {
         if (controller.signal.aborted || requestGeneration !== generation.current) return;
+        automaticRetries.current = 0;
         const all = [...new Map([...(current?.items ?? []), ...data.items].map(card => [card.historyId, card])).values()]
           .sort((a, b) => a.historyId! - b.historyId!);
         const items = before ? all.slice(0, 40) : all.slice(-40);
@@ -178,9 +204,16 @@ function QuestionWindow({ entries, enabled = true, onSettledQuestions, ...props 
             restoreAnchor.current = null;
           }
         });
-      }).catch(() => { if (!controller.signal.aborted) setFailed(true); })
+      }).catch(() => {
+        if (!controller.signal.aborted) {
+          if (automaticRetries.current < 2) {
+            const delay = 300 * 2 ** automaticRetries.current++;
+            retryTimer.current = setTimeout(() => { retryTimer.current = null; setRetry(value => value + 1); }, delay);
+          } else setFailed(true);
+        }
+      })
       .finally(() => { if (active.current === controller) { active.current = null; setLoading(false); } });
-  }, [visible, props.base, props.conversationId, props.turnId, props.refreshKey, ref]);
+  }, [visible, props.base, props.conversationId, props.turnId, props.refreshKey, retry, ref]);
   // Settlement order differs from ID order: an older pending card can settle
   // behind the current cursor. Restart the bounded scan instead of marking only
   // the newer edge dirty, and automatically recover the reader's retained row.
@@ -193,6 +226,9 @@ function QuestionWindow({ entries, enabled = true, onSettledQuestions, ...props 
     if (anchor?.dataset.questionId) restoreAnchor.current = { id: anchor.dataset.questionId, top: anchor.getBoundingClientRect().top };
     recovery.current = { first: 0, older: false, top: element?.scrollTop ?? 0 };
     generation.current++; active.current?.abort(); active.current = null;
+    automaticRetries.current = 0;
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    retryTimer.current = null;
     state.current = null; setPage(null); setLoading(false); setFailed(false);
   }, [props.refreshKey, ref]);
   useEffect(() => {
@@ -202,7 +238,11 @@ function QuestionWindow({ entries, enabled = true, onSettledQuestions, ...props 
       top: ref.current?.scrollTop ?? 0 };
     generation.current++; active.current?.abort(); active.current = null; setPage(null);
   }, [visible, load, ref]);
-  useEffect(() => () => { generation.current++; active.current?.abort(); active.current = null; }, [props.base, props.conversationId, props.turnId]);
+  useEffect(() => () => {
+    generation.current++; active.current?.abort(); active.current = null;
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    retryTimer.current = null;
+  }, [props.base, props.conversationId, props.turnId]);
   useEffect(() => {
     if (!visible || !page || failed || loading) return;
     onSettledQuestions?.(props.turnId, page.items.map(card => card.requestId));
@@ -219,7 +259,9 @@ function QuestionWindow({ entries, enabled = true, onSettledQuestions, ...props 
       else if (element.scrollHeight - element.clientHeight - element.scrollTop <= 120) load(); }}>
     {page?.items.map(card => <Question key={card.historyId} {...props} enabled={visible} card={card} heights={cardHeights.current} />)}
     <AnswerHistory entries={entries.filter(entry => !durable.has(entry.requestId))} onContinue={props.onContinue} canContinue={props.canContinue} />
-    {failed && <div role="status">{t('clarification.history.contentFailed')} <Button size="small" onClick={() => load(retryBefore.current)}>{t('clarification.history.retry')}</Button></div>}
+    {failed && <div role="status">{t('clarification.history.contentFailed')} <Button size="small" onClick={() => {
+      automaticRetries.current = 0; load(retryBefore.current);
+    }}>{t('clarification.history.retry')}</Button></div>}
   </div>;
 }
 

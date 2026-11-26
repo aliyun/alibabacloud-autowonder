@@ -70,6 +70,9 @@ class WorkspaceAccessAnnotationCoverageTest {
             // token through DaemonUploadAuthenticator and carries no logged-in workspace context,
             // same trust boundary as artifact uploads.
             "com.aliyun.autowonder.prd.DaemonPrdAcceptanceController",
+            // 分享评审独立于当前工作区：AuthFilter 校验登录，PrdReviewService 校验
+            // 不可猜分享令牌、版本、需求及工程来源；不会赋予空间成员权限。
+            "com.aliyun.autowonder.prd.PrdSharedReviewController",
             "com.aliyun.autowonder.taskpackage.DaemonTaskPackageController",
             // Dispatch-scoped task data/identity endpoints authenticate with the executor token
             // through DaemonUploadAuthenticator and carry no logged-in workspace context.
@@ -364,6 +367,10 @@ class WorkspaceAccessAnnotationCoverageTest {
 
     @Test
     void specialAccessLevelMatrixIsExplicitlyClassified() {
+        assertAccess(com.aliyun.autowonder.prd.PrdReviewController.class, "previewStatus", WorkspaceAccessLevel.READ_ONLY);
+        assertAccess(com.aliyun.autowonder.prd.PrdReviewController.class, "previewSession", WorkspaceAccessLevel.READ_ONLY);
+        assertAccess(com.aliyun.autowonder.prd.PrdReviewController.class, "enable", WorkspaceAccessLevel.READ_WRITE);
+        assertAccess(com.aliyun.autowonder.prd.PrdReviewController.class, "revoke", WorkspaceAccessLevel.READ_WRITE);
         // 执行器运维操作由 READ_WRITE 级 + 角色 EXECUTOR 只读域治理；
         // 令牌与启动命令携带凭证语义，仍收在管理员边界内。
         assertAccess(ExecutorController.class, "create", WorkspaceAccessLevel.READ_WRITE);

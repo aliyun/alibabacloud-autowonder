@@ -31,6 +31,28 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class AuthFilterTest {
+    @Test
+    void designReviewRequiresLoginButIgnoresSelectedWorkspaceMembership() throws Exception {
+        JwtService jwt=newJwtService();
+        var members=mock(WorkspaceMemberDao.class); var workspaces=mock(WorkspaceDao.class);
+        var users=activeUserDao();
+        var filter=new AuthFilter(jwt,mock(SessionService.class),members,workspaces,users);
+        String path="/api/design-reviews/"+"a".repeat(43)+"/comments";
+        var anonymous=new MockHttpServletResponse(); filter.doFilter(new MockHttpServletRequest("POST",path),anonymous,new MockFilterChain());
+        assertEquals(401,anonymous.getStatus());
+        var request=new MockHttpServletRequest("POST",path); request.addHeader("Authorization","Bearer "+jwt.signAccess(new TokenPayload(42L,999L,"review")));
+        var response=new MockHttpServletResponse(); var chain=new MockFilterChain(); filter.doFilter(request,response,chain);
+        assertEquals(200,response.getStatus()); assertNotNull(chain.getRequest()); verifyNoInteractions(members,workspaces);
+        var statusRequest=new MockHttpServletRequest("GET","/api/design-reviews/"+"a".repeat(43)+"/preview-status");
+        statusRequest.addHeader("Authorization",request.getHeader("Authorization"));
+        var statusChain=new MockFilterChain(); filter.doFilter(statusRequest,new MockHttpServletResponse(),statusChain);
+        assertNotNull(statusChain.getRequest()); verifyNoInteractions(members,workspaces);
+        var pendingUser=user(42L,0); pendingUser.setStatus(2); when(users.findById(42L)).thenReturn(pendingUser);
+        var disabled=new MockHttpServletResponse(); filter.doFilter(request,disabled,new MockFilterChain()); assertEquals(401,disabled.getStatus());
+        var unrelated=new MockHttpServletRequest("GET","/api/workitems/10/prd"); unrelated.addHeader("Authorization",request.getHeader("Authorization"));
+        when(users.findById(42L)).thenReturn(user(42L,0));
+        var rejected=new MockHttpServletResponse(); filter.doFilter(unrelated,rejected,new MockFilterChain()); assertEquals(403,rejected.getStatus());
+    }
 
     @AfterEach
     void tearDown() {

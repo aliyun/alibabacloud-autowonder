@@ -1,6 +1,7 @@
 export interface ClarificationConversation {
   id: number;
   agentId: number;
+  squadId?: number | null;
   agentName: string | null;
   channelConversationId: string;
   status: string;

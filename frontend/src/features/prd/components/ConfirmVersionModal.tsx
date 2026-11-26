@@ -1,14 +1,10 @@
-import { Alert, Descriptions, Form, Modal, Radio, Space, Typography } from 'antd';
+import { Form, Modal, Radio } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { DELIVERY_MODE, type PrdDesignVersion } from '../api';
-
-const { Text } = Typography;
 
 interface ConfirmVersionModalProps {
   open: boolean;
   version: PrdDesignVersion | null;
-  blockingCount: number;
-  ignoreOpenQuestions?: boolean;
   confirming: boolean;
   hasTarget: boolean;
   onOk: (deliveryMode: string) => void;
@@ -26,8 +22,6 @@ interface ConfirmVersionModalProps {
 export function ConfirmVersionModal({
   open,
   version,
-  blockingCount,
-  ignoreOpenQuestions = false,
   confirming,
   hasTarget,
   onOk,
@@ -36,7 +30,6 @@ export function ConfirmVersionModal({
   const { t } = useTranslation('prd');
   const [form] = Form.useForm();
 
-  const blocked = blockingCount > 0 && !ignoreOpenQuestions;
   const prdDrivenDisabled = !hasTarget;
 
   return (
@@ -45,8 +38,9 @@ export function ConfirmVersionModal({
       title={t('confirm.title')}
       okText={t('confirm.ok')}
       cancelText={t('confirm.cancel')}
+      className="prd-confirm-version-modal"
+      width={520}
       confirmLoading={confirming}
-      okButtonProps={{ disabled: blocked }}
       onCancel={onCancel}
       onOk={() => {
         void form.validateFields().then((values) => onOk(values.deliveryMode as string));
@@ -54,50 +48,40 @@ export function ConfirmVersionModal({
       destroyOnHidden
     >
       {version && (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Descriptions column={1} size="small">
-            <Descriptions.Item label={t('confirm.version')}>{t('versionLabel', { versionNo: version.versionNo })}</Descriptions.Item>
-            <Descriptions.Item label={t('confirm.requirementCount')}>
-              {version.requirementCount ?? 0}
-            </Descriptions.Item>
-            <Descriptions.Item label={t('confirm.digest')}>
-              <Text code copyable={{ text: version.designSha256 }}>
-                {version.designSha256.slice(0, 16)}
-              </Text>
-            </Descriptions.Item>
-          </Descriptions>
-
-          {ignoreOpenQuestions && blockingCount > 0 && <Alert type="warning" showIcon
-            message={t('confirm.questionsPending', { count: blockingCount })}
-            description={t('confirm.ignoreHint')} />}
-          {blocked && (
-            <Alert
-              type="error"
-              showIcon
-              message={t('confirm.blocked')}
-              description={t('confirm.blockedHint', { count: blockingCount })}
-            />
-          )}
+        <div className="prd-confirm-version-content">
+          <div className="prd-confirm-version-summary">
+            <strong>{t('versionLabel', { versionNo: version.versionNo })}</strong>
+            <span>{t('confirm.requirementCountValue', { count: version.requirementCount ?? 0 })}</span>
+          </div>
 
           <Form form={form} layout="vertical" initialValues={{ deliveryMode: DELIVERY_MODE.PRD_DRIVEN }}>
-            <Form.Item name="deliveryMode" label={t('confirm.modeLabel')}>
-              <Radio.Group disabled={blocked}>
-                <Space direction="vertical">
-                  <Radio value={DELIVERY_MODE.PRD_DRIVEN} disabled={prdDrivenDisabled}>
-                    {t('confirm.modePrdDriven')}
-                  </Radio>
-                  <Radio value={DELIVERY_MODE.LEGACY}>{t('confirm.modeLegacy')}</Radio>
-                </Space>
+            <Form.Item name="deliveryMode" label={t('confirm.modeLabel')} className="prd-confirm-version-mode">
+              <Radio.Group className="prd-confirm-version-options">
+                <Radio className="prd-confirm-version-option" value={DELIVERY_MODE.PRD_DRIVEN} disabled={prdDrivenDisabled}>
+                  <span className="prd-confirm-version-option-copy">
+                    <strong>{t('confirm.modePrdDrivenTitle')}</strong>
+                    <span>{t('confirm.modePrdDrivenDescription')}</span>
+                  </span>
+                </Radio>
+                <Radio className="prd-confirm-version-option" value={DELIVERY_MODE.LEGACY}>
+                  <span className="prd-confirm-version-option-copy">
+                    <strong>{t('confirm.modeLegacyTitle')}</strong>
+                    <span>{t('confirm.modeLegacyDescription')}</span>
+                  </span>
+                </Radio>
               </Radio.Group>
             </Form.Item>
           </Form>
 
           {!hasTarget && (
-            <Alert type="warning" showIcon message={t('confirm.noTarget')} description={t('confirm.noTargetHint')} />
+            <div className="prd-confirm-version-note" role="status">
+              <strong>{t('confirm.noTarget')}</strong>
+              <span>{t('confirm.noTargetHint')}</span>
+            </div>
           )}
 
-          <Alert type="info" showIcon message={t('confirm.immutableHint')} />
-        </Space>
+          <p className="prd-confirm-version-hint">{t('confirm.immutableHint')}</p>
+        </div>
       )}
     </Modal>
   );

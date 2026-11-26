@@ -155,6 +155,12 @@ public class McpToolService {
     private static final String WORKITEM_CLI_UPLOAD_TOKEN = "autowonder.workitem_cli_upload_token";
     private static final String WORKITEM_CLI_DOWNLOAD_TOKEN = "autowonder.workitem_cli_download_token";
     private static final String LIST_WORKITEM_DOCUMENTS = "autowonder.list_workitem_documents";
+    private static final String REPORT_PRD_DESIGN_RUNTIME = com.aliyun.autowonder.prd.PrdDesignRuntimeService.TOOL;
+    private static final String REPORT_PRD_DESIGN = com.aliyun.autowonder.prd.PrdDesignArtifactService.TOOL;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.aliyun.autowonder.prd.PrdDesignRuntimeService prdDesignRuntimes;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.aliyun.autowonder.prd.PrdDesignArtifactService prdDesignArtifacts;
     private static final String DELETE_WORKITEM_DOCUMENT = "autowonder.delete_workitem_document";
     private static final String EXPOSE_WORKITEM_ARTIFACT = "autowonder.expose_workitem_artifact";
     private static final String TRANSITION_WORKITEM = "autowonder.transition_workitem";
@@ -393,6 +399,10 @@ public class McpToolService {
                             workspaceTool(WorkspaceAccessLevel.READ_ONLY)),
                     Map.entry(LIST_WORKITEM_DOCUMENTS,
                             workspaceTool(WorkspaceAccessLevel.READ_ONLY)),
+                    Map.entry(REPORT_PRD_DESIGN_RUNTIME,
+                            workspaceTool(WorkspaceAccessLevel.READ_WRITE)),
+                    Map.entry(REPORT_PRD_DESIGN,
+                            workspaceTool(WorkspaceAccessLevel.READ_WRITE)),
                     Map.entry(DELETE_WORKITEM_DOCUMENT,
                             workspaceTool(WorkspaceAccessLevel.READ_WRITE)),
                     Map.entry(EXPOSE_WORKITEM_ARTIFACT,
@@ -662,6 +672,8 @@ public class McpToolService {
                     Map.entry(WORKITEM_CLI_UPLOAD_TOKEN, WorkspaceDomain.ARTIFACT),
                     Map.entry(WORKITEM_CLI_DOWNLOAD_TOKEN, WorkspaceDomain.ARTIFACT),
                     Map.entry(LIST_WORKITEM_DOCUMENTS, WorkspaceDomain.ARTIFACT),
+                    Map.entry(REPORT_PRD_DESIGN_RUNTIME, WorkspaceDomain.PRD),
+                    Map.entry(REPORT_PRD_DESIGN, WorkspaceDomain.PRD),
                     Map.entry(DELETE_WORKITEM_DOCUMENT, WorkspaceDomain.ARTIFACT),
                     Map.entry(EXPOSE_WORKITEM_ARTIFACT, WorkspaceDomain.ARTIFACT),
                     Map.entry(TRANSITION_WORKITEM, WorkspaceDomain.WORKITEM),
@@ -1246,6 +1258,31 @@ public class McpToolService {
                         schema(required("id"),
                                 prop("id", "integer", "Required. Initial workitem id used for the preflight read-access "
                                         + "check and generated download command; bound into conversation-turn credentials."))),
+                tool(REPORT_PRD_DESIGN_RUNTIME, "Report the current PRD design development server on this executor. "
+                                + "Only the active WORKITEM_PRD conversation turn credential may call this tool. "
+                                + "When the design instructions enable managed Vite, report PREPARED after installing dependencies "
+                                + "and after each completed code change. Omit port so that the executor can start or reuse Vite. "
+                                + "Otherwise report STARTING before startup, READY with the actual port after checking the HTTP service, "
+                                + "and UPDATED after each code change. Report FAILED with a diagnostic on failure. "
+                                + "Start sequence at 1 and increase it within this attempt; reuse the sequence for a repeated report.",
+                        schema(required("status", "directory", "sequence"),
+                                enumProp("status", List.of("STARTING", "PREPARED", "READY", "UPDATED", "FAILED"), "Runtime state."),
+                                prop("port", "integer", "Actual local port; required for READY and UPDATED."),
+                                prop("route", "string", "Entry route beginning with /; defaults to /."),
+                                prop("directory", "string", "Persistent design project directory on this executor."),
+                                prop("error", "string", "Diagnostic for FAILED; never include secrets."),
+                                prop("previewBindingId", "string", "Platform-issued preview binding id from the design task; never an arbitrary URL."),
+                                enumProp("tunnelStatus", List.of("STARTING", "READY", "RECONNECTING", "FAILED", "STOPPED"), "Actual state of the configured preview connection."),
+                                prop("sequence", "integer", "Positive monotonically increasing report sequence for this attempt."))),
+                tool(REPORT_PRD_DESIGN, "Save the structured PRD produced by the active WORKITEM_PRD conversation turn. "
+                                + "This updates the requirement-document surface and is separate from the assistant's "
+                                + "human-readable final reply. Report the complete current PRD after an effective design "
+                                + "change; repeated reports update the current draft without incrementing versionNo. "
+                                + "Only the returned versionNo is authoritative; never invent a version label or paste "
+                                + "the PRD JSON into the final chat response.",
+                        schema(required("design"),
+                                prop("design", "object", "Complete structured PRD matching the design schema."),
+                                prop("changeSummary", "string", "Optional concise version-history summary; not chat content."))),
                 tool(LIST_WORKITEM_DOCUMENTS, "List requirement/design context attachment documents uploaded to an AutoWonder "
                                 + "workitem. Returns metadata only (id, name, type, size, created time) and never the "
                                 + "document body. To read a document's actual contents without loading them into this MCP "
@@ -2995,6 +3032,17 @@ public class McpToolService {
                 if (context.executionScope() != null) yield workitemCliDownloadTokenService.mint(context.principal(), requiredLong(safeArgs, "id"));
                 yield workitemCliDownloadTokenService.mint(context.credentialType(),
                         context.userId(), requiredLong(safeArgs, "id"));
+            }
+            case REPORT_PRD_DESIGN_RUNTIME -> prdDesignRuntimes.report(context.principal(),
+                    requiredString(safeArgs, "status"), safeArgs.get("port") == null ? null : requiredInt(safeArgs, "port"),
+                    str(safeArgs, "route"), requiredString(safeArgs, "directory"), str(safeArgs, "error"),
+                    requiredInt(safeArgs, "sequence"),str(safeArgs,"previewBindingId"),str(safeArgs,"tunnelStatus"));
+            case REPORT_PRD_DESIGN -> {
+                Object design = safeArgs.get("design");
+                if (design == null) throw new IllegalArgumentException("design is required");
+                String designJson = design instanceof String text
+                        ? text : com.aliyun.autowonder.json.JSON.toJSONString(design);
+                yield prdDesignArtifacts.report(context.principal(), designJson, str(safeArgs, "changeSummary"));
             }
             case LIST_WORKITEM_DOCUMENTS -> {
                 long id = requiredLong(safeArgs, "id");
@@ -4935,6 +4983,17 @@ public class McpToolService {
 
     private Map<String, Object> outputSchemaFor(String name) {
         return switch (name) {
+            case REPORT_PRD_DESIGN_RUNTIME -> schema(required("status", "revision", "reportSequence"),
+                    prop("status", "string", "Persisted runtime state."),
+                    nullableProp("port", "integer", "Actual Vite port."),
+                    prop("route", "string", "Entry route."), prop("directory", "string", "Design project directory."),
+                    prop("revision", "integer", "Monotonic refresh revision."),
+                    prop("reportSequence", "integer", "Last accepted sequence."));
+            case REPORT_PRD_DESIGN -> schema(required("id", "versionNo", "status", "designSha256"),
+                    prop("id", "integer", "Persisted PRD version id."),
+                    prop("versionNo", "integer", "Human-facing PRD version number."),
+                    prop("status", "string", "Persisted version status."),
+                    prop("designSha256", "string", "Digest of the normalized PRD payload."));
             case LIST_TASK_DATA -> schema(required("items", "nextAfterId"),
                     arrayProp("items", taskDataRecordSchema(), "Task-data records in ascending id order."),
                     nullableProp("nextAfterId", "integer", "Pass as afterId; null means the namespace is fully read."));
@@ -6409,6 +6468,14 @@ public class McpToolService {
             throw new BizException(ErrorCode.MCP_TOOL_ARGUMENT_INVALID);
         }
         return value;
+    }
+
+    private int requiredInt(Map<String, Object> args, String key) {
+        long value = requiredLong(args, key);
+        if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
+            throw new BizException(ErrorCode.MCP_TOOL_ARGUMENT_INVALID);
+        }
+        return (int) value;
     }
 
     /**

@@ -12,7 +12,7 @@ import java.util.Map;
  */
 public final class PrdPrototypeSelection {
     static final int SELECTOR_LIMIT = 1000;
-    static final int PAGE_LIMIT = 200;
+    static final int PAGE_LIMIT = 2048;
     static final int TAG_LIMIT = 64;
     static final int TEXT_LIMIT = 200;
 

@@ -41,6 +41,28 @@ class NodeMailboxListenerTest {
     }
 
     @Test
+    void deliversPreviewRecoveryOnlyToTheCurrentSessionInTheBindingWorkspace() throws Exception {
+        Session ws = mock(Session.class);
+        RemoteEndpoint.Basic basic = mock(RemoteEndpoint.Basic.class);
+        when(ws.getId()).thenReturn("active");
+        when(ws.isOpen()).thenReturn(true);
+        when(ws.getBasicRemote()).thenReturn(basic);
+        when(sessionRegistry.findByExecutorId(5L)).thenReturn(new ExecutorSession(5L, 10L, 100L, ws));
+        when(presenceManager.isCurrentSession(5L, "active")).thenReturn(true);
+        String command = """
+                {"type":"PRD_PREVIEW_ENSURE","executorId":5,"workspaceId":100,"sessionId":"active"}
+                """;
+        listener.onMessage("node:dispatch:broadcast", command.replace("active", "stale"));
+        listener.onMessage("node:dispatch:broadcast", command.replace("100", "101"));
+        verifyNoInteractions(basic);
+        listener.onMessage("node:dispatch:broadcast", command);
+        verify(basic).sendText(command);
+        when(presenceManager.isCurrentSession(5L, "active")).thenReturn(false);
+        listener.onMessage("node:dispatch:broadcast", command);
+        verifyNoMoreInteractions(basic);
+    }
+
+    @Test
     void ignoresWhenExecutorNotLocal() {
         when(sessionRegistry.findByExecutorId(5L)).thenReturn(null);
 

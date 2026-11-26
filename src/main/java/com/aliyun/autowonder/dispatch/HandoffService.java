@@ -7,6 +7,7 @@ import com.aliyun.autowonder.common.error.ErrorCode;
 import com.aliyun.autowonder.context.AutoWonderContext;
 import com.aliyun.autowonder.filter.BizLoggerFilter;
 import com.aliyun.autowonder.im.notification.WorkitemHumanAssignedEvent;
+import com.aliyun.autowonder.office.OfficeActivitySignaler;
 import com.aliyun.autowonder.user.UserDO;
 import com.aliyun.autowonder.user.UserDao;
 import com.aliyun.autowonder.workspace.WorkspaceDO;
@@ -51,6 +52,7 @@ public class HandoffService {
     private ScheduledTaskRunOrchestrator scheduledTaskRunOrchestrator;
     private DispatchRecoveryService recoveryService;
     private ExecutionAvailabilityService executionAvailabilityService;
+    private OfficeActivitySignaler officeActivitySignaler;
 
     @Autowired
     public void setRecoveryService(DispatchRecoveryService recoveryService) {
@@ -60,6 +62,11 @@ public class HandoffService {
     @Autowired(required = false)
     public void setExecutionAvailabilityService(ExecutionAvailabilityService service) {
         this.executionAvailabilityService = service;
+    }
+
+    @Autowired(required = false)
+    public void setOfficeActivitySignaler(OfficeActivitySignaler signaler) {
+        this.officeActivitySignaler = signaler;
     }
 
 
@@ -259,6 +266,9 @@ public class HandoffService {
         e.setActorRef(actor.ref());
         e.setDetailJson(WorkitemService.assignmentDetailJson(fromType, toType));
         eventDao.insert(e);
+        if (officeActivitySignaler != null) {
+            officeActivitySignaler.afterCommit(tenantId, "ASSIGNMENT_CHANGED", e.getId());
+        }
         return e;
     }
 

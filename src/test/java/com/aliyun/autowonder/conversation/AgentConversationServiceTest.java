@@ -33,6 +33,29 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class AgentConversationServiceTest {
+    @Test
+    void managedDesignCommentQueuesOnBusyOwnerWithoutSwitchingExecutor() {
+        var conv = existingConversationWithSession();
+        conv.setChannel("WORKITEM_PRD");
+        when(convDao.findByKey(1L, "WORKITEM_PRD", "conv-x", 3L)).thenReturn(conv);
+        var runtime = mock(com.aliyun.autowonder.prd.PrdDesignRuntimeService.class);
+        when(runtime.managedWorkspacePrompt(conv)).thenReturn("managed design workspace");
+        org.springframework.test.util.ReflectionTestUtils.setField(svc, "prdDesignRuntime", runtime);
+        when(executorRouter.selectDesignOwner(1L, 3L, 50L, 9L)).thenReturn(null);
+        when(executorRouter.canQueueDesignOnOwner(1L, 3L, 50L, 9L)).thenReturn(true);
+        when(turnDao.insert(any())).thenAnswer(invocation -> {
+            ((AgentConversationTurnDO) invocation.getArgument(0)).setId(90L);
+            return 1;
+        });
+        svc.submitTurn(1L, 3L, "WORKITEM_PRD", "conv-x", "review comment", "managed-queue", "{}", 7L);
+        commitTransactionSynchronizations();
+        verify(turnDao).insert(argThat(row -> "IN".equals(row.getDirection())
+                && "QUEUED".equals(row.getStatus()) && "review comment".equals(row.getContent())));
+        verify(executorRouter).selectDesignOwner(1L, 3L, 50L, 9L);
+        verify(executorRouter, never()).select(anyLong(), anyLong(), anyLong(), any());
+        verify(convDao, never()).updateExecutor(anyLong(), anyLong(), anyLong());
+        verifyNoInteractions(transport);
+    }
 
     @ParameterizedTest @ValueSource(strings = {"SUCCESS", "FAILED", "CANCELED"})
     void exactTerminalReplayIsDebugAndHasNoBusinessEffects(String status) {
@@ -175,6 +198,7 @@ class AgentConversationServiceTest {
     void setUp() {
         // svc 是类级单例，逐一清掉用例注入的可选协作者，避免跨用例串味。
         svc.setConversationUsageService(null);
+        svc.setTurnEventService(null);
         svc.setUserDao(null);
         TransactionSynchronizationManager.initSynchronization();
         TransactionSynchronizationManager.setActualTransactionActive(true);
@@ -1856,6 +1880,32 @@ class AgentConversationServiceTest {
     }
 
     @Test
+    void acknowledgeCanceledTurnRecoversTheReplyAlreadyStreamedToTheBrowser() {
+        ConversationBrowserEventPublisher eventPublisher = mock(ConversationBrowserEventPublisher.class);
+        ConversationTurnEventService eventService = mock(ConversationTurnEventService.class);
+        svc.setBrowserEventPublisher(eventPublisher);
+        svc.setTurnEventService(eventService);
+        AgentConversationDO conv = existingConversationWithSession();
+        when(convDao.findById(1L, 77L)).thenReturn(conv);
+        AgentConversationTurnDO inTurn = processingInboundTurn(77L);
+        when(turnDao.findByConversationTurn(1L, 77L, 55L)).thenReturn(inTurn);
+        when(turnDao.updateInboundStatusIfProcessing(1L, 77L, 55L, "CANCELED", null))
+                .thenReturn(1);
+        when(eventService.streamedReplyText(1L, 77L, 55L, inTurn.getDispatchAttempt()))
+                .thenReturn("停止前已产生的回复");
+        when(turnDao.insert(any())).thenReturn(1);
+
+        svc.acknowledgeTurn(1L, 9L, 77L, 55L, "CANCELED", null, null, null);
+        commitTransactionSynchronizations();
+
+        verify(turnDao).insert(argThat(t -> "OUT".equals(t.getDirection())
+                && "CANCELED".equals(t.getStatus())
+                && "停止前已产生的回复".equals(t.getContent())
+                && t.getSourceContext() == null));
+        verify(eventPublisher).publishStatusEvent(1L, 77L, 55L, "canceled");
+    }
+
+    @Test
     void acknowledgeSuccessfulTurnPublishesCompletedStatusEvent() {
         ConversationBrowserEventPublisher eventService = mock(ConversationBrowserEventPublisher.class);
         svc.setBrowserEventPublisher(eventService);
@@ -2803,6 +2853,59 @@ class AgentConversationServiceTest {
         assertTrue(runtime.getValue().contains("User message:\nlook"));
         // 只取当前轮次：历史轮次附件不能顺带投递。
         verify(attachments).runtimeContext(1L, 77L, 55L, "look");
+    }
+
+    @Test
+    void explicitPrdRuntimeCommandIsPreparedAtActualDispatchButKeptOutOfChatHistory() {
+        AgentConversationDO conv = existingConversationWithSession();
+        conv.setChannel("WORKITEM_PRD");
+        when(convDao.findByKey(1L, "WORKITEM_PRD", "conv-x", 3L)).thenReturn(conv);
+        when(executorRouter.select(1L, 3L, 50L, 9L)).thenReturn(9L);
+        when(turnDao.insert(any())).thenAnswer(invocation -> {
+            AgentConversationTurnDO row = invocation.getArgument(0);
+            row.setId(55L);
+            return 1;
+        });
+        var attachments = mock(ClarificationAttachmentService.class);
+        when(attachments.runtimeContext(1L, 77L, 55L, "design"))
+                .thenReturn("design with current attachment");
+        var runtime = mock(com.aliyun.autowonder.prd.PrdDesignRuntimeService.class);
+        when(runtime.runtimePrompt(conv, 55L, 1, "PREPARE"))
+                .thenReturn("trusted runtime preparation instructions");
+        org.springframework.test.util.ReflectionTestUtils.setField(svc, "clarificationAttachmentService", attachments);
+        org.springframework.test.util.ReflectionTestUtils.setField(svc, "prdDesignRuntime", runtime);
+        String sourceContext = "{\"userMessage\":\"prepare\",\"runtimeAction\":\"PREPARE\"}";
+        svc.submitTurn(1L, 3L, "WORKITEM_PRD", "conv-x", "design", "prd-dispatch-1", sourceContext);
+        verify(runtime, never()).runtimePrompt(any(), anyLong(), anyInt(), anyString());
+        commitTransactionSynchronizations();
+        verify(runtime).runtimePrompt(conv, 55L, 1, "PREPARE");
+        verify(runtime, never()).bindTurn(any(), anyLong(), anyInt());
+        verify(turnDao, never()).updateProcessingSourceContext(anyLong(), anyLong(), anyString(), anyString());
+        verify(transport).send(any(), eq(55L), eq("design with current attachment"), any(),
+                eq("trusted runtime preparation instructions"), any());
+    }
+
+    @Test
+    void ordinaryPrdTurnDoesNotReceiveRuntimePreparationInstructions() {
+        AgentConversationDO conv = existingConversationWithSession();
+        conv.setChannel("WORKITEM_PRD");
+        when(convDao.findByKey(1L, "WORKITEM_PRD", "conv-x", 3L)).thenReturn(conv);
+        when(executorRouter.select(1L, 3L, 50L, 9L)).thenReturn(9L);
+        when(turnDao.insert(any())).thenAnswer(invocation -> {
+            AgentConversationTurnDO row = invocation.getArgument(0);
+            row.setId(55L);
+            return 1;
+        });
+        var runtime = mock(com.aliyun.autowonder.prd.PrdDesignRuntimeService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(svc, "prdDesignRuntime", runtime);
+
+        svc.submitTurn(1L, 3L, "WORKITEM_PRD", "conv-x", "design", "prd-dispatch-ordinary",
+                "{\"userMessage\":\"design\"}");
+        commitTransactionSynchronizations();
+
+        verify(runtime).bindTurn(conv, 55L, 1);
+        verify(runtime, never()).runtimePrompt(any(), anyLong(), anyInt(), anyString());
+        verify(transport).send(any(), eq(55L), eq("design"), any(), any());
     }
 
     @Test

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Collapse, Space, Tooltip } from 'antd';
 import { FullscreenExitOutlined } from '@ant-design/icons';
 import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
-import { PrdWorkitemEntry } from '@/features/prd/components/PrdWorkitemEntry';
 import { WorkitemClarificationPanel } from '../clarification/WorkitemClarificationPanel';
 import { CLARIFICATION_THEME } from '../clarification/theme';
 import { SquadMembers } from './SquadMembers';
@@ -120,6 +119,12 @@ export function RightPanel({
     lastInitialModeRef.current = initialMode;
     applyMode(initialMode ?? 'progress');
   }, [initialMode, applyMode]);
+
+  // 页面级入口会在面板已挂载后同时把 URL 切到澄清和全屏，
+  // 因此全屏态也必须跟随 prop 变化，不能只在 useState 初始化时读一次。
+  useEffect(() => {
+    if (initialMode === 'clarify') setClarifyFullscreen(initialFullscreen ?? false);
+  }, [initialMode, initialFullscreen]);
 
   // 主动退出全屏的唯一入口，保证 Esc 与按钮两条路径不会走偏
   const exitFullscreen = useCallback(() => {
@@ -239,9 +244,6 @@ export function RightPanel({
   return (
     <div style={{ padding: 0, overflow: 'auto', height: '100%' }}>
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
-        <PrdWorkitemEntry onClarify={AI_CLARIFICATION_ENABLED
-          ? () => accessCommand('READ_WRITE', t('detail.clarifyCommand'), () => switchMode('clarify'))
-          : undefined} />
 
         <Collapse
           className="aw-rail-collapse"

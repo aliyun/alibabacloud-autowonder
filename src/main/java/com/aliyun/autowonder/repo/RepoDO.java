@@ -12,6 +12,7 @@ public class RepoDO {
     private String name;
     private String url;
     private String defaultBranch;
+    private String designBaseBranch;
     private String description;
     private String scanStatus;
     private Date gmtCreate;

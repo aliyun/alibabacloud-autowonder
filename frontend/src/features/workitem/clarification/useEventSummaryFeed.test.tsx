@@ -646,6 +646,33 @@ describe('useEventSummaryFeed', () => {
     unmount();
   });
 
+  it('restores an active turn atomically, then resumes incremental live updates', async () => {
+    const summaries = vi.fn(async (_turn: number, after = 0) => {
+      const end = Math.min(600, after + 200);
+      return page({ items: Array.from({ length: end - after }, (_, index) => ({
+        ...item(after + index + 1), revision: after + index + 1,
+      })), nextCursor: end, hasMore: end < 600, preparationStatus: 'PARTIAL', publicationWatermark: 600 });
+    });
+    const lengths: number[] = [];
+    const { result, unmount } = renderHook(() => {
+      const feed = useEventSummaryFeed({ source: source({ summaries }), conversationId: 1, turnId: 2,
+        enabled: true, processing: true, keepAllEvents: true, atomicHistory: true });
+      lengths.push(feed.items.length);
+      return feed;
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(600), { timeout: 10_000 });
+    expect(lengths.filter(length => length > 0 && length < 600)).toEqual([]);
+
+    act(() => realtime.current?.onEvent?.({
+      channel: 'conversation:1', type: 'CONVERSATION_TURN_EVENT', timestamp: 0,
+      payload: { conversationId: 1, turnId: 2, dispatchAttempt: 1, eventSeq: 601,
+        eventType: 'text', payload: { type: 'text', content: 'live update' } },
+    }));
+    await waitFor(() => expect(result.current.items).toHaveLength(601));
+    expect(result.current.items.at(-1)?.eventSeq).toBe(601);
+    unmount();
+  });
+
   it('appends running events past the former window cap without trimming displayed history', async () => {
     const summaries = vi.fn(async (_turn: number, after = 0) => {
       const end = Math.min(1300, after + 200);

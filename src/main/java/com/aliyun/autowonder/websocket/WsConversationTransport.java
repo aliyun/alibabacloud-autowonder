@@ -53,6 +53,12 @@ public class WsConversationTransport implements ConversationTransport {
     @Override
     public void send(AgentConversationDO conv, Long turnId, String content, String systemPrompt,
             Integer dispatchAttempt) {
+        send(conv, turnId, content, systemPrompt, null, dispatchAttempt);
+    }
+
+    @Override
+    public void send(AgentConversationDO conv, Long turnId, String content, String systemPrompt,
+            String runtimePrompt, Integer dispatchAttempt) {
         if (conv.getExecutorId() == null) {
             throw new IllegalArgumentException("conversation must have a bound executor");
         }
@@ -90,6 +96,12 @@ public class WsConversationTransport implements ConversationTransport {
                     conv.getExecutorId(), "CONVERSATION_ACP_INTERACTION_V1");
             frame.put("systemPrompt", com.aliyun.autowonder.conversation.ConversationMode.of(conv.getChannel())
                     .applyToIdentity(capability.officialSystemPrompt(), supportsAcp));
+        }
+        if (runtimePrompt != null && !runtimePrompt.isBlank()) {
+            String identityPrompt = frame.getString("systemPrompt");
+            frame.put("systemPrompt", identityPrompt == null || identityPrompt.isBlank()
+                    ? runtimePrompt
+                    : identityPrompt + "\n\n" + runtimePrompt);
         }
         frame.put("agentVersionId", capability.agentVersionId());
         frame.put("capabilityDownloadUrl", capability.downloadUrl());

@@ -79,6 +79,7 @@ class ConversationTurnHistoryTest {
         assertTrue(pageSql.contains("LEFT(")); assertTrue(pageSql.contains("2048) AS content"));
         assertTrue(pageSql.contains("id < ?")); assertTrue(pageSql.contains("ORDER BY id DESC LIMIT ?"));
         assertTrue(pageSql.contains("$.userMessage")); assertTrue(pageSql.contains("$.element"));
+        assertTrue(pageSql.contains("$.reviewCommentsDisplay"));
         String segmentSql = config.getMappedStatement(AgentConversationTurnDao.class.getName() + ".findHistoryContentSegment")
                 .getBoundSql(params).getSql().replaceAll("\\s+", " ");
         assertTrue(segmentSql.contains("SUBSTRING(")); assertTrue(segmentSql.contains("4096) AS content"));

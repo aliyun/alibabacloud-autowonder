@@ -74,6 +74,10 @@ import {
   writeClarificationPrefill,
 } from './prefill';
 import {
+  AUTO_CLARIFICATION_AGENT_QUERY_KEY,
+  loadAutoClarificationAgent,
+} from './defaultClarificationAgent';
+import {
   CLARIFICATION_SEND_MODE_KEY,
   CLARIFICATION_SEND_MODE_QUERY_KEY,
   DEFAULT_SEND_MODE,
@@ -289,6 +293,17 @@ export function WorkitemClarificationPanel({
   // render (react-query v5), so without this set a persistent create failure
   // would re-trigger mutate on every effect run (request storm + toast spam).
   const autoCreateAttemptedRef = useRef(new Set<number>());
+  // 自动选人（工单 60314）：挂载时的本地预填快照决定是否允许标签自动选择。
+  // 必须在最近会话/预填改写 selection 之前取值，否则会把“后来才有的身份”当成预填。
+  const initialPrefillRef = useRef(selection);
+  // 自动身份只应用一次；兜底后同样不再自动回选，避免清空选择形成循环。
+  const autoAppliedRef = useRef(false);
+  const autoFallbackRef = useRef(false);
+  // 非唯一候选（0 个或多个）落定后不再自动选：用户留在选人页期间不会被后台重取“突然选中”。
+  const autoSettledRef = useRef(false);
+  const autoSelectedAgentIdRef = useRef<number | null>(null);
+  const [autoTip, setAutoTip] = useState<{ agentName: string } | null>(null);
+  const [autoFallbackNotice, setAutoFallbackNotice] = useState(false);
 
   // 刷新恢复（URL 上下文）：恢复源只认挂载当帧从 URL 读到的值——外层会把本面板上报的
   // 上下文写回 URL 再作为 prop 回流，跟着活的 prop 走会让恢复源在落定之前就被自己抹掉
@@ -315,6 +330,8 @@ export function WorkitemClarificationPanel({
   // 只读 ref 的 memo 会返回缓存的「无恢复身份」把合法会话丢掉，面板退回本地记忆
   // 并自动选上别人的会话（缺陷二 A/B 竞态）。
   const urlConversationOwnerId = urlConversationAgentIdRef.current;
+  const launchSquad = conversation.data?.id === restoredConversationIdRef.current
+    ? conversation.data?.squadId : undefined;
 
   // URL 只带数字人参数（没有会话）时，靠「小队成员查询」确认它仍然可选：
   // 候选范围与选择器一致，解析不出来的数字人不恢复。查询结果同时用于恢复后
@@ -322,7 +339,7 @@ export function WorkitemClarificationPanel({
   const restoreSquadQuery = useQuery({
     queryKey: ['clarification', 'agent-squad', restoredAgentId],
     queryFn: () => findSquadIdForAgent(restoredAgentId as number),
-    enabled: restoredAgentId != null && !userSelectedAgentRef.current,
+    enabled: restoredAgentId != null && !launchSquad && !userSelectedAgentRef.current,
     staleTime: 5 * 60_000,
   });
 
@@ -336,7 +353,7 @@ export function WorkitemClarificationPanel({
       // 已不在任何可选小队中的历史数字人不编造小队归属（squadId 0 仅作占位）。
       return {
         pending: false,
-        identity: { squadId: restoreSquadQuery.data ?? 0, agentId: urlConversationOwnerId },
+        identity: { squadId: launchSquad ?? restoreSquadQuery.data ?? 0, agentId: urlConversationOwnerId },
       };
     }
     if (restoreSquadQuery.isSuccess) {
@@ -352,7 +369,7 @@ export function WorkitemClarificationPanel({
       return { pending: false, identity: null };
     }
     return { pending: true, identity: null };
-  }, [restoredAgentId, urlConversationOwnerId, restoreSquadQuery.data, restoreSquadQuery.isError,
+  }, [restoredAgentId, urlConversationOwnerId, launchSquad, restoreSquadQuery.data, restoreSquadQuery.isError,
     restoreSquadQuery.isSuccess]);
 
   // 有效数字人身份：用户主动选择 > 有效 URL 上下文 > 本地选择记忆（工单 56281）。
@@ -391,6 +408,38 @@ export function WorkitemClarificationPanel({
     && (latestQuery.isLoading
       || (latestQuery.isSuccess && latestQuery.data != null && !serverResolvedRef.current));
 
+  // 标签自动选择（工单 60314）：只有“无 URL、无用户接管、无预填、/latest 明确为空”
+  // 且尚未自动选中/兜底时才查询候选；/latest 失败保持现有降级，不自动选
+  // （无法确认是否已有历史会话）。
+  const autoEligible = !restoredFromUrl
+    && !agentRestorePending
+    && !userSelectedAgentRef.current
+    && initialPrefillRef.current == null
+    && !autoAppliedRef.current
+    && !autoFallbackRef.current
+    && !autoSettledRef.current
+    && latestQuery.isSuccess
+    && latestQuery.data == null;
+
+  const autoQuery = useQuery({
+    queryKey: AUTO_CLARIFICATION_AGENT_QUERY_KEY,
+    queryFn: loadAutoClarificationAgent,
+    enabled: autoEligible,
+    // 查询失败静默回落手动选择，不做重试风暴。
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  // 解析窗口：latest 落空的同一帧就要接管加载态，否则会先闪一帧选人页。
+  // 不能用 isLoading（enabled 刚翻转时仍是 idle），用“是否已落定”判断；
+  // 候选取回但还没写进 selection 的那一帧同样算未落定，否则会闪一帧选人页。
+  const autoApplyPending = autoQuery.isSuccess
+    && autoQuery.data != null
+    && !autoAppliedRef.current
+    && !autoFallbackRef.current;
+  const autoPending = autoEligible && (!autoQuery.isFetched || autoApplyPending);
+  const identityPending = latestPending || autoPending;
+
   // 命中即落定身份与会话；没有记录或查询失败都静默回落现有链路（FR-1/FR-6）。
   // 放在自动选会话之前：它先写 conversationId，自动选择就不会再抢着取列表首项。
   // 每次挂载只落定一次：/latest 之后重新取数（窗口聚焦/缓存失效）拿到新数据时，
@@ -407,6 +456,25 @@ export function WorkitemClarificationPanel({
     setSelection({ squadId: 0, agentId: latest.agentId });
     setConversationId(latest.id);
   }, [restoredFromUrl, latestQuery.isSuccess, latestQuery.data]);
+
+  // 应用候选：恰好 1 个时才自动进入。查询期间用户可能已接管或 URL 恢复落定，
+  // 迟到的结果一律不覆盖；0 个或多个候选落定后停留在手动选人页。
+  useEffect(() => {
+    if (!autoQuery.isSuccess || autoAppliedRef.current || autoFallbackRef.current) return;
+    if (autoSettledRef.current) return;
+    if (userSelectedAgentRef.current || restoredFromUrl || initialPrefillRef.current != null) return;
+    const candidate = autoQuery.data;
+    if (!candidate) {
+      autoSettledRef.current = true;
+      return;
+    }
+    autoAppliedRef.current = true;
+    autoSelectedAgentIdRef.current = candidate.id;
+    setAutoTip({ agentName: candidate.name });
+    // 不设 userSelectedAgentRef、不写 localStorage 预填：身份来源仍是“系统推断”，
+    // 会话创建后由 /latest 承接后续恢复。无小队时用 0 占位，不伪造归属。
+    setSelection({ squadId: candidate.squadIds?.[0] ?? 0, agentId: candidate.id });
+  }, [autoQuery.isSuccess, autoQuery.data, restoredFromUrl]);
 
   // 服务端会话的小队归属只用于「切换数字员工」回显与交付预填：查不到保持 0 占位，
   // 不伪造预填（与 URL 恢复口径一致）。数字人已移出所有小队时照常打开会话（FR-4）。
@@ -914,6 +982,9 @@ export function WorkitemClarificationPanel({
       resetStreamedEvents();
       setInputValue('');
       userSelectedAgentRef.current = true;
+      autoSelectedAgentIdRef.current = null;
+      setAutoTip(null);
+      setAutoFallbackNotice(false);
       setSelection(next);
       setConversationId(null);
       if (next && next.agentId > 0) {
@@ -926,6 +997,15 @@ export function WorkitemClarificationPanel({
     [workitemId, resetStreamedEvents],
   );
 
+  // 「切换数字员工」：清空自动身份与提示并接管选择；自动兜底提示一并收起。
+  const switchToManualSelection = useCallback(() => {
+    userSelectedAgentRef.current = true;
+    autoSelectedAgentIdRef.current = null;
+    setAutoTip(null);
+    setAutoFallbackNotice(false);
+    setSelection(null);
+  }, []);
+
   const handleSelectConversation = useCallback((nextConversationId: number) => {
     if (nextConversationId === conversationIdRef.current) return;
     resetStreamedEvents();
@@ -934,7 +1014,7 @@ export function WorkitemClarificationPanel({
   }, [resetStreamedEvents]);
 
   useEffect(() => {
-    if (agentRestorePending || latestPending) return;
+    if (agentRestorePending || identityPending) return;
     if (!conversations.data || conversationId !== null) return;
     if (conversations.data.length > 0) {
       setConversationId(conversations.data[0].id);
@@ -952,11 +1032,29 @@ export function WorkitemClarificationPanel({
         setConversationId(conv.id);
       },
       onError: () => {
+        // 仅“当前身份仍来自自动选择、用户尚未接管且还没有可用会话”时静默兜底：
+        // 清空自动身份、回到选人页并提示，手动选择的失败仍沿用全局 toast。
+        if (autoSelectedAgentIdRef.current === mutatedAgentId
+            && !userSelectedAgentRef.current
+            && effectiveAgentIdRef.current === mutatedAgentId
+            && conversationIdRef.current === null) {
+          autoFallbackRef.current = true;
+          autoSelectedAgentIdRef.current = null;
+          // 允许用户重选同一数字人时再次创建会话（一次失败不得永久封禁）。
+          autoCreateAttemptedRef.current.delete(mutatedAgentId);
+          // 标记“用户接管选择”，同时关掉候选查询，避免清空后又被自动选中形成循环。
+          userSelectedAgentRef.current = true;
+          setAutoTip(null);
+          setAutoFallbackNotice(true);
+          setSelection(null);
+          setConversationId(null);
+          return;
+        }
         message.error(i18n.t('workitem:clarification.autoCreateFailed'));
       },
     });
   }, [conversations.data, conversationId, effectiveAgentId, createMutation, workitemId,
-    agentRestorePending, latestPending]);
+    agentRestorePending, identityPending]);
 
   // 打开会话即补一次带外命令探针：详情里的快照只保证秒显，命令可能早已过期。
   // 每个 conversationId 只打一次（重渲染/详情重拉/StrictMode 双调用都不能重复打），
@@ -1009,13 +1107,13 @@ export function WorkitemClarificationPanel({
   const hasReportedContextRef = useRef(false);
   useEffect(() => {
     if (!hasReportedContextRef.current && effectiveAgentId == null && conversationId == null) return;
-    // 最近会话结果落地前不回报：此刻的 null 只是「还没解析出来」，写回 URL 会污染恢复源。
-    if (latestPending) return;
+    // 最近会话/候选解析结果落地前不回报：此刻的 null 只是「还没解析出来」，写回 URL 会污染恢复源。
+    if (identityPending) return;
     hasReportedContextRef.current = true;
     onContextChange?.(
       agentRestorePending ? { conversationId } : { agentId: effectiveAgentId, conversationId },
     );
-  }, [effectiveAgentId, conversationId, onContextChange, agentRestorePending, latestPending]);
+  }, [effectiveAgentId, conversationId, onContextChange, agentRestorePending, identityPending]);
 
   const handleCreateConversation = useCallback(() => {
     const agentId = effectiveAgentId;
@@ -1213,8 +1311,8 @@ export function WorkitemClarificationPanel({
     }
     : {};
 
-  if (latestPending) {
-    // 最近会话结果返回前的轻量加载态：只保留头行（返回/全屏仍可用），
+  if (identityPending) {
+    // 最近会话/候选结果返回前的轻量加载态：只保留头行（返回/全屏仍可用），
     // 不渲染选人页，避免「先闪一下选人页再跳走」。
     return (
       <div className={fullscreen ? 'aw-clarification-panel is-fullscreen' : 'aw-clarification-panel'}>
@@ -1228,10 +1326,7 @@ export function WorkitemClarificationPanel({
               className="aw-cl-ghost"
               icon={<AwStrokeIcon name="transfer" />}
               aria-label={t('clarification.switchAgent')}
-              onClick={() => {
-                userSelectedAgentRef.current = true;
-                setSelection(null);
-              }}
+              onClick={switchToManualSelection}
             >
               {t('clarification.switchAgent')}
             </Button>
@@ -1239,7 +1334,10 @@ export function WorkitemClarificationPanel({
             {headerSuffix}
           </div>
         </div>
-        <div data-testid="clarification-latest-loading" />
+        <div
+          data-testid="clarification-latest-loading"
+          aria-label={autoPending ? t('clarification.autoSelecting') : undefined}
+        />
       </div>
     );
   }
@@ -1258,6 +1356,12 @@ export function WorkitemClarificationPanel({
         </div>
         <div className="aw-cl-pick">
           <div data-testid="clarification-selection-column" className="aw-cl-pick-col" style={fullscreenColumnStyle}>
+            {autoFallbackNotice && (
+              <div className="aw-cl-note error" role="alert" style={{ marginBottom: 12 }}>
+                <span className="ic"><AwStrokeIcon name="alert-c" /></span>
+                <span className="grow">{t('clarification.autoSelectFallback')}</span>
+              </div>
+            )}
             <p className="aw-cl-pick-intro">{t('clarification.selectSquadAgent')}</p>
             <p className="aw-cl-pick-intro">{t('clarification.pickIntro', { id: workitemId })}</p>
             <SquadAgentSelector
@@ -1310,10 +1414,7 @@ export function WorkitemClarificationPanel({
       aria-label={t('clarification.switchAgent')}
       title={t('clarification.switchAgent')}
       disabled={isCreatingConversation}
-      onClick={() => {
-        userSelectedAgentRef.current = true;
-        setSelection(null);
-      }}
+      onClick={switchToManualSelection}
     >
       {t('clarification.switchShort')}
     </Button>
@@ -1382,6 +1483,15 @@ export function WorkitemClarificationPanel({
           {/* 这层列节点必须在滚动容器内部：滚动元素仍是 scrollRef 那层，
               否则跟随底部/回到底部的滚动测量会落到不滚动的节点上。 */}
           <div data-testid="clarification-content-column" className="aw-cl-column" style={fullscreenColumnStyle}>
+            {autoTip && (
+              <div className="aw-cl-note info" style={{ marginBottom: 12 }}>
+                <span className="ic"><AwStrokeIcon name="spark" /></span>
+                <span className="grow">{t('clarification.autoSelectedTip', { name: autoTip.agentName })}</span>
+                <Button size="small" type="text" onClick={() => setAutoTip(null)}>
+                  {t('clarification.autoSelectedTipDismiss')}
+                </Button>
+              </div>
+            )}
             {!conversationId ? (
               conversations.isError ? (
                 <ClarificationLoadError

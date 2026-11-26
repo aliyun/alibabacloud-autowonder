@@ -159,20 +159,30 @@ html .aw-cl-session .ant-select-selector { border-radius: 4px; padding: 0 8px; }
 .aw-cl-turn .aw-clarify-msg-actions .ant-btn { width: 20px; height: 20px; min-width: 20px; color: var(--aw-text-3); }
 .aw-cl-turn:hover .aw-clarify-msg-actions { opacity: 1; }
 .aw-cl-steps { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.aw-cl-event-row + .aw-cl-event-row { margin-top: 8px; }
+.aw-turn-events:empty { display: none; }
 .aw-cl-step { border-radius: 6px; min-width: 0; }
-.aw-cl-step > summary { list-style: none; display: flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 6px; margin: 0 -6px;
+.aw-cl-step > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 6px; margin: 0 -6px;
   border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--aw-text-2); }
 .aw-cl-step > summary::-webkit-details-marker { display: none; }
 .aw-cl-step > summary:hover { background: var(--aw-gray-bg); color: var(--aw-text); }
-.aw-cl-step > summary > .ic { width: 13px; height: 13px; flex-shrink: 0; color: var(--aw-text-3); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
-.aw-cl-step > summary .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-cl-step > summary > .ic { width: 12px; height: 12px; line-height: 1; flex-shrink: 0; color: var(--aw-text-3); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.aw-cl-step > summary > .ic > span,
+.aw-cl-step > summary > .ic svg { width: 12px; height: 12px; display: block; }
+.aw-cl-step > summary .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-cl-step > summary .t code { font-family: var(--aw-font-mono); font-size: 11px; }
 .aw-cl-step > summary .r { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 11px; color: var(--aw-text-3); }
 .aw-cl-step > summary .chev { width: 12px; height: 12px; color: var(--aw-text-3); display: inline-flex; transition: transform .15s; }
 .aw-cl-step[open] > summary .chev { transform: rotate(180deg); }
 .aw-cl-step-body { margin: 4px 0 4px 6px; padding: 4px 0 4px 12px; border-left: 2px solid var(--aw-border); font-size: 12px; line-height: 20px; color: var(--aw-text-2); }
+.aw-cl-step-body [data-testid='tool-locations'] { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-cl-step-body .k { font-size: 11px; color: var(--aw-text-3); margin: 6px 0 2px; }
 .aw-cl-step-body .k:first-child { margin-top: 0; }
+.aw-cl-subfold > summary { list-style: none; width: fit-content; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.aw-cl-subfold > summary::-webkit-details-marker { display: none; }
+.aw-cl-subfold > summary .k { margin: 6px 0 2px; }
+.aw-cl-subfold > summary .chev { width: 12px; height: 12px; display: inline-flex; color: var(--aw-text-3); transition: transform .15s; }
+.aw-cl-subfold[open] > summary .chev { transform: rotate(180deg); }
 .aw-cl-step-body .aw-clarify-md { font-size: 12px; line-height: 20px; color: var(--aw-text-2); }
 .aw-cl-pre { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--aw-header-bg); border: 1px solid var(--aw-border);
   font-family: var(--aw-font-mono); font-size: 11px; line-height: 18px; color: var(--aw-text-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow-y: auto; }

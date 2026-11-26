@@ -175,6 +175,7 @@ export function RepoDetailPage() {
         name: repo?.name || '',
         url: repo?.url || '',
         defaultBranch: repo?.defaultBranch || '',
+        designBaseBranch: repo?.designBaseBranch || '',
         description: repo?.description || '',
       });
       setEditingRepo(true);
@@ -192,6 +193,8 @@ export function RepoDetailPage() {
         name: values.name.trim(),
         url: values.url.trim(),
         defaultBranch: values.defaultBranch?.trim() ? values.defaultBranch.trim() : null,
+        ...((values.designBaseBranch?.trim() || null) !== (repo?.designBaseBranch ?? null)
+          ? { designBaseBranch: values.designBaseBranch?.trim() || null } : {}),
         description: values.description?.trim() ? values.description.trim() : null,
       });
     });
@@ -316,6 +319,9 @@ export function RepoDetailPage() {
           <Form.Item label={t('fields.branch')} name="defaultBranch">
             <Input placeholder={t('placeholders.clearBranch')} allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('actions.clearBranch')} /> }} />
           </Form.Item>
+          <Form.Item label={t('fields.designBase')} name="designBaseBranch" extra={t('fields.designBaseHint')}>
+            <Input allowClear maxLength={128} />
+          </Form.Item>
           <Form.Item label={t('fields.description')} name="description">
             <TextArea rows={3} placeholder={t('placeholders.clearDescription')} allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('actions.clearDescription')} /> }} />
           </Form.Item>
@@ -335,6 +341,10 @@ export function RepoDetailPage() {
             <div className="aw-repo-meta-label">{t('fields.branch')}</div>
             <div className="aw-repo-meta-value aw-repo-meta-value--mono">{repo.defaultBranch || MISSING}</div>
           </div>
+          {repo.designBaseBranch && <div className="aw-repo-meta-item">
+            <div className="aw-repo-meta-label">{t('fields.designBase')}</div>
+            <div className="aw-repo-meta-value aw-repo-meta-value--mono">{repo.designBaseBranch}</div>
+          </div>}
           <div className="aw-repo-meta-item">
             <div className="aw-repo-meta-label">{t('fields.id')}</div>
             <div className="aw-repo-meta-value aw-repo-meta-value--mono">{repo.id}</div>

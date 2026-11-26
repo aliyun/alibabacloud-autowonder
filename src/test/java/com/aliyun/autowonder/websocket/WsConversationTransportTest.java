@@ -44,6 +44,30 @@ class WsConversationTransportTest {
         assertEquals(50L, frame.path("agentVersionId").asLong());
     }
 
+    @Test
+    void appendsTrustedRuntimePromptAfterCurrentOfficialIdentity() throws Exception {
+        var sender = new WsConversationTransport(sessionRegistry, redisManager, capabilityService, null, null);
+        var conv = new AgentConversationDO();
+        conv.setId(5L);
+        conv.setExecutorId(9L);
+        conv.setAgentId(3L);
+        conv.setChannel("WORKITEM_PRD");
+        when(capabilityService.prepare(conv, 11L)).thenReturn(new ConversationCapabilitySnapshot(
+                50L, "https://bundle", "sha", "hash", "token", Map.of(), "OFFICIAL_IDENTITY"));
+
+        sender.send(conv, 11L, "visible user message", "STALE_IDENTITY",
+                "TRUSTED_RUNTIME_CONTEXT", 1);
+
+        var payload = ArgumentCaptor.forClass(String.class);
+        verify(redisManager).publish(eq(WsDispatchTransport.BROADCAST_CHANNEL), payload.capture());
+        var frame = new ObjectMapper().readTree(payload.getValue());
+        assertEquals("visible user message", frame.path("content").asText());
+        String prompt = frame.path("systemPrompt").asText();
+        assertTrue(prompt.startsWith("OFFICIAL_IDENTITY"));
+        assertTrue(prompt.endsWith("TRUSTED_RUNTIME_CONTEXT"));
+        assertFalse(prompt.contains("STALE_IDENTITY"));
+    }
+
     @ParameterizedTest
     @CsvSource({"true", "false"})
     void officialScopedChiefFramePreservesTrustedActorContentAndSession(boolean acp) throws Exception {

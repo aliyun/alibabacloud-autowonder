@@ -26,6 +26,7 @@ interface RequirementDocumentsCardProps {
   documents: Artifact[];
   loading?: boolean;
   children?: ReactNode;
+  headerActions?: ReactNode;
   hasGeneratedContext?: boolean;
 }
 
@@ -45,7 +46,7 @@ function formatBytes(size: number | null): string {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function RequirementDocumentsCard({ workitemId, documents, loading, children, hasGeneratedContext }: RequirementDocumentsCardProps) {
+export function RequirementDocumentsCard({ workitemId, documents, loading, children, headerActions, hasGeneratedContext }: RequirementDocumentsCardProps) {
   const { t } = useTranslation('workitem');
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewArtifact, setPreviewArtifact] = useState<Artifact | null>(null);
@@ -152,19 +153,22 @@ export function RequirementDocumentsCard({ workitemId, documents, loading, child
             event.target.value = '';
           }}
         />
-        <Button
-          className="aw-card-head-btn aw-req-context-upload"
-          icon={<AwStrokeIcon name="upload" />}
-          loading={uploadMutation.isPending}
-          disabled={uploadMutation.isPending || documents.length >= DOCUMENT_MAX_DOCUMENTS}
-          onClick={() => accessCommand(
-            'READ_WRITE',
-            t('documents.uploadCommand'),
-            () => inputRef.current?.click(),
-          )}
-        >
-          {t('documents.upload')}
-        </Button>
+        <div className="aw-req-context-actions">
+          {headerActions}
+          <Button
+            className="aw-card-head-btn"
+            icon={<AwStrokeIcon name="upload" />}
+            loading={uploadMutation.isPending}
+            disabled={uploadMutation.isPending || documents.length >= DOCUMENT_MAX_DOCUMENTS}
+            onClick={() => accessCommand(
+              'READ_WRITE',
+              t('documents.uploadCommand'),
+              () => inputRef.current?.click(),
+            )}
+          >
+            {t('documents.upload')}
+          </Button>
+        </div>
       </div>
       {children}
       <div

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run check:i18n && tsc -b && vite build",
+    "build": "npm run check:i18n && tsc -b && vite build && vite build --config vite.office.config.mjs && vite build --config vite.inspector.config.mjs",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
@@ -14,6 +14,7 @@
     "check:i18n": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
+    "three": "0.170.0",
     "@ant-design/icons": "^5.3.0",
     "@antv/g6": "^5.1.1",
     "@tanstack/react-query": "^5.50.0",
@@ -28,6 +29,7 @@
     "@tiptap/extension-task-list": "2.27.3",
     "@tiptap/react": "^2.27.3",
     "@tiptap/starter-kit": "^2.27.3",
+    "@uxerjs/universal-inspector": "^0.3.0",
     "antd": "^5.19.0",
     "axios": "^1.7.0",
     "copy-to-clipboard": "^3.3.3",
@@ -47,6 +49,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@types/three": "0.170.0",
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/react": "14.3.1",
     "@testing-library/user-event": "^14.5.0",

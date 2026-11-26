@@ -26,6 +26,30 @@ public class ConversationExecutorRouter {
         return selector.select(agentId, preferredExecutorId,
                 ExecutorProtocolFeatures.AGENT_ENVIRONMENT_VARIABLES_V1);
     }
+    public Long selectDesign(long tenantId, long agentId, long version, Long preferred) {
+        String features = environmentFeature(tenantId, version);
+        Long available = selector.select(agentId, preferred, features);
+        return available != null ? available : selector.selectQueueOwner(agentId, preferred, features);
+    }
+
+    public Long selectDesignPreparationReplacement(long tenantId, long agentId, long version, Long previousOwner) {
+        return selector.selectQueueOwner(agentId, null, environmentFeature(tenantId, version), previousOwner);
+    }
+
+    public Long selectDesignOwner(long tenantId, long agentId, long version, Long owner) {
+        return owner == null ? null : selector.selectStrict(agentId, owner, environmentFeature(tenantId, version));
+    }
+
+    public boolean canQueueDesignOnOwner(long tenantId, long agentId, long version, Long owner) {
+        return selector.canQueueOnOwner(agentId, owner, environmentFeature(tenantId, version));
+    }
+
+    private String environmentFeature(long tenantId, long version) {
+        var bindings = refs.listByVersion(tenantId, version);
+        return bindings == null || bindings.isEmpty()
+                ? null : ExecutorProtocolFeatures.AGENT_ENVIRONMENT_VARIABLES_V1;
+    }
+
     public Long selectPlatform(long tenantId, long agentId, long agentVersionId, Long preferredExecutorId) {
         var bindings = refs.listByVersion(tenantId, agentVersionId);
         String required = ConversationProtocolFeatures.TURN_EVENT;

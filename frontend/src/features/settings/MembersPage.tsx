@@ -11,12 +11,15 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Avatar,
   Button,
+  Input,
   Popconfirm,
   Select,
   Space,
   Tabs,
   Tooltip} from 'antd';
+import { CloseCircleFilled } from '@ant-design/icons';
 import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { EmptyState } from '@/shared/ui/EmptyState';
 import { Table } from '@/shared/theme/ThemedTable';
 import type { ColumnsType } from 'antd/es/table';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
@@ -75,6 +78,7 @@ export function MembersPage() {
   const transferOwnerMutation = useTransferOwner();
 
   const [roleFilter, setRoleFilter] = useState<number | 'ALL'>('ALL');
+  const [memberKeyword, setMemberKeyword] = useState('');
   const [memberPage, setMemberPage] = useState(1);
   const [memberPageSize, setMemberPageSize] = usePageSizePreference(
     'autowonder.members.pageSize', [10, 20, 50, 100], 10);
@@ -94,9 +98,15 @@ export function MembersPage() {
     );
   };
 
-  const filteredMembers = roleFilter === 'ALL'
-    ? members
-    : members.filter((member) => member.roleId === roleFilter);
+  const normalizedKeyword = memberKeyword.trim().toLowerCase();
+  const isSearching = normalizedKeyword.length > 0;
+  const filteredMembers = members.filter((member) => {
+    if (roleFilter !== 'ALL' && member.roleId !== roleFilter) return false;
+    if (!normalizedKeyword) return true;
+    return [member.nickname, member.username, member.email].some(
+      (value) => Boolean(value) && value.toLowerCase().includes(normalizedKeyword),
+    );
+  });
 
   const handleAddMember = (userId: number, roleId?: number) => {
     accessCommand('ADMIN', t('addMember'), () => {
@@ -268,19 +278,51 @@ export function MembersPage() {
     memberPage * memberPageSize,
   );
 
+  const noMatchEmpty = isSearching ? (
+    <EmptyState
+      icon={<AwStrokeIcon name="search" size={20} />}
+      title={t('noMatchingMembers')}
+      subtext={t('noMatchingMembersHint')}
+      action={(
+        <Button
+          onClick={() => {
+            setMemberKeyword('');
+            setMemberPage(1);
+          }}
+        >
+          {t('clearSearch')}
+        </Button>
+      )}
+    />
+  ) : undefined;
+
   const membersPane = (
     <>
       <Toolbar
         left={(
-          <Select
-            aria-label={t('filterRole')} style={{ width: 180 }}
-            options={[
-              { label: t('allMembers', { count: members.length, total: formatNumber(members.length) }), value: 'ALL' as const },
-              ...roles.map((role) => ({ label: workspaceRoleLabel(role), value: role.id })),
-            ]}
-            value={roleFilter}
-            onChange={(value) => { setRoleFilter(value); setMemberPage(1); }}
-          />
+          <>
+            <Input
+              aria-label={t('searchMembers')}
+              placeholder={t('searchMembersPlaceholder')}
+              prefix={<AwStrokeIcon name="search" />}
+              allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('clearSearch')} /> }}
+              style={{ width: 260, maxWidth: '100%' }}
+              value={memberKeyword}
+              onChange={(event) => {
+                setMemberKeyword(event.target.value);
+                setMemberPage(1);
+              }}
+            />
+            <Select
+              aria-label={t('filterRole')} style={{ width: 180 }}
+              options={[
+                { label: t('allMembers', { count: members.length, total: formatNumber(members.length) }), value: 'ALL' as const },
+                ...roles.map((role) => ({ label: workspaceRoleLabel(role), value: role.id })),
+              ]}
+              value={roleFilter}
+              onChange={(value) => { setRoleFilter(value); setMemberPage(1); }}
+            />
+          </>
         )}
         right={adminOnlyTip(
           <Button
@@ -301,6 +343,7 @@ export function MembersPage() {
         loading={isLoading}
         pagination={false}
         scroll={{ x: 880 }}
+        locale={noMatchEmpty ? { emptyText: noMatchEmpty } : undefined}
       />
       <TableFooter
         total={filteredMembers.length}

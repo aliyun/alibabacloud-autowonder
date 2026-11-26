@@ -24,6 +24,7 @@ import type { ClarificationConversation } from './types';
 import { readClarifyView, writeClarifyView } from '../clarifyView';
 import { copyTextToClipboard } from '@/shared/lib/clipboard';
 import type { Artifact } from '@/shared/types/workitem';
+import type { Agent } from '@/features/agent/api';
 
 type RealtimeCallback = (event: { type: string; payload: unknown }) => void;
 const realtime = vi.hoisted(() => ({ callback: null as RealtimeCallback | null }));
@@ -57,9 +58,16 @@ type PanelTestProps = {
   latest?: Partial<ClarificationConversation> | null;
   /** 自定义 /latest handler（加载态、失败等场景），优先于 latest。 */
   latestHandler?: HttpHandler;
+  /** 打桩 /api/agents 返回；缺省沿用全局 handler（空列表，不会自动选中）。 */
+  agents?: Agent[];
 };
 
-function renderPanel({ latest, latestHandler, ...props }: PanelTestProps = {}) {
+function renderPanel({ latest, latestHandler, agents, ...props }: PanelTestProps = {}) {
+  if (agents) {
+    server.use(http.get('/api/agents', () => HttpResponse.json({
+      success: true, code: '0', message: '', traceId: null, data: agents,
+    })));
+  }
   // 必须在测试自己的 :conversationId 详情 handler 之后注册：MSW 运行时 handler
   // 后注册者优先，否则 latest 会被详情 handler 当成会话 id 匹配掉。
   if (latestHandler) {
@@ -2793,5 +2801,279 @@ describe('owned conversation fallback display', () => {
     await act(async () => { await i18n.changeLanguage('zh-CN'); });
     expect(blocks[0]).toHaveTextContent('响应已终止');
     expect(requests).toBe(count);
+  });
+});
+
+describe('工单 60314：无历史会话时按「需求澄清」标签自动选人', () => {
+  const AUTO_TIP = '已自动使用「需求澄清」数字人 Agent-X，可随时切换。';
+  const PICKER_INTRO = '选择小队和数字员工';
+
+  function agentFixture(overrides: Partial<Agent> & { id: number }): Agent {
+    const { id, ...rest } = overrides;
+    return {
+      id,
+      name: `Agent-${id}`,
+      avatarUrl: null,
+      status: 'ONLINE',
+      onlineVersionId: 1,
+      editingVersionId: null,
+      latestVersionNo: 1,
+      version: 1,
+      gmtCreate: '2026-01-01T00:00:00',
+      systemTags: ['REQ_CLARIFY'],
+      executorOnlineCount: 1,
+      ...rest,
+    };
+  }
+
+  function jsonOk(data: unknown) {
+    return HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data });
+  }
+
+  function countAgentRequests(agents: Agent[] | 'fail') {
+    let calls = 0;
+    server.use(http.get('/api/agents', () => {
+      calls += 1;
+      if (agents === 'fail') {
+        return HttpResponse.json(
+          { success: false, code: '10000', message: 'agents failed', traceId: null, data: null },
+          { status: 500 },
+        );
+      }
+      return jsonOk(agents);
+    }));
+    return () => calls;
+  }
+
+  function captureCreate(created: number[], failFirst = false) {
+    let posts = 0;
+    server.use(http.post('/api/workitems/:workitemId/clarification-conversations', async ({ request }) => {
+      posts += 1;
+      const body = await request.json() as { agentId?: number };
+      created.push(body.agentId ?? -1);
+      if (failFirst && posts === 1) {
+        return HttpResponse.json(
+          { success: false, code: '10000', message: 'create failed', traceId: null, data: null },
+          { status: 500 },
+        );
+      }
+      return jsonOk({ ...makeConversation(5, ''), agentId: body.agentId ?? 0, turns: [] });
+    }));
+    return () => posts;
+  }
+
+  async function pickAgent(agentName = 'Agent-X') {
+    const squadSelect = await screen.findByRole('combobox');
+    await waitFor(() => expect(squadSelect).not.toBeDisabled());
+    fireEvent.mouseDown(squadSelect);
+    fireEvent.click(await screen.findByText('交付小队'));
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(agentName) }));
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    realtime.callback = null;
+  });
+
+  it('AC-1: 唯一在线候选时直接进入会话、显示可关闭提示', async () => {
+    mockSquads();
+    const created: number[] = [];
+    captureCreate(created);
+    renderPanel({ agents: [agentFixture({ id: 77, name: '澄清助手', squadIds: [9] })] });
+
+    expect(await screen.findByText('已自动使用「需求澄清」数字人 澄清助手，可随时切换。'))
+      .toBeInTheDocument();
+    expect(screen.queryByText(PICKER_INTRO)).toBeNull();
+    await waitFor(() => expect(created).toEqual([77]));
+
+    fireEvent.click(screen.getByRole('button', { name: '知道了' }));
+    expect(screen.queryByText(/已自动使用「需求澄清」/)).toBeNull();
+  });
+
+  it('AC-2: 无候选时保持选人页且不显示自动提示', async () => {
+    mockSquads();
+    const created: number[] = [];
+    captureCreate(created);
+    renderPanel({ agents: [agentFixture({ id: 41, name: '其他数字人', systemTags: ['OTHER'] })] });
+
+    expect(await screen.findByText(PICKER_INTRO)).toBeInTheDocument();
+    expect(screen.queryByText(/已自动使用「需求澄清」/)).toBeNull();
+    expect(created).toEqual([]);
+    const squadSelect = await screen.findByRole('combobox');
+    await waitFor(() => expect(squadSelect).not.toBeDisabled());
+  });
+
+  it('AC-3: 多个在线候选时保持选人页', async () => {
+    mockSquads();
+    renderPanel({
+      agents: [agentFixture({ id: 41, name: '澄清一' }), agentFixture({ id: 42 })],
+    });
+
+    expect(await screen.findByText(PICKER_INTRO)).toBeInTheDocument();
+    expect(screen.queryByText(/已自动使用「需求澄清」/)).toBeNull();
+    const squadSelect = await screen.findByRole('combobox');
+    await waitFor(() => expect(squadSelect).not.toBeDisabled());
+  });
+
+  it('AC-4: 两个打标签、仅一个执行器在线时自动选在线者', async () => {
+    mockSquads();
+    const created: number[] = [];
+    captureCreate(created);
+    renderPanel({
+      agents: [
+        agentFixture({ id: 41, name: '离线澄清', executorOnlineCount: 0 }),
+        agentFixture({ id: 42, name: 'Agent-X', executorOnlineCount: 2 }),
+      ],
+    });
+
+    expect(await screen.findByText(AUTO_TIP)).toBeInTheDocument();
+    await waitFor(() => expect(created).toEqual([42]));
+  });
+
+  it('AC-5: 有最近会话时打开最近会话且不查询候选', async () => {
+    const calls = countAgentRequests([agentFixture({ id: 42, name: 'Agent-X' })]);
+    mockSquads();
+    const latest = makeConversation(7, '最近澄清会话');
+    server.use(
+      http.get('/api/workitems/:workitemId/clarification-conversations', () => jsonOk([latest])),
+      http.get('/api/workitems/:workitemId/clarification-conversations/:conversationId', () =>
+        jsonOk(latest)),
+    );
+
+    renderPanel({ latest });
+
+    expect(await screen.findByText('最近澄清会话')).toBeInTheDocument();
+    expect(calls()).toBe(0);
+    expect(screen.queryByText(/已自动使用「需求澄清」/)).toBeNull();
+  });
+
+  it('AC-6: 本机预填优先于标签候选且不查询候选', async () => {
+    writeClarificationPrefill('100', { squadId: 9, agentId: 42 });
+    const calls = countAgentRequests([agentFixture({ id: 42, name: 'Agent-X' })]);
+    mockSquads();
+    const created: number[] = [];
+    captureCreate(created);
+
+    renderPanel();
+
+    await waitFor(() => expect(created).toEqual([42]));
+    expect(calls()).toBe(0);
+    expect(screen.queryByText(PICKER_INTRO)).toBeNull();
+  });
+
+  it('AC-7: URL 上下文优先于标签候选且不查询候选', async () => {
+    const calls = countAgentRequests([agentFixture({ id: 42, name: 'Agent-X' })]);
+    mockSquads();
+    const created: number[] = [];
+    captureCreate(created);
+
+    renderPanel({ initialAgentId: 42 });
+
+    await waitFor(() => expect(created).toEqual([42]));
+    expect(calls()).toBe(0);
+  });
+
+  it('AC-8: 自动建会话失败回落选人页并提示，重选同一数字人可再次创建', async () => {
+    mockSquads();
+    const created: number[] = [];
+    const posts = captureCreate(created, true);
+    renderPanel({ agents: [agentFixture({ id: 42, name: 'Agent-X' })] });
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('自动创建澄清会话失败，已切换到手动选择。请重新选择数字员工后继续。');
+    expect(screen.getByText(PICKER_INTRO)).toBeInTheDocument();
+    // 不弹全局 toast：兜底提示只出现在选人页。
+    expect(screen.queryByText('自动创建会话失败，请点击「新对话」重试')).toBeNull();
+
+    const previous = i18n.language;
+    try {
+      await act(async () => { await i18n.changeLanguage('en-US'); });
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Failed to start the clarification conversation automatically.',
+      );
+    } finally {
+      await act(async () => { await i18n.changeLanguage(previous); });
+    }
+
+    await pickAgent('Agent-X');
+    await waitFor(() => expect(posts()).toBe(2));
+    await waitFor(() => expect(screen.queryByText(PICKER_INTRO)).toBeNull());
+  });
+
+  it('AC-9: 候选查询失败静默回落选人页且不重试', async () => {
+    mockSquads();
+    const calls = countAgentRequests('fail');
+    renderPanel();
+
+    expect(await screen.findByText(PICKER_INTRO)).toBeInTheDocument();
+    expect(calls()).toBe(1);
+    expect(screen.queryByText('agents failed')).toBeNull();
+    const squadSelect = await screen.findByRole('combobox');
+    await waitFor(() => expect(squadSelect).not.toBeDisabled());
+  });
+
+  it('AC-10: 自动选中后点「切换」进入选人页、提示消失且不再回选', async () => {
+    mockSquads();
+    const calls = countAgentRequests([agentFixture({ id: 42, name: 'Agent-X' })]);
+    renderPanel();
+
+    expect(await screen.findByText(AUTO_TIP)).toBeInTheDocument();
+    const switchButton = screen.getByRole('button', { name: '切换数字员工' });
+    await waitFor(() => expect(switchButton).not.toBeDisabled());
+    fireEvent.click(switchButton);
+
+    expect(await screen.findByText(PICKER_INTRO)).toBeInTheDocument();
+    expect(screen.queryByText(/已自动使用「需求澄清」/)).toBeNull();
+    expect(calls()).toBe(1);
+  });
+
+  it('AC-11: 候选无小队归属仍可自动进入且不伪造小队', async () => {
+    mockSquads();
+    const created: number[] = [];
+    captureCreate(created);
+    renderPanel({ agents: [agentFixture({ id: 42, name: 'Agent-X', squadIds: [] })] });
+
+    expect(await screen.findByText(AUTO_TIP)).toBeInTheDocument();
+    await waitFor(() => expect(created).toEqual([42]));
+    // squadId=0 占位：头部不做小队成员查询，也不伪造在线徽标。
+    expect(screen.queryByText('执行器在线')).toBeNull();
+    expect(screen.queryByText('执行器离线')).toBeNull();
+  });
+
+  it('AC-13: 候选解析期间保持加载态，不闪现选人页', async () => {
+    mockSquads();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    server.use(http.get('/api/agents', async () => {
+      await gate;
+      return jsonOk([agentFixture({ id: 42, name: 'Agent-X' })]);
+    }));
+
+    renderPanel();
+
+    await waitFor(() => expect(screen.getByTestId('clarification-latest-loading'))
+      .toHaveAttribute('aria-label', '正在匹配「需求澄清」数字员工…'));
+    expect(screen.queryByText(PICKER_INTRO)).toBeNull();
+
+    release();
+    expect(await screen.findByText(AUTO_TIP)).toBeInTheDocument();
+  });
+
+  it('AC-13: en-US 自动选择提示文案完整可关闭', async () => {
+    mockSquads();
+    const previous = i18n.language;
+    try {
+      await i18n.changeLanguage('en-US');
+      renderPanel({ agents: [agentFixture({ id: 42, name: 'Agent-X' })] });
+
+      expect(await screen.findByText(
+        'Using the agent Agent-X tagged Requirement Clarification automatically. You can switch at any time.',
+      )).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+      expect(screen.queryByText(/Using the agent Agent-X/)).toBeNull();
+    } finally {
+      await act(async () => { await i18n.changeLanguage(previous); });
+      clearClarificationPrefill('100');
+    }
   });
 });

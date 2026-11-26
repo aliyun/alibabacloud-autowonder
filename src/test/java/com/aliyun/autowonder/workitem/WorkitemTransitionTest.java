@@ -1,6 +1,6 @@
 package com.aliyun.autowonder.workitem;
 
-import com.alibaba.fastjson.JSON;
+import com.aliyun.autowonder.json.JSON;
 import com.aliyun.autowonder.common.error.BizException;
 import com.aliyun.autowonder.common.error.KeyedIllegalArgumentException;
 import com.aliyun.autowonder.statemachine.StatusNodeDO;

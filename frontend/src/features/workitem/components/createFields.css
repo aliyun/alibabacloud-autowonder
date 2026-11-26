@@ -23,6 +23,19 @@
 .aw-file-chip .aw-chip-remove:hover { color: var(--aw-error); }
 .aw-file-chip .aw-chip-remove:disabled { cursor: not-allowed; opacity: .5; }
 .aw-delivery-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.aw-launch-team { width: 100%; }
+.aw-launch-team > .ant-form-item { flex: 1; min-width: 0; }
+.aw-launch-team > .ant-form-item:first-child { flex: 0 0 38%; margin-inline-end: -1px; }
+.aw-launch-start-branch { margin-top: 4px; overflow-wrap: anywhere; }
+.aw-launch-source > .ant-select:first-child { flex: 0 0 auto; width: 8.5em; }
+.aw-launch-source > .ant-select:last-child { flex: 1; min-width: 0; }
+.aw-launch-repo-option { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.aw-launch-repo-name, .aw-launch-repo-address { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-launch-repo-name:not(:last-child) { flex: 0 0 auto; max-width: 55%; }
+.aw-launch-repo-address { color: var(--aw-text-2); font-size: 12px; }
+.aw-design-employee { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+.aw-design-employee > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.aw-design-employee .ant-tag { flex-shrink: 0; }
 @media (max-width: 560px) { .aw-delivery-row { grid-template-columns: 1fr; } }
 .aw-delivery-hint { margin: -6px 0 14px; font-size: 12px; color: var(--aw-text-3); }
 /* hidden 文件输入在本环境被计算为 display:block，原生「选择文件」按钮会漏出，显式兜底 */

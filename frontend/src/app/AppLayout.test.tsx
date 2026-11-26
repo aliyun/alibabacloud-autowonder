@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
 import {
@@ -96,6 +96,8 @@ describe('AppLayout', () => {
     ['/workitems/recycled', true],
     ['/workitems/42', false],
     ['/workitems/42/', false],
+    ['/workitems/42/design', false],
+    ['/workitems/42/design/', false],
     ['/scheduled-task-runs/12', false],
     ['/scheduled-task-runs/12/', false],
     ['/scheduled-tasks/7', false],
@@ -128,6 +130,25 @@ describe('AppLayout', () => {
     );
     expect(container.querySelectorAll('.aw-content-frame')).toHaveLength(framed ? 1 : 0);
     if (framed) expect(screen.getByTestId('page-body').closest('.aw-content-frame')).not.toBeNull();
+  });
+
+  it('focuses design without changing the navigation preference on other pages', async () => {
+    localStorage.setItem('autowonder.sidebar.collapsed', '0');
+    const view = renderWithQueryClient(<MemoryRouter initialEntries={['/workitems/42/design']}><Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/workitems/42/design" element={<Link to="/workitems">leave-design</Link>} />
+        <Route path="/workitems" element={<Link to="/workitems/42/design">enter-design</Link>} />
+      </Route>
+    </Routes></MemoryRouter>);
+    expect(view.container.querySelector('.aw-sider')).toHaveClass('collapsed');
+    await userEvent.click(screen.getByRole('button', { name: '展开' }));
+    expect(view.container.querySelector('.aw-sider')).not.toHaveClass('collapsed');
+    await userEvent.click(screen.getByRole('link', { name: 'leave-design' }));
+    expect(view.container.querySelector('.aw-sider')).not.toHaveClass('collapsed');
+    expect(localStorage.getItem('autowonder.sidebar.collapsed')).toBe('0');
+    await userEvent.click(screen.getByRole('link', { name: 'enter-design' }));
+    expect(view.container.querySelector('.aw-sider')).toHaveClass('collapsed');
+    localStorage.removeItem('autowonder.sidebar.collapsed');
   });
 
   it('parses and removes one-shot workspace deep-link parameters', () => {

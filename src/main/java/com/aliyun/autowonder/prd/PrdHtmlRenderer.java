@@ -299,7 +299,7 @@ public final class PrdHtmlRenderer {
                 :root{color-scheme:light dark}
                 body{margin:0;padding:24px;font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",\
                 "PingFang SC","Microsoft YaHei",sans-serif;color:#1f2329;background:#fff}
-                main{max-width:960px;margin:0 auto}
+                main{width:100%;min-height:calc(100vh - 48px);box-sizing:border-box}
                 h1{font-size:24px;margin:0 0 20px}
                 h2{font-size:18px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e5e6eb}
                 h3{font-size:15px;margin:16px 0 6px}

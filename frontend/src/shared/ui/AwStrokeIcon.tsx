@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 
 /** 原型 SVG 图标集（prototype.css 各页 symbol 的 1:1 描边路径，stroke=currentColor）。 */
 const ICON_PATHS: Record<string, ReactNode> = {
+  // UXer 的 Lucide MousePointerSquareDashed；许可见 AwStrokeIcon.LICENSE。
+  inspect: (<><path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z" /><path d="M5 3a2 2 0 0 0-2 2M19 3a2 2 0 0 1 2 2M5 21a2 2 0 0 1-2-2M9 3h1M9 21h2M14 3h1M3 9v1M21 9v2M3 14v1" /></>),
   dash: (<><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></>),
   file: (<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M16 13H8" /><path d="M16 17H8" /></>),
   clock: (<><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>),

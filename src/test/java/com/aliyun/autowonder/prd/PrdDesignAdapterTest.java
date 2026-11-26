@@ -48,6 +48,15 @@ class PrdDesignAdapterTest {
     }
 
     @Test
+    void collaborativePromptKeepsDraftAndVersionSemanticsTruthful() {
+        String prompt = adapter.buildConversationSystemPrompt();
+
+        assertTrue(prompt.contains("版本号只以 autowonder.report_prd_design 返回的 versionNo 为准"));
+        assertTrue(prompt.contains("重复上报只更新当前草稿"));
+        assertTrue(prompt.contains("不得自行宣称保存为 vN"));
+    }
+
+    @Test
     void acceptsACompleteConfirmableDesign() {
         String json = PrdDesignCodec.serialize(confirmable());
 

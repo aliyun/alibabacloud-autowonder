@@ -120,6 +120,10 @@ function setupHandlers() {
     http.get('/api/workitems/1/clarification-conversations/latest', () => HttpResponse.json({
       success: true, code: '0', message: '', traceId: null, data: null,
     })),
+    http.get('/api/workitems/1/clarification-conversations/launch', () => HttpResponse.json({
+      success: true, code: '0', message: '', traceId: null,
+      data: { conversationId: null, agentId: null, squadId: null, repoId: null, phase: 'ACTIVE', managed: false },
+    })),
     http.get('/api/workitems/1/artifacts', () => {
       return HttpResponse.json({
         success: true, code: '0', message: '', traceId: null,
@@ -145,6 +149,10 @@ function setupHandlers() {
 /** 澄清面板与启动交付弹窗会打到的接口：进入澄清态或打开交付弹窗的用例都要带上。 */
 function mockClarifyEndpoints() {
   return [
+    http.get('/api/workitems/1/clarification-conversations/launch', () => HttpResponse.json({
+      success: true, code: '0', message: '', traceId: null,
+      data: { conversationId: null, agentId: null, squadId: null, repoId: null, phase: 'ACTIVE', managed: false },
+    })),
     http.get('/api/squads', () => HttpResponse.json({
       success: true, code: '0', message: '', traceId: null,
       data: { list: [], total: 0, pageNum: 1, pageSize: 100 },
@@ -244,6 +252,65 @@ describe('WorkitemDetailPage', () => {
     // Title appears in both breadcrumb and heading — use role to target the heading
     expect(await screen.findByRole('heading', { name: '跨境支付重构' })).toBeInTheDocument();
     expect(screen.getByText('开发中')).toBeInTheDocument();
+  });
+
+  it('puts delivery details and the shared review link in the attachment header', async () => {
+    const delivered = {
+      id: 12, versionId: 14, status: 'COMPLETED', repoId: 1, reviewerIds: [],
+      repoUrl: 'https://example.invalid/team/design.git', branch: 'review/12', commit: '9984281a26c5a0ceceeb2cb99ab654f262d44854',
+      decisionReason: null, attachmentId: null, attachmentName: null, canDecide: false, canWithdraw: false, canRetry: false,
+    };
+    server.use(
+      ...setupHandlers(),
+      http.get('/api/workitems/1/prd/summary', () => HttpResponse.json({
+        success: true, code: '0', data: { latestVersionNo: 1 },
+      })),
+      http.get('/api/workitems/1/prd/handoff', () => HttpResponse.json({
+        success: true, code: '0', data: { review: delivered, completed: delivered, canSubmit: true, managed: true },
+      })),
+      http.get('/api/workitems/1/prd/review/share', () => HttpResponse.json({
+        success: true, code: '0', data: { share: { enabled: 1, token: 'review-token' }, preferredIdentifier: 'design-review' },
+      })),
+    );
+    renderPage();
+    const card = await screen.findByTestId('requirement-documents-card');
+    const preview = await within(card).findByRole('link', { name: '预览交互设计' });
+    expect(preview).toHaveAttribute('href', `${window.location.origin}/design-reviews/design-review`);
+    expect(preview).toHaveAttribute('target', '_blank');
+    const status = await within(card).findByRole('button', { name: '设计已交付' });
+    expect(status.parentElement).toContainElement(preview);
+    expect(status.parentElement).toContainElement(within(card).getByRole('button', { name: '上传' }));
+    const designAction = screen.getByRole('button', { name: '原型&交互设计' });
+    expect(designAction).toBeVisible();
+    expect(card).not.toContainElement(designAction);
+    expect(status).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: '进入需求澄清' })).not.toBeInTheDocument();
+
+    await userEvent.click(status);
+    const details = await screen.findByRole('dialog', { name: '设计已交付' });
+    await waitFor(() => expect(within(details).getByText('9984281a26c5')).toBeVisible());
+    expect(within(details).getByRole('link', { name: '进入需求澄清' })).toHaveAttribute('href', '/workitems/1?panel=clarify&fullscreen=1');
+    await userEvent.keyboard('{Escape}');
+    expect(status).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('links to the workbench when design sharing is disabled', async () => {
+    server.use(
+      ...setupHandlers(),
+      http.get('/api/workitems/1/prd/summary', () => HttpResponse.json({
+        success: true, code: '0', data: { latestVersionNo: 1 },
+      })),
+      http.get('/api/workitems/1/prd/handoff', () => HttpResponse.json({
+        success: true, code: '0', data: { review: null, completed: null },
+      })),
+      http.get('/api/workitems/1/prd/review/share', () => HttpResponse.json({
+        success: true, code: '0', data: { share: { enabled: 0, token: 'disabled-token' } },
+      })),
+    );
+    renderPage();
+    const card = await screen.findByTestId('requirement-documents-card');
+    expect(await within(card).findByRole('link', { name: '打开工作台' })).toHaveAttribute('href', '/workitems/1/design');
+    expect(within(card).queryByRole('link', { name: '预览交互设计' })).not.toBeInTheDocument();
   });
 
   it('renders the detail page when the workitem contentMd is null', async () => {
@@ -822,12 +889,16 @@ describe('WorkitemDetailPage', () => {
     renderPage();
     await screen.findByRole('heading', { name: '跨境支付重构' });
 
-    await userEvent.click(screen.getByRole('button', { name: /AI 需求澄清/ }));
+    await userEvent.click(screen.getByRole('button', { name: /需求澄清/ }));
+    const fullscreenBox = await screen.findByTestId('clarify-resize-box');
+    expect(fullscreenBox).toHaveStyle('position: fixed');
+    fireEvent.keyDown(window, { key: 'Escape' });
     const panel = await screen.findByTestId('workitem-right-panel');
     // clarify 模式：右栏容器 flex column，box 底部锚定
-    await waitFor(() => expect(panel).toHaveStyle({ display: 'flex', flexDirection: 'column' }));
-    const box = await screen.findByTestId('clarify-resize-box');
-    expect(box.style.marginTop).toBe('auto');
+    expect(panel).toHaveStyle({ display: 'flex', flexDirection: 'column' });
+    await waitFor(() => expect(screen.getByTestId('clarify-resize-box')).toHaveStyle({
+      position: 'relative', marginTop: 'auto',
+    }));
 
     vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({ width: 400 } as DOMRect);
     const handle = await screen.findByTestId('resize-handle-horizontal');
@@ -849,7 +920,9 @@ describe('WorkitemDetailPage', () => {
     // jsdom 的 CSSOM 不接受 clamp() 赋值，默认宽度的恢复改为行为断言：
     // 重新进入 clarify 后拖拽从默认测量宽度重新生效（宽度状态已重置）
 
-    await userEvent.click(screen.getByRole('button', { name: /AI 需求澄清/ }));
+    await userEvent.click(screen.getByRole('button', { name: /需求澄清/ }));
+    await screen.findByRole('button', { name: '退出全屏' });
+    fireEvent.keyDown(window, { key: 'Escape' });
     const rehandle = await screen.findByTestId('resize-handle-horizontal');
     firePointer('pointerdown', rehandle, { clientX: 500, clientY: 200 });
     firePointer('pointermove', rehandle, { clientX: 440, clientY: 200 });
@@ -1745,7 +1818,7 @@ describe('WorkitemDetailPage', () => {
     renderPage();
 
     expect(await screen.findByText('交付进度跟踪')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /AI 需求澄清/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /需求澄清/ })).toBeInTheDocument();
     expect(await screen.findByText('澄清材料 (AI 生成)')).toBeInTheDocument();
     expect(await screen.findByText('补充风控口径')).toBeInTheDocument();
   });
@@ -1941,12 +2014,12 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
     await screen.findByRole('heading', { name: '跨境支付重构' });
     expect(currentSearch()).toBe('');
 
-    await userEvent.click(screen.getByRole('button', { name: /AI 需求澄清/ }));
+    await userEvent.click(screen.getByRole('button', { name: /需求澄清/ }));
 
     await waitFor(() => expect(currentSearch()).toContain('panel=clarify'));
     // 澄清态挂在同一个工单路由上，不能变成另一条路由
     expect(screen.getByTestId('location-pathname').textContent).toBe('/workitems/1');
-    expect(currentSearch()).not.toContain('fullscreen=1');
+    expect(currentSearch()).toContain('fullscreen=1');
   });
 
   it('records fullscreen in the URL and drops it again on exit', async () => {
@@ -1954,16 +2027,17 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
     renderPageAt('/workitems/1');
     await screen.findByRole('heading', { name: '跨境支付重构' });
 
-    await userEvent.click(screen.getByRole('button', { name: /AI 需求澄清/ }));
-    await screen.findByTestId('clarify-resize-box');
-
-    await userEvent.click(screen.getByRole('button', { name: '全屏' }));
+    await userEvent.click(screen.getByRole('button', { name: /需求澄清/ }));
+    await screen.findByTestId('clarification-selection-column');
     await waitFor(() => expect(currentSearch()).toContain('fullscreen=1'));
 
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(currentSearch()).not.toContain('fullscreen=1'));
     // 退出全屏不等于离开澄清页
     expect(currentSearch()).toContain('panel=clarify');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^全屏$/ }));
+    await waitFor(() => expect(currentSearch()).toContain('fullscreen=1'));
   });
 
   it('clears every clarify param when returning to progress', async () => {
@@ -1975,7 +2049,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
     await userEvent.click(screen.getByRole('button', { name: '返回' }));
 
     await waitFor(() => expect(currentSearch()).toBe(''));
-    expect(screen.getByRole('button', { name: /AI 需求澄清/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /需求澄清/ })).toBeInTheDocument();
   });
 
   it('restores the fullscreen clarify page after a refresh', async () => {
@@ -1986,7 +2060,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
     const box = await screen.findByTestId('clarify-resize-box');
     expect(box).toHaveStyle({ position: 'fixed', zIndex: 1000 });
     expect(screen.getByRole('button', { name: '退出全屏' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /AI 需求澄清/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /需求澄清/ })).toBeInTheDocument();
     expect(screen.getByTestId('location-pathname').textContent).toBe('/workitems/1');
   });
 
@@ -2005,7 +2079,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
     renderPageAt('/workitems/1');
 
     await screen.findByRole('heading', { name: '跨境支付重构' });
-    expect(screen.getByRole('button', { name: /AI 需求澄清/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /需求澄清/ })).toBeInTheDocument();
     expect(screen.queryByTestId('clarify-resize-box')).toBeNull();
   });
 
@@ -2044,7 +2118,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
     await screen.findByRole('heading', { name: '跨境支付重构' });
     await waitFor(() => expect(queryClient.getQueryData(['workitem', '1', 'delivery-progress'])).toMatchObject({ totalUsage: { credits: 12.5 } }));
 
-    await userEvent.click(screen.getByRole('button', { name: /AI 需求澄清/ }));
+    await userEvent.click(screen.getByRole('button', { name: /需求澄清/ }));
     const selectionColumn = await screen.findByTestId('clarification-selection-column');
     expect(within(selectionColumn).queryByText('Agent-History')).toBeNull();
 
@@ -2163,7 +2237,7 @@ describe('WorkitemDetailPage clarify URL persistence (工单 53035)', () => {
   });
 });
 
-describe('WorkitemDetailPage start-delivery clarify reminder (工单 53315 / 54819)', () => {
+describe('WorkitemDetailPage direct delivery and clarification actions', () => {
   function LocationProbe() {
     const location = useLocation();
     return <span data-testid="location-search">{location.search}</span>;
@@ -2223,30 +2297,10 @@ describe('WorkitemDetailPage start-delivery clarify reminder (工单 53315 / 548
    *  避免和引导弹窗的文案互相干扰。 */
   const DELIVERY_MODAL_MARKER = '首步执行 Agent';
 
-  /** antd 默认 autoInsertSpace 会在两个中文字符之间插空格，「跳过」的可访问名实际是 "跳 过"。 */
-  const SKIP_BUTTON = /^跳\s*过$/;
   /** 启动交付弹窗的取消按钮同样是两个中文字符，用宽松匹配避开 autoInsertSpace。 */
   const CANCEL_BUTTON = /^取\s*消$/;
-  /** 「记住我的选项，下次不再提醒」勾选项（工单 54819）。 */
-  const REMEMBER_CHECKBOX = { name: /记住我的选项/ };
   /** clarifyReminderPreference.ts 落盘用的 key，直接写字面量避免把存储 key 导出成公共 API。 */
   const CLARIFY_REMINDER_KEY = 'autowonder.workitems.clarifyReminder';
-
-  async function openReminder() {
-    await userEvent.click(await screen.findByRole('button', { name: /启动交付/ }));
-    return screen.findByText('建议先完成需求澄清');
-  }
-
-  function rememberCheckbox() {
-    return screen.getByRole('checkbox', REMEMBER_CHECKBOX);
-  }
-
-  /** 详情页常驻两个 forceRender 的隐藏产物预览弹窗，全局取第一个 .ant-modal-close 会点错弹窗；
-   *  以引导弹窗标题为锚点，只在它所属的 .ant-modal 里找关闭按钮。 */
-  function reminderCloseIcon(): Element | null {
-    const reminderModal = screen.getByText('建议先完成需求澄清').closest('.ant-modal');
-    return reminderModal?.querySelector('.ant-modal-close') ?? null;
-  }
 
   /** 关掉启动交付弹窗，好用例能再点一次「启动交付」验证同一次会话内引导是否已被抑制。 */
   async function closeDeliveryModal() {
@@ -2264,50 +2318,42 @@ describe('WorkitemDetailPage start-delivery clarify reminder (工单 53315 / 548
     }
   });
 
-  it('reminds about clarification before a first-time delivery start', async () => {
+  it('starts the delivery flow directly for a first-time delivery', async () => {
     renderReminderPage();
     await screen.findByRole('heading', { name: '跨境支付重构' });
 
-    await openReminder();
-
-    // 引导挡在原流程前面，此时不该看到启动交付表单
-    expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull();
-  });
-
-  it('continues the unchanged delivery flow after skipping', async () => {
-    renderReminderPage();
-    await openReminder();
-
-    await userEvent.click(screen.getByRole('button', { name: SKIP_BUTTON }));
+    await userEvent.click(await screen.findByRole('button', { name: /启动交付/ }));
 
     expect(await screen.findByText(DELIVERY_MODAL_MARKER)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText('建议先完成需求澄清')).toBeNull());
-    // 跳过只是继续原流程，不该顺手把用户带进澄清页
+    expect(screen.queryByText('建议先完成需求澄清')).toBeNull();
+  });
+
+  it('keeps the direct delivery flow cancellable', async () => {
+    renderReminderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /启动交付/ }));
+
+    expect(await screen.findByText(DELIVERY_MODAL_MARKER)).toBeInTheDocument();
+    await closeDeliveryModal();
+    expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull();
     expect(currentSearch()).not.toContain('panel=clarify');
   });
 
-  it('jumps into the AI clarification panel after confirming', async () => {
+  it('opens clarification from its dedicated action', async () => {
     renderReminderPage();
-    await openReminder();
-
-    await userEvent.click(screen.getByRole('button', { name: '确认，去澄清' }));
+    await userEvent.click(await screen.findByRole('button', { name: /需求澄清/ }));
 
     await waitFor(() => expect(currentSearch()).toContain('panel=clarify'));
     expect(await screen.findByTestId('clarify-resize-box')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText('建议先完成需求澄清')).toBeNull());
-    // 去澄清不等于启动交付
+    expect(currentSearch()).toContain('fullscreen=1');
     expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull();
   });
 
-  it('only dismisses itself through the close icon', async () => {
+  it('does not open clarification when the delivery dialog is canceled', async () => {
     renderReminderPage();
-    await openReminder();
+    await userEvent.click(await screen.findByRole('button', { name: /启动交付/ }));
+    expect(await screen.findByText(DELIVERY_MODAL_MARKER)).toBeInTheDocument();
+    await closeDeliveryModal();
 
-    const closeIcon = reminderCloseIcon();
-    expect(closeIcon).not.toBeNull();
-    await userEvent.click(closeIcon as Element);
-
-    await waitFor(() => expect(screen.queryByText('建议先完成需求澄清')).toBeNull());
     expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull();
     expect(currentSearch()).not.toContain('panel=clarify');
   });
@@ -2365,69 +2411,54 @@ describe('WorkitemDetailPage start-delivery clarify reminder (工单 53315 / 548
     expect(screen.queryByText('建议先完成需求澄清')).toBeNull();
   });
 
-  it('persists the opt-out on skip and stops reminding within the same session', async () => {
+  it('does not write the obsolete reminder preference while starting delivery repeatedly', async () => {
     const user = userEvent.setup();
     const view = renderReminderPage();
     const start = await screen.findByRole('button', { name: /启动交付/ });
     await act(async () => { await user.click(start); });
-    const reminder = await screen.findByRole('dialog', { name: '建议先完成需求澄清' });
-    await act(async () => { await user.click(within(reminder).getByRole('checkbox', REMEMBER_CHECKBOX)); });
-    await act(async () => { await user.click(within(reminder).getByRole('button', { name: SKIP_BUTTON })); });
-
     const marker = await screen.findByText(DELIVERY_MODAL_MARKER);
-    expect(window.localStorage.getItem(CLARIFY_REMINDER_KEY)).toBe('suppressed');
+    expect(window.localStorage.getItem(CLARIFY_REMINDER_KEY)).toBeNull();
     const delivery = marker.closest('[role="dialog"]') as HTMLElement;
     await act(async () => { await user.click(within(delivery).getByRole('button', { name: CANCEL_BUTTON })); });
     await waitFor(() => expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull());
 
-    // Reuse the mounted page and its original start control; no reload reads the preference for us.
     expect(start).toBeInTheDocument();
     await act(async () => { await user.click(start); });
     expect(await screen.findByText(DELIVERY_MODAL_MARKER)).toBeInTheDocument();
-    expect(screen.queryByText('建议先完成需求澄清')).toBeNull();
-    expect(window.localStorage.getItem(CLARIFY_REMINDER_KEY)).toBe('suppressed');
+    expect(window.localStorage.getItem(CLARIFY_REMINDER_KEY)).toBeNull();
     view.unmount();
   });
 
-  it('persists the opt-out when going to clarification', async () => {
+  it('does not write the obsolete reminder preference when opening clarification', async () => {
     renderReminderPage();
-    await openReminder();
-
-    await userEvent.click(rememberCheckbox());
-    await userEvent.click(screen.getByRole('button', { name: '确认，去澄清' }));
+    await userEvent.click(await screen.findByRole('button', { name: /需求澄清/ }));
 
     await waitFor(() => expect(currentSearch()).toContain('panel=clarify'));
-    expect(window.localStorage.getItem(CLARIFY_REMINDER_KEY)).toBe('suppressed');
+    expect(window.localStorage.getItem(CLARIFY_REMINDER_KEY)).toBeNull();
     expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull();
   });
 
-  it('keeps reminding when the opt-out is left unticked', async () => {
+  it('continues to open delivery directly after the dialog is closed', async () => {
     renderReminderPage();
-    await openReminder();
-
-    await userEvent.click(screen.getByRole('button', { name: SKIP_BUTTON }));
+    await userEvent.click(await screen.findByRole('button', { name: /启动交付/ }));
     expect(await screen.findByText(DELIVERY_MODAL_MARKER)).toBeInTheDocument();
     expect(window.localStorage.getItem(CLARIFY_REMINDER_KEY)).toBeNull();
 
-    // 没勾就还得提醒，否则等于替用户做了永久决定
     await closeDeliveryModal();
-    await openReminder();
-    expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /启动交付/ }));
+    expect(await screen.findByText(DELIVERY_MODAL_MARKER)).toBeInTheDocument();
   });
 
-  it('does not persist the opt-out when dismissed through the close icon', async () => {
+  it('does not persist reminder state when the delivery dialog is closed from its icon', async () => {
     renderReminderPage();
-    await openReminder();
-
-    await userEvent.click(rememberCheckbox());
-    const closeIcon = reminderCloseIcon();
+    await userEvent.click(await screen.findByRole('button', { name: /启动交付/ }));
+    const deliveryModal = (await screen.findByText(DELIVERY_MODAL_MARKER)).closest('.ant-modal');
+    const closeIcon = deliveryModal?.querySelector('.ant-modal-close');
     expect(closeIcon).not.toBeNull();
     await userEvent.click(closeIcon as Element);
 
-    await waitFor(() => expect(screen.queryByText('建议先完成需求澄清')).toBeNull());
-    // 关闭图标只表达「我先不决定」，勾了也不算做过决定
+    await waitFor(() => expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull());
     expect(window.localStorage.getItem(CLARIFY_REMINDER_KEY)).toBeNull();
-    expect(screen.queryByText(DELIVERY_MODAL_MARKER)).toBeNull();
   });
 });
 

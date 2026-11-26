@@ -1,0 +1,8 @@
+{
+  "relayUrl": "wss://app.example.com/design-preview-relay/v1/control/design-123",
+  "bindingId": "design-123",
+  "executorId": 789,
+  "auth": {
+    "tokenEnv": "AUTOWONDER_EXECUTOR_TOKEN"
+  }
+}

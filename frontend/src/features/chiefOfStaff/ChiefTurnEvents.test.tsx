@@ -35,6 +35,19 @@ function mount(processing: boolean, props: {
 }
 
 describe('ChiefTurnEvents detail presentation', () => {
+  it('releases the active timeline height when completed events are hidden', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <ChiefTurnEvents scope={['test']} conversationId={1} turnId={2} processing={false}
+          showCompletedEvents={false} />
+      </QueryClientProvider>,
+    );
+    const events = view.container.querySelector('.aw-turn-events');
+    expect(events).toBeEmptyDOMElement();
+    expect(events).not.toHaveStyle({ minHeight: '1px' });
+  });
+
   it('keeps historical execution details collapsed and unread until the reader opens them', async () => {
     let calls = 0;
     server.use(http.get(SUMMARIES, () => {

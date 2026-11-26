@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { PrdContextPreview } from './PrdContextPreview';
 import { PrdWorkitemEntry } from './PrdWorkitemEntry';
 
 vi.mock('../hooks', () => ({
@@ -25,13 +24,5 @@ describe('PrdWorkitemEntry', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
-  });
-});
-
-describe('PrdContextPreview', () => {
-  it('shows the saved design preview without a design editing link', () => {
-    const { container } = render(<MemoryRouter><PrdContextPreview workitemId="42" /></MemoryRouter>);
-    expect(container.querySelector('summary')).toBeInTheDocument();
-    expect(container.querySelector('a[href="/workitems/42/design"]')).toBeNull();
   });
 });

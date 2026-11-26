@@ -56,10 +56,24 @@ public class PrdDesignService {
     private final AuditLogService auditLogService;
     private final String artifactBucket;
     private com.aliyun.autowonder.repo.RepoDao repoDao;
+    private com.aliyun.autowonder.conversation.AgentConversationDao conversationDao;
+    private PrdDesignRuntimeDao runtimeDao;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PrdDesignHandoffDao handoffs;
 
     @org.springframework.beans.factory.annotation.Autowired
     public void setRepoDao(com.aliyun.autowonder.repo.RepoDao repoDao) {
         this.repoDao = repoDao;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setConversationDao(com.aliyun.autowonder.conversation.AgentConversationDao conversationDao) {
+        this.conversationDao = conversationDao;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRuntimeDao(PrdDesignRuntimeDao runtimeDao) {
+        this.runtimeDao = runtimeDao;
     }
 
     public PrdDesignService(PrdDesignDao designDao,
@@ -141,7 +155,12 @@ public class PrdDesignService {
     /** Bind the target frontend project. The profile must belong to this workspace. */
     @Transactional
     public PrdDesignVO selectTarget(long workspaceId, long workitemId, SelectTargetRequest request, long userId) {
+        workitemDao.findByIdForUpdate(workitemId, workspaceId);
+        PrdDesignHandoffService.requireEditable(handoffs, workspaceId, workitemId);
         PrdDesignDO design = requireDesign(workspaceId, workitemId);
+        if (runtimeDao != null && runtimeDao.findLatestByWorkitem(workspaceId, workitemId) != null) {
+            throw new BizException(ErrorCode.PRD_TARGET_PROJECT_LOCKED);
+        }
         if (request.getRepoId() != null) {
             if (request.getProfileId() != null) throw new BizException(ErrorCode.PARAM_INVALID);
             var repo = repoDao.findById(request.getRepoId());
@@ -163,7 +182,12 @@ public class PrdDesignService {
             config.setSource("USER_CONFIGURED");
             config.setRepoId(repo.getId());
             config.setAppRoot(root);
-            config.setBranch(repo.getDefaultBranch());
+            config.setBranch(request.isUseDesignBase() ? repo.getDesignBaseBranch() : repo.getDefaultBranch());
+            if (request.isUseDesignBase()) {
+                if (config.getBranch() == null || config.getBranch().isBlank()) throw WorkitemLaunchAccess.failure("design_repo_required");
+                config.setManagedDesign(true);
+                if (request.getAppRoot() != null && !request.getAppRoot().isBlank()) config.setPreferredAppRoot(root);
+            }
             config.setProjectNotes(request.getProjectNotes());
             if (designDao.updateManualTarget(design.getId(), workspaceId, repo.getId(), root,
                     com.aliyun.autowonder.json.JSON.toJSONString(config), design.getVersion(), userId) == 0) {
@@ -192,6 +216,7 @@ public class PrdDesignService {
      */
     @Transactional
     public PrdDesignVersionVO saveDraft(long workspaceId, long workitemId, SaveDesignRequest request, long userId) {
+        lockEditable(workspaceId, workitemId);
         PrdDesignDO design = requireDesign(workspaceId, workitemId);
         PrdDesignData data = PrdDesignCodec.parse(request.getDesignJson());
         data.setSchemaVersion(PrdDesignData.SCHEMA_VERSION);
@@ -227,6 +252,7 @@ public class PrdDesignService {
     @Transactional
     public PrdDesignVersionVO createDraftFrom(long workspaceId, long workitemId, long sourceVersionId,
                                               String changeSummary, long userId) {
+        lockEditable(workspaceId, workitemId);
         PrdDesignDO design = requireDesign(workspaceId, workitemId);
         PrdDesignVersionDO source = requireVersion(workspaceId, sourceVersionId);
         if (!source.getDesignId().equals(design.getId())) {
@@ -335,6 +361,8 @@ public class PrdDesignService {
     @Transactional
     public PrdDesignVersionVO submitForReview(long workspaceId, long versionId, long userId) {
         PrdDesignVersionDO version = requireVersion(workspaceId, versionId);
+        var design = designDao.findById(version.getDesignId(), workspaceId);
+        if (design != null) requireLegacyReview(workspaceId, design.getWorkitemId());
         if (version.isConfirmed()) {
             throw new BizException(ErrorCode.PRD_VERSION_IMMUTABLE);
         }
@@ -350,6 +378,16 @@ public class PrdDesignService {
      */
     @Transactional
     public PrdDesignVersionVO confirm(long workspaceId, long workitemId, ConfirmVersionRequest request, long userId) {
+        requireLegacyReview(workspaceId, workitemId);
+        return confirmVersion(workspaceId, workitemId, request, userId);
+    }
+
+    @Transactional
+    public PrdDesignVersionVO confirmHandoff(long workspaceId, long workitemId, ConfirmVersionRequest request, long userId) {
+        return confirmVersion(workspaceId, workitemId, request, userId);
+    }
+
+    private PrdDesignVersionVO confirmVersion(long workspaceId, long workitemId, ConfirmVersionRequest request, long userId) {
         PrdDesignDO design = requireDesign(workspaceId, workitemId);
         PrdDesignVersionDO version = requireVersion(workspaceId, request.getVersionId());
         if (!version.getDesignId().equals(design.getId())) {
@@ -366,25 +404,7 @@ public class PrdDesignService {
             throw new BizException(ErrorCode.PRD_DIGEST_MISMATCH);
         }
 
-        PrdProjectSnapshot currentTarget = targetSnapshot(design);
-        if (currentTarget == null) {
-            throw new BizException(ErrorCode.PRD_TARGET_PROJECT_REQUIRED);
-        }
-
-        PrdDesignData data = PrdDesignCodec.parse(version.getDesignJson());
-        PrdProjectSnapshot target = data.getProjectSnapshot();
-        if (target == null || !java.util.Objects.equals(
-                com.aliyun.autowonder.json.JSON.toJSONString(target),
-                com.aliyun.autowonder.json.JSON.toJSONString(currentTarget))) {
-            throw BizException.keyed(ErrorCode.PRD_TARGET_PROJECT_STALE, "prd.confirmation.target_changed",
-                    new Object[]{}, "Reviewed version target snapshot differs from current target configuration");
-        }
-        List<String> problems = PrdDesignCodec.validateForConfirmation(data, request.isIgnoreOpenQuestions());
-        if (!problems.isEmpty()) {
-            throw BizException.keyed(ErrorCode.PRD_CONFIRMATION_BLOCKED, "prd.confirmation.blocked",
-                    new Object[]{String.join("；", problems)},
-                    "confirmation blocked: " + String.join("; ", problems));
-        }
+        validateHandoffTarget(design, version, request.isIgnoreOpenQuestions());
 
         if (versionDao.confirm(versionId(version), workspaceId, currentDigest, userId, version.getVersion()) == 0) {
             throw new BizException(ErrorCode.PRD_VERSION_CONFLICT);
@@ -411,6 +431,51 @@ public class PrdDesignService {
         log.info("prd version confirmed designId={} versionId={} versionNo={} digest={} by={}",
                 design.getId(), version.getId(), version.getVersionNo(), currentDigest, userId);
         return toVersionVO(versionDao.findById(version.getId(), workspaceId), false);
+    }
+
+    void validateHandoff(long workspaceId, long workitemId, long versionId) {
+        var design = requireDesign(workspaceId, workitemId);
+        var version = requireVersion(workspaceId, versionId);
+        if (!version.getDesignId().equals(design.getId())) throw new BizException(ErrorCode.PRD_VERSION_NOT_FOUND);
+        validateHandoffTarget(design, version, false);
+    }
+
+    private void validateHandoffTarget(PrdDesignDO design, PrdDesignVersionDO version, boolean ignoreOpenQuestions) {
+        PrdProjectSnapshot currentTarget = targetSnapshot(design);
+        if (currentTarget == null) throw new BizException(ErrorCode.PRD_TARGET_PROJECT_REQUIRED);
+        PrdDesignData data = PrdDesignCodec.parse(version.getDesignJson());
+        PrdProjectSnapshot target = data.getProjectSnapshot();
+        if (target == null || !java.util.Objects.equals(
+                com.aliyun.autowonder.json.JSON.toJSONString(target),
+                com.aliyun.autowonder.json.JSON.toJSONString(currentTarget))) {
+            throw BizException.keyed(ErrorCode.PRD_TARGET_PROJECT_STALE, "prd.confirmation.target_changed",
+                    new Object[]{}, "Reviewed version target snapshot differs from current target configuration");
+        }
+        List<String> problems = PrdDesignCodec.validateForConfirmation(data, ignoreOpenQuestions);
+        if (!problems.isEmpty()) {
+            throw BizException.keyed(ErrorCode.PRD_CONFIRMATION_BLOCKED, "prd.confirmation.blocked",
+                    new Object[]{String.join("；", problems)},
+                    "confirmation blocked: " + String.join("; ", problems));
+        }
+    }
+
+    private void lockEditable(long workspace, long item) {
+        if (handoffs == null) return;
+        if (workitemDao.findByIdForUpdate(item, workspace) == null) throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
+        PrdDesignHandoffService.requireEditable(handoffs, workspace, item);
+    }
+
+    private void requireLegacyReview(long workspace, long item) {
+        lockEditable(workspace, item);
+        if (managedTarget(designDao.findByWorkitem(workspace, item))) {
+            throw PrdDesignHandoffService.failure("managed");
+        }
+    }
+
+    static boolean managedTarget(PrdDesignDO design) {
+        if (design == null || design.getTargetConfigJson() == null) return false;
+        var target = com.aliyun.autowonder.json.JSON.parseObject(design.getTargetConfigJson(), PrdProjectSnapshot.class);
+        return target != null && Boolean.TRUE.equals(target.getManagedDesign());
     }
 
     private long versionId(PrdDesignVersionDO version) {

@@ -181,6 +181,8 @@ public class InboundFrameRouter {
     @Autowired
     public void setFrameScheduler(InboundFrameScheduler scheduler) { this.frameScheduler = scheduler; }
 
+    @Autowired private org.springframework.beans.factory.ObjectProvider<com.aliyun.autowonder.prd.PrdBootstrapWorker> designBootstrap;
+    @Autowired private org.springframework.beans.factory.ObjectProvider<com.aliyun.autowonder.prd.PrdDesignHandoffService> designHandoff;
     public void route(ExecutorSession es, String message) {
         JSONObject json;
         try {
@@ -403,6 +405,17 @@ public class InboundFrameRouter {
                     answerDeliveryService.receive(es.getTenantId(),es.getExecutorId(),json.getLongValue("conversationId"),
                             json.getLongValue("turnId"),json.getIntValue("dispatchAttempt"),
                             json.getString("requestId"),json.getString("answerId"),json.getString("status"));
+                }
+                break;
+            case "PRD_DESIGN_HANDOFF_RESULT":
+                if (designHandoff != null && presenceManager.isCurrentSession(es.getExecutorId(), es.getSession().getId())) {
+                    designHandoff.getObject().receive(es.getTenantId(), es.getExecutorId(), json);
+                }
+                break;
+            case "PRD_PREVIEW_BOOTSTRAP_PROGRESS":
+                if (presenceManager.isCurrentSession(es.getExecutorId(),es.getSession().getId())) {
+                    designBootstrap.getObject().progress(es.getTenantId(),es.getExecutorId(),json.getLongValue("conversationId"),
+                            json.getIntValue("attempt"),json.getString("phase"));
                 }
                 break;
             case "CONVERSATION_TURN_ACK":

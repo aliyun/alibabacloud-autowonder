@@ -11,4 +11,5 @@ public class SelectTargetRequest {
     private Long repoId;
     private String appRoot;
     private String projectNotes;
+    private boolean useDesignBase;
 }

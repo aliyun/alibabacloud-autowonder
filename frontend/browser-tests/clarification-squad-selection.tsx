@@ -33,6 +33,10 @@ interface InitBlob {
   latest?: { id: number; agentId: number } | null | 'fail';
   /** 挂起 /latest 响应，等 releaseLatest() 放行：用于断言加载态与迟到结果。 */
   holdLatest?: boolean;
+  /** 「需求澄清」系统标签候选（工单 60314）：缺省=空列表；'fail'=查询失败。 */
+  agents?: Array<Record<string, unknown>> | 'fail';
+  /** 创建澄清会话的前 N 次请求失败（工单 60314 自动建会话失败兜底）。 */
+  createFailures?: number;
 }
 
 const WORKITEM = '200';
@@ -112,6 +116,9 @@ const holdResolvers: Record<number, (() => void) | null> = {};
 let failListAgents = new Set<number>(INIT.failListAgents ?? []);
 let failMemberSquads = new Set<number>();
 let createdConvSeq = 0;
+let createAttempts = 0;
+let createFailures = INIT.createFailures ?? 0;
+let agentCalls = 0;
 let latestCalls = 0;
 let latestReleased = !INIT.holdLatest;
 let latestResolver: (() => void) | null = null;
@@ -183,6 +190,11 @@ apiClient.defaults.adapter = async (config) => {
   if (url === '/api/users/me/settings/clarification_send_mode') {
     return ok({ key: 'clarification_send_mode', valueJson: null });
   }
+  if (url === '/api/agents' && method === 'get') {
+    agentCalls += 1;
+    if (INIT.agents === 'fail') return fail();
+    return ok(INIT.agents ?? []);
+  }
   if (url === '/api/squads') {
     squadListCalls += 1;
     return ok({ list: SQUADS, total: SQUADS.length, pageNum: 1, pageSize: 100 });
@@ -214,6 +226,11 @@ apiClient.defaults.adapter = async (config) => {
       return ok(sortedList(agentId));
     }
     if (method === 'post') {
+      createAttempts += 1;
+      if (createFailures > 0) {
+        createFailures -= 1;
+        return fail();
+      }
       const body = JSON.parse(String(config.data)) as { agentId: number };
       createCalls.push({ agentId: body.agentId });
       const conv = convPayload(++createdConvSeq, body.agentId);
@@ -284,6 +301,8 @@ function SquadPanelHarness() {
       contextChanges: [...contextChanges],
       prefill: readClarificationPrefill(WORKITEM),
       latestCalls,
+      agentCalls,
+      createAttempts,
     }),
     failListFor: (agentIds: number[] | null) => { failListAgents = new Set(agentIds ?? []); },
     failMembersFor: (squadIds: number[] | null) => { failMemberSquads = new Set(squadIds ?? []); },
@@ -353,6 +372,8 @@ declare global {
         contextChanges: Array<Record<string, unknown>>;
         prefill: { squadId: number; agentId: number; updatedAt: number } | null;
         latestCalls: number;
+        agentCalls: number;
+        createAttempts: number;
       };
       failListFor: (agentIds: number[] | null) => void;
       failMembersFor: (squadIds: number[] | null) => void;

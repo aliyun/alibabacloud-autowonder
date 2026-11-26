@@ -2,6 +2,8 @@ package com.aliyun.autowonder.prd;
 
 import com.aliyun.autowonder.common.error.BizException;
 import com.aliyun.autowonder.common.error.ErrorCode;
+import com.aliyun.autowonder.conversation.AgentConversationDO;
+import com.aliyun.autowonder.conversation.AgentConversationDao;
 import com.aliyun.autowonder.frontendproject.FrontendProjectProfileDO;
 import com.aliyun.autowonder.frontendproject.FrontendProjectProfileDao;
 import com.aliyun.autowonder.prd.dto.ConfirmVersionRequest;
@@ -63,6 +65,26 @@ class PrdDesignServiceTest {
         confirm.setVersionId(version.getId());
         confirm.setExpectedDigest(version.getDesignSha256());
         assertNotNull(f.service.confirm(WS, WORKITEM, confirm, USER));
+    }
+
+    @Test
+    void targetCanChangeBeforeRuntimeStartsButLocksAfterExecutorAcceptsDesign() {
+        Fixture f = new Fixture();
+        f.service.getOrCreate(WS, WORKITEM, USER);
+        SelectTargetRequest target = new SelectTargetRequest();
+        target.setRepoId(42L);
+        target.setAppRoot("wrong");
+        f.service.selectTarget(WS, WORKITEM, target, USER);
+
+        target.setAppRoot("frontend");
+        assertEquals("frontend", f.service.selectTarget(WS, WORKITEM, target, USER).getTargetAppRoot());
+
+        when(f.runtimes.findLatestByWorkitem(WS, WORKITEM)).thenReturn(new PrdDesignRuntimeDO());
+        target.setAppRoot("another-app");
+        BizException locked = assertThrows(BizException.class,
+                () -> f.service.selectTarget(WS, WORKITEM, target, USER));
+        assertEquals(ErrorCode.PRD_TARGET_PROJECT_LOCKED.getCode(), locked.getCode());
+        assertEquals("frontend", f.service.get(WS, WORKITEM).getTargetAppRoot());
     }
 
     @Test
@@ -606,6 +628,8 @@ class PrdDesignServiceTest {
         final InMemoryProfileDao profiles = new InMemoryProfileDao();
         final InMemoryObjectStorage storage = new InMemoryObjectStorage();
         final WorkitemDao workitemDao = mock(WorkitemDao.class);
+        final AgentConversationDao conversations = mock(AgentConversationDao.class);
+        final PrdDesignRuntimeDao runtimes = mock(PrdDesignRuntimeDao.class);
         final PrdDesignService service;
 
         Fixture() {
@@ -630,6 +654,8 @@ class PrdDesignServiceTest {
             repo.setDefaultBranch("main");
             when(repos.findById(42L)).thenReturn(repo);
             service.setRepoDao(repos);
+            service.setConversationDao(conversations);
+            service.setRuntimeDao(runtimes);
         }
 
         void foreignWorkitem() {

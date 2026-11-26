@@ -1,5 +1,7 @@
 {
   "fields": {
+    "designBase": "Interaction design base branch",
+    "designBaseHint": "Set a branch to enable this repository for interaction design. Each work item gets its own branch.",
     "id": "ID",
     "name": "Name",
     "url": "URL",

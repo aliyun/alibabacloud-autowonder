@@ -45,6 +45,8 @@ public class PrdDesignController {
 
     private final PrdDesignService designService;
     private final PrdAcceptanceService acceptanceService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PrdDesignHandoffService handoff;
 
     public PrdDesignController(PrdDesignService designService, PrdAcceptanceService acceptanceService) {
         this.designService = designService;
@@ -115,6 +117,37 @@ public class PrdDesignController {
                                                  @PathVariable("versionId") Long versionId) {
         requireSameWorkitem(workitemId, versionId);
         return Result.ok(designService.getVersion(currentWorkspaceId(), versionId));
+    }
+
+    @GetMapping("/{workitemId}/prd/versions/{versionId}/markdown")
+    public Result<PrdDesignHandoffService.Document> markdown(@PathVariable long workitemId, @PathVariable long versionId) {
+        return Result.ok(handoff.document(currentWorkspaceId(), workitemId, versionId));
+    }
+
+    @GetMapping("/{workitemId}/prd/handoff")
+    public Result<PrdDesignHandoffService.State> handoff(@PathVariable long workitemId) {
+        return Result.ok(handoff.state(currentWorkspaceId(), workitemId, currentUserId()));
+    }
+
+    @GetMapping("/{workitemId}/prd/handoff/reviewers")
+    public Result<List<PrdDesignHandoffService.Reviewer>> reviewers(@PathVariable long workitemId) {
+        return Result.ok(handoff.reviewers(currentWorkspaceId(), workitemId, currentUserId()));
+    }
+
+    @PostMapping("/{workitemId}/prd/handoff")
+    @RequireWorkspaceAccess(value = WorkspaceAccessLevel.READ_WRITE,
+            action = "设计 PRD", actionKey = "access.action.design_prd")
+    public Result<PrdDesignHandoffService.View> submitHandoff(@PathVariable long workitemId,
+            @RequestBody PrdDesignHandoffService.Submission request) {
+        return Result.ok(handoff.submit(currentWorkspaceId(), workitemId, currentUserId(), request));
+    }
+
+    @PostMapping("/{workitemId}/prd/handoff/{reviewId}/decision")
+    @RequireWorkspaceAccess(value = WorkspaceAccessLevel.READ_WRITE,
+            action = "设计 PRD", actionKey = "access.action.design_prd")
+    public Result<PrdDesignHandoffService.View> decideHandoff(@PathVariable long workitemId, @PathVariable long reviewId,
+            @RequestBody PrdDesignHandoffService.Decision request) {
+        return Result.ok(handoff.decide(currentWorkspaceId(), workitemId, reviewId, currentUserId(), request));
     }
 
     /** Move a draft to pending review. */

@@ -50,10 +50,11 @@ function useCompactNav() {
   return useSyncExternalStore(subscribeCompactNav, getCompactNavSnapshot, () => false);
 }
 
+const DESIGN_ROUTE = /^\/workitems\/[1-9]\d*\/design\/?$/;
 // 原型 05 工单详情 / 12 定时任务运行详情 / 43 个人工作台 / 14 SDLC 详情自带整页画布（内部按块分块）；
 // 数据洞察由多个自带边框的 panel 组成，外层不再套全局页框（2026-11-21 用户要求去掉最外层框）。
 const FRAMELESS_ROUTES = [
-  /^\/workitems\/[1-9]\d*\/?$/, /^\/scheduled-task-runs\/[1-9]\d*\/?$/, /^\/scheduled-tasks\/[1-9]\d*\/?$/,
+  /^\/workitems\/[1-9]\d*\/?$/, DESIGN_ROUTE, /^\/scheduled-task-runs\/[1-9]\d*\/?$/, /^\/scheduled-tasks\/[1-9]\d*\/?$/,
   /^\/workbench\/?$/, /^\/sdlcs\/[1-9]\d*\/?$/, /^\/insights\/?$/, /^\/profile\/settings\/?$/,
   // 设置中心自带二级导航与画布，外层不再套 .aw-content-frame。
   /^\/settings(?:\/|$)/,
@@ -105,9 +106,13 @@ export function AppLayout({ helpCenter = false }: { helpCenter?: boolean }) {
   const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
   const setWorkspaceSession = useAuthStore((s) => s.setWorkspaceSession);
 
-  const [collapsed, setCollapsed] = useState<boolean>(readCollapsedPref);
+  const designWorkbench = DESIGN_ROUTE.test(location.pathname);
+  const [navigationCollapsed, setCollapsed] = useState<boolean>(readCollapsedPref);
+  const [designNavigationCollapsed, setDesignNavigationCollapsed] = useState(true);
+  const collapsed = designWorkbench ? designNavigationCollapsed : navigationCollapsed;
   const compactNav = useCompactNav();
   const effectiveCollapsed = collapsed || compactNav;
+  useEffect(() => { if (designWorkbench) setDesignNavigationCollapsed(true); }, [designWorkbench]);
 
   useEffect(() => {
     if (helpCenter) return;
@@ -200,6 +205,10 @@ export function AppLayout({ helpCenter = false }: { helpCenter?: boolean }) {
   ]);
 
   const toggleCollapsed = () => {
+    if (designWorkbench) {
+      setDesignNavigationCollapsed((previous) => !previous);
+      return;
+    }
     setCollapsed((prev) => {
       const next = !prev;
       writeCollapsedPref(next);
@@ -277,7 +286,7 @@ export function AppLayout({ helpCenter = false }: { helpCenter?: boolean }) {
         {user && <ChiefOfStaff hideLauncher={helpCenter} />}
         {!helpCenter && user && currentWorkspace && <WorkspaceGuideHost />}
         <main
-          className={helpCenter ? 'aw-content help-content' : 'aw-content'}
+          className={helpCenter ? 'aw-content help-content' : designWorkbench ? 'aw-content aw-design-content' : 'aw-content'}
           style={helpCenter ? { padding: 0, overflow: 'hidden' } : undefined}
         >
           {helpCenter || FRAMELESS_ROUTES.some((pattern) => pattern.test(location.pathname))

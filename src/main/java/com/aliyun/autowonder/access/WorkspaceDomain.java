@@ -68,7 +68,8 @@ public enum WorkspaceDomain {
         }
         String rest = packageName.substring(BASE_PACKAGE.length());
         int dot = rest.indexOf('.');
-        return BY_PACKAGE_SEGMENT.get(dot < 0 ? rest : rest.substring(0, dot));
+        String segment = dot < 0 ? rest : rest.substring(0, dot);
+        return "office".equals(segment) ? INSIGHTS : BY_PACKAGE_SEGMENT.get(segment);
     }
 
     /** 角色在目标类所属域上只读时返回该域，否则 null。 */

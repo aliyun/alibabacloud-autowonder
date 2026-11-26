@@ -750,6 +750,192 @@ describe('MembersPage', () => {
   });
 });
 
+describe('MembersPage keyword search', () => {
+  const searchInput = () => screen.getByRole('textbox', { name: '搜索成员' });
+  const activePageTitle = () =>
+    document.querySelector('.ant-pagination-item-active')?.getAttribute('title');
+
+  it('filters by nickname, username, or email, ignoring case and surrounding spaces', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('dev1@co.com');
+
+    await user.type(searchInput(), '开发');
+    expect(screen.getByText('dev1@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('admin@co.com')).not.toBeInTheDocument();
+    expect(screen.getByText('共 1 条')).toBeInTheDocument();
+
+    await user.clear(searchInput());
+    await user.type(searchInput(), 'ADMIN');
+    expect(screen.getByText('admin@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('dev1@co.com')).not.toBeInTheDocument();
+
+    await user.clear(searchInput());
+    await user.type(searchInput(), '  dev1@CO.com  ');
+    expect(screen.getByText('dev1@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('admin@co.com')).not.toBeInTheDocument();
+  });
+
+  it('treats a whitespace-only keyword as no search', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('dev1@co.com');
+
+    await user.type(searchInput(), '   ');
+
+    expect(screen.getByText('dev1@co.com')).toBeInTheDocument();
+    expect(screen.getByText('admin@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('未找到匹配成员')).not.toBeInTheDocument();
+  });
+
+  it('matches members with a blank nickname or email through their username', async () => {
+    server.use(
+      http.get('/api/workspaces/current/members', () => HttpResponse.json({
+        success: true,
+        code: '0',
+        message: '',
+        traceId: null,
+        data: [
+          {
+            userId: 5, username: 'plainuser', email: '', nickname: '无名',
+            accessLevel: 'READ_ONLY', roleId: 11, roleCode: 'READ_ONLY', roleName: null,
+            readOnlyDomains: [], identityTags: [], joinedAt: '2026-07-01', owner: false,
+          },
+          {
+            userId: 6, username: 'anon', email: 'anon@co.com', nickname: '',
+            accessLevel: 'READ_WRITE', roleId: 12, roleCode: 'READ_WRITE', roleName: null,
+            readOnlyDomains: [], identityTags: [], joinedAt: '2026-07-02', owner: false,
+          },
+        ],
+      })),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('无名');
+
+    await user.type(searchInput(), 'plainuser');
+    expect(screen.getByText('无名')).toBeInTheDocument();
+    expect(screen.queryByText('anon@co.com')).not.toBeInTheDocument();
+
+    await user.clear(searchInput());
+    await user.type(searchInput(), 'anon@');
+    expect(screen.getByText('anon@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('无名')).not.toBeInTheDocument();
+  });
+
+  it('shows the no-match empty state and clearing restores the full list', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('dev1@co.com');
+
+    await user.type(searchInput(), 'zzz');
+
+    expect(await screen.findByText('未找到匹配成员')).toBeInTheDocument();
+    expect(screen.getByText('换个关键词，或清除搜索查看全部成员')).toBeInTheDocument();
+    expect(screen.queryByText('dev1@co.com')).not.toBeInTheDocument();
+
+    await user.click(screen.getByText('清除搜索'));
+
+    expect(searchInput()).toHaveValue('');
+    expect(screen.getByText('dev1@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('未找到匹配成员')).not.toBeInTheDocument();
+  });
+
+  it('clears the keyword through the input clear icon', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('dev1@co.com');
+
+    await user.type(searchInput(), 'dev1');
+    expect(screen.queryByText('admin@co.com')).not.toBeInTheDocument();
+
+    const clearIcon = document.querySelector('.ant-input-clear-icon');
+    expect(clearIcon).not.toBeNull();
+    fireEvent.click(clearIcon!);
+
+    await waitFor(() => expect(screen.getByText('admin@co.com')).toBeInTheDocument());
+    expect(searchInput()).toHaveValue('');
+  });
+
+  it('intersects the keyword with the role filter and resets the page to the first page', async () => {
+    const manyMembers = Array.from({ length: 15 }, (_, index) => {
+      const seq = index + 1;
+      const admin = seq > 8;
+      return {
+        userId: seq,
+        username: `member${seq}`,
+        email: `member${seq}@co.com`,
+        nickname: `成员${seq}`,
+        accessLevel: admin ? 'ADMIN' : 'READ_WRITE',
+        roleId: admin ? 13 : 12,
+        roleCode: admin ? 'ADMIN' : 'READ_WRITE',
+        roleName: null,
+        readOnlyDomains: [],
+        identityTags: [],
+        joinedAt: '2026-07-01',
+        owner: false,
+      };
+    });
+    server.use(
+      http.get('/api/workspaces/current/members', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null, data: manyMembers,
+      })),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('member1@co.com');
+
+    await user.click(screen.getByTitle('2'));
+    expect(activePageTitle()).toBe('2');
+
+    await user.type(searchInput(), 'member1');
+    expect(activePageTitle()).toBe('1');
+    expect(screen.getByText('member1@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('member2@co.com')).not.toBeInTheDocument();
+
+    await selectRole(user, '按角色筛选', '管理员');
+    expect(activePageTitle()).toBe('1');
+    expect(screen.getByText('member11@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('member1@co.com')).not.toBeInTheDocument();
+
+    await user.clear(searchInput());
+    await user.type(searchInput(), 'member8');
+    expect(await screen.findByText('未找到匹配成员')).toBeInTheDocument();
+
+    await user.click(screen.getByText('清除搜索'));
+    expect(screen.getByText('member11@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('member1@co.com')).not.toBeInTheDocument();
+    expect(screen.queryByText('未找到匹配成员')).not.toBeInTheDocument();
+    expect(activePageTitle()).toBe('1');
+  });
+
+  it('keeps search available for read-only members while admin actions stay disabled', async () => {
+    useAuthStore.getState().setCurrentWorkspace(
+      { id: 7, name: '测试工作空间', description: '' },
+      'READ_ONLY',
+    );
+    server.use(
+      http.get('/api/workspaces/current/membership', () => HttpResponse.json({
+        success: true,
+        code: '0',
+        message: '',
+        data: { ...mockMembers[0], accessLevel: 'READ_ONLY' },
+        traceId: null,
+      })),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('dev1@co.com');
+
+    expect(searchInput()).toBeEnabled();
+    await user.type(searchInput(), 'admin');
+
+    expect(screen.getByText('admin@co.com')).toBeInTheDocument();
+    expect(screen.queryByText('dev1@co.com')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '添加成员' })).toBeDisabled());
+  });
+});
+
 describe('resolveMembersTab', () => {
   it('accepts only the known tab keys', () => {
     expect(resolveMembersTab('requests')).toBe('requests');

@@ -59,6 +59,8 @@ export function usePrdVersions(workitemId: string | number, enabled = true) {
     queryKey: versionsKey(workitemId),
     queryFn: () => listPrdVersions(workitemId),
     enabled: enabled && !!workitemId,
+    refetchInterval: ACTIVE_POLL_MS,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -67,6 +69,8 @@ export function usePrdVersion(workitemId: string | number, versionId: string | n
     queryKey: versionKey(workitemId, versionId ?? 0),
     queryFn: () => getPrdVersion(workitemId, versionId as string | number),
     enabled: !!workitemId && versionId != null,
+    refetchInterval: ACTIVE_POLL_MS,
+    refetchIntervalInBackground: false,
   });
 }
 

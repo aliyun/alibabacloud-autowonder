@@ -64,6 +64,16 @@ describe('automatic durable question history', () => {
     expect(await screen.findByText('Saved after opening')).toBeInTheDocument();
     view.unmount();
   });
+  it('recovers a transient page failure without flashing a document-size error', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('temporary gateway failure'))
+      .mockResolvedValueOnce({ data: { items: [{ ...card, contentHasMore: false, message: 'Recovered history' }], hasMore: false,
+        nextBeforeId: 4, nextAfterId: 4 } });
+    const view = render(<AutoConversationQuestionHistory base="/retry" conversationId={2} turnId={3} entries={[]} />);
+    expect(await screen.findByText('Recovered history', {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.queryByText(/32 MiB/)).toBeNull();
+    expect(vi.mocked(apiClient.get)).toHaveBeenCalledTimes(2);
+    view.unmount();
+  });
   it('restores the complete older question when it settles after a newer saved question', async () => {
     let olderSettled = false;
     const newer = { ...card, historyId: 5, requestId: 'newer', contentHasMore: false, message: 'Newer saved question' };

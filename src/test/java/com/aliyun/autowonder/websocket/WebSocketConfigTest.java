@@ -93,8 +93,38 @@ class WebSocketConfigTest {
         }
     }
 
+    @Test
+    void officeSubscriberRelaysWorkspaceScopedChangeSignals() {
+        RedisManager redisManager = mock(RedisManager.class);
+        Jedis scheduledRunJedis = blockingPatternSubscriber("scheduled-run:*");
+        Jedis dispatchJedis = blockingPatternSubscriber("dispatch:*");
+        Jedis notificationJedis = blockingPatternSubscriber("notification:*");
+        Jedis officeJedis = blockingPatternSubscriber("office:*");
+        BrowserRealtimeSubscriberManager subscriberManager = mock(BrowserRealtimeSubscriberManager.class);
+        JedisPool pool = subscriberPool(scheduledRunJedis, dispatchJedis, notificationJedis, officeJedis);
+        when(redisManager.getJedisPool()).thenReturn(pool);
+
+        WebSocketConfig config = new WebSocketConfig(redisManager,
+                mock(NodeMailboxListener.class), subscriberManager);
+        try {
+            config.startSubscriber();
+            ArgumentCaptor<JedisPubSub> pubSub = ArgumentCaptor.forClass(JedisPubSub.class);
+            verify(officeJedis, timeout(1000)).psubscribe(pubSub.capture(), eq("office:*"));
+            pubSub.getValue().onPMessage("office:*", "office:2048", "{\"type\":\"office-activity-changed\"}");
+            verify(subscriberManager).deliverToChannel("office:2048", "{\"type\":\"office-activity-changed\"}");
+        } finally {
+            config.stopSubscriber();
+        }
+    }
+
     private static JedisPool subscriberPool(Jedis scheduledRunJedis, Jedis dispatchJedis,
             Jedis notificationJedis) {
+        return subscriberPool(scheduledRunJedis, dispatchJedis, notificationJedis,
+                blockingPatternSubscriber("office:*"));
+    }
+
+    private static JedisPool subscriberPool(Jedis scheduledRunJedis, Jedis dispatchJedis,
+            Jedis notificationJedis, Jedis officeJedis) {
         Jedis mailboxJedis = blockingSubscriber();
         Jedis conversationJedis = blockingSubscriber();
         JedisPool pool = mock(JedisPool.class);
@@ -104,6 +134,7 @@ class WebSocketConfigTest {
             case "ws-scheduled-run-subscriber" -> scheduledRunJedis;
             case "ws-dispatch-subscriber" -> dispatchJedis;
             case "ws-notification-subscriber" -> notificationJedis;
+            case "ws-office-subscriber" -> officeJedis;
             default -> throw new AssertionError("Unexpected subscriber thread: "
                     + Thread.currentThread().getName());
         });

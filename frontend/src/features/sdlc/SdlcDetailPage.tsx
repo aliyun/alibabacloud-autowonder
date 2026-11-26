@@ -102,7 +102,7 @@ export function SdlcDetailPage() {
       queryClient.setQueryData(['sdlc', sdlcId], updated);
       invalidate(); setEditingInfo(false); message.success(i18n.t('sdlc:messages.saved'));
     },
-    onError: (error) => message.error(error instanceof Error ? error.message : i18n.t('sdlc:messages.saveFailed')),
+    onError: (mutationError) => message.error(mutationError instanceof Error ? mutationError.message : i18n.t('sdlc:messages.saveFailed')),
   });
 
   const enableMutation = useMutation({

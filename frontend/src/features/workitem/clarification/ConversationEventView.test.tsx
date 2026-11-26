@@ -288,7 +288,7 @@ describe('ConversationEventView 时间线渲染', () => {
         isProcessing={false}
       />,
     );
-    expect(screen.getByText('未识别事件：acp_something_new')).toBeInTheDocument();
+    expect(screen.getByText('acp_something_new')).toBeInTheDocument();
     expect(screen.getByTestId('timeline-unknown-raw').textContent).toContain('未来能力');
   });
 

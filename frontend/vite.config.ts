@@ -3,7 +3,14 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), {
+    name: 'browser-local-vite-origin',
+    apply: 'serve',
+    config(config) {
+      // CLI --port has been merged before this hook; asset URLs must match it.
+      return { server: { origin: `http://127.0.0.1:${config.server?.port ?? 3000}` } };
+    },
+  }],
   // Java deployments replace the entire asset set. Keep all executable code and
   // styles in the initial load so open tabs never need retired release chunks.
   // Measured 2026-11-05: entry JS gzip ~1.75 -> ~2.97 MB (+1.22 MB); all JS
@@ -19,7 +26,15 @@ export default defineConfig({
     },
   },
   server: {
+    host: '127.0.0.1',
     port: 3000,
+    strictPort: true,
+    cors: {
+      origin: [
+        /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/,
+        new URL(process.env.AW_LOCAL_API_URL || 'http://localhost:7001').origin,
+      ],
+    },
     proxy: {
       '/api': {
         target: process.env.AW_LOCAL_API_URL || 'http://localhost:7001',

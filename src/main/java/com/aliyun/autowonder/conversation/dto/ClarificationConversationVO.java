@@ -11,6 +11,7 @@ public class ClarificationConversationVO {
     private boolean questionHistoryPaged;
     private Long id;
     private Long agentId;
+    private Long squadId;
     private String agentName;
     private String channelConversationId;
     private String status;

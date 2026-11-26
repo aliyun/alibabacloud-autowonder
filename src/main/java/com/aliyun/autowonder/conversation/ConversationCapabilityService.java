@@ -7,6 +7,7 @@ import com.aliyun.autowonder.agent.ChiefEffectiveConfigResolver;
 import com.aliyun.autowonder.agent.PlatformAgentSeeder;
 import com.aliyun.autowonder.dispatch.PackageContextAssembler;
 import com.aliyun.autowonder.mcp.ConversationMcpTokenService;
+import com.aliyun.autowonder.prd.PrdDesignRuntimeService;
 import com.aliyun.autowonder.skill.SkillDao;
 import com.aliyun.autowonder.security.crypto.SecretCrypto;
 import com.aliyun.autowonder.squad.workflow.SquadWorkflowChannelSink;
@@ -31,6 +32,9 @@ public class ConversationCapabilityService {
     private final ChiefEffectiveConfigResolver chiefConfig;
     @org.springframework.beans.factory.annotation.Autowired
     private com.aliyun.autowonder.prd.PrdBrowserService prdBrowsers;
+    @org.springframework.beans.factory.annotation.Autowired
+    private PrdDesignRuntimeService prdRuntime;
+    @org.springframework.beans.factory.annotation.Autowired private com.aliyun.autowonder.prd.WorkitemLaunchAccess launchAccess;
 
     public ConversationCapabilityService(AgentSkillDao bindingDao, SkillDao skillDao,
             AgentDao agentDao, PackageContextAssembler contextAssembler,
@@ -117,6 +121,12 @@ public class ConversationCapabilityService {
         var repos = restricted ? List.<Map<String, Object>>of()
                 : contextAssembler.buildRepos(conversation.getTenantId(),
                         conversation.getAgentVersionId(), agent);
+        if ("WORKITEM_PRD".equals(conversation.getChannel()) && prdRuntime != null) {
+            prdRuntime.requireAuthorizedRepository(conversation, repos);
+        }
+        if (launchAccess != null && ("WORKITEM_PRD".equals(conversation.getChannel()) || WorkitemClarificationConversationService.CHANNEL.equals(conversation.getChannel()))) {
+            repos = launchAccess.boundRepositories(conversation,repos);
+        }
         TaskPackageResult bundle = packager.buildConversationCapabilities(
                 conversation.getTenantId(), conversation.getId(), turnId,
                 conversation.getAgentId(), conversation.getAgentVersionId(),

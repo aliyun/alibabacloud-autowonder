@@ -8,6 +8,7 @@ import { STATUS_CATEGORY_TAG_COLOR, getPriorityMeta, workTypeMap } from '../cons
 import type { DeliveryControlAction } from './RecoveryControls';
 
 interface WorkitemActionBarProps {
+  designActions?: import('react').ReactNode;
   deliveryControl?: DeliveryControlAction | null;
   workType: string;
   statusName: string | null;
@@ -32,7 +33,7 @@ interface WorkitemActionBarProps {
 
 export function WorkitemActionBar({
   deliveryControl, workType, statusName, statusLabelKey, statusCategory, priority, hasSdlc, watched,
-  onStartDelivery, onAssignHuman, onTransition, onAddComment, onSyncExternal,
+  designActions, onStartDelivery, onAssignHuman, onTransition, onAddComment, onSyncExternal,
   onDelete, onToggleWatch, watchLoading, syncExternalLoading,
   deleteLoading, deleteDisabled, deleteDisabledReason,
 }: WorkitemActionBarProps) {
@@ -52,7 +53,7 @@ export function WorkitemActionBar({
     ...(deliveryControl ? [{ key: 'delivery-control',
       label: menuLabel(deliveryControl.label, deliveryControl.pending, deliveryControl.disabled ? deliveryControl.disabledReason : null),
       disabled: deliveryControl.disabled || deliveryControl.pending, danger: deliveryControl.danger,
-      onClick: deliveryControl.invoke,
+      icon: <AwStrokeIcon name="x" />, onClick: deliveryControl.invoke,
     }] : []),
     { type: 'divider' },
     { key: 'delete', label: menuLabel(t('actions.delete'), deleteLoading, deleteDisabled ? deleteDisabledReason : null),
@@ -61,10 +62,14 @@ export function WorkitemActionBar({
   return (
     <div data-testid="workitem-action-bar" className="aw-workitem-actions">
       <div className="aw-workitem-primary-actions">
+        {designActions}
         <Button className="aw-op-solid" type="primary" icon={hasSdlc ? <AwStrokeIcon name="transfer" /> : <AwStrokeIcon name="play" />} onClick={onStartDelivery}>
           {hasSdlc ? t('detail.deliverAgain') : t('detail.startDelivery')}
         </Button>
-        <Button className="aw-op-solid" icon={<AwStrokeIcon name="branch" />} onClick={onTransition}>{t('detail.transitionTitle')}</Button>
+        <div className="aw-workitem-transition-action">
+          <span className="aw-workitem-action-divider" aria-hidden="true" />
+          <Button className="aw-op-solid" icon={<AwStrokeIcon name="branch" />} onClick={onTransition}>{t('detail.transitionTitle')}</Button>
+        </div>
         <Button
           data-testid="workitem-watch-toggle"
           className="aw-op-ghost"

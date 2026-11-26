@@ -6,6 +6,7 @@ export interface Repo {
   name: string;
   url: string;
   defaultBranch: string | null;
+  designBaseBranch?: string | null;
   description: string | null;
   scanStatus: string | null;
   version: number;
@@ -34,6 +35,7 @@ export interface UpdateConclusionRequest {
 }
 
 export interface CreateRepoRequest {
+  designBaseBranch?: string;
   name: string;
   url: string;
   defaultBranch?: string;
@@ -41,6 +43,7 @@ export interface CreateRepoRequest {
 }
 
 export interface UpdateRepoRequest {
+  designBaseBranch?: string | null;
   name?: string;
   url?: string;
   defaultBranch?: string | null;

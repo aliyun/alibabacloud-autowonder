@@ -35,6 +35,7 @@ import com.aliyun.autowonder.integration.common.ExternalWorkitemLinkDO;
 import com.aliyun.autowonder.integration.event.WorkitemCommentCreatedEvent;
 import com.aliyun.autowonder.integration.event.WorkitemContentUpdatedEvent;
 import com.aliyun.autowonder.integration.event.WorkitemStatusChangedEvent;
+import com.aliyun.autowonder.office.OfficeActivitySignaler;
 import com.aliyun.autowonder.workspace.WorkspaceMemberDO;
 import com.aliyun.autowonder.workspace.WorkspaceMemberDao;
 import com.aliyun.autowonder.sdlc.SdlcDO;
@@ -176,10 +177,16 @@ public class WorkitemService {
     @Autowired(required = false)
     private WorkitemServiceRestartHandler restartHandler;
     private ExecutionAvailabilityService executionAvailabilityService;
+    private OfficeActivitySignaler officeActivitySignaler;
 
     @Autowired(required = false)
     public void setExecutionAvailabilityService(ExecutionAvailabilityService service) {
         this.executionAvailabilityService = service;
+    }
+
+    @Autowired(required = false)
+    public void setOfficeActivitySignaler(OfficeActivitySignaler signaler) {
+        this.officeActivitySignaler = signaler;
     }
 
     @Autowired(required = false)
@@ -1162,6 +1169,9 @@ public class WorkitemService {
             assignEvent.setActorRef(effectiveActor.ref());
             assignEvent.setDetailJson(assignDetailJson(w.getAssigneeType(), assigneeType));
             eventDao.insert(assignEvent);
+            if (officeActivitySignaler != null) {
+                officeActivitySignaler.afterCommit(tenantId, "ASSIGNMENT_CHANGED", assignEvent.getId());
+            }
 
         }
 

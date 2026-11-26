@@ -67,7 +67,7 @@ describe('Sidebar', () => {
     expect(Array.from(rail.querySelectorAll('.aw-rail-group-title')).map((node) => node.textContent))
       .toEqual(['交付', '洞察']);
     expect(Array.from(rail.querySelectorAll('.aw-rail-row')).map((node) => node.textContent))
-      .toEqual(['工作台', '工单', '定时任务', '执行记录', '回收站', '数据洞察']);
+      .toEqual(['工作台', '工单', '定时任务', '执行记录', '回收站', '数据洞察', '黑灯工厂']);
 
     expect(container.querySelector('.aw-panel')).toBeNull();
     expect(await screen.findByRole('link', { name: '定时任务' })).toBeInTheDocument();
@@ -289,7 +289,7 @@ describe('Sidebar helpers', () => {
     expect(NAV_SPACES.map((space) => space.key)).toEqual(['delivery', 'insights']);
     expect(NAV_SPACES.map((space) => keysOf(space.items))).toEqual([
       ['/workbench', '/workitems', '/scheduled-tasks', '/executions', '/workitems/recycled'],
-      ['/insights'],
+      ['/insights', '/office'],
     ]);
     expect(SETTINGS_SPACE.key).toBe('settings');
     expect(keysOf(SETTINGS_SPACE.items)).toEqual([
@@ -337,6 +337,7 @@ describe('Sidebar helpers', () => {
     expect(resolveSelectedNavKey('/scheduled-tasks/7/edit')).toBe('/scheduled-tasks');
     expect(resolveSelectedNavKey('/scheduled-task-runs/12')).toBe('/scheduled-tasks');
     expect(resolveSelectedNavKey('/insights')).toBe('/insights');
+    expect(resolveSelectedNavKey('/office')).toBe('/office');
     expect(resolveSelectedNavKey('/about')).toBe('/about');
     expect(resolveSelectedNavKey('/agents/reviews')).toBe('/agents');
     expect(resolveSelectedNavKey('/agents/42')).toBe('/agents');
@@ -353,6 +354,7 @@ describe('Sidebar helpers', () => {
     expect(resolveSelectedSpaceKey('/workitems/42')).toBe('delivery');
     expect(resolveSelectedSpaceKey('/scheduled-task-runs/12')).toBe('delivery');
     expect(resolveSelectedSpaceKey('/insights')).toBe('insights');
+    expect(resolveSelectedSpaceKey('/office')).toBe('insights');
     expect(resolveSelectedSpaceKey('/agents/42')).toBe('settings');
     expect(resolveSelectedSpaceKey('/executors')).toBe('settings');
     expect(resolveSelectedSpaceKey('/repos/map')).toBe('settings');

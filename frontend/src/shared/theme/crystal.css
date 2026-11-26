@@ -161,7 +161,8 @@ html .ant-card{border-color:var(--aw-border)}
 html .ant-card-head{color:var(--aw-text)}
 html .ant-card-head-title{font-weight:600}
 html .ant-card-hoverable:hover{border-color:color-mix(in srgb,var(--aw-border),var(--aw-accent) 25%);box-shadow:0 4px 14px #0000000a}
-html :is(.ant-modal-content,.ant-drawer-content,.ant-popover-inner){border:1px solid var(--aw-border)}
+/* Popovers use the component shadow. A border on the body draws a line across the arrow joint. */
+html :is(.ant-modal-content,.ant-drawer-content){border:1px solid var(--aw-border)}
 /* 全局返回钮：24×24 图标钮 + 12px chevron（2026-11-12 用户定稿由原型 11/13 的 28×28 收小），双类名压过 antd css-in-js */
 html .aw-back-btn.ant-btn.ant-btn{width:24px;height:24px;min-width:24px;padding:0}
 html .aw-back-btn.ant-btn .anticon{font-size:12px}

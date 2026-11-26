@@ -30,6 +30,9 @@ import com.aliyun.autowonder.taskpackage.PackageContext;
 import com.aliyun.autowonder.taskpackage.TaskArtifactRef;
 import com.aliyun.autowonder.taskpackage.TaskComment;
 import com.aliyun.autowonder.taskpackage.TeammateOutput;
+import com.aliyun.autowonder.prd.PrdDesignHandoffDao;
+import com.aliyun.autowonder.prd.PrdDesignHandoffDao.Review;
+import com.aliyun.autowonder.util.MessageDigestUtil;
 import com.aliyun.autowonder.user.UserDO;
 import com.aliyun.autowonder.user.UserDao;
 import com.aliyun.autowonder.workspace.WorkspaceMemberDO;
@@ -48,6 +51,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -99,6 +103,8 @@ public class PackageContextAssembler {
      */
     @Autowired(required = false)
     private com.aliyun.autowonder.prd.PrdDeliveryFreezeService prdDeliveryFreezeService;
+    @Autowired(required = false)
+    private PrdDesignHandoffDao prdDesignHandoffs;
 
     @Autowired
     public PackageContextAssembler(WorkitemDao workitemDao, ClarificationDao clarificationDao,
@@ -223,8 +229,6 @@ public class PackageContextAssembler {
         ctx.setComments(comments);
         ctx.setCommentsMd(buildComments(comments));
         populateSideInteractionContext(ctx, dispatch);
-        ctx.setRequirementDocuments(buildRequirementDocuments(tenantId, dispatch.getWorkitemId()));
-
         ctx.setIdentity(buildIdentity(version));
         ctx.setRepos(buildRepos(tenantId, version.getId(),
                 dispatch.getAgentId() == null ? null : agentDao.findById(dispatch.getAgentId())));
@@ -232,6 +236,23 @@ public class PackageContextAssembler {
         ctx.setSkills(buildCapabilities(skillDao, skillCatalogDao, tenantId, version.getId()));
         boolean interaction = DispatchService.isInteractionDispatchValue(dispatch);
         var snapshot = workflowSnapshots == null ? null : workflowSnapshots.require(dispatch);
+        var reviewedDesign = reviewedDesign(dispatch, snapshot);
+        ctx.setRequirementDocuments(buildRequirementDocuments(tenantId, dispatch.getWorkitemId(), reviewedDesign));
+        if (reviewedDesign != null) {
+            ctx.setWorkitemContentMd(java.util.Objects.toString(ctx.getWorkitemContentMd(), "") + """
+
+
+                    ## 已评审的产品与交互设计
+
+                    - 设计代码仓库：`%s`
+                    - 设计分支：`%s`
+                    - 已评审提交：`%s`
+                    - 需求说明：`requirements/%s`
+
+                    请先阅读任务包中的需求说明，并以该提交核对交互设计。
+                    """.formatted(reviewedDesign.getRepoUrl(), reviewedDesign.getBranch(), reviewedDesign.getCommitSha(),
+                            reviewedDesign.attachmentFilename()));
+        }
         if (snapshot != null) {
             ctx.setSdlcId(snapshot.sdlcId());
             ctx.setSdlc(snapshot.workflow());
@@ -415,14 +436,23 @@ public class PackageContextAssembler {
                 agentVersionId, dispatch.getCreatorId(), sourceDispatchId);
     }
 
-    private List<TaskArtifactRef> buildRequirementDocuments(long tenantId, long workitemId) {
+    private Review reviewedDesign(DispatchDO dispatch, DispatchWorkflowSnapshotStore.Snapshot snapshot) {
+        if (prdDesignHandoffs == null) return null;
+        DispatchDO root = snapshot == null || snapshot.roundId() == dispatch.getId()
+                ? dispatch : dispatchDao.findById(snapshot.roundId());
+        if (root == null || !java.util.Objects.equals(root.getTenantId(), dispatch.getTenantId())
+                || !java.util.Objects.equals(root.getWorkitemId(), dispatch.getWorkitemId()) || root.getGmtCreate() == null) {
+            return null;
+        }
+        return prdDesignHandoffs.completedForDelivery(dispatch.getTenantId(), dispatch.getWorkitemId(), root.getGmtCreate());
+    }
+
+    private List<TaskArtifactRef> buildRequirementDocuments(long tenantId, long workitemId, Review reviewedDesign) {
         List<TaskArtifactRef> refs = new ArrayList<>();
         List<ArtifactDO> artifacts = artifactDao.listByWorkitemAndType(
                 tenantId, workitemId, RequirementDocumentService.TYPE);
-        if (artifacts == null) {
-            return refs;
-        }
-        for (ArtifactDO artifact : artifacts) {
+        boolean includedReviewedDocument = false;
+        for (ArtifactDO artifact : artifacts == null ? List.<ArtifactDO>of() : artifacts) {
             if (artifact == null || artifact.getTenantId() == null || artifact.getTenantId() != tenantId
                     || artifact.getWorkitemId() == null || artifact.getWorkitemId() != workitemId
                     || artifact.getName() == null || artifact.getOssRef() == null) {
@@ -431,7 +461,17 @@ public class PackageContextAssembler {
             TaskArtifactRef ref = new TaskArtifactRef();
             ref.setName(artifact.getName());
             ref.setOssRef(artifact.getOssRef());
+            if (reviewedDesign != null && artifact.getId() != null
+                    && artifact.getId().equals(reviewedDesign.getAttachmentId())
+                    && artifact.getName().equals("requirements/" + reviewedDesign.attachmentFilename())) {
+                ref.setExpectedSha256("sha256:"
+                        + MessageDigestUtil.sha256Hex(reviewedDesign.getMarkdown().getBytes(StandardCharsets.UTF_8)));
+                includedReviewedDocument = true;
+            }
             refs.add(ref);
+        }
+        if (reviewedDesign != null && !includedReviewedDocument) {
+            throw new BizException(ErrorCode.ARTIFACT_NOT_FOUND);
         }
         return refs;
     }

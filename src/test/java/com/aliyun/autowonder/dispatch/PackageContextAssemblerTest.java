@@ -8,6 +8,8 @@ import com.aliyun.autowonder.clarification.ClarificationDO;
 import com.aliyun.autowonder.clarification.ClarificationDao;
 import com.aliyun.autowonder.guidance.GuidanceDO;
 import com.aliyun.autowonder.guidance.GuidanceDao;
+import com.aliyun.autowonder.prd.PrdDesignHandoffDao;
+import com.aliyun.autowonder.storage.InMemoryObjectStorage;
 import com.aliyun.autowonder.sdlc.SdlcStepDO;
 import com.aliyun.autowonder.common.error.BizException;
 import com.aliyun.autowonder.common.error.ErrorCode;
@@ -18,6 +20,7 @@ import com.aliyun.autowonder.statemachine.StatusNodeDO;
 import com.aliyun.autowonder.statemachine.StatusNodeDao;
 import com.aliyun.autowonder.taskpackage.PackageContext;
 import com.aliyun.autowonder.taskpackage.TaskArtifactRef;
+import com.aliyun.autowonder.taskpackage.TaskPackager;
 import com.aliyun.autowonder.taskpackage.TeammateOutput;
 import com.aliyun.autowonder.repo.RepoDO;
 import com.aliyun.autowonder.repo.RepoDao;
@@ -35,10 +38,16 @@ import com.aliyun.autowonder.workitem.WorkitemCommentDao;
 import com.aliyun.autowonder.workitem.WorkitemCommentDO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -544,6 +553,72 @@ class PackageContextAssemblerTest {
         assertEquals("requirements/spec.md", ctx.getRequirementDocuments().get(0).getName());
         assertEquals("artifact-bucket/t/100/workitem/200/requirements/spec.md",
                 ctx.getRequirementDocuments().get(0).getOssRef());
+    }
+
+    @Test
+    void laterDeliveryStepGetsTheRoundsReviewedCommitAndExactDocument() throws Exception {
+        WorkitemDO workitem = new WorkitemDO();
+        workitem.setId(200L);
+        workitem.setTenantId(TENANT);
+        workitem.setContentMd("Implement the requirements");
+        when(workitemDao.findById(200L)).thenReturn(workitem);
+
+        DispatchDO root = dispatch();
+        root.setGmtCreate(new Date(1_800_000_000_000L));
+        DispatchDO next = dispatch();
+        next.setId(501L);
+        next.setGmtCreate(new Date(root.getGmtCreate().getTime() + 2_000));
+        when(dispatchDao.findById(root.getId())).thenReturn(root);
+        var snapshots = mock(DispatchWorkflowSnapshotStore.class);
+        when(snapshots.require(next)).thenReturn(new DispatchWorkflowSnapshotStore.Snapshot(
+                root.getId(), root.getId(), 301L, 300L, 401L, "{}", "workflow-digest", null));
+        ReflectionTestUtils.setField(assembler, "workflowSnapshots", snapshots);
+
+        var handoffs = mock(PrdDesignHandoffDao.class);
+        var review = new PrdDesignHandoffDao.Review();
+        review.setWorkitemId(200L);
+        review.setId(51L);
+        review.setAttachmentId(99L);
+        review.setRepoUrl("https://code.example.invalid/team/product.git");
+        review.setBranch("autowonder-design/200-1234567890ab");
+        review.setCommitSha("2".repeat(40));
+        review.setMarkdown("# 已评审的需求\n");
+        when(handoffs.completedForDelivery(TENANT, 200L, root.getGmtCreate())).thenReturn(review);
+        ReflectionTestUtils.setField(assembler, "prdDesignHandoffs", handoffs);
+
+        var storage = new InMemoryObjectStorage();
+        var documentPath = "requirements/" + review.attachmentFilename();
+        var stored = storage.put("documents", documentPath, review.getMarkdown().getBytes(StandardCharsets.UTF_8));
+        var artifact = new ArtifactDO();
+        artifact.setId(99L);
+        artifact.setTenantId(TENANT);
+        artifact.setWorkitemId(200L);
+        artifact.setName(documentPath);
+        artifact.setOssRef(stored.getOssRef());
+        when(artifactDao.listByWorkitemAndType(TENANT, 200L, RequirementDocumentService.TYPE))
+                .thenReturn(List.of(artifact));
+
+        var ctx = assembler.assemble(next, version());
+        var packager = new TaskPackager(storage, "packages", "https://autowonder.example.invalid");
+        var packageRef = packager.build(ctx).getOssRef();
+        Map<String, String> contents = new HashMap<>();
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(storage.get(packageRef)))) {
+            for (var entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
+                contents.put(entry.getName(), new String(zip.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        assertTrue(contents.get("workitem.md").contains(workitem.getContentMd()));
+        assertTrue(contents.get("workitem.md").contains(review.getRepoUrl()));
+        assertTrue(contents.get("workitem.md").contains(review.getBranch()));
+        assertTrue(contents.get("workitem.md").contains(review.getCommitSha()));
+        assertTrue(contents.get("workitem.md").contains(documentPath));
+        assertEquals(review.getMarkdown(), contents.get(documentPath));
+        verify(handoffs).completedForDelivery(TENANT, 200L, root.getGmtCreate());
+        verifyNoMoreInteractions(handoffs);
+
+        storage.put("documents", documentPath, "Different requirements".getBytes(StandardCharsets.UTF_8));
+        assertEquals(ErrorCode.PACKAGE_BUILD_FAILED.getCode(),
+                assertThrows(BizException.class, () -> packager.build(ctx)).getCode());
     }
 
     @Test

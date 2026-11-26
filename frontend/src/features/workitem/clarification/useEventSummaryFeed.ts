@@ -27,7 +27,7 @@ export function isEventDisplayAuthDenied(error: unknown): boolean {
  * Durable cursors recover dropped pushes; live and recovered events share one logical identity.
  *
  * <p>`keepAllEvents` 关闭 1000 事件窗口裁剪：可见性只影响是否读，已显示事件不因窗口上限消失。
- * <p>`atomicHistory` 让已完成轮次在一个 tick 内读完并一次提交，不再逐页长出或整批替换窗口。
+ * <p>`atomicHistory` 让历史在一个 tick 内读完并一次提交；活跃轮次追平后恢复实时增量。
  */
 export function useEventSummaryFeed({ source, conversationId, turnId, enabled, processing,
   retainBusinessText = false, keepAllEvents = false, atomicHistory = false }: {
@@ -76,6 +76,8 @@ export function useEventSummaryFeed({ source, conversationId, turnId, enabled, p
   const cacheOwner = useRef(Symbol('conversation-event-cache'));
   /** 原子历史批次在途：期间的合并不逐页提交，整批结束后一次呈现。 */
   const atomicBatches = useRef(new Set<symbol>());
+  /** 活跃轮次首次进入也原子恢复已有历史；追平后切回实时增量。 */
+  const initialAtomicHistoryComplete = useRef(false);
   const liveTimer = useRef<ReturnType<typeof setTimeout>>();
   const clearLive = useCallback(() => {
     if (liveTimer.current) clearTimeout(liveTimer.current);
@@ -269,7 +271,8 @@ export function useEventSummaryFeed({ source, conversationId, turnId, enabled, p
     if (navigating.current) hydrateOnly = true;
     inFlight.current = true;
     // 原子历史：整轮历史在一次 tick 内读完，期间不提交，结束后一次呈现。
-    const batchToken = atomicHistory && !processing ? Symbol('atomic-history') : null;
+    const batchToken = atomicHistory && (!processing || !initialAtomicHistoryComplete.current)
+      ? Symbol('atomic-history') : null;
     const atomic = batchToken != null;
     if (batchToken) atomicBatches.current.add(batchToken);
     let settled = false;
@@ -405,7 +408,10 @@ export function useEventSummaryFeed({ source, conversationId, turnId, enabled, p
       if (epoch === epochRef.current) { inFlight.current = false; setLoading(false); setHydrating(false); }
       if (batchToken) atomicBatches.current.delete(batchToken);
       // 中止（切走/隐藏）时不提交半轮历史，保留累积数据供下次续读后一次性呈现。
-      if (batchToken && settled && epoch === epochRef.current) { commitItems(); refreshBusinessText(); }
+      if (batchToken && settled && epoch === epochRef.current) {
+        initialAtomicHistoryComplete.current = true;
+        commitItems(); refreshBusinessText();
+      }
     }
   }, [atomicHistory, autoReadsHistory, commitItems, conversationId, enabled, merge, processing, publishWindow, refreshBusinessText, rememberPage, retainBusinessText, turnId]);
   const runRef = useRef(runTick); runRef.current = runTick;
@@ -471,6 +477,7 @@ export function useEventSummaryFeed({ source, conversationId, turnId, enabled, p
     itemsRef.current.clear(); details.current.clear();
     windowAnchor.current = null; highestRevision.current = 0;
     atomicBatches.current.clear();
+    initialAtomicHistoryComplete.current = false;
     liveItems.current.clear(); pagesSeen.current.clear();
     for (const controller of restoreControllers.current) controller.abort(); restoreControllers.current.clear();
     businessParts.current.clear();

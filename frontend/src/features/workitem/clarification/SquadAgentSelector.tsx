@@ -31,6 +31,11 @@ interface SquadAgentSelectorProps {
   onChange: (selection: SquadAgentSelection | null) => void;
   /** When true the squad picker is disabled (e.g. locked by delivery progress). */
   locked?: boolean;
+  /** Context-specific action copy; clarification remains the default. */
+  actionLabel?: ReactNode;
+  selectedActionLabel?: ReactNode;
+  /** PRD setup uses compact selects instead of clarification cards. */
+  compact?: boolean;
 }
 
 /**
@@ -40,7 +45,7 @@ interface SquadAgentSelectorProps {
  * enforced here — the clarification backend resolves the executor lazily via
  * ExecutorSelector when the conversation is created.
  */
-export function SquadAgentSelector({ value, onChange, locked }: SquadAgentSelectorProps) {
+export function SquadAgentSelector({ value, onChange, locked, actionLabel, selectedActionLabel, compact }: SquadAgentSelectorProps) {
   const { t } = useTranslation('workitem');
   const { data: squads, isLoading: squadsLoading } = useQuery({
     queryKey: ['squads', 'clarification'],
@@ -81,6 +86,23 @@ export function SquadAgentSelector({ value, onChange, locked }: SquadAgentSelect
     );
   } else if (members.length === 0) {
     agentList = <p className="aw-cl-pick-intro" style={{ margin: 0 }}>{t('clarification.noMembers')}</p>;
+  } else if (compact) {
+    agentList = (
+      <Select
+        aria-label={t('clarification.agent')}
+        placeholder={t('clarification.selectAgent')}
+        value={value?.agentId || undefined}
+        disabled={locked}
+        onChange={(agentId) => onChange({ squadId, agentId })}
+        options={members.map(member => ({
+          value: member.agentId,
+          label: t('clarification.agentOption', {
+            name: member.agentName,
+            status: member.executorOnline ? t('clarification.online') : t('clarification.offline'),
+          }),
+        }))}
+      />
+    );
   } else {
     agentList = (
       <ul className="aw-cl-agents">
@@ -107,7 +129,9 @@ export function SquadAgentSelector({ value, onChange, locked }: SquadAgentSelect
                   </span>
                 )}
                 <span className="go">
-                  {t('clarification.startClarify')}
+                  {selected && selectedActionLabel != null
+                    ? selectedActionLabel
+                    : actionLabel ?? t('clarification.startClarify')}
                   <AwStrokeIcon name="chev-r" size={12} />
                 </span>
               </button>

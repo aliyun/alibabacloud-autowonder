@@ -29,6 +29,8 @@ public class WorkitemClarificationConversationService {
     static final String CHANNEL = "WORKITEM_CLARIFICATION";
     static final String BIZ_REF_TYPE = "WORKITEM";
 
+    @org.springframework.beans.factory.annotation.Autowired private com.aliyun.autowonder.prd.WorkitemLaunchAccess launchAccess;
+    @org.springframework.beans.factory.annotation.Autowired private com.aliyun.autowonder.prd.WorkitemLaunchDao launches;
     private final AgentConversationDao convDao;
     private final AgentConversationTurnDao turnDao;
     private final AgentConversationService conversationService;
@@ -106,6 +108,8 @@ public class WorkitemClarificationConversationService {
         var vo = toVO(conv, page.items(), processing,
                 pendingElicitationsQuietly(tenantId, conversationId),
                 commandsSnapshotQuietly(tenantId, conversationId));
+        var launch = launches == null ? null : launches.find(tenantId, conversationId);
+        if (launch != null) vo.setSquadId(launch.squadId());
         vo.setTurnsHasMore(page.hasMore());
         vo.setNextBeforeTurnId(page.nextBeforeTurnId());
         if (elicitationService != null) {
@@ -306,6 +310,7 @@ public class WorkitemClarificationConversationService {
         }
         List<Long> bindableIds = attachmentService.requireBindableIds(
                 tenantId, conversationId, userId, attachmentIds);
+        if (launchAccess != null) launchAccess.requireConversationRepo(conv);
         String normalizedContent = content == null || content.isBlank() ? "" : content;
         conversationService.submitTurn(tenantId, conv.getAgentId(), CHANNEL,
                 conv.getChannelConversationId(), normalizedContent, externalMsgId, null, userId);

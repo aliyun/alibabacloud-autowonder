@@ -16,9 +16,9 @@ import java.sql.Statement;
 import java.util.Locale;
 
 /**
- * Startup self-heal for the V076 PRD design schema.
+ * Startup self-heal for the PRD design schema.
  *
- * <p>V076 (docs/migration/V104__prd_design_version.sql) is applied by operators, so a database
+ * <p>Community PRD migrations in docs/migration/ are applied by operators, so a database
  * upgraded by hand can still lack the PRD tables when this code is deployed. Mirrors
  * {@code WorkitemRecycleBinSchemaBootstrap} and {@code FrontendProjectSchemaBootstrap}: MySQL only,
  * CREATE TABLE IF NOT EXISTS tolerates concurrently booting nodes, any failure only logs a warning
@@ -46,6 +46,8 @@ public class PrdDesignSchemaBootstrap implements ApplicationRunner {
               `delivery_mode` VARCHAR(24) NOT NULL DEFAULT 'LEGACY' COMMENT 'LEGACY/PRD_DRIVEN',
               `latest_version_no` INT NOT NULL DEFAULT 0 COMMENT '已分配的最大版本号',
               `content_language` VARCHAR(16) DEFAULT NULL COMMENT '生成内容语言',
+              `review_slug` VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin COMMENT '公开分享英文名',
+              `review_share_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '英文名绑定的分享记录',
               `version` INT NOT NULL DEFAULT 0 COMMENT '乐观并发版本',
               `creator_id` BIGINT UNSIGNED DEFAULT NULL,
               `modifier_id` BIGINT UNSIGNED DEFAULT NULL,
@@ -53,6 +55,7 @@ public class PrdDesignSchemaBootstrap implements ApplicationRunner {
               `gmt_modified` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
               PRIMARY KEY (`id`),
               UNIQUE KEY `uk_prd_design_workitem` (`workspace_id`, `workitem_id`),
+              UNIQUE KEY `uk_prd_design_review_slug` (`review_slug`),
               KEY `idx_prd_design_repo` (`workspace_id`, `target_repo_id`)
             ) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COMMENT='工单 PRD 设计聚合根'
             """;
@@ -146,6 +149,28 @@ public class PrdDesignSchemaBootstrap implements ApplicationRunner {
             ) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COMMENT='PRD 交付冻结绑定'
             """;
 
+    static final String CREATE_RUNTIME_TABLE = """
+            CREATE TABLE IF NOT EXISTS `prd_design_runtime` (
+              `workspace_id` BIGINT UNSIGNED NOT NULL,
+              `workitem_id` BIGINT UNSIGNED NOT NULL,
+              `conversation_id` BIGINT UNSIGNED NOT NULL,
+              `executor_id` BIGINT UNSIGNED NOT NULL,
+              `turn_id` BIGINT UNSIGNED NOT NULL,
+              `dispatch_attempt` INT NOT NULL,
+              `source_key` VARCHAR(128) NOT NULL,
+              `directory` VARCHAR(1024) NOT NULL,
+              `status` VARCHAR(16) NOT NULL DEFAULT 'STARTING',
+              `port` INT DEFAULT NULL,
+              `route` VARCHAR(2048) NOT NULL DEFAULT '/',
+              `error` VARCHAR(2048) DEFAULT NULL,
+              `revision` BIGINT NOT NULL DEFAULT 0,
+              `report_sequence` INT NOT NULL DEFAULT 0,
+              `gmt_modified` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              PRIMARY KEY (`workspace_id`, `conversation_id`),
+              KEY `idx_prd_runtime_workitem` (`workspace_id`, `workitem_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='产品与交互设计工程运行状态'
+            """;
+
     private final DataSource dataSource;
 
     public PrdDesignSchemaBootstrap(DataSource dataSource) {
@@ -158,7 +183,7 @@ public class PrdDesignSchemaBootstrap implements ApplicationRunner {
             repair(connection);
         } catch (Exception exception) {
             log.warn("prd-design schema self-heal skipped; run "
-                    + "docs/migration/V104__prd_design_version.sql and V107__prd_manual_target.sql manually", exception);
+                    + "Community migrations V104, V107, V122 and V126 in docs/migration/ manually", exception);
         }
     }
 
@@ -169,32 +194,49 @@ public class PrdDesignSchemaBootstrap implements ApplicationRunner {
             log.info("prd-design schema self-heal targets MySQL only, skipped for {}", product);
             return;
         }
+        if (!tableExists(connection, "prd_design_runtime")) {
+            execute(connection, CREATE_RUNTIME_TABLE);
+            log.info("Created missing table prd_design_runtime (V122 self-heal)");
+        }
         if (!tableExists(connection, "prd_design")) {
             execute(connection, CREATE_DESIGN_TABLE);
-            log.info("Created missing table prd_design (V076 self-heal)");
+            log.info("Created missing table prd_design (V104 self-heal)");
         }
         if (!tableExists(connection, "prd_design_version")) {
             execute(connection, CREATE_VERSION_TABLE);
-            log.info("Created missing table prd_design_version (V076 self-heal)");
+            log.info("Created missing table prd_design_version (V104 self-heal)");
         }
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                        + "AND TABLE_NAME = 'prd_design' AND COLUMN_NAME = 'target_config_json'")) {
-            statement.setQueryTimeout(PROBE_TIMEOUT_SECONDS);
-            try (ResultSet result = statement.executeQuery()) {
-                result.next();
-                if (result.getLong(1) == 0) {
-                    execute(connection, "ALTER TABLE prd_design ADD COLUMN target_config_json MEDIUMTEXT DEFAULT NULL");
-                }
-            }
+        if (!designColumnExists(connection, "target_config_json")) {
+            execute(connection, "ALTER TABLE prd_design ADD COLUMN target_config_json MEDIUMTEXT DEFAULT NULL");
+        }
+        if (!designColumnExists(connection, "review_slug")) {
+            execute(connection, """
+                    ALTER TABLE prd_design
+                      ADD COLUMN review_slug VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin COMMENT '公开分享英文名',
+                      ADD COLUMN review_share_id BIGINT UNSIGNED DEFAULT NULL COMMENT '英文名绑定的分享记录',
+                      ADD UNIQUE KEY uk_prd_design_review_slug (review_slug)
+                    """);
         }
         if (!tableExists(connection, "prd_requirement_acceptance")) {
             execute(connection, CREATE_ACCEPTANCE_TABLE);
-            log.info("Created missing table prd_requirement_acceptance (V076 self-heal)");
+            log.info("Created missing table prd_requirement_acceptance (V104 self-heal)");
         }
         if (!tableExists(connection, "prd_delivery_binding")) {
             execute(connection, CREATE_BINDING_TABLE);
-            log.info("Created missing table prd_delivery_binding (V076 self-heal)");
+            log.info("Created missing table prd_delivery_binding (V104 self-heal)");
+        }
+    }
+
+    private boolean designColumnExists(Connection connection, String columnName) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                        + "AND TABLE_NAME = 'prd_design' AND COLUMN_NAME = ?")) {
+            statement.setString(1, columnName);
+            statement.setQueryTimeout(PROBE_TIMEOUT_SECONDS);
+            try (ResultSet result = statement.executeQuery()) {
+                result.next();
+                return result.getLong(1) > 0;
+            }
         }
     }
 

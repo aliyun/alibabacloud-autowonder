@@ -1,4 +1,5 @@
 /* 工单详情页级样式（页面级文件，只用 crystal.css 真实令牌）。 */
+.aw-design-prepare { flex: 1; display: grid; align-content: center; justify-items: center; padding: 24px; color: var(--aw-text-2); }
 
 /* ===== 主内容区头部（原型 05 page-head / op-bar 契约；返回钮保留全局 PageBackButton） ===== */
 
@@ -64,6 +65,9 @@ html .aw-op-ghost.ant-btn .aw-stroke-icon { width: 14px; height: 14px; }
 /* op-bar 实心钮（原型 .btn 32px 的 padding 0 12px）：主按钮/流转，antd 默认 0 15px */
 html .aw-op-solid.ant-btn { padding: 0 12px; }
 
+.aw-workitem-transition-action { display: flex; align-items: center; gap: 8px; }
+.aw-workitem-action-divider { width: 1px; height: 20px; background: var(--aw-border); }
+
 /* 更多操作钮（原型 .more-btn）：26×26 无边框透明、hover 灰底文字加深、icon 14 */
 html .aw-op-more.ant-btn.ant-btn {
   width: 26px;
@@ -113,7 +117,7 @@ html .aw-detail-head-card .aw-workitem-actions { padding-bottom: 0; margin-botto
 
 /* ===== 需求与设计卡内附件：不画分隔线，靠 20px 留白与正文段距（≈12px）拉开层级 ===== */
 .aw-req-context { margin-top: 20px; }
-.aw-req-context-head { display: flex; align-items: center; gap: 8px; min-height: 26px; margin-bottom: 8px; }
+.aw-req-context-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 26px; margin-bottom: 8px; }
 .aw-req-context-head h3 {
   display: inline-flex;
   align-items: center;
@@ -126,7 +130,7 @@ html .aw-detail-head-card .aw-workitem-actions { padding-bottom: 0; margin-botto
 }
 .aw-req-context-head h3 .aw-stroke-icon { width: 14px; height: 14px; }
 .aw-req-context-count { color: var(--aw-text-3); font-weight: 400; }
-html .aw-req-context-upload.ant-btn { margin-left: auto; }
+.aw-req-context-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-inline-start: auto; }
 
 .aw-req-dropzone {
   border: 1px dashed transparent;

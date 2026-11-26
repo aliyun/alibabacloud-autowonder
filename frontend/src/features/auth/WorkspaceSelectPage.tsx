@@ -244,7 +244,7 @@ export function WorkspaceSelectPage() {
   );
 
   return (
-    <PlatformShell topbar={<>
+    <PlatformShell fullWidth topbar={<>
       <PageHeader brandTo="/workspaces" actions={<>
         <ChiefEntryButton standalone />
         <HelpCenterLink /><LanguageSwitch /><AppearanceSwitch />

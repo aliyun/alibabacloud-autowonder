@@ -316,6 +316,10 @@ class FrontendProjectProbeServiceTest {
         }
         @Override public int update(Long id, Long tenantId, String name, String url, String defaultBranch,
                                     String description, Integer version, Long modifierId) { return 1; }
+        @Override public void updateDesignBaseBranch(long id, long tenantId, String branch) {
+            RepoDO repo = findById(id);
+            if (repo != null && repo.getTenantId() == tenantId) repo.setDesignBaseBranch(branch);
+        }
         @Override public int updateScanStatus(Long id, Long tenantId, String scanStatus,
                                               Integer version, Long modifierId) { return 1; }
         @Override public int softDelete(Long id, Long tenantId, Integer version, Long modifierId) {

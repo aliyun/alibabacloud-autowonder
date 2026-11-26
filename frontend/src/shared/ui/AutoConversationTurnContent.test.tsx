@@ -28,6 +28,14 @@ describe('automatic turn content', () => {
     expect(await readConversationTurnText('/conversation/1', 1, 4, signal)).toBe('firstlast');
     expect(apiClient.get).toHaveBeenLastCalledWith('/conversation/1/turns/4/content', { params: { cursor: 'opaque' }, signal });
   });
+  it('lets a parent conversation own scrolling while loading the complete reply', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: { content: 'first', segmentIndex: 0, nextCursor: '1', hasMore: true } })
+      .mockResolvedValueOnce({ data: { content: 'last', segmentIndex: 1, nextCursor: null, hasMore: false } });
+    const { container } = render(<AutoConversationTurnContent base="/conversation/1" conversationId={1}
+      turn={{ id: 5, content: 'preview', contentHasMore: true }} scrollMode="flow" />);
+    await waitFor(() => expect(screen.getByText('firstlast')).toBeTruthy());
+    expect(container.firstElementChild).not.toHaveStyle({ maxHeight: '70vh', overflowY: 'auto' });
+  });
   it('replaces the preview with the first exact segment without duplication', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { content: 'complete original', segmentIndex: 0, nextCursor: null, hasMore: false } });
     render(<AutoConversationTurnContent base="/conversation/1" conversationId={1} turn={{ id: 2, content: 'complete', contentHasMore: true }} />);

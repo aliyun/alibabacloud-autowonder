@@ -2,6 +2,7 @@ package com.aliyun.autowonder.websocket;
 
 import com.aliyun.autowonder.json.JSON;
 import com.aliyun.autowonder.json.JSONObject;
+import com.aliyun.autowonder.office.OfficeRealtimePublisher;
 import com.aliyun.autowonder.redis.RedisManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +33,8 @@ public class WebSocketConfig {
     private volatile JedisPubSub dispatchPubSub;
     private volatile Thread notificationSubscriberThread;
     private volatile JedisPubSub notificationPubSub;
+    private volatile Thread officeSubscriberThread;
+    private volatile JedisPubSub officePubSub;
 
     public WebSocketConfig(RedisManager redisManager, NodeMailboxListener mailboxListener,
             BrowserRealtimeSubscriberManager subscriberManager) {
@@ -161,6 +164,23 @@ public class WebSocketConfig {
             }
         }, "ws-notification-subscriber");
         notificationSubscriberThread.setDaemon(true); notificationSubscriberThread.start();
+
+        officePubSub = new JedisPubSub() {
+            @Override public void onPMessage(String pattern, String channel, String message) {
+                subscriberManager.deliverToChannel(channel, message);
+            }
+        };
+        officeSubscriberThread = new Thread(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                try (Jedis jedis = redisManager.getJedisPool().getResource()) {
+                    jedis.psubscribe(officePubSub, OfficeRealtimePublisher.CHANNEL_PREFIX + "*");
+                } catch (Exception e) {
+                    if (!Thread.currentThread().isInterrupted()) { log.warn("Office Redis subscriber disconnected", e);
+                        try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); } }
+                }
+            }
+        }, "ws-office-subscriber");
+        officeSubscriberThread.setDaemon(true); officeSubscriberThread.start();
     }
 
     @PreDestroy
@@ -180,6 +200,7 @@ public class WebSocketConfig {
         if (scheduledRunPubSub != null) { try { scheduledRunPubSub.punsubscribe(); } catch (Exception ignore) { } }
         if (dispatchPubSub != null) { try { dispatchPubSub.punsubscribe(); } catch (Exception ignore) { } }
         if (notificationPubSub != null) { try { notificationPubSub.punsubscribe(); } catch (Exception ignore) { } }
+        if (officePubSub != null) { try { officePubSub.punsubscribe(); } catch (Exception ignore) { } }
         if (subscriberThread != null) {
             subscriberThread.interrupt();
         }
@@ -189,5 +210,6 @@ public class WebSocketConfig {
         if (scheduledRunSubscriberThread != null) scheduledRunSubscriberThread.interrupt();
         if (dispatchSubscriberThread != null) dispatchSubscriberThread.interrupt();
         if (notificationSubscriberThread != null) notificationSubscriberThread.interrupt();
+        if (officeSubscriberThread != null) officeSubscriberThread.interrupt();
     }
 }

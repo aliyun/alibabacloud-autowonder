@@ -4,6 +4,7 @@ import com.aliyun.autowonder.common.error.BizException;
 import com.aliyun.autowonder.common.error.ErrorCode;
 import com.aliyun.autowonder.json.JSON;
 import com.aliyun.autowonder.json.JSONObject;
+import com.aliyun.autowonder.office.OfficeActivitySignaler;
 import com.aliyun.autowonder.scheduledtask.compat.V037MapperMode;
 import com.aliyun.autowonder.scheduledtask.compat.V037SchemaCapability;
 import com.aliyun.autowonder.sdlc.SdlcStepDao;
@@ -16,6 +17,7 @@ import com.aliyun.autowonder.workspace.WorkspaceMemberDO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -47,6 +49,7 @@ public class DispatchRequestService {
     private final UserDao users;
     private final ApplicationEventPublisher events;
     private final V037SchemaCapability v037Capability;
+    private OfficeActivitySignaler officeActivitySignaler;
 
     public record Request(long id, long dispatchId, String kind, String key, JSONObject body,
                           String status, JSONObject answer, Long actorId, Timestamp expiresAt,
@@ -74,6 +77,11 @@ public class DispatchRequestService {
         this.workitems = workitems; this.workitemService = workitemService; this.members = members;
         this.users = users; this.events = events;
         this.v037Capability = v037Capability;
+    }
+
+    @Autowired(required = false)
+    public void setOfficeActivitySignaler(OfficeActivitySignaler signaler) {
+        this.officeActivitySignaler = signaler;
     }
 
     public Request create(long dispatchId, Create input) {
@@ -158,7 +166,9 @@ public class DispatchRequestService {
             String status = d == null || !ACTIVE.contains(d.getStatus()) || recovery.fenced(d) ? "CANCELED"
                     : r.expiresAt() != null && r.expiresAt().getTime() <= System.currentTimeMillis() ? "EXPIRED" : null;
             if (status != null) {
-                jdbc.update("UPDATE dispatch_request SET status=?,gmt_modified=NOW() WHERE id=? AND status='PENDING'", status, id);
+                if (jdbc.update("UPDATE dispatch_request SET status=?,gmt_modified=NOW() WHERE id=? AND status='PENDING'", status, id) == 1) {
+                    signal(workspaceId, id);
+                }
                 return jdbc.queryForObject("SELECT * FROM dispatch_request WHERE tenant_id=? AND id=?", MAPPER, workspaceId, id);
             }
         }
@@ -256,13 +266,22 @@ public class DispatchRequestService {
             DispatchDO d = active(r.dispatchId()); lockSubject(d); active(r.dispatchId());
             if (jdbc.update("UPDATE dispatch_request SET status='RESOLVED',answer_json=?,actor_id=?,gmt_modified=NOW() "
                     + "WHERE id=? AND tenant_id=? AND status='PENDING' AND (expires_at IS NULL OR expires_at>NOW())", answer.toJSONString(), userId, id, workspaceId) != 1) conflict("dispatch_request.already_answered", "问题已回答或过期");
+            signal(workspaceId, id);
         });
     }
 
     public void cancel(long workspaceId, long dispatchId, long id) {
         get(workspaceId, dispatchId, id);
-        jdbc.update("UPDATE dispatch_request SET status='CANCELED',gmt_modified=NOW() WHERE tenant_id=? AND dispatch_id=? AND id=? AND resume_dispatch_id IS NULL AND status='PENDING'",
-                workspaceId, dispatchId, id);
+        if (jdbc.update("UPDATE dispatch_request SET status='CANCELED',gmt_modified=NOW() WHERE tenant_id=? AND dispatch_id=? AND id=? AND resume_dispatch_id IS NULL AND status='PENDING'",
+                workspaceId, dispatchId, id) == 1) {
+            signal(workspaceId, id);
+        }
+    }
+
+    private void signal(long workspaceId, long requestId) {
+        if (officeActivitySignaler != null) {
+            officeActivitySignaler.afterCommit(workspaceId, "HITL_CHANGED", requestId);
+        }
     }
 
     public boolean requiresHumanRequests(DispatchDO d) {

@@ -18,6 +18,8 @@ public class PrdProjectSnapshot {
     private String evidenceJson;
     private String source;
     private String projectNotes;
+    private Boolean managedDesign;
+    private String preferredAppRoot;
 
     @com.fasterxml.jackson.annotation.JsonIgnore
     public boolean isManual() {

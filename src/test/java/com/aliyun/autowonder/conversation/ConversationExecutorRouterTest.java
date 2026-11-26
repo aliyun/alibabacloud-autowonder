@@ -12,6 +12,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 class ConversationExecutorRouterTest {
+    @Test void designPreparationCanQueueWithoutAnAdvertisedDesignFeature() {
+        var refs = mock(AgentEnvironmentVariableRefDao.class);
+        var selector = mock(ExecutorSelector.class);
+        var router = new ConversationExecutorRouter(refs, selector);
+        when(selector.select(3L, 9L, null)).thenReturn(null);
+        when(selector.selectQueueOwner(3L, 9L, null)).thenReturn(9L);
+        assertEquals(9L, router.selectDesign(1L, 3L, 50L, 9L));
+    }
+    @Test
+    void managedDesignStaysOnItsOwnerAndStillHonorsBoundEnvironmentVariables() {
+        var refs = mock(AgentEnvironmentVariableRefDao.class);
+        var selector = mock(ExecutorSelector.class);
+        var router = new ConversationExecutorRouter(refs, selector);
+        when(refs.listByVersion(1L, 50L)).thenReturn(List.of(new AgentEnvironmentVariableRefDO()));
+        router.selectDesignOwner(1L, 3L, 50L, 9L);
+        router.canQueueDesignOnOwner(1L, 3L, 50L, 9L);
+        String features = ExecutorProtocolFeatures.AGENT_ENVIRONMENT_VARIABLES_V1;
+        verify(selector).selectStrict(3L, 9L, features);
+        verify(selector).canQueueOnOwner(3L, 9L, features);
+        verify(selector, never()).select(anyLong(), any(), anyString());
+    }
     @Test
     void ownerQueueProbeKeepsRouteAndVersionFeatureRequirements() {
         var refs = mock(AgentEnvironmentVariableRefDao.class);

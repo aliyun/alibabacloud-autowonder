@@ -73,25 +73,25 @@ describe('renderTimelineNode', () => {
       raw: { eventType: 'acp_brand_new', payload: { type: 'acp_brand_new', content: '未来能力' } },
     }))}</>);
 
-    expect(screen.getByText('未识别事件：acp_brand_new')).toBeInTheDocument();
+    expect(screen.getByText('acp_brand_new')).toBeInTheDocument();
     const details = view.container.querySelector('details');
     expect(details?.open).toBe(false);
     const dump = screen.getByTestId('timeline-unknown-raw');
     expect(dump.textContent).toContain('acp_brand_new');
     expect(dump.textContent).toContain('未来能力');
 
-    fireEvent.click(screen.getByText('未识别事件：acp_brand_new'));
+    fireEvent.click(screen.getByText('acp_brand_new'));
     expect(dump.textContent).toContain('未来能力');
   });
 
   it('does not throw on an unknown node without any raw payload', () => {
     expect(() => render(<>{renderTimelineNode(node('unknown'))}</>)).not.toThrow();
-    expect(screen.getByText('未识别事件：unknown')).toBeInTheDocument();
+    expect(screen.getByText('unknown')).toBeInTheDocument();
   });
 
   it('falls back for a node kind that has no registered renderer at all', () => {
     render(<>{renderTimelineNode(node('acp_future_kind'))}</>);
-    expect(screen.getByText('未识别事件：acp_future_kind')).toBeInTheDocument();
+    expect(screen.getByText('acp_future_kind')).toBeInTheDocument();
   });
 
   // 进行中的问题改由面板的 ElicitationWizard 浮层承担，时间线不再内联交互卡片。
@@ -174,7 +174,7 @@ it('updates independently rendered timeline labels while preserving raw provider
   }))}</>);
   await act(async () => { await i18n.changeLanguage('en-US'); });
   expect(screen.getByText('Thinking process')).toBeInTheDocument();
-  expect(screen.getByText('Unrecognized event: provider_custom')).toBeInTheDocument();
+  expect(screen.getByText('provider_custom')).toBeInTheDocument();
   expect(screen.getByText('原始思路')).toBeInTheDocument();
   expect(screen.getByTestId('timeline-unknown-raw')).toHaveTextContent('<b>外部内容</b>');
   await act(async () => { await i18n.changeLanguage('zh-CN'); });

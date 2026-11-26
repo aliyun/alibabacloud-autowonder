@@ -26,6 +26,7 @@ export type NavLabelKey =
   | 'nav.memories'
   | 'nav.skills'
   | 'nav.insights'
+  | 'nav.office'
   | 'nav.settingsHub'
   | 'nav.groupDeliveryConfig'
   | 'nav.groupWorkspace'
@@ -80,6 +81,7 @@ export const NAV_SPACES: NavSpace[] = [
     icon: 'chart',
     items: [
       { key: '/insights', labelKey: 'nav.insights', icon: 'chart' },
+      { key: '/office', labelKey: 'nav.office', icon: 'robot' },
     ],
   },
 ];

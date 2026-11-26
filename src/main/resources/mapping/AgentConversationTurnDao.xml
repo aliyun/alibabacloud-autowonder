@@ -246,7 +246,8 @@
                OCTET_LENGTH(<include refid="HistoryContent"/>) &gt; 2048 AS content_has_more,
                <choose><when test="prd">CASE WHEN JSON_VALID(source_context) THEN
                    JSON_OBJECT('element', JSON_EXTRACT(source_context, '$.element'),
-                               'browser', JSON_EXTRACT(source_context, '$.browser'))
+                               'browser', JSON_EXTRACT(source_context, '$.browser'),
+                               'reviewComments', JSON_EXTRACT(source_context, '$.reviewCommentsDisplay'))
                    ELSE NULL END</when><otherwise>CASE WHEN JSON_VALID(source_context) THEN
                    JSON_OBJECT('conversationImageIds', JSON_EXTRACT(source_context, '$.conversationImageIds'),
                                'conversationDisplay', JSON_EXTRACT(source_context, '$.conversationDisplay'))

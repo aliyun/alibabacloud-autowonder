@@ -22,7 +22,7 @@ describe('PrdHtmlPreview', () => {
   it('asks for a placeholder before any version is chosen', () => {
     render(<PrdHtmlPreview workitemId={1} versionId={null} viewport={PRESET_VIEWPORTS.FIT} />);
 
-    expect(screen.getByText('在左侧描述需求或添加截图，设计生成后会自动显示在这里。')).toBeInTheDocument();
+    expect(screen.getByText('在左侧描述需求，生成设计和需求文档。')).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
   });
 

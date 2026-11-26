@@ -165,6 +165,31 @@ public class ExecutorSelector {
         return true;
     }
 
+    /** Admission for preparation that may queue its later AI turn on this exact owner. */
+    public Long selectQueueOwner(long agentId, Long preferredExecutorId, String requiredFeature) {
+        return selectQueueOwner(agentId, preferredExecutorId, requiredFeature, null);
+    }
+
+    public Long selectQueueOwner(long agentId, Long preferredExecutorId, String requiredFeature, Long excludedExecutorId) {
+        Set<String> members = redisManager.smembers(execsKey(agentId));
+        if (members == null) return null;
+        List<Long> ids = new ArrayList<>();
+        for (String member : members) {
+            try { ids.add(Long.parseLong(member)); } catch (NumberFormatException ignored) { }
+        }
+        Collections.sort(ids);
+        if (preferredExecutorId != null && ids.remove(preferredExecutorId)) ids.add(0, preferredExecutorId);
+        for (Long id : ids) {
+            if (id.equals(excludedExecutorId)) continue;
+            try {
+                if (canQueueOnOwner(agentId, id, requiredFeature)) return id;
+            } catch (ExecutorProtocolCompatibilityException ignored) {
+                // A free but incompatible runtime must never replace the actual design owner.
+            }
+        }
+        return null;
+    }
+
     private Long select(long agentId, Long preferredExecutorId, boolean interaction,
             String requiredFeature) {
         Set<String> members = redisManager.smembers(execsKey(agentId));

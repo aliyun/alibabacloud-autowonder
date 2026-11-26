@@ -612,12 +612,15 @@ export function ExecutorListPage() {
   );
 
   useEffect(() => {
+    // 直达员工可能在首批列表之外。等补查出其名称后再记录默认展开，
+    // 否则临时的“未知员工”分组会覆盖目标分组的展开状态。
+    if (entryAgentId != null && !executorGroups.some(group => group.agentId === entryAgentId)) return;
     if (!hasDefaultExpandedAgents.current && executorGroups.length > 0) {
       // 直达链接会在分组就绪前先展开目标分组；此时首屏可能还是「未知 Agent」，默认展开必须并集而不是覆盖。
       setExpandedAgentKeys((current) => Array.from(new Set([...current, ...executorGroups.map((group) => group.key)])));
       hasDefaultExpandedAgents.current = true;
     }
-  }, [executorGroups]);
+  }, [executorGroups, entryAgentId]);
 
   useEffect(() => {
     if (!hasDefaultExpandedSquads.current && squadGroups.length > 0) {
@@ -628,6 +631,7 @@ export function ExecutorListPage() {
 
   const handleAgentCollapseChange = (keys: string | string[]) => {
     // 非手风琴模式下 antd 恒传数组，用 flat 归一化两种签名，避免留下不可达分支。
+    hasDefaultExpandedAgents.current = true;
     setExpandedAgentKeys([keys].flat());
   };
 
@@ -1265,9 +1269,9 @@ export function ExecutorListPage() {
               activeKey={expandedSquadKeys}
               onChange={handleSquadCollapseChange}
               className="aw-executor-groups"
+              destroyOnHidden
               bordered={false}
               expandIconPosition="start"
-              destroyOnHidden
               items={squadGroups.map((group) => ({
                 key: group.key,
                 label: <ExecutorSquadGroupHeader group={group} />,
@@ -1298,9 +1302,9 @@ export function ExecutorListPage() {
             activeKey={expandedAgentKeys}
             onChange={handleAgentCollapseChange}
             className="aw-executor-groups"
+            destroyOnHidden
             bordered={false}
             expandIconPosition="start"
-            destroyOnHidden
             items={executorGroups.map((group) => ({
               key: group.key,
               label: <ExecutorGroupHeader group={group} />,

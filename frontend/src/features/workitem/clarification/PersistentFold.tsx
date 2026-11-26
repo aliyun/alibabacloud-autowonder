@@ -15,14 +15,15 @@ interface PersistentFoldProps {
   style?: CSSProperties;
   /** 供沿用类名样式的折叠块（如时间线的 aw-cl-step）复用。 */
   className?: string;
+  testId?: string;
   children: ReactNode;
 }
 
 /** 原生 details 的展开状态会随卸载丢失；挂载时按 foldKey 恢复，切换时回写。 */
-export function PersistentFold({ foldKey, summary, summaryStyle, style, className, children }: PersistentFoldProps) {
+export function PersistentFold({ foldKey, summary, summaryStyle, style, className, testId, children }: PersistentFoldProps) {
   const scope = useContext(FoldScopeContext);
   const scopedKey = scope ? `${scope}:${foldKey}` : foldKey;
-  return <details className={className} open={isFoldExpanded(scopedKey)} style={style}
+  return <details className={className} data-testid={testId} open={isFoldExpanded(scopedKey)} style={style}
     onToggle={event => setFoldExpanded(scopedKey, event.currentTarget.open)}>
     <summary style={summaryStyle}>{summary}</summary>
     {children}

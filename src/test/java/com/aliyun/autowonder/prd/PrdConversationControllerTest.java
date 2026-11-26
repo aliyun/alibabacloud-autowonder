@@ -20,6 +20,7 @@ class PrdConversationControllerTest {
     final ClarificationAttachmentService attachments = mock(ClarificationAttachmentService.class);
     final ConversationTurnEventService events = mock(ConversationTurnEventService.class);
     final ConversationEventDisplayReadService displayReads = mock(ConversationEventDisplayReadService.class);
+    final com.aliyun.autowonder.user.UserDao users = mock(com.aliyun.autowonder.user.UserDao.class);
     final com.aliyun.autowonder.common.web.ConversationEventBoundedResponse bounded =
             mock(com.aliyun.autowonder.common.web.ConversationEventBoundedResponse.class);
     final PrdConversationController controller = new PrdConversationController(designs, prompts, agents, conversations, turns, execution, router, displayReads, bounded);
@@ -31,14 +32,53 @@ class PrdConversationControllerTest {
         org.springframework.test.util.ReflectionTestUtils.setField(controller, "workitems", mock(com.aliyun.autowonder.workitem.WorkitemDao.class));
         org.springframework.test.util.ReflectionTestUtils.setField(controller, "attachments", attachments);
         org.springframework.test.util.ReflectionTestUtils.setField(controller, "events", events);
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "users", users);
         AutoWonderContext.get().setCurrentWorkspaceId(1L); AutoWonderContext.get().setUserId(7L);
         AgentDO agent = new AgentDO(); agent.setId(3L); agent.setTenantId(1L); agent.setOnlineVersionId(4L);
         when(agents.findById(3L)).thenReturn(agent);
-        when(prompts.buildSystemPrompt(any())).thenReturn("system");
+        when(prompts.buildConversationSystemPrompt()).thenReturn("system");
         when(prompts.buildUserPrompt(any(), anyString())).thenReturn("design");
         doAnswer(i -> { ((AgentConversationDO)i.getArgument(0)).setId(5L); return 1; }).when(conversations).insert(any());
     }
     @AfterEach void clear() { AutoWonderContext.destroy(); }
+    @Test void managedConversationPreparationDoesNotRequireAnIdleAlternativeExecutor() {
+        var conversation = new AgentConversationDO(); conversation.setId(5L);
+        conversation.setExecutorId(9L);
+        when(conversations.findLatestByBizRef(1L, "WORKITEM_PRD", "WORKITEM", 10L, 3L)).thenReturn(conversation);
+        var launches = mock(WorkitemLaunchDao.class);
+        when(launches.latest(1L, 10L, "DESIGN")).thenReturn(new WorkitemLaunchDao.Launch(
+                1L, 10L, 5L, "DESIGN", 2L, 3L, null, 7L, "ACTIVE", 1));
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "launchStore", launches);
+        when(router.canQueueDesignOnOwner(1L, 3L, 4L, 9L)).thenReturn(true);
+        assertEquals(5L, controller.prepare(10L, new PrdConversationController.Input(3L, "", "request")).getData().id());
+        verify(router, never()).select(anyLong(), anyLong(), anyLong(), any());
+    }
+    @Test void historyUsesTheUserNicknameInsteadOfTheLoginName() {
+        var conversation = new AgentConversationDO(); conversation.setId(5L);
+        when(conversations.findLatestByBizRef(1L, "WORKITEM_PRD", "WORKITEM", 10L, 3L))
+                .thenReturn(conversation);
+        var turn = new AgentConversationTurnDO(); turn.setId(6L); turn.setDirection("IN");
+        turn.setStatus("SUCCESS"); turn.setContent("改吧"); turn.setSubmittedUserId(7L);
+        when(turns.listHistoryPage(1L, 5L, null, 51, true)).thenReturn(java.util.List.of(turn));
+        var account = new com.aliyun.autowonder.user.UserDO(); account.setId(7L);
+        account.setUsername("123"); account.setNickname("Local Admin");
+        when(users.findById(7L)).thenReturn(account);
+
+        assertEquals("Local Admin", controller.history(10L, 3L).getData().participants().get(7L));
+    }
+    @Test void historyFallsBackToTheLoginNameWhenTheNicknameIsBlank() {
+        var conversation = new AgentConversationDO(); conversation.setId(5L);
+        when(conversations.findLatestByBizRef(1L, "WORKITEM_PRD", "WORKITEM", 10L, 3L))
+                .thenReturn(conversation);
+        var turn = new AgentConversationTurnDO(); turn.setId(6L); turn.setDirection("IN");
+        turn.setStatus("SUCCESS"); turn.setContent("改吧"); turn.setSubmittedUserId(7L);
+        when(turns.listHistoryPage(1L, 5L, null, 51, true)).thenReturn(java.util.List.of(turn));
+        var account = new com.aliyun.autowonder.user.UserDO(); account.setId(7L);
+        account.setUsername("123"); account.setNickname(" ");
+        when(users.findById(7L)).thenReturn(account);
+
+        assertEquals("123", controller.history(10L, 3L).getData().participants().get(7L));
+    }
     @Test void historyReportsProcessingOutsideLatestFiftyQueuedTurnsWithoutChangingThePage() {
         var conversation = new AgentConversationDO(); conversation.setId(5L);
         when(conversations.findLatestByBizRef(1L, "WORKITEM_PRD", "WORKITEM", 10L, 3L))
@@ -162,6 +202,26 @@ class PrdConversationControllerTest {
         assertThrows(BizException.class, () -> controller.send(10L, new PrdConversationController.Input(3L, "change",
                 "message-3", null, null, new PrdPrototypeSelection.Element(null, " ", null, null, null, null))));
         verifyNoInteractions(execution);
+    }
+    @Test void selectedReviewCommentsReachTheExecutorAsAnImmutableSnapshotAndRetryDoesNotQueueAgain() {
+        var reviews = mock(PrdReviewService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "reviews", reviews);
+        when(router.select(1L, 3L, 4L, null)).thenReturn(9L);
+        var snapshot = new PrdReviewService.CommentSnapshot(91L, "Make Save larger", "/settings?q=1#save",
+                "{\"selector\":\"#save\"}", "source", 8L, 2);
+        when(reviews.references(1L, 10L, 5L, java.util.List.of(91L))).thenReturn(java.util.List.of(snapshot));
+        var inbound = new AgentConversationTurnDO(); inbound.setId(6L); inbound.setConversationId(5L);
+        inbound.setSubmittedUserId(7L); inbound.setDirection("IN");
+        when(turns.findByExternalMsgId(1L, "web-prd:5:7:review-1")).thenReturn(null, inbound);
+        var input = new PrdConversationController.Input(3L, "", "review-1", null, null, null, java.util.List.of(91L));
+        controller.send(10L, input);
+        verify(execution).submitTurn(eq(1L), eq(3L), eq("WORKITEM_PRD"), anyString(),
+                argThat(prompt -> prompt.contains("Make Save larger") && prompt.contains("#save")),
+                eq("web-prd:5:7:review-1"), argThat(context -> context.contains("reviewComments") && context.contains("\"version\":2")), eq(7L));
+        verify(reviews).sent(1L, java.util.List.of(snapshot), 6L);
+        controller.send(10L, input);
+        verify(reviews, times(1)).references(anyLong(), anyLong(), anyLong(), anyList());
+        verify(execution, times(1)).submitTurn(anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString(), anyLong());
     }
     @Test void previewDoesNotSaveAVersion() {
         var request = new com.aliyun.autowonder.prd.dto.SaveDesignRequest();

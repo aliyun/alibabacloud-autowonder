@@ -6,10 +6,11 @@ import { accountEventCache, releaseEventCache } from '@/features/workitem/clarif
 import { MarkdownView } from './MarkdownView';
 import type { ComponentProps } from 'react';
 import { Button, message } from 'antd';
-import { CopyOutlined } from '@ant-design/icons';
+import { CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { copyTextToClipboard } from '@/shared/lib/clipboard';
 
 interface Segment { content: string; segmentIndex: number; nextCursor: string | null; hasMore: boolean }
+export const CONVERSATION_COPY_FEEDBACK_MS = 2000;
 export async function readConversationTurnText(base: string, conversationId: number, turnId: number, signal: AbortSignal): Promise<string> {
   const chunks: string[] = []; let cursor: string | undefined; let bytes = 0;
   do {
@@ -29,26 +30,83 @@ export function ConversationTurnCopyButton({ base, conversationId, turn, label }
 }) {
   const { t } = useTranslation('shared');
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const controller = useRef<AbortController | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(true);
   useEffect(() => {
+    mounted.current = true;
     const hide = () => { if (document.hidden) { controller.current?.abort(); setBusy(false); } };
     document.addEventListener('visibilitychange', hide);
-    return () => { controller.current?.abort(); document.removeEventListener('visibilitychange', hide); };
+    return () => {
+      mounted.current = false;
+      controller.current?.abort();
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+      document.removeEventListener('visibilitychange', hide);
+    };
   }, [base, conversationId, turn.id]);
-  return <Button type="text" size="small" icon={<CopyOutlined />} aria-label={label} title={label} loading={busy} data-testid="copy-message-button" onClick={async () => {
+  return <Button type="text" size="small" icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+    aria-label={label} title={label} loading={busy} data-testid="copy-message-button"
+    data-copy-state={copied ? 'copied' : 'idle'} onClick={async () => {
     const request = new AbortController(); controller.current = request; setBusy(true);
     try {
       const text = turn.contentHasMore ? await readConversationTurnText(base, conversationId, turn.id, request.signal) : turn.content;
-      if (!request.signal.aborted && !(await copyTextToClipboard(text))) throw new Error('Clipboard write failed');
+      if (request.signal.aborted) return;
+      if (!(await copyTextToClipboard(text))) throw new Error('Clipboard write failed');
+      if (!mounted.current || request.signal.aborted) return;
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+      setCopied(true);
+      copiedTimer.current = setTimeout(() => {
+        copiedTimer.current = null;
+        if (mounted.current) setCopied(false);
+      }, CONVERSATION_COPY_FEEDBACK_MS);
     } catch { if (!request.signal.aborted) void message.error(t('copy.failed')); }
-    finally { if (!request.signal.aborted) setBusy(false); }
+    finally {
+      if (controller.current === request) controller.current = null;
+      if (mounted.current && !request.signal.aborted) setBusy(false);
+    }
   }} />;
 }
 /** Eight UTF-8 16KiB segments bound each mounted bubble to 128KiB. Cursors, never
  * discarded text, let scrolling recover older segments from the server. */
-export function AutoConversationTurnContent({ base, conversationId, turn, enabled = true, ...markdown }: {
-  base: string; conversationId: number; turn: { id: number; content: string; contentHasMore?: boolean }; enabled?: boolean;
-} & Omit<ComponentProps<typeof MarkdownView>, 'content'>) {
+type AutoConversationTurnContentProps = {
+  base: string;
+  conversationId: number;
+  turn: { id: number; content: string; contentHasMore?: boolean };
+  enabled?: boolean;
+  scrollMode?: 'contained' | 'flow';
+} & Omit<ComponentProps<typeof MarkdownView>, 'content'>;
+
+export function AutoConversationTurnContent({ scrollMode = 'contained', ...props }: AutoConversationTurnContentProps) {
+  return scrollMode === 'flow'
+    ? <FlowConversationTurnContent {...props} />
+    : <ContainedConversationTurnContent {...props} />;
+}
+
+/** PRD already has a conversation-level scroller, so long replies join that document flow
+ * instead of creating a second scrollbar inside one message. */
+function FlowConversationTurnContent({ base, conversationId, turn, enabled = true, ...markdown }: AutoConversationTurnContentProps) {
+  const { t } = useTranslation('shared');
+  const [content, setContent] = useState(turn.content);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    setContent(turn.content);
+    setError(false);
+    if (!turn.contentHasMore || !enabled) return;
+    const controller = new AbortController();
+    void readConversationTurnText(base, conversationId, turn.id, controller.signal)
+      .then(text => { if (!controller.signal.aborted) setContent(text); })
+      .catch(() => { if (!controller.signal.aborted) setError(true); });
+    return () => controller.abort();
+  }, [base, conversationId, turn.id, turn.content, turn.contentHasMore, enabled, retry]);
+  return <div>
+    <MarkdownView {...markdown} content={content} />
+    {error && <Button type="link" size="small" onClick={() => setRetry(value => value + 1)}>{t('conversationContent.retry')}</Button>}
+  </div>;
+}
+
+function ContainedConversationTurnContent({ base, conversationId, turn, enabled = true, ...markdown }: AutoConversationTurnContentProps) {
   const { t } = useTranslation('shared');
   const root = useRef<HTMLDivElement>(null);
   const [segments, setSegments] = useState<Segment[]>([]);

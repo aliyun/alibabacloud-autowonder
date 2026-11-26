@@ -45,6 +45,7 @@ public class RepoService {
         repo.setName(name);
         repo.setUrl(req.getUrl().trim());
         repo.setDefaultBranch(req.getDefaultBranch());
+        repo.setDesignBaseBranch(designBase(req.getDesignBaseBranch()));
         repo.setDescription(req.getDescription());
         repo.setScanStatus("UNSCANNED");
         repo.setCreatorId(userId);
@@ -80,6 +81,7 @@ public class RepoService {
         return result;
     }
 
+    @Transactional
     public RepoVO update(long id, UpdateRepoRequest req, long tenantId, long userId) {
         RepoDO repo = repoDao.findById(id);
         if (repo == null) {
@@ -99,7 +101,23 @@ public class RepoService {
         if (rows == 0) {
             throw new BizException(ErrorCode.REPO_VERSION_CONFLICT);
         }
+        if (req.isDesignBaseBranchPresent()) {
+            repoDao.updateDesignBaseBranch(id, tenantId, designBase(req.getDesignBaseBranch()));
+        }
         return get(id);
+    }
+
+    private String designBase(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String branch = raw.trim();
+        if (!branch.matches("[A-Za-z0-9][A-Za-z0-9._/-]{0,127}") || branch.equals("HEAD")
+                || branch.startsWith("refs/") || branch.startsWith("autowonder-design/")
+                || branch.contains("..") || branch.contains("//")
+                || java.util.Arrays.stream(branch.split("/", -1))
+                    .anyMatch(part -> part.isEmpty() || part.startsWith(".") || part.endsWith(".") || part.endsWith(".lock"))) {
+            throw BizException.keyed(ErrorCode.PARAM_INVALID, "repo.design_base.invalid", null, "Invalid design base branch");
+        }
+        return branch;
     }
 
     private String requiredField(boolean present, String value, String current, ErrorCode missing) {
@@ -302,6 +320,7 @@ public class RepoService {
         vo.setName(repo.getName());
         vo.setUrl(repo.getUrl());
         vo.setDefaultBranch(repo.getDefaultBranch());
+        vo.setDesignBaseBranch(repo.getDesignBaseBranch());
         vo.setDescription(repo.getDescription());
         vo.setScanStatus(repo.getScanStatus());
         vo.setVersion(repo.getVersion());

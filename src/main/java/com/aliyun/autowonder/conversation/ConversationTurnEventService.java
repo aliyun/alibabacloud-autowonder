@@ -214,6 +214,37 @@ public class ConversationTurnEventService {
         return eventDao.listByTurn(tenantId, conversationId, turnId, MAX_TURN_EVENTS);
     }
 
+    /**
+     * Rebuilds the business reply already shown in the browser when a canceled runtime omits
+     * {@code replyMarkdown} from its terminal ACK. Tool and thinking events remain execution
+     * details; only the same {@code text} events used for the live reply are retained.
+     */
+    public String streamedReplyText(long tenantId, long conversationId, long turnId,
+            Integer dispatchAttempt) {
+        StringBuilder reply = new StringBuilder();
+        long replyBytes = 0;
+        for (AgentConversationTurnEventDO event : assembleVerbatim(
+                eventDao.listByTurn(tenantId, conversationId, turnId, MAX_TURN_EVENTS))) {
+            if (!"text".equals(event.getEventType())
+                    || dispatchAttempt != null && dispatchAttempt > 0
+                    && !dispatchAttempt.equals(event.getDispatchAttempt())) continue;
+            try {
+                String content = JSON.parseObject(event.getPayloadFragment()).getString("content");
+                if (content == null || content.isEmpty()) continue;
+                long remaining = ConversationEventDisplayBudget.MAX_EVENT_BYTES - replyBytes;
+                if (remaining <= 0) break;
+                String retained = ConversationEventDisplayBudget.truncateUtf8(content,
+                        (int) Math.min(Integer.MAX_VALUE, remaining));
+                reply.append(retained);
+                replyBytes += ConversationEventDisplayBudget.utf8Length(retained);
+            } catch (RuntimeException invalidPayload) {
+                log.debug("ignored invalid text event while preserving canceled reply turnId={} eventSeq={}",
+                        turnId, event.getEventSeq());
+            }
+        }
+        return reply.toString();
+    }
+
     public record EventPage(List<AgentConversationTurnEventDO> rows, long nextAfterId, boolean hasMore) {}
 
     public EventPage listEventsByTurnPage(long tenantId, long conversationId, long turnId,

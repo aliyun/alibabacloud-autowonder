@@ -122,6 +122,19 @@ describe('RealtimeClient', () => {
     );
   });
 
+  it('registers office workspace channels with the server', () => {
+    client.connect('t');
+    MockWebSocket.instances[0].simulateOpen();
+    const subscription = client.subscribe('office:2048', vi.fn());
+    expect(MockWebSocket.instances[0].send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'subscribe', channel: 'office:2048' }),
+    );
+    subscription.unsubscribe();
+    expect(MockWebSocket.instances[0].send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'unsubscribe', channel: 'office:2048' }),
+    );
+  });
+
   it('unsubscribe stops delivery', () => {
     client.connect('t');
     MockWebSocket.instances[0].simulateOpen();

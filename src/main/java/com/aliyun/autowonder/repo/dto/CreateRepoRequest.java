@@ -9,5 +9,6 @@ public class CreateRepoRequest {
     private String name;
     private String url;
     private String defaultBranch;
+    private String designBaseBranch;
     private String description;
 }

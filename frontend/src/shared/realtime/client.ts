@@ -123,7 +123,8 @@ export class RealtimeClient {
     return channel.startsWith('conversation:')
       || channel.startsWith('scheduled-run:')
       || channel.startsWith('dispatch:')
-      || channel.startsWith('notification:');
+      || channel.startsWith('notification:')
+      || channel.startsWith('office:');
   }
 
   private sendServerSubscribe(channel: string) {

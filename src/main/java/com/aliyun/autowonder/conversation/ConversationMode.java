@@ -43,7 +43,7 @@ public enum ConversationMode {
                     + "submissionId; never ask the user and never call any other write tool.",
             true),
 
-    WORKITEM_PRD("\n\n当前为 PRD 设计会话。仅生成设计，不执行交付或修改仓库。需要澄清时用文字回复，不调用交互工具。", true),
+    WORKITEM_PRD("\n\n当前为 PRD 设计会话。可以在任务指定的独立设计工程中修改代码和运行预览，但不得修改源仓库、执行交付或发布。需要澄清时用文字回复，不调用交互工具。对话回复、设计工程和PRD文档分别处理。", true),
 
     /** 内部情报渠道：没有真人在线回答，交互工具的提问会掉进黑洞。 */
     PLATFORM_INTERNAL("", true),

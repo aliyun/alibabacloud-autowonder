@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Empty, Space, Spin } from 'antd';
+import { Alert, Button, Spin } from 'antd';
+import { AppstoreOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getPrdHtmlBlob } from '../api';
 
@@ -76,7 +77,10 @@ export function PrdHtmlPreview({ workitemId, versionId, viewport }: PrdHtmlPrevi
   }, []);
 
   if (versionId == null) {
-    return <Empty description={t('preview.noVersion')} />;
+    return <div className="prd-document-empty prd-browser-empty">
+      <div className="prd-browser-empty-icon"><AppstoreOutlined /></div>
+      <p>{t('preview.noVersion')}</p>
+    </div>;
   }
   if (loading) {
     return (
@@ -99,9 +103,8 @@ export function PrdHtmlPreview({ workitemId, versionId, viewport }: PrdHtmlPrevi
   }
   const width = VIEWPORT_WIDTHS[viewport];
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', background: 'var(--aw-fill-quaternary, #f5f5f5)', minHeight: 320 }}>
-      <Space direction="vertical" size={0} style={{ width: '100%', alignItems: 'center' }}>
-        {url && (
+    <div className="prd-html-preview" style={{ background: 'var(--aw-fill-quaternary, #f5f5f5)' }}>
+      {url && (
           <iframe
             data-testid="prd-html-preview"
             title={t('preview.frameTitle')}
@@ -112,13 +115,11 @@ export function PrdHtmlPreview({ workitemId, versionId, viewport }: PrdHtmlPrevi
             style={{
               width: width ? `${width}px` : '100%',
               maxWidth: '100%',
-              height: '70vh',
               border: '1px solid var(--aw-border)',
               background: '#fff',
             }}
           />
-        )}
-      </Space>
+      )}
     </div>
   );
 }

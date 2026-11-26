@@ -955,8 +955,12 @@ class McpToolServiceTest {
         hiddenFromReadWrite.removeAll(readWriteCatalog);
         assertEquals(adminOnlyTools, hiddenFromReadWrite);
         assertEquals(fullCatalog, adminCatalog);
-        assertEquals(157, fullCatalog.size());
-        assertEquals(146, readWriteCatalog.size());
+        assertEquals(159, fullCatalog.size());
+        assertEquals(148, readWriteCatalog.size());
+        for (String tool : List.of("autowonder.report_prd_design_runtime", "autowonder.report_prd_design")) {
+            assertTrue(readWriteCatalog.contains(tool));
+            assertFalse(readOnlyCatalog.contains(tool));
+        }
     }
 
     @Test

@@ -1,3 +1,4 @@
+import { WorkitemLaunchModal, readLaunch, designUrl, type LaunchState, type Activity } from './components/WorkitemLaunchModal';
 import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { workitemDeleteReason } from './runtimeLabels';
 import './workitemDetail.css';
@@ -7,9 +8,9 @@ import { useTranslation } from 'react-i18next';
 import { RecoveryControls } from './components/RecoveryControls';
 import { DispatchRequests } from './components/DispatchRequests';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Empty, Input, Modal, Spin, Result, Button } from 'antd';
+import { Empty, Input, Modal, Spin, Result, Button, Popover, message } from 'antd';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTemplateDetail } from '@/features/statemachine/hooks';
 import {
   useWorkitem, useTimelineHistory, useParticipants,
@@ -23,16 +24,16 @@ import { ScheduledStartControl } from './components/ScheduledStartControl';
 import { HumanInterventionAlert } from './components/HumanInterventionBadge';
 import { WorkitemActionBar } from './components/WorkitemActionBar';
 import { StartDeliveryModal } from './components/StartDeliveryModal';
-import { ClarifyReminderModal } from './components/ClarifyReminderModal';
 import { AssignHumanModal } from './components/AssignHumanModal';
 import { OtherWorkspacePrompt } from './components/OtherWorkspacePrompt';
 import { readWorkitemOwningWorkspace } from './otherWorkspace';
 import { WorkitemContent } from './components/WorkitemContent';
 import { WorkitemTagsEditor } from './components/WorkitemTagsEditor';
 import { RequirementDocumentsCard } from './components/RequirementDocumentsCard';
+import { PrdHandoffSummary } from '@/features/prd/components/PrdHandoffSummary';
 import { ClarificationResult } from './components/ClarificationResult';
 import { usePrdSummary } from '@/features/prd/hooks';
-import { PrdContextPreview } from '@/features/prd/components/PrdContextPreview';
+import { PrdReviewPreviewLink } from '@/features/prd/components/PrdReviewPreviewLink';
 import { UnifiedTimeline } from './components/UnifiedTimeline';
 import { InteractionStopControl } from './components/InteractionStopControl';
 import type { InteractionStopAction } from './components/InteractionStopControl';
@@ -43,7 +44,6 @@ import { ResizeHandle } from '@/shared/ui/ResizeHandle';
 import { AI_CLARIFICATION_ENABLED } from './featureFlags';
 import { isSameClarifyView, readClarifyView, writeClarifyView } from './clarifyView';
 import type { ClarifyContext, ClarifyView } from './clarifyView';
-import { isClarifyReminderSuppressed, suppressClarifyReminder } from './clarifyReminderPreference';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 import { allows } from '@/shared/auth/access';
 import { useAuthStore } from '@/shared/auth/store';
@@ -73,9 +73,8 @@ export function WorkitemDetailPage() {
   const executionControl = useExecutionControl(id || '');
   const [interactionPending, setInteractionPending] = useState<Record<number, InteractionStopAction>>({});
   const [deliveryOpen, setDeliveryOpen] = useState(false);
-  const [clarifyReminderOpen, setClarifyReminderOpen] = useState(false);
-  // localStorage 不是响应式的：挂载时读一次进 state，本次会话内勾选后立刻生效，不必刷新页面
-  const [clarifyReminderSuppressed, setClarifyReminderSuppressed] = useState(isClarifyReminderSuppressed);
+  const [launch, setLaunch] = useState<{ activity: Activity; repoId: number | null } | null>(null);
+  const [opening, setOpening] = useState<Activity | null>(null);
   const [assignHumanOpen, setAssignHumanOpen] = useState(false);
   const [transitionOpen, setTransitionOpen] = useState(false);
   const [transitionTarget, setTransitionTarget] = useState<number | null>(null);
@@ -95,7 +94,16 @@ export function WorkitemDetailPage() {
   }
   // 澄清视图状态挂在 URL 上：刷新后仍停在原工单的原澄清会话并恢复全屏态（工单 53035）
   const clarifyView = readClarifyView(searchParams);
-  const panelMode = clarifyView.mode;
+  const needsClarificationLookup = clarifyView.mode === 'clarify' && !clarifyView.conversationId;
+  const clarificationEntry = useQuery({
+    queryKey: ['clarification-entry', id],
+    queryFn: () => readLaunch(id!, 'clarify'),
+    enabled: !!id && needsClarificationLookup,
+    retry: false,
+  });
+  const needsClarificationSetup = needsClarificationLookup && clarificationEntry.data?.phase === 'NEW';
+  const panelMode = needsClarificationLookup && clarificationEntry.data?.phase !== 'ACTIVE'
+    ? 'progress' : clarifyView.mode;
   const [clarifyWidth, setClarifyWidth] = useState<number | null>(null);
   const rightPanelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -196,35 +204,25 @@ export function WorkitemDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['workitem', id, 'clarification'] });
   };
   const hasSdlc = workitem.sdlcId != null;
-  // 澄清材料就是左栏「澄清材料 (AI 生成)」卡片的数据源：有内容即视为已完成澄清
-  const clarificationDone = Boolean(clarification?.contentMd?.trim());
-  // 需求文档已经就位，说明需求信息不缺，没必要再引导去澄清（工单 54819）
-  const hasRequirementDocuments = requirementDocuments.length > 0;
-  // 只在「首次启动交付 + 尚未完成澄清 + 没有需求文档 + 用户没说过别再提醒」时引导（工单 53315 / 54819）；
-  // 按钮已变成「重新指派」说明不是首次
-  const shouldRemindClarify = AI_CLARIFICATION_ENABLED
-    && !hasSdlc && !clarificationDone && !hasRequirementDocuments && !clarifyReminderSuppressed;
   const handleStartDeliveryClick = () => accessCommand(
     'READ_WRITE',
     hasSdlc ? t('detail.reassignCommand') : t('detail.startDeliveryCommand'),
-    // 引导弹窗只是插在原流程前面：跳过就照旧打开启动交付弹窗
-    () => (shouldRemindClarify ? setClarifyReminderOpen(true) : setDeliveryOpen(true)),
+    () => setDeliveryOpen(true),
   );
-  // 只有跳过和去澄清算用户做了决定，关闭图标不算，所以落偏好收在这一个入口（工单 54819）
-  const rememberClarifyReminderChoice = (rememberChoice: boolean) => {
-    if (!rememberChoice) return;
-    suppressClarifyReminder();
-    setClarifyReminderSuppressed(true);
+  const enterActivity = (activity: Activity, state: LaunchState) => {
+    setLaunch(null);
+    if (activity === 'design') navigate(designUrl(id,state));
+    else updateClarifyView({ mode: 'clarify', fullscreen: true, agentId: state.agentId, conversationId: state.conversationId });
   };
-  const handleGoClarify = (rememberChoice: boolean) => {
-    rememberClarifyReminderChoice(rememberChoice);
-    setClarifyReminderOpen(false);
-    accessCommand('READ_WRITE', t('detail.clarifyCommand'), () => updateClarifyView({ mode: 'clarify' }));
-  };
-  const handleSkipClarifyReminder = (rememberChoice: boolean) => {
-    rememberClarifyReminderChoice(rememberChoice);
-    setClarifyReminderOpen(false);
-    setDeliveryOpen(true);
+  const openActivity = async (activity: Activity) => {
+    setOpening(activity);
+    try {
+      const state = await readLaunch(id,activity);
+      if (state.phase !== 'NEW') enterActivity(activity,state);
+      else accessCommand('READ_WRITE', t(activity === 'design' ? 'launch.design' : 'launch.clarify'),
+        () => setLaunch({ activity, repoId: state.repoId }), activity === 'design' ? 'PRD' : 'WORKITEM');
+    } catch (err) { message.error(err instanceof Error ? err.message : t('launch.failed')); }
+    finally { setOpening(null); }
   };
   // 宽度上限保证左栏工单正文区至少保留 480px 可用宽度
   const clarifyMaxWidth = Math.max(
@@ -331,6 +329,15 @@ export function WorkitemDetailPage() {
             watched={!!workitem.watched}
             onToggleWatch={() => watchMutation.mutate({ id, watched: !!workitem.watched })}
             watchLoading={watchMutation.isPending}
+            designActions={<>
+              <Popover content={t('launch.designHint')} trigger="hover" placement="top">
+                <Button className="aw-op-solid" loading={opening === 'design'} onClick={() => void openActivity('design')}>{t('launch.design')}</Button>
+              </Popover>
+              {AI_CLARIFICATION_ENABLED && <Popover content={t('launch.clarifyHint')} trigger="hover" placement="top">
+                <Button className="aw-op-solid" icon={<AwStrokeIcon name="msg" />}
+                  loading={opening === 'clarify'} onClick={() => void openActivity('clarify')}>{t('launch.clarify')}</Button>
+              </Popover>}
+            </>}
             onStartDelivery={handleStartDeliveryClick}
             onAssignHuman={() => accessCommand(
               'READ_WRITE',
@@ -366,9 +373,12 @@ export function WorkitemDetailPage() {
               documents={requirementDocuments}
               loading={requirementDocumentsLoading}
               hasGeneratedContext={Boolean(clarification?.contentMd || prdSummary?.latestVersionNo)}
+              headerActions={Boolean(prdSummary?.latestVersionNo) && <>
+                <PrdHandoffSummary workitemId={id} documents={requirementDocuments} />
+                <PrdReviewPreviewLink workitemId={id} />
+              </>}
             >
               {AI_CLARIFICATION_ENABLED ? <ClarificationResult clarification={clarification} /> : null}
-              {Boolean(prdSummary?.latestVersionNo) && <PrdContextPreview workitemId={id} />}
             </RequirementDocumentsCard>
           </WorkitemContent>
             <UnifiedTimeline
@@ -455,12 +465,18 @@ export function WorkitemDetailPage() {
         />
       </div>
 
-      <ClarifyReminderModal
-        open={clarifyReminderOpen}
-        onConfirm={handleGoClarify}
-        onSkip={handleSkipClarifyReminder}
-        onClose={() => setClarifyReminderOpen(false)}
-      />
+      {needsClarificationSetup && !launch && (
+        <WorkitemLaunchModal key={id + '-clarify-link'} item={id} activity="clarify" initialRepo={clarificationEntry.data?.repoId ?? null}
+          onEnter={state => enterActivity('clarify', state)} onClose={() => updateClarifyView({ mode: 'progress' })} />
+      )}
+      {needsClarificationLookup && clarificationEntry.isError && (
+        <Modal open title={t('launch.clarify')} okText={t('clarification.retry')}
+          onOk={() => void clarificationEntry.refetch()} onCancel={() => updateClarifyView({ mode: 'progress' })}>
+          {clarificationEntry.error.message}
+        </Modal>
+      )}
+      {launch && <WorkitemLaunchModal key={id + launch.activity} item={id} activity={launch.activity} initialRepo={launch.repoId}
+        onEnter={state => enterActivity(launch.activity,state)} onClose={() => setLaunch(null)} />}
       <StartDeliveryModal
         open={deliveryOpen}
         workitemId={id}

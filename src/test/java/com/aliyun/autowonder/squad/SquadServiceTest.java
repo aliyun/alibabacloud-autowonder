@@ -47,7 +47,7 @@ class SquadServiceTest {
         executorDao = mock(ExecutorDao.class);
         executorRegistry = mock(ExecutorRegistry.class);
         service = new SquadService(squadDao, memberDao, agentDao, agentVersionDao, sdlcDao, sdlcStepDao,
-                executorDao, executorRegistry);
+                executorDao, executorRegistry, mock(com.aliyun.autowonder.agent.AgentTagService.class));
     }
 
     @Test

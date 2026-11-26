@@ -16,6 +16,8 @@ public class SquadMemberVO {
     private String responsibilities;
     private Long sdlcId;
     private String sdlcName;
+    private List<String> systemTags;
+    private List<String> customTags;
     private List<SdlcStepSummaryVO> sdlcSteps;
     /** 该数字员工是否至少有一个在线执行器 */
     private boolean executorOnline;

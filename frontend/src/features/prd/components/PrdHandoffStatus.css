@@ -1,0 +1,107 @@
+.prd-handoff-trigger.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  min-height: 28px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: normal;
+}
+
+.prd-handoff-trigger.ant-btn[aria-expanded='true'] {
+  background: var(--aw-primary-faint);
+  border-color: var(--aw-primary);
+}
+
+.prd-handoff-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--aw-text-3);
+}
+
+[data-tone='working'] > .prd-handoff-dot { background: var(--aw-primary); }
+[data-tone='attention'] > .prd-handoff-dot { background: var(--aw-warning-deep); }
+[data-tone='success'] > .prd-handoff-dot { background: var(--aw-success); }
+
+.prd-handoff-popover.ant-popover .ant-popover-inner { padding: 0; }
+
+.prd-handoff-panel { width: min(390px, calc(100vw - 36px)); }
+
+.prd-handoff-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.prd-handoff-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.prd-handoff-panel-title h3 {
+  margin: 0;
+  color: var(--aw-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.prd-handoff-panel-head p {
+  margin: 4px 0 0;
+  color: var(--aw-text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.prd-handoff-reason { white-space: pre-wrap; }
+
+.prd-handoff-metadata {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 6px 10px;
+  margin: 0 14px 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--aw-gray-bg);
+  font-size: 12px;
+}
+
+.prd-handoff-metadata dt { color: var(--aw-text-2); }
+.prd-handoff-metadata dd { margin: 0; }
+
+.prd-handoff-value.ant-typography {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.prd-handoff-value.ant-typography code {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-family: var(--aw-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.prd-handoff-value .ant-typography-copy { flex: none; margin: 0; }
+.prd-handoff-value .ant-typography-copy:not(.ant-typography-copy-success) { color: var(--aw-text-2); }
+
+.prd-handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--aw-border);
+}

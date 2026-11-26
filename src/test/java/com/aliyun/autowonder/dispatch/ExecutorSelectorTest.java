@@ -16,6 +16,29 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 class ExecutorSelectorTest {
+    @Test
+    void preparationMayQueueOnBusyCompatibleOwnerWithoutReservingOrSwitchingIt() {
+        when(redisManager.smembers(ExecutorSelector.execsKey(1L))).thenReturn(Set.of("9", "10"));
+        when(executorRegistry.isAvailable(anyLong())).thenReturn(true);
+        when(executorRegistry.currentDispatchSnapshot(9L)).thenReturn(java.util.Optional.of(
+                snapshot(1, true, Set.of(), Set.of(99L))));
+        when(presenceManager.capacity(10L)).thenReturn(1);
+        when(presenceManager.supportsProtocolFeature(9L, "preview")).thenReturn(true);
+        assertEquals(9L, selector.selectQueueOwner(1L, 9L, "preview"));
+        verify(redisManager, never()).exIncrBy(anyString(), anyLong(), anyLong());
+        assertNull(selector.selectStrict(1L, 9L, "preview"));
+    }
+
+    @Test
+    void failedPreparationCanMoveToAnotherOnlineExecutor() {
+        when(redisManager.smembers(ExecutorSelector.execsKey(1L))).thenReturn(Set.of("9", "10"));
+        when(executorRegistry.isAvailable(anyLong())).thenReturn(true);
+        when(presenceManager.capacity(9L)).thenReturn(1);
+        when(presenceManager.capacity(10L)).thenReturn(1);
+
+        assertEquals(10L, selector.selectQueueOwner(1L, null, null, 9L));
+        verify(redisManager, never()).exIncrBy(anyString(), anyLong(), anyLong());
+    }
 
     private ExecutorDispatchSnapshot snapshot(int capacity, boolean ready,
             Set<Long> running, Set<Long> conversations) {

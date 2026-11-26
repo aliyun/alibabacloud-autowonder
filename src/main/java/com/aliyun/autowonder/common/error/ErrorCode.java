@@ -323,6 +323,7 @@ public enum ErrorCode {
     PRD_ACCEPTANCE_REASON_REQUIRED("39115", "判定不适用必须提供理由"),
     PRD_ACCEPTANCE_INVALID_EVIDENCE("39116", "证据引用不合法"),
     PRD_ACCEPTANCE_NOT_FOUND("39117", "需求验收结果不存在"),
+    PRD_TARGET_PROJECT_LOCKED("39118", "设计已开始，不能再更换目标前端项目"),
     // 39xxx 重复工单检测
     FEATURE_SWITCH_VERSION_CONFLICT("39001", "开关配置已被他人修改，请刷新后重试"),
     DUPLICATE_CHECK_NOT_FOUND("39002", "重复检测记录不存在"),

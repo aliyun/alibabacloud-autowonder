@@ -68,8 +68,19 @@ public class AgentTagService {
                 byId.put(vo.getId(), vo);
             }
         }
-        Map<Long, List<AgentTagDO>> grouped = new HashMap<>();
         List<Long> agentIds = new ArrayList<>(byId.keySet());
+        Map<Long, Tags> tags = tagsByAgent(tenantId, agentIds);
+        byId.forEach((id, vo) -> {
+            Tags values = tags.get(id);
+            vo.setSystemTags(values.systemTags());
+            vo.setCustomTags(values.customTags());
+        });
+    }
+
+    public record Tags(List<String> systemTags, List<String> customTags) {}
+
+    public Map<Long, Tags> tagsByAgent(long tenantId, List<Long> agentIds) {
+        Map<Long, List<AgentTagDO>> grouped = new HashMap<>();
         for (int start = 0; start < agentIds.size(); start += IN_CHUNK_SIZE) {
             List<Long> chunk = agentIds.subList(start, Math.min(start + IN_CHUNK_SIZE, agentIds.size()));
             List<AgentTagDO> rows = agentTagDao.listByAgentIds(tenantId, chunk);
@@ -83,9 +94,11 @@ public class AgentTagService {
                 grouped.computeIfAbsent(row.getAssetId(), key -> new ArrayList<>()).add(row);
             }
         }
-        for (Map.Entry<Long, AgentVO> entry : byId.entrySet()) {
-            apply(entry.getValue(), grouped.get(entry.getKey()));
+        Map<Long, Tags> result = new HashMap<>();
+        for (Long id : agentIds) {
+            result.put(id, toTags(grouped.get(id)));
         }
+        return result;
     }
 
     /**
@@ -169,7 +182,7 @@ public class AgentTagService {
         return false;
     }
 
-    private void apply(AgentVO vo, List<AgentTagDO> rows) {
+    private Tags toTags(List<AgentTagDO> rows) {
         List<String> systemCodes = new ArrayList<>();
         List<String> customNames = new ArrayList<>();
         if (rows != null) {
@@ -191,8 +204,7 @@ public class AgentTagService {
             AgentSystemTag tag = AgentSystemTag.fromCode(code);
             return tag == null ? Integer.MAX_VALUE : tag.ordinal();
         }));
-        vo.setSystemTags(systemCodes);
-        vo.setCustomTags(customNames);
+        return new Tags(systemCodes, customNames);
     }
 
     private Set<String> keysOf(List<AgentTagDO> rows) {

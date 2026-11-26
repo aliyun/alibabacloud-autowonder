@@ -50,6 +50,14 @@ public class NodeMailboxListener {
             if (es == null || !es.getSession().isOpen()) {
                 return;
             }
+            if (("PRD_PREVIEW_ENSURE".equals(type) || "PRD_PREVIEW_BOOTSTRAP".equals(type)
+                    || "PRD_DESIGN_HANDOFF".equals(type))
+                    && (!es.getSession().getId().equals(json.getString("sessionId"))
+                        || !Long.valueOf(es.getTenantId()).equals(json.getLong("workspaceId"))
+                        || presenceManager == null
+                        || !presenceManager.isCurrentSession(executorId, es.getSession().getId()))) {
+                return;
+            }
             es.sendText(message);
             log.info("mailbox delivered executorId={}", executorId);
         } catch (Exception e) {

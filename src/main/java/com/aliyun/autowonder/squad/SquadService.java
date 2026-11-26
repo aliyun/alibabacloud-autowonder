@@ -2,6 +2,7 @@ package com.aliyun.autowonder.squad;
 
 import com.aliyun.autowonder.agent.AgentDO;
 import com.aliyun.autowonder.agent.AgentDao;
+import com.aliyun.autowonder.agent.AgentTagService;
 import com.aliyun.autowonder.agent.AgentVersionDO;
 import com.aliyun.autowonder.agent.AgentVersionDao;
 import com.aliyun.autowonder.common.error.BizException;
@@ -43,11 +44,12 @@ public class SquadService {
     private final SdlcStepDao sdlcStepDao;
     private final ExecutorDao executorDao;
     private final ExecutorRegistry executorRegistry;
+    private final AgentTagService agentTags;
 
     public SquadService(SquadDao squadDao, SquadMemberDao memberDao,
             AgentDao agentDao, AgentVersionDao agentVersionDao,
             SdlcDao sdlcDao, SdlcStepDao sdlcStepDao,
-            ExecutorDao executorDao, ExecutorRegistry executorRegistry) {
+            ExecutorDao executorDao, ExecutorRegistry executorRegistry, AgentTagService agentTags) {
         this.squadDao = squadDao;
         this.memberDao = memberDao;
         this.agentDao = agentDao;
@@ -56,6 +58,7 @@ public class SquadService {
         this.sdlcStepDao = sdlcStepDao;
         this.executorDao = executorDao;
         this.executorRegistry = executorRegistry;
+        this.agentTags = agentTags;
     }
 
     @Transactional
@@ -192,6 +195,7 @@ public class SquadService {
             return List.of();
         }
         List<Long> agentIds = members.stream().map(SquadMemberDO::getAgentId).toList();
+        var tags = agentTags.tagsByAgent(tenantId, agentIds);
         Map<Long, AgentDO> agentMap = new HashMap<>();
         for (AgentDO agent : agentDao.listByIds(tenantId, agentIds)) {
             agentMap.put(agent.getId(), agent);
@@ -230,6 +234,11 @@ public class SquadService {
             SquadMemberVO vo = new SquadMemberVO();
             vo.setAgentId(m.getAgentId());
             vo.setExecutorOnline(onlineAgentIds.contains(m.getAgentId()));
+            var memberTags = tags.get(m.getAgentId());
+            if (memberTags != null) {
+                vo.setSystemTags(memberTags.systemTags());
+                vo.setCustomTags(memberTags.customTags());
+            }
             AgentDO agent = agentMap.get(m.getAgentId());
             if (agent != null) {
                 vo.setAgentName(agent.getName());

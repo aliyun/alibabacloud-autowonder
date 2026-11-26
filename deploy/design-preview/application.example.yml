@@ -1,0 +1,22 @@
+# 托管试用默认使用平台公开地址和自动绑定。以下手工绑定示例用于已有预览服务。
+autowonder:
+  design-preview:
+    platform-origin: https://app.example.com
+    # 每台实例配置各自的 node。namespace 与下方地址表可在同一环境共享。
+    cluster:
+      enabled: false
+      namespace: autowonder-design-trial
+      node: instance-a
+      peers:
+        instance-a: https://auto-wonder-instance-a.internal.example.com
+        instance-b: https://auto-wonder-instance-b.internal.example.com
+    bindings:
+      - id: design-123
+        workspace-id: 10
+        workitem-id: 123
+        conversation-id: 456
+        executor-id: 789
+        source-key: replaceWithActualSourceKey
+        executor-config-path: /opt/autowonder/config/design-123.json
+        # 可选：独立安装的兼容 CLI 可在这里指定绝对路径。
+        # executor-cli-path: /opt/autowonder/preview-link/bin/autowonder

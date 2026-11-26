@@ -24,5 +24,13 @@ class PrdFreshSchemaTest(unittest.TestCase):
         self.assertRegex(table.group(1), r'`target_config_json`\s+MEDIUMTEXT\s+DEFAULT NULL')
 
 
+    def test_workitem_launch_ddl_matches_runtime_and_upgrade(self):
+        schema = (ROOT / 'docs/autowonder-schema.sql').read_text()
+        migration = (ROOT / 'docs/migration/V131__workitem_activity_launch.sql').read_text()
+        runtime = (ROOT / 'src/main/resources/schema/workitem-launch.sql').read_text()
+        self.assertEqual(migration, runtime)
+        self.assertEqual(schema.count(migration), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

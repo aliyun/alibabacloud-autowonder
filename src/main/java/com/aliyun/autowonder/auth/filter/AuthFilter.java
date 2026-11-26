@@ -320,6 +320,11 @@ public class AuthFilter extends OncePerRequestFilter {
     private boolean isLoginOnlyRequest(HttpServletRequest request) {
         String method = request.getMethod();
         String path = normalizeTrailingSlash(request.getRequestURI());
+        // Design share authorization is independent of the viewer's selected workspace.
+        // Keep authentication, disabled-account and email checks above; never whitelist these APIs.
+        if (path.matches("^/api/design-reviews/(?:[A-Za-z0-9_-]{43}|[a-z0-9][a-z0-9-]{1,38}[a-z0-9])(?:/preview-session|/preview-status|/comments(?:/[0-9]+)?)?$")) {
+            return true;
+        }
         if (path.startsWith(PERSONAL_MCP_TOKEN_PREFIX)) {
             return true;
         }

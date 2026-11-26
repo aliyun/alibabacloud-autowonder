@@ -28,6 +28,27 @@ class ConversationTurnEventServiceTest {
         service.setConversationElicitationService(elicitationService);
     }
 
+    @Test
+    void rebuildsOnlyTheVisibleReplyTextForACanceledTurn() {
+        var first = event(1L, 1L, "text", "{\"content\":\"已经\"}");
+        var tool = event(2L, 2L, "tool_result", "{\"output\":\"private output\"}");
+        var second = event(3L, 3L, "text", "{\"content\":\"生成的回复\"}");
+        var stale = event(4L, 4L, "text", "{\"content\":\"old attempt\"}");
+        stale.setDispatchAttempt(1);
+        when(eventDao.listByTurn(1L, 10L, 20L, ConversationTurnEventService.MAX_TURN_EVENTS))
+                .thenReturn(List.of(first, tool, second, stale));
+
+        assertEquals("已经生成的回复", service.streamedReplyText(1L, 10L, 20L, 2));
+    }
+
+    private static AgentConversationTurnEventDO event(Long id, Long seq, String type, String payload) {
+        var event = new AgentConversationTurnEventDO();
+        event.setId(id); event.setTenantId(1L); event.setConversationId(10L); event.setTurnId(20L);
+        event.setDispatchAttempt(2); event.setEventSeq(seq); event.setChunkIndex(0); event.setChunkCount(1);
+        event.setEventType(type); event.setPayloadFragment(payload);
+        return event;
+    }
+
     @org.junit.jupiter.params.ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(booleans={true,false})
     void stoppedLateQuestionIsNotRepublishedAsOpen(boolean reliable) {
         var conv=new AgentConversationDO();conv.setExecutorId(50L);

@@ -1,40 +1,43 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  Alert, Button, Card, Drawer, Dropdown, Empty, List, Segmented, Space, Spin, Tag, Typography, message,
+  Button, Card, Drawer, Dropdown, Empty, List, Segmented, Space, Spin, Tag, Tooltip, Typography, message,
 } from 'antd';
 import {
-  DesktopOutlined, EllipsisOutlined, ExpandOutlined, FileTextOutlined, MobileOutlined, RocketOutlined,
+  EllipsisOutlined, HistoryOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
+import { getSquadMembers } from '@/features/squad/api';
+import { createClientMessageId } from '@/features/workitem/clarification/api';
 import { ApiError } from '@/shared/types/common';
-import { PageHeading } from '@/shared/ui/PageHeading';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
-import { PrdConversation, type DesignReply } from './components/PrdConversation';
+import { PrdConversation, type PrdConversationHandle } from './components/PrdConversation';
 import { apiClient } from '@/shared/api/client';
-import { PrdPrototypePreview, prototypePages, type PrototypeElement, type PrototypePage } from './components/PrdPrototypePreview';
+import { type PrototypeElement } from './components/PrdPrototypePreview';
+import { PrdDesignBrowser } from './components/PrdDesignBrowser';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 import { formatDateTime } from '@/shared/i18n/format';
-import { StartDeliveryModal } from '@/features/workitem/components/StartDeliveryModal';
+import { PrdShareName } from './components/PrdShareName';
 import {
   DELIVERY_MODE,
   PRD_VERSION_STATUS,
 } from './api';
 import {
-  useConfirmPrdVersion,
   useCreatePrdDraft,
   usePrdDeliveryAcceptance,
   usePrdDeliveries,
   usePrdDesign,
   usePrdVersion,
   usePrdVersions,
-  useSelectPrdTarget,
-  useSubmitPrdForReview,
 } from './hooks';
-import { PrdHtmlPreview, PRESET_VIEWPORTS, type PresetViewport } from './components/PrdHtmlPreview';
-import { TargetProjectSelector } from './components/TargetProjectSelector';
-import { ConfirmVersionModal } from './components/ConfirmVersionModal';
+import { PrdDesignDocumentLink, PrdDesignHeader } from './components/PrdDesignHeader';
+import { PrdRequirementsDocument } from './components/PrdRequirementsDocument';
+import { useDesignHandoff } from './handoff';
+import { readLaunch, launchPath, designUrl, WorkitemLaunchModal } from '@/features/workitem/components/WorkitemLaunchModal';
+import { getRepo } from '@/features/repo/api';
 import { PrdAcceptancePanel } from './components/PrdAcceptancePanel';
+import type { PrdDesignRuntime } from './designBrowser';
 
 // Git represents an application at the repository root with an empty relative path.
 const REPOSITORY_ROOT = '.';
@@ -43,8 +46,8 @@ const PREVIEW_MODE = { PROTOTYPE: 'prototype', DOCUMENT: 'document' } as const;
 const { Text } = Typography;
 
 /**
- * The PRD design workbench for one workitem: probe-backed target project on the left, the rendered
- * HTML PRD and its versions in the center, and the design conversation on the right.
+ * The PRD design workbench for one workitem: design conversation on the left, live preview and
+ * document on the right, with project settings and version history available in drawers.
  *
  * <p>Three invariants shape this page. The document is shown only through a sandboxed iframe, so it
  * can never reach host state. Confirmation is a distinct action from starting a delivery — confirming
@@ -55,164 +58,161 @@ const { Text } = Typography;
  * be linked directly; it owns no state that the server does not also hold.
  */
 export function PrdDesignWorkbench() {
-  const { t } = useTranslation('prd');
+  const { t } = useTranslation(['prd', 'workitem']);
   const { workitemId } = useParams<{ workitemId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const documentParam = Number(searchParams.get('prdDocument'));
+  const linkedVersion = Number.isSafeInteger(documentParam) && documentParam > 0 ? documentParam : null;
   const accessCommand = useAccessCommand();
 
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
-  const [viewport, setViewport] = useState<PresetViewport>(PRESET_VIEWPORTS.FIT);
-  const [targetOpen, setTargetOpen] = useState<boolean | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [livePreview, setLivePreview] = useState<string | null>(null);
-  const [livePages, setLivePages] = useState<PrototypePage[] | null>(null);
-  const [draftReply, setDraftReply] = useState<DesignReply | null>(null);
-  const [adoptedTurn, setAdoptedTurn] = useState<number | null>(null);
-  const [adopting, setAdopting] = useState(false);
-  const [questionsOpen, setQuestionsOpen] = useState(false);
-  const [ignoredVersion, setIgnoredVersion] = useState<string | null>(null);
-  const [outdatedTargetVersion, setOutdatedTargetVersion] = useState<string | null>(null);
-  const [dismissedQuestions, setDismissedQuestions] = useState<string | null>(null);
-  const [suggestion, setSuggestion] = useState<{ text: string; id: number }>();
-  const [previewMode, setPreviewMode] = useState<string>(PREVIEW_MODE.PROTOTYPE);
+  const conversationRef = useRef<PrdConversationHandle>(null);
+  const [previewMode, setPreviewMode] = useState<string>(linkedVersion ? PREVIEW_MODE.DOCUMENT : PREVIEW_MODE.PROTOTYPE);
   const [elementSelection, setElementSelection] = useState<PrototypeElement | null>(null);
-  const [selectingElement, setSelectingElement] = useState(false);
+  const [employeeOffline, setEmployeeOffline] = useState(false);
+  const [conversationProcessing, setConversationProcessing] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const launch = useQuery({
+    queryKey: ['workitem-design-launch', workitemId],
+    queryFn: () => readLaunch(workitemId!, 'design'), enabled: !!workitemId,
+    refetchInterval: query => {
+      const phase = query.state.data?.phase;
+      return phase && phase !== 'NEW' && phase !== 'ACTIVE' && !phase.startsWith('FAILED') ? 1500 : false;
+    },
+  });
+  const setup = launch.data;
+  const sourceRepo = useQuery({ queryKey: ['repo', setup?.repoId], queryFn: () => getRepo(setup!.repoId!), enabled: !!setup?.repoId });
   useEffect(() => {
-    setLivePreview(null);
-    setLivePages(null);
     setSelectedVersionId(null);
-    setTargetOpen(null);
-    setDraftReply(null); setAdoptedTurn(null); setDismissedQuestions(null);
-    setElementSelection(null); setSelectingElement(false);
+    setElementSelection(null);
+    setEmployeeOffline(false);
+    setConversationProcessing(false);
+    setSettingsOpen(false);
   }, [workitemId]);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [acceptanceDispatchId, setAcceptanceDispatchId] = useState<number | null>(null);
 
-  const designQuery = usePrdDesign(workitemId ?? '');
-  const versionsQuery = usePrdVersions(workitemId ?? '');
+  const hasDesign = !!setup && setup.phase !== 'NEW';
+  const handoff = useDesignHandoff(workitemId ?? '', hasDesign && !!workitemId);
+  const review = handoff.data?.review;
+  const managedHandoff = handoff.data?.managed === true;
+  const reviewLocked = !!review && ['SNAPSHOTTING', 'IN_REVIEW', 'PUSHING', 'ATTACHING', 'PUSH_FAILED', 'ATTACHMENT_FAILED'].includes(review.status);
+  const designQuery = usePrdDesign(workitemId ?? '', hasDesign);
+  const conversationSelectionQuery = useQuery({
+    queryKey: ['prd-selection', workitemId],
+    queryFn: async () => (await apiClient.get<{ agentId: number; squadId: number } | null>(
+      `/api/workitems/${workitemId}/prd/conversation/selection`,
+    )).data,
+    enabled: hasDesign && !setup?.managed,
+  });
+  const selectedAgentId = setup?.managed ? setup.agentId ?? undefined
+    : Number(searchParams.get('prdAgent')) || conversationSelectionQuery.data?.agentId;
+  const selectedSquadId = setup?.managed ? setup.squadId ?? undefined
+    : Number(searchParams.get('prdSquad')) || conversationSelectionQuery.data?.squadId || undefined;
+  const selectedAgentQuery = useQuery({
+    queryKey: ['squad-members', 'clarification', selectedSquadId],
+    queryFn: () => getSquadMembers(selectedSquadId!),
+    enabled: !!selectedAgentId && !!selectedSquadId,
+    refetchInterval: 3000,
+  });
+  const selectedAgentName = selectedAgentQuery.data
+    ?.find(member => member.agentId === selectedAgentId)?.agentName;
+  const runtimeQuery = useQuery({
+    queryKey: ['prd-design-runtime', workitemId, selectedAgentId],
+    queryFn: async () => (await apiClient.get<PrdDesignRuntime | null>(
+      `/api/workitems/${workitemId}/prd/runtime`,
+      { params: selectedAgentId ? { agentId: selectedAgentId } : {}, backgroundActivity: true },
+    )).data,
+    enabled: !!workitemId && !!selectedAgentId,
+    refetchInterval: 2000,
+    refetchIntervalInBackground: false,
+  });
+  const versionsQuery = usePrdVersions(workitemId ?? '', hasDesign);
   const design = designQuery.data ?? null;
 
   const versions = useMemo(() => versionsQuery.data ?? [], [versionsQuery.data]);
   const activeVersionId = selectedVersionId
+    ?? linkedVersion
     ?? versions[0]?.id
     ?? design?.confirmedVersionId
     ?? null;
   const activeVersionQuery = usePrdVersion(workitemId ?? '', activeVersionId);
   const activeVersion = activeVersionQuery.data ?? null;
+  const setDocumentLink = (version: number | null) => {
+    setSearchParams(params => {
+      const next = new URLSearchParams(params);
+      if (version !== null) next.set('prdDocument', String(version));
+      else next.delete('prdDocument');
+      return next;
+    }, { replace: true });
+  };
+  const openDocument = (version: number) => {
+    setSelectedVersionId(version);
+    setPreviewMode(PREVIEW_MODE.DOCUMENT);
+    setDocumentLink(version);
+  };
 
   const deliveriesQuery = usePrdDeliveries(workitemId ?? '', design?.deliveryMode === DELIVERY_MODE.PRD_DRIVEN);
   const acceptanceQuery = usePrdDeliveryAcceptance(workitemId ?? '', acceptanceDispatchId);
 
-  const selectTarget = useSelectPrdTarget(workitemId ?? '');
-  const confirmVersion = useConfirmPrdVersion(workitemId ?? '');
-  const submitForReview = useSubmitPrdForReview(workitemId ?? '');
   const createDraft = useCreatePrdDraft(workitemId ?? '');
 
-  const hasUnadoptedReply = draftReply != null && draftReply.turnId !== adoptedTurn
-    && !(draftReply.createdAt != null && activeVersion?.gmtCreate
-      && new Date(draftReply.createdAt).getTime() <= new Date(activeVersion.gmtCreate).getTime())
-    && !matchesPersistedDesign(draftReply.content, activeVersion?.designJson);
-  // Streaming has no completed reply yet. Completed historical replies must not replace a saved version.
-  const showLivePreview = draftReply == null || hasUnadoptedReply;
-  const pages = useMemo(() => {
-    if (showLivePreview && livePages) return livePages;
-    try { return prototypePages(JSON.parse(activeVersion?.designJson || '{}')); } catch { return []; }
-  }, [showLivePreview, livePages, activeVersion?.designJson]);
-  const parsed = useMemo(() => parseDesign(hasUnadoptedReply ? draftReply?.content ?? null : activeVersion?.designJson ?? null),
-    [hasUnadoptedReply, draftReply?.content, activeVersion?.designJson]);
-  const blockingOpen = parsed?.openQuestions.filter((q) => q.blocking && !q.resolved).length ?? 0;
-  const questionsKey = JSON.stringify(parsed?.openQuestions ?? []);
-  const confirmationKey = JSON.stringify([workitemId, activeVersion?.id, activeVersion?.designSha256, questionsKey]);
-  const ignoreOpenQuestions = ignoredVersion === confirmationKey;
-  const hasTarget = design?.targetRepoId != null;
+  const parsed = useMemo(() => parseDesign(activeVersion?.designJson ?? null), [activeVersion?.designJson]);
+  const preparing = !!setup?.managed && setup.phase !== 'ACTIVE';
+  const projectReady = setup?.phase === 'ACTIVE';
+  const prepareFailed = setup?.phase.startsWith('FAILED') ?? false;
+  const showPreparation = preparing && (prepareFailed || runtimeQuery.data?.status !== 'READY');
+  const prepareLabel = setup ? t(`workitem:launch.phase.${setup.phase}` as 'workitem:launch.phase.QUEUED') : '';
+  useEffect(() => { if (employeeOffline) setSettingsOpen(true); }, [employeeOffline]);
   const isConfirmedVersion = activeVersion?.status === PRD_VERSION_STATUS.CONFIRMED;
-  const isDraft = activeVersion?.status === PRD_VERSION_STATUS.DRAFT;
-  const canConfirm = activeVersion != null
-    && activeVersion.status !== PRD_VERSION_STATUS.CONFIRMED
-    && (blockingOpen === 0 || ignoreOpenQuestions)
-    && hasTarget;
 
   if (!workitemId) {
     return <PageError onBack={() => navigate('/workitems')} label={t('page.invalidId')} backLabel={t('page.back')} />;
   }
-  if (designQuery.isLoading) {
+  if (launch.isLoading || (hasDesign && designQuery.isLoading)) {
     return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />;
   }
+  if (launch.isError || !setup) {
+    return <PageError onBack={() => navigate(-1)} label={t('page.loadFailed')} backLabel={t('page.back')} />;
+  }
+
+  if (setup.phase === 'NEW') return <WorkitemLaunchModal item={workitemId} activity="design" initialRepo={setup.repoId}
+    onClose={() => navigate(`/workitems/${workitemId}`)}
+    onEnter={state => { navigate(designUrl(workitemId,state),{replace:true}); void launch.refetch(); }} />;
+
   if (designQuery.isError || !design) {
     return <PageError onBack={() => navigate(-1)} label={t('page.loadFailed')} backLabel={t('page.back')} />;
   }
 
-  const handleSelectTarget = (request: import('./api').SelectTargetRequest) => accessCommand(
-    'READ_WRITE', t('target.confirm'),
-    async () => {
-      try {
-        await selectTarget.mutateAsync(request);
-        message.success(t('target.saved'));
-        setTargetOpen(false);
-      } catch (err) {
-        message.error(err instanceof ApiError ? err.message : t('target.saveFailed'));
-      }
-    },
-    'PRD',
-  );
-
-  const handleConfirm = (deliveryMode: string) => accessCommand(
-    'READ_WRITE', t('confirm.ok'),
-    async () => {
-      if (!activeVersion) return;
-      try {
-        await confirmVersion.mutateAsync({
-          versionId: activeVersion.id,
-          expectedDigest: activeVersion.designSha256,
-          deliveryMode,
-          ...(ignoreOpenQuestions ? { ignoreOpenQuestions: true } : {}),
-        });
-        message.success(t('confirm.saved'));
-        setConfirmOpen(false);
-        setIgnoredVersion(null);
-      } catch (err) {
-        if (err instanceof ApiError && err.code === '39108') {
-          setOutdatedTargetVersion(confirmationKey);
-          setConfirmOpen(false);
-          setIgnoredVersion(null);
-          return;
-        }
-        message.error(err instanceof ApiError ? err.message : t('confirm.saveFailed'));
-      }
-    },
-    'PRD',
-  );
-
-  const handleStartDelivery = () => accessCommand(
-    'READ_WRITE', t('delivery.start'),
-    () => setDeliveryOpen(true),
-  );
-  const handleAdopt = async () => {
-    if (!draftReply) return;
-    setAdopting(true);
-    try {
-      const response = await apiClient.post<{ id: number }>(`/api/workitems/${workitemId}/prd/conversation/${draftReply.conversationId}/turns/${draftReply.turnId}/save`);
-      setSelectedVersionId(response.data.id); setAdoptedTurn(draftReply.turnId);
-      setLivePreview(null); setLivePages(null);
-      await Promise.all([designQuery.refetch(), versionsQuery.refetch()]);
-    } catch (error) { message.error(error instanceof Error ? error.message : t('conversation.failed')); }
-    finally { setAdopting(false); }
+  const retryBootstrap = async () => {
+    setRetrying(true);
+    try { await apiClient.post(launchPath(workitemId,'design') + '/retry'); await launch.refetch(); }
+    catch (err) { message.error(err instanceof Error ? err.message : t('workitem:launch.failed')); }
+    finally { setRetrying(false); }
   };
 
-  const handleSubmitReview = () => accessCommand(
-    'READ_WRITE', t('review.submit'),
-    async () => {
-      if (!activeVersion) return;
-      try {
-        await submitForReview.mutateAsync(activeVersion.id);
-        message.success(t('review.submitted'));
-      } catch (err) {
-        message.error(err instanceof ApiError ? err.message : t('review.submitFailed'));
-      }
-    },
-    'PRD',
-  );
+  const handleRecoverPreview = async () => {
+    if (conversationProcessing) return;
+    const command = accessCommand(
+      'READ_WRITE', t('runtime.recoverAction'),
+      async () => {
+        try {
+          const conversation = conversationRef.current;
+          if (!conversation) throw new Error(t('runtime.recoverUnavailable'));
+          await conversation.startPreparation(t('runtime.recoverMessage'), createClientMessageId(), 'RECOVER');
+          message.success(t('runtime.recoverRequested', {
+            agent: selectedAgentName ?? t('runtime.selectedAgent'),
+          }));
+        } catch (err) {
+          message.error(err instanceof Error ? err.message : t('runtime.recoverFailed'));
+        }
+      },
+      'PRD',
+    );
+    await command;
+  };
 
   const handleDeriveDraft = () => accessCommand(
     'READ_WRITE', t('review.derive'),
@@ -229,49 +229,10 @@ export function PrdDesignWorkbench() {
     'PRD',
   );
 
-  const confirmedBanner = design.deliveryMode === DELIVERY_MODE.PRD_DRIVEN && design.confirmedVersionNo != null;
-
   return (
-    <div style={{ padding: 24 }}>
-      <PageHeading
-        title={
-          <span className="aw-detail-title">
-            <PageBackButton to={`/workitems/${workitemId}`} label={t('page.back')} />
-            <span>{t('page.title')}</span>
-          </span>
-        }
-        extra={
-          <Space wrap>
-            <Button type="text" onClick={() => setHistoryOpen(true)}>{t('versions.historyAndIndex')}</Button>
-            {confirmedBanner && (
-              <Tag color="success">{t('page.confirmedVersion', { versionNo: design.confirmedVersionNo })}</Tag>
-            )}
-            <Button type="text" icon={<FileTextOutlined />} onClick={() => setTargetOpen(true)}>
-              {hasTarget ? t('target.change') : t('target.select')}
-            </Button>
-            {design.deliveryMode === DELIVERY_MODE.PRD_DRIVEN && design.confirmedVersionId != null && <Button
-              icon={<RocketOutlined />}
-              onClick={handleStartDelivery}
-            >
-              {t('delivery.start')}
-            </Button>}
-          </Space>
-        }
-      />
-
-      {(targetOpen ?? !hasTarget) && (
-        <div style={{ marginBottom: 16 }}>
-          <TargetProjectSelector
-            design={design}
-            confirming={selectTarget.isPending}
-            onConfirm={handleSelectTarget}
-          />
-          <Button style={{ marginTop: 8 }} onClick={() => setTargetOpen(false)}>{t('target.close')}</Button>
-        </div>
-      )}
-
-      <div className="prd-workbench-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) minmax(0, 2fr)', gap: 16, alignItems: 'start' }}>
-        <Drawer open={historyOpen} onClose={() => setHistoryOpen(false)} title={t('versions.title')} width={440}>
+    <div className="prd-workbench">
+      <div className="prd-workbench-grid">
+        <Drawer open={historyOpen} onClose={() => setHistoryOpen(false)} title={t('versions.historyAndIndex')} width={440}>
         {/* Left: versions + requirement index */}
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Card size="small" title={t('versions.title')}>
@@ -284,7 +245,10 @@ export function PrdDesignWorkbench() {
                   renderItem={(version) => (
                     <List.Item
                       style={{ cursor: 'pointer', background: version.id === activeVersionId ? 'var(--aw-fill-tertiary, #fafafa)' : undefined }}
-                      onClick={() => setSelectedVersionId(version.id)}
+                      onClick={() => {
+                        setSelectedVersionId(version.id);
+                        if (previewMode === PREVIEW_MODE.DOCUMENT) setDocumentLink(version.id);
+                      }}
                       actions={[
                         <VersionStatusTag key="status" status={version.status} />,
                       ]}
@@ -303,6 +267,7 @@ export function PrdDesignWorkbench() {
           </Card>
 
           <Card size="small" title={t('requirements.indexTitle')}>
+            <Text type="secondary">{t('requirements.indexHint')}</Text>
             {parsed && parsed.requirements.length > 0 ? (
               <List
                 size="small"
@@ -324,107 +289,100 @@ export function PrdDesignWorkbench() {
           </Card>
         </Space>
         </Drawer>
-        <Card size="small" title={t('conversation.title')} styles={{ body: { padding: 0 } }}>
-          <PrdConversation workitemId={String(workitemId)} suggestion={suggestion} onDraftChange={setDraftReply} onPreview={setLivePreview}
-            onPrototype={setLivePages} element={elementSelection} onClearElement={() => setElementSelection(null)} />
-        </Card>
+        <section className="prd-workbench-conversation" aria-label={t('conversation.title')}>
+          <header className="prd-conversation-heading" data-settings-open={settingsOpen}>
+            <div className="prd-conversation-title">
+              <PageBackButton to={`/workitems/${workitemId}`} label={t('page.back')} />
+              <h2>{t('conversation.panelTitle')}</h2>
+              <PrdShareName workitemId={workitemId} agentId={selectedAgentId} />
+            </div>
+            <div className="prd-conversation-heading-actions">
+            <Button type="text" size="small" className="prd-settings-toggle" data-open={settingsOpen}
+              aria-expanded={settingsOpen} onClick={() => {
+                setSettingsOpen(open => !open);
+              }}>
+              {t('conversation.settings')}
+            </Button>
+            </div>
+          </header>
+          {preparing && !prepareFailed && <div className="prd-design-preparing" role="status">
+            <Spin size="small" />
+            <div className="prd-design-preparing-copy">
+              <div className="prd-design-preparing-title">{t('workitem:launch.preparingTask')}</div>
+              <div className="prd-design-preparing-description">{t('workitem:launch.preparingTaskDescription')}</div>
+            </div>
+          </div>}
+          <PrdConversation ref={conversationRef} workitemId={String(workitemId)}
+            element={elementSelection} onClearElement={() => setElementSelection(null)}
+            ready={(projectReady || setup.phase === 'CONFIGURING') && !reviewLocked}
+            documentLink={versions[0] && <PrdDesignDocumentLink onClick={() => openDocument(versions[0].id)} />}
+            onEmployeeOfflineChange={setEmployeeOffline}
+            onProcessingChange={setConversationProcessing}
+            setupLocked={setup.managed || !!runtimeQuery.data}
+            launchSelection={setup.managed && setup.agentId && setup.squadId
+              ? { agentId: setup.agentId, squadId: setup.squadId } : undefined}
+            settingsOpen={settingsOpen}
+            setupExtra={<Text>{t('workitem:launch.sourceDisplay', { name: sourceRepo.data?.name ?? (setup.repoId ? String(setup.repoId) : t('workitem:launch.new')) })}</Text>}
+            onStarted={() => {
+              void conversationSelectionQuery.refetch();
+              void runtimeQuery.refetch();
+              void versionsQuery.refetch();
+            }} />
+        </section>
 
         {/* Center: HTML document + prototype viewport */}
-        <Card
-          size="small"
-          title={
-            <Space>
-              <span>{t('preview.title')}</span>
-              {activeVersion && <Tag>{t('versionLabel', { versionNo: activeVersion.versionNo })}</Tag>}
-            </Space>
-          }
-          extra={
-            <Segmented
-              size="small"
-              value={viewport}
-              onChange={(value) => setViewport(value as PresetViewport)}
-              options={[
-                { value: PRESET_VIEWPORTS.FIT, icon: <ExpandOutlined />, title: t('preview.fit') },
-                { value: PRESET_VIEWPORTS.DESKTOP, icon: <DesktopOutlined />, title: t('preview.desktop') },
-                { value: PRESET_VIEWPORTS.MOBILE, icon: <MobileOutlined />, title: t('preview.mobile') },
-              ]}
-            />
-          }
-        >
-          <Space direction="vertical" size={12} style={{ width: '100%' }}>
-            {outdatedTargetVersion === confirmationKey && <Alert type="warning" showIcon
-              message={t('confirm.targetChanged')}
-              description={t('confirm.targetChangedHint')}
-              action={<Button loading={createDraft.isPending} onClick={handleDeriveDraft}>{t('confirm.refreshTarget')}</Button>} />}
-            {pages.length > 0 && <Segmented value={previewMode} onChange={value => setPreviewMode(String(value))}
-              options={[{ value: PREVIEW_MODE.PROTOTYPE, label: t('preview.prototype') }, { value: PREVIEW_MODE.DOCUMENT, label: t('preview.document') }]} />}
-            {hasUnadoptedReply ? <Button type="primary" loading={adopting} onClick={() => void handleAdopt()}>{t('conversation.adopt')}</Button> : activeVersion && (
-              <Space size={8} wrap>
-                <VersionStatusTag status={activeVersion.status} />
-                {(isDraft || isConfirmedVersion) && <Dropdown trigger={['click']} menu={{ items: [isDraft
-                  ? { key: 'review', label: t('review.submit'), disabled: submitForReview.isPending, onClick: handleSubmitReview }
-                  : { key: 'derive', label: t('review.derive'), disabled: createDraft.isPending, onClick: handleDeriveDraft }] }}>
-                  <Button type="text" size="small" aria-label={t('review.more')} icon={<EllipsisOutlined />} />
-                </Dropdown>}
-                {!isConfirmedVersion && <Button
-                  size="small"
-                  type="primary"
-                  onClick={() => {
-                    if (blockingOpen > 0 && !ignoreOpenQuestions) { setQuestionsOpen(true); return; }
-                    if (!hasTarget) { setTargetOpen(true); return; }
-                    if (canConfirm) accessCommand('READ_WRITE', t('confirm.ok'), () => setConfirmOpen(true), 'PRD');
-                  }}
-                >
-                  {t('confirm.trigger')}
-                </Button>}
-                {isConfirmedVersion && <Tag color="success">{t('versions.immutable')}</Tag>}
-              </Space>
-            )}
-            {blockingOpen > 0 && dismissedQuestions !== questionsKey && (
-              <Alert
-                type="warning"
-                showIcon
-                closable
-                onClose={() => setDismissedQuestions(questionsKey)}
-                message={t('confirm.questionsPending', { count: blockingOpen })}
-                action={<Button type="link" size="small" onClick={() => setQuestionsOpen(true)}>{t('confirm.resolveQuestions')}</Button>}
-              />
-            )}
-            {pages.length > 0 && previewMode === PREVIEW_MODE.PROTOTYPE ? <PrdPrototypePreview pages={pages} viewport={viewport}
-              selecting={selectingElement} onSelectingChange={setSelectingElement} onSelectElement={setElementSelection} />
-              : showLivePreview && livePreview ? <iframe title={t('preview.title')} sandbox="allow-scripts" referrerPolicy="no-referrer"
-              style={{ width: '100%', height: '75vh', border: 0 }}
-              srcDoc={'<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: blob:; style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; base-uri \'none\'; form-action \'none\'">' + livePreview} />
-              : <PrdHtmlPreview workitemId={workitemId} versionId={activeVersionId} viewport={viewport} />}
-          </Space>
-        </Card>
+        <section className="prd-design-surface" aria-label={t('preview.title')}>
+          <PrdDesignHeader
+            key={workitemId}
+            workitemId={workitemId} version={activeVersion}
+            agentId={selectedAgentId} review={review} onReadDocument={openDocument}
+            canSubmit={(managedHandoff || !!review) && !!handoff.data?.canSubmit && projectReady && !conversationProcessing
+              && activeVersion?.id === versions[0]?.id && activeVersion?.id !== handoff.data.completed?.versionId}
+            repositoryRequired={handoff.isSuccess && !managedHandoff && !review && !!activeVersion}
+            tabs={<Segmented className="prd-design-tabs" size="small" value={previewMode} onChange={value => {
+              const documentSelected = value === PREVIEW_MODE.DOCUMENT;
+              if (!documentSelected && linkedVersion) setSelectedVersionId(linkedVersion);
+              setPreviewMode(String(value));
+              setDocumentLink(documentSelected ? activeVersionId : null);
+            }}
+              options={[{ value: PREVIEW_MODE.PROTOTYPE, label: t('runtime.design') }, {
+                value: PREVIEW_MODE.DOCUMENT,
+                label: activeVersion?.versionNo
+                  ? t('preview.documentVersion', { versionNo: activeVersion.versionNo })
+                  : t('preview.document'),
+              }]} />}
+            versionActions={<>
+              {activeVersion && !review && <VersionStatusTag status={activeVersion.status} />}
+              {isConfirmedVersion && <Dropdown trigger={['click']} menu={{ items: [
+                { key: 'derive', label: t('review.derive'), disabled: createDraft.isPending || reviewLocked, onClick: handleDeriveDraft },
+              ] }}>
+                <Button type="text" size="small" aria-label={t('review.more')} icon={<EllipsisOutlined />} />
+              </Dropdown>}
+              <Tooltip title={t('versions.historyAndIndex')}>
+                <Button type="text" size="small" icon={<HistoryOutlined />} aria-label={t('versions.historyAndIndex')} onClick={() => setHistoryOpen(true)}>{t('versions.title')}</Button>
+              </Tooltip>
+            </>}
+          />
+            <div className="prd-design-prototype" hidden={previewMode !== PREVIEW_MODE.PROTOTYPE}>
+              {showPreparation ? <div className="aw-design-prepare" role="status">
+                {!prepareFailed && <Spin />}
+                <p>{prepareLabel}</p>
+                {prepareFailed && <Button loading={retrying} onClick={retryBootstrap}>{t('preview.retry')}</Button>}
+              </div> : <PrdDesignBrowser workitemId={workitemId}
+                agentName={selectedAgentName}
+                processing={conversationProcessing}
+                recoveryDisabled={conversationProcessing}
+                onRecoverPreview={setup.managed ? undefined : handleRecoverPreview}
+                onReferences={comments => conversationRef.current?.addComments(comments)} />}
+            </div>
+            {previewMode === PREVIEW_MODE.DOCUMENT
+              && <div className="prd-design-document"><PrdRequirementsDocument workitemId={workitemId} versionId={activeVersionId} /></div>}
+        </section>
 
       </div>
-      <Drawer open={questionsOpen} onClose={() => setQuestionsOpen(false)} title={t('confirm.resolveQuestions')} width={440}
-        footer={!isConfirmedVersion && !hasUnadoptedReply && activeVersion ? <Space direction="vertical" style={{ width: '100%' }}>
-          <Text type="secondary">{t('confirm.ignoreHint')}</Text>
-          <Button block onClick={() => accessCommand('READ_WRITE', t('confirm.ignoreAndContinue'), () => {
-            setIgnoredVersion(confirmationKey);
-            setQuestionsOpen(false);
-            if (!hasTarget) { setTargetOpen(true); return; }
-            setConfirmOpen(true);
-          }, 'PRD')}>{t('confirm.ignoreAndContinue')}</Button>
-        </Space> : null}>
-        <Typography.Paragraph>{t('confirm.questionsGuide')}</Typography.Paragraph>
-        {!hasTarget && <Button type="link" onClick={() => { setQuestionsOpen(false); setTargetOpen(true); }}>{t('target.select')}</Button>}
-        <List dataSource={parsed?.openQuestions.filter(question => question.blocking && !question.resolved) ?? []}
-          renderItem={question => <List.Item><Space direction="vertical">
-            <Text strong>{question.key}</Text><Text>{question.question}</Text>
-            <Button type="link" onClick={() => {
-              setQuestionsOpen(false);
-              setSuggestion({ id: Date.now(), text: t('confirm.answerPrompt', { key: question.key, question: question.question }) });
-            }}>{t('confirm.answerInConversation')}</Button>
-          </Space></List.Item>} />
-      </Drawer>
-
       {/* Deliveries + acceptance, only meaningful once PRD-driven */}
-      {design.deliveryMode === DELIVERY_MODE.PRD_DRIVEN && (
-        <Card size="small" title={t('delivery.title')} style={{ marginTop: 16 }}>
+      {design.deliveryMode === DELIVERY_MODE.PRD_DRIVEN && <details className="prd-workbench-deliveries"><summary>{t('delivery.title')}</summary>
+        <Card size="small">
           {(deliveriesQuery.data ?? []).length === 0 ? (
             <Empty description={t('delivery.empty')} />
           ) : (
@@ -455,25 +413,8 @@ export function PrdDesignWorkbench() {
             </Space>
           )}
         </Card>
-      )}
+      </details>}
 
-      <ConfirmVersionModal
-        open={confirmOpen}
-        version={activeVersion}
-        blockingCount={blockingOpen}
-        ignoreOpenQuestions={ignoreOpenQuestions}
-        confirming={confirmVersion.isPending}
-        hasTarget={hasTarget}
-        onOk={handleConfirm}
-        onCancel={() => { setConfirmOpen(false); setIgnoredVersion(null); }}
-      />
-
-      <StartDeliveryModal
-        open={deliveryOpen}
-        workitemId={workitemId}
-        hasSdlc={false}
-        onClose={() => setDeliveryOpen(false)}
-      />
     </div>
   );
 }
@@ -499,25 +440,10 @@ function PageError({ onBack, label, backLabel }: { onBack: () => void; label: st
   );
 }
 
-// Persistence adds defaults such as schemaVersion/excluded. These do not make an adopted reply new.
-export function matchesPersistedDesign(reply: string, saved: string | null | undefined): boolean {
-  if (!saved) return false;
-  const matches = (source: unknown, stored: unknown): boolean => {
-    if (source === stored) return true;
-    if (Array.isArray(source)) return Array.isArray(stored) && source.length === stored.length && source.every((item, i) => matches(item, stored[i]));
-    if (source && stored && typeof source === 'object' && typeof stored === 'object') {
-      return Object.entries(source).every(([key, value]) => matches(value, (stored as Record<string, unknown>)[key]));
-    }
-    return false;
-  };
-  try { return matches(JSON.parse(reply.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')), JSON.parse(saved)); }
-  catch { return false; }
-}
-
 /** Best-effort parse of a stored design payload for the read-only index; null when absent/invalid. */
 function parseDesign(designJson: string | null): {
+  title: string;
   requirements: { key: string; title: string; priority?: string; excluded?: boolean }[];
-  openQuestions: { key: string; question: string; blocking?: boolean; resolved?: boolean }[];
 } | null {
   if (!designJson) return null;
   try {
@@ -527,12 +453,8 @@ function parseDesign(designJson: string | null): {
           .filter((r) => typeof r?.key === 'string')
           .map((r) => ({ key: r.key as string, title: r.title ?? '', priority: r.priority, excluded: r.excluded }))
       : [];
-    const openQuestions = Array.isArray(obj.openQuestions)
-      ? (obj.openQuestions as { key?: string; question?: string; blocking?: boolean; resolved?: boolean }[])
-          .filter((q) => typeof q?.key === 'string')
-          .map((q) => ({ key: q.key as string, question: q.question ?? '', blocking: q.blocking, resolved: q.resolved }))
-      : [];
-    return { requirements, openQuestions };
+    const title = typeof obj.title === 'string' ? obj.title : '';
+    return { title, requirements };
   } catch {
     return null;
   }

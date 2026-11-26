@@ -1,0 +1,10 @@
+import type { Point } from './visual';
+export const SUPPLY_INTERVAL: number;
+export const SUPPLY_BATCH: number;
+export const SUPPLY_DROP_TIME: number;
+export const PREPARATION_SECONDS: number;
+export const ENTRY_SECONDS: number;
+export const EXIT_SECONDS: number;
+export const DOOR_CLOSE_DELAY: number;
+export const door: { x: number; z: number; width: number; height: number };
+export function supplyPose(time: number): { phase: number; position: Point; heading: number; walking: boolean; visible: boolean; carrying: boolean; leaving: boolean; doorOpen: boolean };

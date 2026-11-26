@@ -4,9 +4,9 @@
 <mapper namespace="com.aliyun.autowonder.repo.RepoDao">
     <insert id="insert" parameterType="com.aliyun.autowonder.repo.RepoDO"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO repo (tenant_id, name, url, default_branch,
+        INSERT INTO repo (tenant_id, name, url, default_branch, design_base_branch,
                           description, scan_status, creator_id, is_deleted, version)
-        VALUES (#{tenantId}, #{name}, #{url}, #{defaultBranch},
+        VALUES (#{tenantId}, #{name}, #{url}, #{defaultBranch}, #{designBaseBranch},
                 #{description}, #{scanStatus}, #{creatorId}, 0, 0)
     </insert>
 

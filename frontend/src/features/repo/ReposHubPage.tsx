@@ -126,6 +126,9 @@ export function ReposHubPage() {
           <Form.Item label={t('fields.branch')} name="defaultBranch">
             <Input placeholder={t('placeholders.branchOptional')} />
           </Form.Item>
+          <Form.Item label={t('fields.designBase')} name="designBaseBranch" extra={t('fields.designBaseHint')}>
+            <Input maxLength={128} />
+          </Form.Item>
           <Form.Item label={t('fields.description')} name="description">
             <Input placeholder={t('placeholders.repoDescription')} />
           </Form.Item>

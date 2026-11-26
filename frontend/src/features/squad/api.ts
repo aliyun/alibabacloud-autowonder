@@ -53,6 +53,8 @@ export interface SquadMember {
   responsibilities?: string;
   sdlcId?: number | null;
   sdlcName?: string;
+  systemTags?: string[] | null;
+  customTags?: string[] | null;
   sdlcSteps?: SquadSdlcStep[];
   executorOnline?: boolean;
 }

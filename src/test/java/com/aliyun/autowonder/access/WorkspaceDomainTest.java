@@ -18,6 +18,8 @@ class WorkspaceDomainTest {
     void mapsControllersToTheirTopLevelPackageDomain() {
         assertEquals(WorkspaceDomain.SDLC, WorkspaceDomain.of(SdlcController.class));
         assertEquals(WorkspaceDomain.WORKITEM, WorkspaceDomain.of(WorkitemController.class));
+        assertEquals(WorkspaceDomain.INSIGHTS,
+                WorkspaceDomain.of(com.aliyun.autowonder.office.OfficeActivityController.class));
         assertEquals(WorkspaceDomain.INTEGRATION,
                 WorkspaceDomain.of(com.aliyun.autowonder.integration.dingtalk.DingTalkBindingController.class));
         assertEquals(WorkspaceDomain.MEMORY,
@@ -31,6 +33,8 @@ class WorkspaceDomainTest {
         assertNull(WorkspaceDomain.firstReadOnly("[\"WORKITEM\"]", SdlcController.class));
         assertEquals(WorkspaceDomain.SDLC, WorkspaceDomain.firstReadOnly("[\"SDLC\"]", SdlcController.class));
         assertNull(WorkspaceDomain.firstReadOnly("[\"SDLC\"]", WorkspaceDomainTest.class));
+        assertEquals(WorkspaceDomain.INSIGHTS, WorkspaceDomain.firstReadOnly("[\"INSIGHTS\"]",
+                com.aliyun.autowonder.office.OfficeActivityController.class));
     }
 
     @Test

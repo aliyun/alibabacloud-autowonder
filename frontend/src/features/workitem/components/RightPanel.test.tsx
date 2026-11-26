@@ -1,6 +1,6 @@
 import { MemoryRouter } from 'react-router-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -52,11 +52,27 @@ function firePointer(type: 'pointerdown' | 'pointermove' | 'pointerup', target: 
   fireEvent(target, new MouseEvent(type, { bubbles: true, cancelable: true, ...coords }));
 }
 
+/** 需求澄清的入口已迁到工单页操作栏；这个包装器用页面级按钮驱动 RightPanel。 */
+function RightPanelWithPageEntry(props: Parameters<typeof RightPanel>[0]) {
+  const { initialMode, onModeChange, ...panelProps } = props;
+  const [mode, setMode] = useState(initialMode ?? 'progress');
+  return <>
+    {mode === 'progress' && <button type="button" onClick={() => {
+      setMode('clarify');
+      onModeChange?.('clarify');
+    }}>AI 需求澄清</button>}
+    <RightPanel {...panelProps} initialMode={mode} onModeChange={next => {
+      setMode(next);
+      onModeChange?.(next);
+    }} />
+  </>;
+}
+
 function renderPanel(props: Partial<Parameters<typeof RightPanel>[0]> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return { queryClient, ...render(
     <MemoryRouter><QueryClientProvider client={queryClient}>
-      <RightPanel
+      <RightPanelWithPageEntry
         workitemId="1"
         participants={[]}
         steps={[]}
@@ -542,7 +558,7 @@ describe('RightPanel page-driven mode switch (工单 53315)', () => {
   it('follows the page into clarify mode after mount', async () => {
     // 「启动交付」前的澄清引导点确认后只改 URL，面板挂载早于这次点击，必须跟着切过去
     const panel = renderPanelRerenderable({ initialMode: 'progress' });
-    expect(screen.getByRole('button', { name: /AI 需求澄清/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('clarify-resize-box')).not.toBeInTheDocument();
 
     panel.rerenderWith({ initialMode: 'clarify' });
 
@@ -557,21 +573,17 @@ describe('RightPanel page-driven mode switch (工单 53315)', () => {
     panel.rerenderWith({ initialMode: 'progress', initialFullscreen: false });
 
     expect(screen.queryByTestId('clarify-resize-box')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /AI 需求澄清/ })).toBeInTheDocument();
   });
 
-  it('keeps an internally entered clarify mode when the caller never reports mode changes', async () => {
-    // ref 守卫要守住的回归：没接 onModeChange 的调用方 initialMode 永远不变，
-    // 拿 mode 去比对会在下一次重渲染时把用户从澄清态拽回进度态
+  it('keeps page-driven clarify mode across unrelated rerenders', async () => {
     const panel = renderPanelRerenderable();
 
-    await userEvent.click(screen.getByRole('button', { name: /AI 需求澄清/ }));
+    panel.rerenderWith({ initialMode: 'clarify' });
     expect(await screen.findByTestId('clarify-resize-box')).toBeInTheDocument();
 
-    panel.rerenderWith({ stepsLoading: true });
+    panel.rerenderWith({ initialMode: 'clarify', stepsLoading: true });
 
     expect(screen.getByTestId('clarify-resize-box')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /AI 需求澄清/ })).not.toBeInTheDocument();
   });
 });
 

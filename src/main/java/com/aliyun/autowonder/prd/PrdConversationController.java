@@ -8,7 +8,9 @@ import com.aliyun.autowonder.common.result.Result;
 import com.aliyun.autowonder.common.web.ConversationEventBoundedResponse;
 import com.aliyun.autowonder.context.AutoWonderContext;
 import com.aliyun.autowonder.conversation.*;
+import com.aliyun.autowonder.conversation.dto.ClarificationElicitationVO;
 import com.aliyun.autowonder.conversation.dto.ConversationEventDisplayDtos;
+import com.aliyun.autowonder.conversation.dto.ElicitationReplyRequest;
 import com.aliyun.autowonder.prd.dto.SaveDesignRequest;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +33,8 @@ public class PrdConversationController {
     private final AgentConversationService execution;
     private final ConversationExecutorRouter router;
     @org.springframework.beans.factory.annotation.Autowired private ConversationTurnEventService events;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) private ConversationElicitationService elicitations;
+    @org.springframework.beans.factory.annotation.Autowired(required = false) private ConversationRuntimePresence runtimePresence;
     private final ConversationEventDisplayReadService displayReadService;
     private final ConversationEventBoundedResponse boundedResponse;
     @org.springframework.beans.factory.annotation.Autowired private ClarificationAttachmentService attachments;
@@ -48,6 +52,7 @@ public class PrdConversationController {
         this.displayReadService = displayReadService; this.boundedResponse = boundedResponse;
     }
     @org.springframework.beans.factory.annotation.Autowired private PrdBrowserService browsers;
+    @org.springframework.beans.factory.annotation.Autowired private PrdReviewService reviews;
     @org.springframework.beans.factory.annotation.Autowired private com.aliyun.autowonder.skill.SkillConnectionTestService browserTests;
     public record BrowserCheck(Long executorId, com.aliyun.autowonder.skill.dto.SkillConnectionTestVO result) {}
     @PostMapping("/browser-check")
@@ -64,18 +69,33 @@ public class PrdConversationController {
         return Result.ok(new BrowserCheck(executor, browserTests.test(selection.skillId(), workspace(), executor)));
     }
     public record Input(Long agentId, String content, String clientMessageId, List<Long> attachmentIds,
-                        PrdBrowserService.Selection browser, PrdPrototypeSelection.Element element) {
-        public Input(Long agentId, String content, String clientMessageId) { this(agentId, content, clientMessageId, List.of(), null, null); }
-        public Input(Long agentId, String content, String clientMessageId, List<Long> attachmentIds) { this(agentId, content, clientMessageId, attachmentIds, null, null); }
+                        PrdBrowserService.Selection browser, PrdPrototypeSelection.Element element,
+                        List<Long> commentIds, String runtimeAction) {
+        public Input(Long agentId,String content,String clientMessageId,List<Long> attachmentIds,PrdBrowserService.Selection browser,PrdPrototypeSelection.Element element) {
+            this(agentId,content,clientMessageId,attachmentIds,browser,element,List.of(),null);
+        }
+        public Input(Long agentId,String content,String clientMessageId,List<Long> attachmentIds,
+                PrdBrowserService.Selection browser,PrdPrototypeSelection.Element element,List<Long> commentIds) {
+            this(agentId,content,clientMessageId,attachmentIds,browser,element,commentIds,null);
+        }
+        public Input(Long agentId, String content, String clientMessageId) { this(agentId, content, clientMessageId, List.of(), null, null, List.of(), null); }
+        public Input(Long agentId, String content, String clientMessageId, List<Long> attachmentIds) { this(agentId, content, clientMessageId, attachmentIds, null, null, List.of(), null); }
     }
     public record History(Long id, List<AgentConversationTurnDO> turns, Map<Long, String> participants,
             Map<Long, List<com.aliyun.autowonder.conversation.dto.ClarificationAttachmentVO>> attachments,
-            boolean turnsHasMore, Long nextBeforeTurnId, Long processingTurnId, String processingStatus) {
+            boolean turnsHasMore, Long nextBeforeTurnId, Long processingTurnId, String processingStatus,
+            boolean executorOnline, boolean cancelSupported, boolean acpInteractionSupported,
+            List<ClarificationElicitationVO> pendingElicitations,
+            List<ClarificationElicitationVO> questionHistory, boolean questionHistoryPaged,
+            List<ClarificationElicitationVO> answerDeliveries) {
         public History(Long id, List<AgentConversationTurnDO> turns, Map<Long, String> participants,
                 Map<Long, List<com.aliyun.autowonder.conversation.dto.ClarificationAttachmentVO>> attachments) {
-            this(id, turns, participants, attachments, false, null, null, null);
+            this(id, turns, participants, attachments, false, null, null, null, false, false, false,
+                    List.of(), List.of(), true, List.of());
         }
     }
+    @org.springframework.beans.factory.annotation.Autowired private WorkitemLaunchDao launchStore;
+    @org.springframework.beans.factory.annotation.Autowired private WorkitemLaunchAccess launchAccess;
     public record Selection(Long agentId, Long squadId) {}
     public record TurnPage(List<AgentConversationTurnDO> items, boolean hasMore, Long nextBeforeTurnId,
             Map<Long, String> participants,
@@ -85,6 +105,8 @@ public class PrdConversationController {
         designs.get(workspace(), workitemId);
         var c = conversations.findLatestByWorkitemChannel(workspace(), CHANNEL, workitemId);
         if (c == null) return Result.ok(null);
+        var launch = launchStore == null ? null : launchStore.find(workspace(), c.getId());
+        if (launch != null) return Result.ok(new Selection(launch.agentId(), launch.squadId()));
         var member = squadMembers.listByAgent(c.getAgentId()).stream()
                 .filter(m -> Objects.equals(m.getTenantId(), workspace())).findFirst();
         return Result.ok(member.map(m -> new Selection(c.getAgentId(), m.getSquadId())).orElse(null));
@@ -112,14 +134,33 @@ public class PrdConversationController {
         Map<Long, String> participants = new HashMap<>();
         for (var row : rows) if (row.getSubmittedUserId() != null && !participants.containsKey(row.getSubmittedUserId())) {
             var u = users.findById(row.getSubmittedUserId());
-            if (u != null) participants.put(u.getId(), u.getNickname() == null ? u.getUsername() : u.getNickname());
+            if (u != null) participants.put(u.getId(), participantName(u));
         }
         var attachmentRows = c == null ? Map.<Long, List<com.aliyun.autowonder.conversation.dto.ClarificationAttachmentVO>>of()
                 : attachments.listByTurnIds(workspace(), c.getId(), rows.stream().map(AgentConversationTurnDO::getId).toList());
+        var pending = c == null || elicitations == null ? List.<ClarificationElicitationVO>of()
+                : elicitations.listPending(workspace(), c.getId()).stream().map(PrdConversationController::pendingElicitation).toList();
+        var deliveries = c == null || elicitations == null ? List.<ClarificationElicitationVO>of()
+                : elicitations.listActiveAnswerDeliveryStatuses(workspace(), c.getId()).stream()
+                        .map(ClarificationElicitationVO::fromDelivery).toList();
+        boolean executorOnline = c != null && c.getExecutorId() != null && runtimePresence != null
+                && runtimePresence.isExecutorOnline(c.getExecutorId());
+        boolean cancelSupported = executorOnline && runtimePresence.supportsProtocolFeature(
+                c.getExecutorId(), ConversationProtocolFeatures.TURN_CANCEL);
+        boolean acpInteractionSupported = executorOnline && runtimePresence.supportsProtocolFeature(
+                c.getExecutorId(), ConversationProtocolFeatures.ACP_INTERACTION);
         return Result.ok(ConversationTurnHistory.envelope(page, p -> new History(c == null ? null : c.getId(),
                 p.items(), participantSubset(p.items(), participants), attachmentSubset(p.items(), attachmentRows),
                 p.hasMore(), p.nextBeforeTurnId(), active == null ? null : active.getId(),
-                active == null ? null : active.getStatus())));
+                active == null ? null : active.getStatus(), executorOnline, cancelSupported,
+                acpInteractionSupported, pending, List.of(), true, deliveries)));
+    }
+
+    private static ClarificationElicitationVO pendingElicitation(AgentConversationElicitationDO record) {
+        return ClarificationElicitationVO.builder()
+                .requestId(record.getRequestId()).turnId(record.getTurnId()).mode(record.getMode())
+                .message(record.getMessage()).requestedSchema(record.getSchemaJson())
+                .status(record.getStatus()).gmtCreate(record.getGmtCreate()).build();
     }
 
     private static Map<Long, String> participantSubset(List<AgentConversationTurnDO> rows, Map<Long, String> all) {
@@ -127,6 +168,12 @@ public class PrdConversationController {
         for (var row : rows) if (all.containsKey(row.getSubmittedUserId()))
             result.put(row.getSubmittedUserId(), all.get(row.getSubmittedUserId()));
         return result;
+    }
+
+    private static String participantName(com.aliyun.autowonder.user.UserDO user) {
+        if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
+        return user.getUsername() == null || user.getUsername().isBlank()
+                ? String.valueOf(user.getId()) : user.getUsername();
     }
     private static Map<Long, List<com.aliyun.autowonder.conversation.dto.ClarificationAttachmentVO>> attachmentSubset(
             List<AgentConversationTurnDO> rows, Map<Long, List<com.aliyun.autowonder.conversation.dto.ClarificationAttachmentVO>> all) {
@@ -137,10 +184,13 @@ public class PrdConversationController {
     @PostMapping
     @Transactional
     public Result<Void> send(@PathVariable long workitemId, @RequestBody Input input) {
-        if (input.agentId() == null || ((input.content() == null || input.content().isBlank()) && (input.attachmentIds() == null || input.attachmentIds().isEmpty()))
+        if (input.agentId() == null || ((input.content() == null || input.content().isBlank()) && (input.attachmentIds() == null || input.attachmentIds().isEmpty()) && (input.commentIds()==null || input.commentIds().isEmpty()))
                 || input.clientMessageId() == null || input.clientMessageId().isBlank())
             throw new BizException(ErrorCode.PARAM_INVALID);
         var c = ensureConversation(workitemId, input.agentId());
+        if (launchStore != null && input.runtimeAction() != null && launchStore.find(workspace(),c.getId()) != null) {
+            throw WorkitemLaunchAccess.failure("managed_preview");
+        }
         var agent = agents.findById(input.agentId());
         String externalId = "web-prd:" + c.getId() + ":" + user() + ":" + input.clientMessageId();
         var existing = turns.findByExternalMsgId(workspace(), externalId);
@@ -153,21 +203,42 @@ public class PrdConversationController {
             }
             return Result.ok(null);
         }
+        PrdDesignHandoffService.requireEditable(handoffs, workspace(), workitemId);
         var ids = input.attachmentIds() == null || input.attachmentIds().isEmpty() ? List.<Long>of()
                 : attachments.requireBindableIds(workspace(), c.getId(), user(), input.attachmentIds());
         AiSessionDO context = new AiSessionDO(); context.setTenantId(workspace()); context.setBizRefId(workitemId);
-        String prompt = prompts.buildSystemPrompt(context) + "\n" + prompts.buildUserPrompt(context, input.content());
+        var currentLaunch = launchStore == null ? null : launchStore.find(workspace(), c.getId());
+        boolean configuring = currentLaunch != null && "CONFIGURING".equals(currentLaunch.phase());
+        String instructions = currentLaunch != null ? prompts.managedConversationPrompt() : prompts.buildConversationSystemPrompt();
+        String prompt = configuring ? PrdPrompts.PREPARE + "\n用户补充：" + input.content()
+                : instructions + "\n" + prompts.buildUserPrompt(context, input.content());
         var browser = browsers.validate(input.browser(), workspace());
         var element = PrdPrototypeSelection.validate(input.element());
+        var comments=input.commentIds()==null || input.commentIds().isEmpty() ? List.<PrdReviewService.CommentSnapshot>of()
+                : reviews.references(workspace(),workitemId,c.getId(),input.commentIds());
         prompt += browsers.prompt(browser);
         prompt += PrdPrototypeSelection.prompt(element);
+        if(!comments.isEmpty()) prompt += "\n【用户选取的设计评审意见】\n" + com.aliyun.autowonder.json.JSON.toJSONString(comments.stream().map(comment -> Map.of(
+                "id",comment.getId(),"commentText",comment.getCommentText(),"routePath",comment.getRoutePath(),
+                "element",com.aliyun.autowonder.json.JSON.parseObject(comment.getElementJson()),"sourceKey",comment.getSourceKey(),"runtimeRevision",comment.getRuntimeRevision())).toList());
         Map<String, Object> turnContext = new LinkedHashMap<>();
         turnContext.put("userMessage", input.content() == null ? "" : input.content());
         turnContext.put("browser", browser);
+        if (input.runtimeAction() != null) {
+            if (!Set.of("PREPARE", "RECOVER").contains(input.runtimeAction())) {
+                throw new BizException(ErrorCode.PARAM_INVALID);
+            }
+            turnContext.put("runtimeAction", input.runtimeAction());
+        }
         if (element != null) turnContext.put("element", element.normalized());
+        if(!comments.isEmpty()) turnContext.put("reviewComments",comments.stream().map(comment -> Map.of(
+                "id",comment.getId(),"commentText",comment.getCommentText(),"routePath",comment.getRoutePath(),
+                "element",com.aliyun.autowonder.json.JSON.parseObject(comment.getElementJson()),"version",comment.getVersion(),"sourceKey",comment.getSourceKey(),"runtimeRevision",comment.getRuntimeRevision())).toList());
+        if(!comments.isEmpty()) turnContext.put("reviewCommentsDisplay",PrdReviewService.historyReferences(comments));
         execution.submitTurn(workspace(), agent.getId(), CHANNEL, c.getChannelConversationId(), prompt,
                 externalId, com.aliyun.autowonder.json.JSON.toJSONString(turnContext), user());
         var inbound = turns.findByExternalMsgId(workspace(), externalId);
+        if(!comments.isEmpty() && inbound!=null) reviews.sent(workspace(),comments,inbound.getId());
         if (!ids.isEmpty()) attachments.bindToTurn(workspace(), c.getId(), user(), ids, inbound.getId());
         return Result.ok(null);
     }
@@ -178,14 +249,27 @@ public class PrdConversationController {
         var c = ensureConversation(workitemId, input.agentId());
         return Result.ok(new History(c.getId(), List.of(), Map.of(), Map.of()));
     }
+    @org.springframework.beans.factory.annotation.Autowired
+    private PrdDesignHandoffDao handoffs;
+
     private AgentConversationDO ensureConversation(long workitemId, long agentId) {
         designs.get(workspace(), workitemId);
         // Serialize initial creation so participants opening the same employee share one conversation.
         workitems.findByIdForUpdate(workitemId, workspace());
         var c = find(workitemId, agentId);
+        var launch = launchStore == null ? null : launchStore.latest(workspace(), workitemId, "DESIGN");
+        if (launch != null && (launch.agentId() != agentId
+                || !Set.of("ACTIVE", "CONFIGURING").contains(launch.phase()))) throw WorkitemLaunchAccess.failure("not_ready");
+        if (launchStore != null && launch == null && !legacyDesign(workitemId,c)) throw WorkitemLaunchAccess.failure("select_source");
+        if (c != null && launchAccess != null) launchAccess.requireConversationRepo(c);
         var agent = agents.findById(agentId);
         if (agent == null || !Objects.equals(agent.getTenantId(), workspace()) || agent.getOnlineVersionId() == null)
             throw new BizException(ErrorCode.PARAM_INVALID);
+        if (launch != null && c != null) {
+            if (!router.canQueueDesignOnOwner(workspace(), agent.getId(), agent.getOnlineVersionId(), c.getExecutorId()))
+                throw new BizException(ErrorCode.CLARIFICATION_EXECUTOR_OFFLINE);
+            return c;
+        }
         Long executor = router.select(workspace(), agent.getId(), agent.getOnlineVersionId(), c == null ? null : c.getExecutorId());
         if (executor == null) throw new BizException(ErrorCode.CLARIFICATION_EXECUTOR_OFFLINE);
         if (c == null) {
@@ -196,6 +280,11 @@ public class PrdConversationController {
             c.setStatus("ACTIVE"); c.setLastTurnAt(new Date()); conversations.insert(c);
         }
         return c;
+    }
+    @org.springframework.beans.factory.annotation.Autowired private PrdDesignRuntimeDao runtimeRows;
+    private boolean legacyDesign(long item,AgentConversationDO conversation) {
+        return runtimeRows.findLatestByWorkitem(workspace(),item) != null || designs.get(workspace(),item).getLatestVersionNo() > 0
+                || conversation != null && !ConversationTurnHistory.page(turns,workspace(),conversation.getId(),null,1,true).items().isEmpty();
     }
     private AgentConversationDO requireConversation(long workitemId, long conversationId) {
         designs.get(workspace(), workitemId);
@@ -215,7 +304,7 @@ public class PrdConversationController {
         Map<Long, String> participants = new HashMap<>();
         for (var row : page.items()) if (row.getSubmittedUserId() != null && !participants.containsKey(row.getSubmittedUserId())) {
             var u = users.findById(row.getSubmittedUserId());
-            if (u != null) participants.put(u.getId(), u.getNickname() == null ? u.getUsername() : u.getNickname());
+            if (u != null) participants.put(u.getId(), participantName(u));
         }
         var attachmentRows = attachments.listByTurnIds(workspace(), conversationId,
                 page.items().stream().map(AgentConversationTurnDO::getId).toList());
@@ -231,6 +320,41 @@ public class PrdConversationController {
         requireConversation(workitemId, conversationId);
         boundedResponse.write(request, response, Result.ok(ConversationTurnHistory.content(
                 turns, workspace(), conversationId, turnId, cursor, true)));
+    }
+
+    @GetMapping("/{conversationId}/turns/{turnId}/questions/page")
+    public void questionPage(@PathVariable long workitemId, @PathVariable long conversationId,
+            @PathVariable long turnId, @RequestParam(required = false) Long beforeId,
+            @RequestParam(required = false) Long afterId,
+            HttpServletRequest request, HttpServletResponse response) throws IOException {
+        requireConversation(workitemId, conversationId);
+        boundedResponse.write(request, response, Result.ok(
+                elicitations.questionPage(workspace(), conversationId, turnId, beforeId, afterId)));
+    }
+
+    @GetMapping("/{conversationId}/turns/{turnId}/questions/{id}/content")
+    public void questionContent(@PathVariable long workitemId, @PathVariable long conversationId,
+            @PathVariable long turnId, @PathVariable long id, @RequestParam(required = false) String cursor,
+            HttpServletRequest request, HttpServletResponse response) throws IOException {
+        requireConversation(workitemId, conversationId);
+        boundedResponse.write(request, response, Result.ok(
+                elicitations.questionContent(workspace(), conversationId, turnId, id, cursor)));
+    }
+
+    @PostMapping("/{conversationId}/elicitations/{requestId}/reply")
+    public Result<Void> replyElicitation(@PathVariable long workitemId, @PathVariable long conversationId,
+            @PathVariable String requestId, @RequestBody ElicitationReplyRequest request) {
+        requireConversation(workitemId, conversationId);
+        elicitations.reply(workspace(), conversationId, requestId, request.getAction(), request.getContent(), user());
+        return Result.ok(null);
+    }
+
+    @PostMapping("/{conversationId}/turns/{turnId}/cancel")
+    public Result<Void> cancelTurn(@PathVariable long workitemId, @PathVariable long conversationId,
+            @PathVariable long turnId) {
+        requireConversation(workitemId, conversationId);
+        execution.requestTurnCancel(workspace(), conversationId, turnId);
+        return Result.ok(null);
     }
 
     @GetMapping("/{conversationId}/events")

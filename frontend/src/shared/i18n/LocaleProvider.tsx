@@ -8,7 +8,8 @@ const SETTING_KEY = 'ui.locale';
 const STORAGE_KEY = 'aw.locale';
 const cacheKey = (account: number | null) => account === null ? STORAGE_KEY : `${STORAGE_KEY}.user.${account}`;
 function currentAccount() { const state = useAuthStore.getState(); return state.accessToken ? state.user?.id ?? null : null; }
-function readLocale(account: number | null): Locale {
+function readLocale(account: number | null, guestLocale?: Locale): Locale {
+  if (account === null && guestLocale) return guestLocale;
   try { const cached = localStorage.getItem(cacheKey(account)); if (cached === 'en-US' || cached === 'zh-CN') return cached; } catch { /* Storage can be disabled. */ }
   return browserLocale();
 }
@@ -16,9 +17,9 @@ function cacheLocale(account: number | null, locale: Locale) {
   try { localStorage.setItem(cacheKey(account), locale); } catch { /* Keep current-tab switching available. */ }
 }
 const LocaleContext = createContext<{ locale: Locale; setLocale: (locale: Locale) => void } | null>(null);
-export function LocaleProvider({ children }: { children: ReactNode }) {
+export function LocaleProvider({ children, guestLocale }: { children: ReactNode; guestLocale?: Locale }) {
   const account = useAuthStore(state => state.accessToken ? state.user?.id ?? null : null);
-  const [locale, updateLocale] = useState<Locale>(() => readLocale(account));
+  const [locale, updateLocale] = useState<Locale>(() => readLocale(account, guestLocale));
   const identity = useRef({ account, epoch: 0 });
   if (identity.current.account !== account) identity.current = { account, epoch: identity.current.epoch + 1 };
   const revision = useRef(0);
@@ -32,7 +33,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     const started = revision.current;
-    void i18n.changeLanguage(readLocale(account));
+    void i18n.changeLanguage(readLocale(account, guestLocale));
     if (account !== null) {
       void getMySetting(SETTING_KEY).then(setting => {
         if (!active || currentAccount() !== account || revision.current !== started || !setting.valueJson) return;
@@ -44,13 +45,14 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       }).catch(() => { /* Cached preference remains available while offline. */ });
     }
     const syncStorage = (event: StorageEvent) => {
+      if (account === null && guestLocale) return;
       if (event.key !== cacheKey(account) && event.key !== null) return;
       revision.current++;
       void i18n.changeLanguage(event.newValue === 'en-US' || event.newValue === 'zh-CN' ? event.newValue : readLocale(account));
     };
     window.addEventListener('storage', syncStorage);
     return () => { active = false; window.removeEventListener('storage', syncStorage); };
-  }, [account]);
+  }, [account, guestLocale]);
   function setLocale(next: Locale) {
     if (next !== 'zh-CN' && next !== 'en-US') return;
     revision.current++;

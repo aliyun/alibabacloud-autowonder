@@ -15,12 +15,13 @@ interface ConversationEventViewProps {
   artifacts?: Artifact[];
   onArtifactClick?: (artifact: Artifact) => void;
   onOpenEventContent?: (eventId: number, summary: string) => void;
-  /** 折叠状态作用域（入口+会话），避免不同会话的同名节点串展开状态。 */
+  showProcessingIndicator?: boolean;
+  /** 避免不同会话的同名节点共用展开状态。 */
   foldScope?: string;
 }
 
 export function ConversationEventView({
-  nodes, isProcessing, artifacts, onArtifactClick, onOpenEventContent, foldScope,
+  nodes, isProcessing, artifacts, onArtifactClick, onOpenEventContent, showProcessingIndicator = true, foldScope,
 }: ConversationEventViewProps) {
   const { t } = useTranslation('workitem');
   // null 表示跟随尾部：新节点到达时窗口随之前移，不依赖与旧长度的比较（异步提交下会滞后卡住）。
@@ -49,7 +50,7 @@ export function ConversationEventView({
   const hasReplyText = nodes.some((node) => node.kind === 'text' && !!node.text);
   const latest = nodes.find(node => node.contentWindow?.navigation)?.contentWindow;
 
-  if (nodes.length === 0 && isProcessing) {
+  if (nodes.length === 0 && isProcessing && showProcessingIndicator) {
     return (
       <div style={{ padding: 16, textAlign: 'center' }}>
         <Spin indicator={<LoadingOutlined />} />
@@ -66,11 +67,11 @@ export function ConversationEventView({
 
   return (
     <FoldScopeContext.Provider value={foldScope ?? ''}>
-    <div style={{ padding: '8px 0' }}>
+    <div className="aw-cl-event-list" style={{ padding: '8px 0' }}>
       {latest && <div style={{ position: 'sticky', top: 0, zIndex: 1 }}><EventWindowLatest window={latest} /></div>}
       {start > 0 && <><div aria-hidden style={{ height: start * 48, overflowAnchor: 'none' }} /><div ref={earlier} data-testid="events-window-earlier" style={{ height: 1, overflowAnchor: 'none' }} /></>}
       {nodes.slice(start, end).map((node) => (
-        <div key={node.id} data-event-body={node.id} data-content-first={node.contentWindow?.first}
+        <div className="aw-cl-event-row" key={node.id} data-event-body={node.id} data-content-first={node.contentWindow?.first}
           data-content-last={node.contentWindow?.last}>
           {node.contentWindow && !node.contentWindow.navigation && (node.contentWindow.first > 0 || node.contentWindow.evicted) &&
             <EventWindowBoundary window={node.contentWindow} direction={node.contentWindow.evicted ? 'restore' : 'earlier'} />}
@@ -86,7 +87,7 @@ export function ConversationEventView({
         </div>
       ))}
       {end < nodes.length && <><div ref={later} style={{ height: 1, overflowAnchor: 'none' }} /><div aria-hidden style={{ height: (nodes.length - end) * 48, overflowAnchor: 'none' }} /></>}
-      {isProcessing && !hasReplyText && (
+      {showProcessingIndicator && isProcessing && !hasReplyText && (
         <Spin indicator={<LoadingOutlined />} style={{ marginTop: 8 }} />
       )}
     </div>

@@ -10,6 +10,21 @@ public interface ConversationTransport {
             Integer dispatchAttempt);
 
     /**
+     * 下发带有本轮平台运行时上下文的对话。运行时上下文属于受信任的系统提示，
+     * 不得拼入用户消息正文。默认实现兼容不区分两类提示的旧传输实现。
+     */
+    default void send(AgentConversationDO conv, Long turnId, String content, String systemPrompt,
+            String runtimePrompt, Integer dispatchAttempt) {
+        String effectivePrompt = systemPrompt;
+        if (runtimePrompt != null && !runtimePrompt.isBlank()) {
+            effectivePrompt = (systemPrompt == null || systemPrompt.isBlank())
+                    ? runtimePrompt
+                    : systemPrompt + "\n\n" + runtimePrompt;
+        }
+        send(conv, turnId, content, effectivePrompt, dispatchAttempt);
+    }
+
+    /**
      * 通知 Runtime 终止指定轮次。Runtime 应立即停止生成，并以
      * CONVERSATION_TURN_ACK(status=CANCELED, replyMarkdown=已产出的部分内容) 收尾。
      */

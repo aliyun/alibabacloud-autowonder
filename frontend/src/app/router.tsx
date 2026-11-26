@@ -58,11 +58,16 @@ const WorkitemDetailPage = lazyWithChunkReload(() => import('@/features/workitem
   .then(module => ({ default: module.WorkitemDetailPage })));
 const PrdDesignWorkbench = lazyWithChunkReload(() => import('@/features/prd/PrdDesignWorkbench')
   .then(module => ({ default: module.PrdDesignWorkbench })));
+const PrdSharedReviewPage = lazyWithChunkReload(() => import('@/features/prd/PrdSharedReviewPage')
+  .then(module => ({ default: module.PrdSharedReviewPage })));
 const ReposHubPage = lazyWithChunkReload(() => import('@/features/repo/ReposHubPage')
   .then(module => ({ default: module.ReposHubPage })));
+const OfficePage = lazyWithChunkReload(() => import('@/features/office/OfficePage')
+  .then(module => ({ default: module.OfficePage })));
 
 export function createAppRoutes(): RouteObject[] {
   const routes: RouteObject[] = [
+    { path: '/design-reviews/:token', element: <RouteGuard requireWorkspace={false}><PrdSharedReviewPage /></RouteGuard> },
     { path: '/api/share/workitems/:token/:kind/:id', element: <SharedArtifactPage /> },
     {
       element: <AppLayout helpCenter />,
@@ -175,10 +180,15 @@ export function createAppRoutes(): RouteObject[] {
         { path: '/settings', element: <SettingsPage /> },
         { path: '/settings/backups', element: <ProjectBackupsPage /> },
         { path: '/settings/environment-variables', element: <EnvironmentVariablesPage /> },
+        { path: '/office', element: <Suspense fallback={<Spin />}><OfficePage /></Suspense> },
         { path: '/insights', element: <InsightsPage /> },
         { path: '/about', element: <AboutAutoWonderPage /> },
       ],
     },
+    ...(import.meta.env.DEV ? [
+      { path: '/office-preview', element: <RouteGuard><div className="awo-preview"><Suspense fallback={<Spin />}><OfficePage /></Suspense></div></RouteGuard> },
+      { path: '/office-demo', element: <Suspense fallback={<Spin />}><OfficePage preview /></Suspense> },
+    ] : []),
     { path: '*', element: <Navigate to="/login" replace /> },
   ];
   const protect = (route: RouteObject): RouteObject => ({

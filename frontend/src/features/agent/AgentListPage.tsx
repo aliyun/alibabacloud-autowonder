@@ -18,6 +18,7 @@ import { useAuthStore } from '@/shared/auth/store';
 import { AgentTagList } from './components/AgentTagList';
 import { AgentTagsEditor } from './components/AgentTagsEditor';
 import type { Agent, AgentKind } from './api';
+import { isPrdDesignSdlc, PrdDesignSdlcTag } from './designSdlc';
 import { SquadSelect, SquadViewSwitch, useSquadOptions } from '@/features/squad/SquadFilterBar';
 import { groupBySquad } from '@/features/squad/squadGrouping';
 import { readViewPreference, writeViewPreference } from '@/shared/lib/viewPreference';
@@ -339,7 +340,9 @@ function getAgentColumns({ sdlcText, onView, onEdit, onDelete, canEditTags }: Ag
         return sdlc && agent.sdlcId != null
           ? (
             <EllipsisText tooltip={sdlc}>
-              <Link className="agent-text-link" to={`/sdlcs/${agent.sdlcId}`}>{sdlc}</Link>
+              <Link className="agent-text-link" to={`/sdlcs/${agent.sdlcId}`}>
+                {isPrdDesignSdlc(sdlc) ? <PrdDesignSdlcTag name={sdlc} /> : sdlc}
+              </Link>
             </EllipsisText>
           )
           : <span className="agent-sdlc-unbound">{t('display.notBound')}</span>;
@@ -496,7 +499,7 @@ function AgentCard({ agent, sdlc }: { agent: Agent; sdlc: string | null }) {
           {sdlc && agent.sdlcId != null
             ? (
               <Link className="agent-card-sdlc-v agent-text-link" to={`/sdlcs/${agent.sdlcId}`} title={sdlc}>
-                {sdlc}
+                {isPrdDesignSdlc(sdlc) ? <PrdDesignSdlcTag name={sdlc} /> : sdlc}
               </Link>
             )
             : <span className="agent-card-sdlc-v agent-sdlc-unbound">{t('display.notBound')}</span>}

@@ -10,6 +10,8 @@ public class UpdateRepoRequest {
     private String name;
     private String url;
     private String defaultBranch;
+    private String designBaseBranch;
+    private boolean designBaseBranchPresent;
     private String description;
     private boolean namePresent;
     private boolean urlPresent;
@@ -37,6 +39,10 @@ public class UpdateRepoRequest {
         if (body.has("defaultBranch")) {
             req.setDefaultBranchPresent(true);
             req.setDefaultBranch(textOrNull(body.get("defaultBranch")));
+        }
+        if (body.has("designBaseBranch")) {
+            req.setDesignBaseBranchPresent(true);
+            req.setDesignBaseBranch(textOrNull(body.get("designBaseBranch")));
         }
         if (body.has("description")) {
             req.setDescriptionPresent(true);

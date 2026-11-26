@@ -11,6 +11,16 @@ const call = (over: Partial<TimelineToolCall> = {}): TimelineToolCall => ({
 });
 
 describe('ToolCallNode', () => {
+  it('keeps execution details collapsed by default even when rich output exists', () => {
+    const view = render(<ToolCallNode tool={call({
+      toolKind: 'read',
+      locations: [{ path: 'src/App.tsx', line: 12 }],
+      output: 'file content',
+    })} />);
+
+    expect(view.container.querySelector('details')?.open).toBe(false);
+  });
+
   it('shows the ACP title instead of the raw tool name when available', () => {
     render(<ToolCallNode tool={call({ toolKind: 'execute', title: '运行单元测试' })} />);
     expect(screen.getByText('运行单元测试')).toBeInTheDocument();
@@ -130,6 +140,8 @@ describe('ToolCallNode', () => {
     expect(screen.getByTestId('tool-locations')).toHaveTextContent('src/b.ts');
     expect(screen.getByTestId('tool-input')).toHaveTextContent('src/a.ts');
     expect(screen.getByTestId('tool-output')).toHaveTextContent('file content');
+    expect(screen.getByTestId('tool-input-chevron').querySelector('.aw-stroke-icon')).not.toBeNull();
+    expect(screen.getByTestId('tool-output-chevron').querySelector('.aw-stroke-icon')).not.toBeNull();
   });
 
   it('renders nothing extra for a bare call', () => {

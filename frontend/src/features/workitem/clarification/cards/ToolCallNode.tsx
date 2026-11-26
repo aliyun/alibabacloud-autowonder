@@ -36,12 +36,10 @@ export function ToolCallNode({ tool, foldKey }: ToolCallNodeProps) {
   const icon = KIND_ICON[tool.toolKind ?? 'other'] ?? KIND_ICON.other;
   const diffs = tool.diffs ?? [];
   const hasLocations = !!tool.locations && tool.locations.length > 0;
-  // 位置、diff、终端输出原本平铺可见，折叠后仍默认展开；入参/出参保持各自折叠。
-  const visibleByDefault = hasLocations || diffs.length > 0 || !!tool.terminalOutput;
-  const hasBody = visibleByDefault || !!tool.input || !!tool.output;
+  const hasBody = hasLocations || diffs.length > 0 || !!tool.terminalOutput || !!tool.input || !!tool.output;
 
   return (
-    <details className="aw-cl-step" data-testid={`tool-call-${tool.callId}`} open={visibleByDefault}>
+    <details className="aw-cl-step" data-testid={`tool-call-${tool.callId}`}>
       <summary>
         <span className="ic">{icon}</span>
         <span className="t" data-testid="tool-call-title" title={tool.title || tool.tool}>
@@ -90,14 +88,18 @@ export function ToolCallNode({ tool, foldKey }: ToolCallNodeProps) {
 
           {tool.input ? (
             <PersistentFold foldKey={`${foldKey ?? tool.callId}:input`} style={{ marginTop: 4 }}
-              summaryStyle={SUMMARY_STYLE} summary={t('clarification.toolInput')}>
+              className="aw-cl-subfold" summaryStyle={SUMMARY_STYLE}
+              summary={<><span className="k">{t('clarification.toolInput')}</span>
+                <span className="chev" data-testid="tool-input-chevron"><AwStrokeIcon name="chev-d" size={12} /></span></>}>
               <pre className="aw-cl-pre" data-testid="tool-input">{tool.input}</pre>
             </PersistentFold>
           ) : null}
 
           {tool.output ? (
             <PersistentFold foldKey={`${foldKey ?? tool.callId}:output`} style={{ marginTop: 4 }}
-              summaryStyle={SUMMARY_STYLE} summary={t('clarification.toolOutput')}>
+              className="aw-cl-subfold" summaryStyle={SUMMARY_STYLE}
+              summary={<><span className="k">{t('clarification.toolOutput')}</span>
+                <span className="chev" data-testid="tool-output-chevron"><AwStrokeIcon name="chev-d" size={12} /></span></>}>
               <pre className="aw-cl-pre" data-testid="tool-output">{tool.output}</pre>
             </PersistentFold>
           ) : null}

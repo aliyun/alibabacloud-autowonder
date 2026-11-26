@@ -1,5 +1,7 @@
 {
   "fields": {
+    "designBase": "交互设计基线分支",
+    "designBaseHint": "填写后可用于交互设计，每个需求从此分支创建独立分支。留空则不用于交互设计。",
     "id": "ID",
     "name": "名称",
     "url": "URL",

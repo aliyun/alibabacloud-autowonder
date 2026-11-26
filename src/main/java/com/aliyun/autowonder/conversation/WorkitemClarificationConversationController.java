@@ -33,6 +33,26 @@ import java.util.List;
 @RequireWorkspaceAccess(value = WorkspaceAccessLevel.READ_ONLY, action = "查看工单澄清会话", actionKey = "access.action.view_work_item_clarification_conversations")
 public class WorkitemClarificationConversationController {
 
+    @org.springframework.beans.factory.annotation.Autowired private com.aliyun.autowonder.prd.WorkitemLaunchService launches;
+
+    @GetMapping("/launch")
+    public Result<com.aliyun.autowonder.prd.WorkitemLaunchService.State> launchState(@PathVariable long workitemId) {
+        return Result.ok(launches.read(AutoWonderContext.get().getCurrentWorkspaceId(),workitemId,false));
+    }
+    @PostMapping("/launch/check")
+    @RequireWorkspaceAccess(value = WorkspaceAccessLevel.READ_WRITE,
+            action = "创建工单澄清会话", actionKey = "access.action.create_a_work_item_clarification_conversation")
+    public Result<Void> checkLaunch(@PathVariable long workitemId, @RequestBody com.aliyun.autowonder.prd.WorkitemLaunchAccess.Choice choice) {
+        launches.check(AutoWonderContext.get().getCurrentWorkspaceId(),workitemId,false,choice);
+        return Result.ok(null);
+    }
+    @PostMapping("/launch")
+    @RequireWorkspaceAccess(value = WorkspaceAccessLevel.READ_WRITE,
+            action = "创建工单澄清会话", actionKey = "access.action.create_a_work_item_clarification_conversation")
+    public Result<com.aliyun.autowonder.prd.WorkitemLaunchService.State> startLaunch(@PathVariable long workitemId,
+            @RequestBody com.aliyun.autowonder.prd.WorkitemLaunchAccess.Choice choice) {
+        return Result.ok(launches.start(AutoWonderContext.get().getCurrentWorkspaceId(),workitemId,AutoWonderContext.get().getUserId(),false,choice));
+    }
     private final WorkitemClarificationConversationService service;
     private final ConversationTurnEventService turnEventService;
     private final ConversationCommandsService commandsService;
