@@ -5,6 +5,14 @@ versions released in the standalone GitHub repository link to their GitHub
 releases. Earlier entries link to historical version-note snapshots and use
 their recorded dates.
 
+## [1.4.1](releases/release_v1.4.1_20261126.md) (November 26, 2026)
+
+### Bug fixes
+
+- Pre-fill the deployment version and report the Community release version on
+  the About page when deployment configuration is missing, blank, or still uses
+  the legacy `x.x.x` placeholder.
+
 ## [1.4.0](https://github.com/aliyun/alibabacloud-autowonder/releases/tag/1.4.0) (November 26, 2026)
 
 ### Features

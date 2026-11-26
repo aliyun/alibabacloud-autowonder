@@ -8,14 +8,19 @@ import com.aliyun.autowonder.storage.OssProperties;
 import com.aliyun.autowonder.storage.StoredObject;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockMultipartFile;
 import org.yaml.snakeyaml.Yaml;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Parameter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -100,7 +105,7 @@ class PlatformBrandingServiceTest {
         assertNull(config.getDomain());
         assertEquals("https://daily.auto-wonder.example.com/api/mcp", config.getMcpBaseUrl());
         assertEquals("0.2.130", config.getRecommendedRuntimeVersion());
-        assertEquals("x.x.x", config.getDeploymentVersion());
+        assertEquals(PlatformBrandingService.DEFAULT_DEPLOYMENT_VERSION, config.getDeploymentVersion());
         assertFalse(config.isCommunityEdition());
         assertFalse(config.isCanManage());
     }
@@ -351,11 +356,31 @@ class PlatformBrandingServiceTest {
     }
 
     @Test
-    void deploymentVersionFallsBackToPlaceholderWhenBlank() {
-        PlatformBrandingDao dao = mock(PlatformBrandingDao.class);
-        PlatformBrandingService service = newService(dao, new InMemoryObjectStorage(), "  ");
+    void communityDeploymentDefaultsMatchReleaseVersion() throws IOException {
+        String releaseVersion = Files.readString(Path.of("VERSION")).strip();
+        assertTrue(releaseVersion.matches("[0-9]+\\.[0-9]+\\.[0-9]+"));
+        MockEnvironment environment = new MockEnvironment();
+        new YamlPropertySourceLoader()
+                .load("community", new FileSystemResource("src/main/resources/application.yml"))
+                .forEach(environment.getPropertySources()::addLast);
 
-        assertEquals("x.x.x", service.publicConfig().getDeploymentVersion());
+        assertEquals(releaseVersion, environment.getRequiredProperty("autowonder.version"));
+        assertEquals(List.of("AUTOWONDER_VERSION=" + releaseVersion),
+                Files.readAllLines(Path.of("docs/community/application.env.example")).stream()
+                        .filter(line -> line.startsWith("AUTOWONDER_VERSION="))
+                        .toList());
+        environment.setProperty("AUTOWONDER_VERSION", "9.8.7");
+        assertEquals("9.8.7", environment.getRequiredProperty("autowonder.version"));
+    }
+
+    @Test
+    void deploymentVersionFallsBackToReleaseVersionForLegacyValues() throws IOException {
+        String releaseVersion = Files.readString(Path.of("VERSION")).strip();
+        PlatformBrandingDao dao = mock(PlatformBrandingDao.class);
+        for (String value : new String[]{null, "", "  ", "x.x.x"}) {
+            PlatformBrandingService service = newService(dao, new InMemoryObjectStorage(), value);
+            assertEquals(releaseVersion, service.publicConfig().getDeploymentVersion());
+        }
     }
 
     @Test
