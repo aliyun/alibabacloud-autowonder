@@ -46,9 +46,9 @@ required for a community build and runtime.
      `skills/` and `.agents/` must be synced to the external GitHub repository
      at the root of `aliyun/alibabacloud-autowonder`.
    - preserve the Community-owned root `LICENSE`, `README.md`, `README.zh-CN.md`,
-     their illustrations, and [the changelog](CHANGELOG.md) during master syncs.
-     Bring any public license changes back into Community before the next GitHub
-     mirror.
+     [`CHANGELOG.md`](../../CHANGELOG.md), and the README illustrations during
+     master syncs. Bring any public license changes back into Community before
+     the next GitHub mirror.
 5. The root `e2e-tests/` directory is a community-owned verification boundary
    and is an explicit exception to rule 3. During an upstream sync, never copy,
    merge, cherry-pick, restore, or otherwise import `origin/master` E2E files or
@@ -327,10 +327,10 @@ repository is a blocking sync defect.
 
 ## Required Changelog
 
-Maintain [CHANGELOG.md](CHANGELOG.md) on the Community branch. In every sync
-that increments `VERSION`, add the new version at the top of the changelog in
-the same MR as its release file. Summarize user-visible changes under the
-applicable Features, Enhancements, Bug fixes, and Upgrade notes headings.
+Maintain the root [CHANGELOG.md](../../CHANGELOG.md) on the Community branch.
+In every sync that increments `VERSION`, add the new version at the top of the
+changelog in the same MR as its release file. Summarize user-visible changes
+under the applicable Features, Enhancements, Bug fixes, and Upgrade notes headings.
 Call out compatibility changes and required migration steps. Link the version
 to its Community release note or its canonical GitHub Release.
 

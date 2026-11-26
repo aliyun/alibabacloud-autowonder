@@ -18,16 +18,6 @@ AutoWonder 源于阿里云内部的 AI 原生工程实践，**推动软件交付
 
 如需快速搭建概念验证（POC）环境，可使用[阿里云部署 Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md)。
 
-## 推荐部署架构
-
-推荐采用跨可用区高可用部署，使用两个应用节点和私网数据服务。
-
-<p align="center">
-  <a href="docs/images/autowonder-deployment-architecture.png">
-    <img src="docs/images/autowonder-deployment-architecture.png" alt="AutoWonder 推荐部署架构" width="1048">
-  </a>
-</p>
-
 ## 三端协作
 
 用户可通过 AutoWonder 原生工单平台、钉钉和飞书群聊等受支持的即时通讯（IM）渠道，
@@ -36,6 +26,16 @@ AutoWonder 源于阿里云内部的 AI 原生工程实践，**推动软件交付
 <p align="center">
   <a href="docs/images/autowonder-collaboration-model.png">
     <img src="docs/images/autowonder-collaboration-model.png" alt="AutoWonder 三端协作模式" width="1048">
+  </a>
+</p>
+
+## 推荐部署架构
+
+推荐采用跨可用区高可用部署，使用两个应用节点和私网数据服务。
+
+<p align="center">
+  <a href="docs/images/autowonder-deployment-architecture.png">
+    <img src="docs/images/autowonder-deployment-architecture.png" alt="AutoWonder 推荐部署架构" width="1048">
   </a>
 </p>
 
@@ -58,6 +58,8 @@ AutoWonder 源于阿里云内部的 AI 原生工程实践，**推动软件交付
 
 部署详情请参阅[社区运行指南](docs/community/README.md)和
 [阿里云部署 Skill](skills/deploying-autowonder-on-alibaba-cloud/SKILL.md)。
+
+版本亮点和升级注意事项请参阅[变更日志](CHANGELOG.md)。
 
 ## 开源许可证
 

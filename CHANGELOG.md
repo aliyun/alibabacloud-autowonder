@@ -27,7 +27,7 @@ their recorded dates.
 
 ### Upgrade notes
 
-- Use the [Community upgrade Skill](../../skills/upgrading-autowonder-on-alibaba-cloud/SKILL.md)
+- Use the [Community upgrade Skill](skills/upgrading-autowonder-on-alibaba-cloud/SKILL.md)
   to plan and apply pending migrations before starting the new server. This
   release adds V123–V130. V125 requires a maintenance window with database
   writers stopped. Allow time for V129 to build its index on large
@@ -59,7 +59,7 @@ their recorded dates.
   index changes.
 - Email verification defaults to off. Configure and test SMTP before enabling it.
 
-## [1.2.0](../../releases/release_v1.2.0_20261110.md) (November 10, 2026)
+## [1.2.0](releases/release_v1.2.0_20261110.md) (November 10, 2026)
 
 ### Features
 
@@ -85,7 +85,7 @@ their recorded dates.
 - Verify a restorable database backup and apply V101–V113 in order before
   starting the new server. Run each migration in a single database session.
 
-## [1.1.0](../../releases/release_v1.1.0_20261028.md) (October 28, 2026)
+## [1.1.0](releases/release_v1.1.0_20261028.md) (October 28, 2026)
 
 ### Features
 
@@ -106,7 +106,7 @@ their recorded dates.
 - Back up the database and encryption key, stop old servers, and apply V089–V100.
   Resolve duplicate or orphan external work item links if V089 blocks the upgrade.
 
-## [1.0.0](../../releases/release_v1.0.0_20261020.md) (October 20, 2026)
+## [1.0.0](releases/release_v1.0.0_20261020.md) (October 20, 2026)
 
 ### Features
 
@@ -125,14 +125,14 @@ their recorded dates.
 - Stop application writes and back up the database and encryption key before
   applying V076–V088.
 
-## [0.10.1](../../releases/release_v0.10.1_20261010.md) (October 10, 2026)
+## [0.10.1](releases/release_v0.10.1_20261010.md) (October 10, 2026)
 
 ### Bug fixes
 
 - Fixed service startup with SLS enabled and prevented browser-backed
   clarification replies from being forwarded to an external channel.
 
-## [0.10.0](../../releases/release_v0.10.0_20260929.md) (September 29, 2026)
+## [0.10.0](releases/release_v0.10.0_20260929.md) (September 29, 2026)
 
 ### Features
 
@@ -147,14 +147,14 @@ their recorded dates.
   incremental migrations. Review the V075 dry-run report before applying its
   data changes and starting the new server.
 
-## [0.9.0](../../releases/release_v0.9.0_20260919.md) (September 19, 2026)
+## [0.9.0](releases/release_v0.9.0_20260919.md) (September 19, 2026)
 
 ### Features
 
 - Added environment variable management, digital worker bindings, platform
   conversations, project backup, and Feishu integration.
 
-## [0.8.0](../../releases/release_v0.8.0_20260907.md) (September 7, 2026)
+## [0.8.0](releases/release_v0.8.0_20260907.md) (September 7, 2026)
 
 ### Features
 
@@ -166,14 +166,14 @@ their recorded dates.
 - Check which account V050 will promote before upgrading. The migration grants
   platform administrator rights to the first active user.
 
-## [0.7.0](../../releases/release_v0.7.0_20260902.md) (September 2, 2026)
+## [0.7.0](releases/release_v0.7.0_20260902.md) (September 2, 2026)
 
 ### Features
 
 - Added scheduled digital worker tasks, workspace discovery and access requests,
   encrypted MCP configuration, and per-step token and credit usage.
 
-## [0.6.0](../../releases/release_v0.6.0_20260824.md) (August 24, 2026)
+## [0.6.0](releases/release_v0.6.0_20260824.md) (August 24, 2026)
 
 ### Features
 
@@ -184,69 +184,69 @@ their recorded dates.
 - The public API moved from `/api/orgs` to `/api/workspaces`. The version note
   recorded 0.6.0 while the version file remained at 0.5.0 until 0.7.0.
 
-## [0.5.0](../../releases/release_v0.5.0_20260811.md) (August 11, 2026)
+## [0.5.0](releases/release_v0.5.0_20260811.md) (August 11, 2026)
 
 ### Enhancements
 
 - Highlighted work items assigned to people, added automatic cleanup for
   published work item workspaces, and supported Unicode artifact paths.
 
-## [0.4.0](../../releases/release_v0.4.0_20260809.md) (August 9, 2026)
+## [0.4.0](releases/release_v0.4.0_20260809.md) (August 9, 2026)
 
 ### Features
 
 - Added optional S3-compatible storage for self-managed deployments, version
   display on the About page, and Markdown and plain-text copy actions.
 
-## [0.3.5](../../releases/release_v0.3.5_20260809.md) (August 9, 2026)
+## [0.3.5](releases/release_v0.3.5_20260809.md) (August 9, 2026)
 
 ### Bug fixes
 
 - Added rotation and bounded retention for local application log archives.
 
-## [0.3.4](../../releases/release_v0.3.4_20260807.md) (August 7, 2026)
+## [0.3.4](releases/release_v0.3.4_20260807.md) (August 7, 2026)
 
 ### Bug fixes
 
 - Fixed upgrade environment scanning so shell-local variables stay out of the
   application environment requirements.
 
-## [0.3.3](../../releases/release_v0.3.3_20260807.md) (August 7, 2026)
+## [0.3.3](releases/release_v0.3.3_20260807.md) (August 7, 2026)
 
 ### Bug fixes
 
 - Made upgrade execution follow the approved plan and stop for confirmation
   when a step fails or the actual state differs from the plan.
 
-## [0.3.2](../../releases/release_v0.3.2_20260807.md) (August 7, 2026)
+## [0.3.2](releases/release_v0.3.2_20260807.md) (August 7, 2026)
 
 ### Bug fixes
 
 - Fixed upgrade planning and builds from monorepo subdirectories and accepted
   zero-padded migration versions.
 
-## [0.3.1](../../releases/release_v0.3.1_20260807.md) (August 7, 2026)
+## [0.3.1](releases/release_v0.3.1_20260807.md) (August 7, 2026)
 
 ### Bug fixes
 
 - Made the work item comment mention menu scrollable so long candidate lists
   remain accessible.
 
-## [0.3.0](../../releases/release_v0.3.0_20260807.md) (August 7, 2026)
+## [0.3.0](releases/release_v0.3.0_20260807.md) (August 7, 2026)
 
 ### Features
 
 - Added human–agent participation insights with duration and ratio trends,
   breakdowns, and details for long-running work items.
 
-## [0.2.0](../../releases/release_v0.2.0_20260807.md) (August 7, 2026)
+## [0.2.0](releases/release_v0.2.0_20260807.md) (August 7, 2026)
 
 ### Features
 
 - Added account deactivation with a cooling-off period, repository deletion,
   persistent Qoder startup preferences, and squad creation through MCP.
 
-## [0.1.0](../../releases/release_v0.1.0_20260806.md) (August 6, 2026)
+## [0.1.0](releases/release_v0.1.0_20260806.md) (August 6, 2026)
 
 ### Features
 
