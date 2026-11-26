@@ -8,7 +8,7 @@ export interface CostStatsValues {
   perDay: number;
 }
 
-/** 成本分析面板的统计块：视觉沿用线上居中三指标卡片，仅数据换成 realtime 的 kpi.cost。 */
+/** 成本分析面板的统计块：按原型 .stat-grid 三格白卡呈现，标签在上、数值在下。 */
 export function CostStatsCard({ values }: { values: CostStatsValues }) {
   const { t } = useTranslation('insights');
   const kpis = [
@@ -22,8 +22,10 @@ export function CostStatsCard({ values }: { values: CostStatsValues }) {
       <div className="metric-card-kpis is-centered cost-kpis">
         {kpis.map(kpi => (
           <div key={kpi.label} className="cost-kpi">
-            <span className="cost-kpi-value"><FlashValue value={kpi.value} /></span>
             <span className="cost-kpi-label">{kpi.label}</span>
+            <span className="cost-kpi-reading">
+              <span className="cost-kpi-value"><FlashValue value={kpi.value} /><small>{t('cost.creditsUnit')}</small></span>
+            </span>
           </div>
         ))}
       </div>

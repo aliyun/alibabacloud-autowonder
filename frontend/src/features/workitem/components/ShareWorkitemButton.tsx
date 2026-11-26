@@ -2,7 +2,7 @@ import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Tooltip, message } from 'antd';
-import { CheckOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useQuery } from '@tanstack/react-query';
 import { BRANDING_QUERY_KEY, getPublicBranding } from '@/features/platform/brandingApi';
 import { resolvePlatformBaseUrl } from '@/features/platform/platformBaseUrl';
@@ -66,10 +66,10 @@ export function ShareWorkitemButton({ workitemId, title }: ShareWorkitemButtonPr
         data-testid="workitem-share-button"
         type="text"
         size="small"
-        icon={copied ? <CheckOutlined aria-hidden="true" /> : <ShareAltOutlined aria-hidden="true" />}
-        // 图标自带 aria-label="share-alt"，不显式命名的话可访问名会变成「share-alt 分享」
+        icon={copied ? <AwStrokeIcon name="check" /> : <AwStrokeIcon name="share" />}
+        // 图标是装饰性 svg（aria-hidden），显式命名让可访问名随状态切换（「分享」/「已复制」）
         aria-label={label}
-        style={{ color: SHARE_COLOR, fontSize: 13 }}
+        style={{ color: SHARE_COLOR }}
         onClick={handleShare}
       >
         {label}

@@ -210,13 +210,15 @@ describe('RunCommentInput mention menu', () => {
     openMentionMenu('@');
 
     const menu = screen.getByRole('menu');
-    expect(within(menu).getByText('当前交付小队：交付一队')).toBeInTheDocument();
+    expect(menu.querySelector('.aw-mm-group-label')?.textContent).toBe('当前交付小队交付一队');
     expect(within(menu).getByText('其他小队成员')).toBeInTheDocument();
 
     const items = screen.getAllByRole('menuitem');
     expect(items).toHaveLength(3);
-    expect(items[0]).toHaveTextContent('缺陷分析数字人（交付一队）');
-    expect(items[1]).toHaveTextContent('归档数字人（其他小队）');
+    expect(items[0]).toHaveTextContent('缺陷分析数字人');
+    expect(items[0]).toHaveTextContent('交付一队');
+    expect(items[1]).toHaveTextContent('归档数字人');
+    expect(items[1]).toHaveTextContent('其他小队');
     expect(items[2]).toHaveTextContent('张三');
 
     fireEvent.click(items[0]);
@@ -230,7 +232,7 @@ describe('RunCommentInput mention menu', () => {
     ];
     render(<RunCommentInput runId={10482} onSubmit={vi.fn()} />);
     openMentionMenu('@');
-    expect(within(screen.getByRole('menu')).getByText('当前交付小队')).toBeInTheDocument();
+    expect(screen.getByRole('menu').querySelector('.aw-mm-group-label')?.textContent).toBe('当前交付小队');
   });
 });
 
@@ -254,7 +256,7 @@ it('switches an open mention menu without losing targets, caret, draft or raw na
   expect(textarea.value).toBe('@<b>工程师</b> @');
   expect(textarea.selectionStart).toBe(caret);
   expect(screen.getByRole('menuitem', { name: /张三 Human/ })).toHaveAttribute('aria-current', 'true');
-  expect(screen.getByRole('menuitem', { name: /工程师.*Agent.*Offline, delivered later/ })).toBeEnabled();
+  expect(screen.getByRole('menuitem', { name: /工程师.*Agent.*Offline/ })).toBeEnabled();
   expect(screen.getByRole('menuitem', { name: /自定义.*<b>后端原因<\/b>/ })).toBeDisabled();
   expect(screen.getByRole('menuitem', { name: /未冻结.*Not in this run’s frozen snapshot/ })).toBeDisabled();
   expect(container.querySelector('b')).toBeNull();

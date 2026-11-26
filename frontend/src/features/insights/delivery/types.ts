@@ -8,7 +8,12 @@ export interface DeliveryMetrics {
 }
 export interface DeliveryReport {
   days: number; start: string; end: string; summary: DeliveryMetrics;
-  weeks: { start: string; end: string; partial: boolean; displayStart: string; displayEnd: string; metrics: DeliveryMetrics }[];
+  weeks: {
+    start: string; end: string; partial: boolean;
+    /** 旧后端不返回展示区间，渲染侧会回退到 start/end。 */
+    displayStart?: string; displayEnd?: string;
+    metrics: DeliveryMetrics;
+  }[];
   unclosedSessions: number; unclassifiedEvents: number;
 }
 export interface DeliveryResponse {

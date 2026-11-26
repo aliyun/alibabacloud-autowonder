@@ -54,6 +54,7 @@ export interface SquadMember {
   sdlcId?: number | null;
   sdlcName?: string;
   sdlcSteps?: SquadSdlcStep[];
+  executorOnline?: boolean;
 }
 
 export async function listSquads(params: { pageNum: number; pageSize: number }): Promise<PageResult<Squad>> {

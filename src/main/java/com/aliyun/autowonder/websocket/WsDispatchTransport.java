@@ -191,6 +191,7 @@ public class WsDispatchTransport implements DispatchTransport {
         f.setAllowNetwork(pkg.isAllowNetwork());
         f.setPackageRefreshPath("/api/daemon/dispatches/" + dispatch.getId() + "/package-url");
         f.setArtifactUploadPath("/api/daemon/dispatches/" + dispatch.getId() + "/artifacts");
+        f.setUsageReportPath("/api/daemon/dispatches/" + dispatch.getId() + "/usage");
         f.setCheckpointUploadPath("/api/daemon/dispatches/" + dispatch.getId() + "/checkpoint");
         f.setCheckpointRefreshPath("/api/daemon/dispatches/" + dispatch.getId() + "/checkpoint-url");
         String memoryBase = "/api/daemon/dispatches/" + dispatch.getId() + "/memory";

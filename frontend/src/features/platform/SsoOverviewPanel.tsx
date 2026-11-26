@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Card, Tag, Typography } from 'antd';
+import { Button, Card, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { CloseCircleFilled, InfoCircleFilled } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Table } from '@/shared/theme/ThemedTable';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 import {
   FEDERATION_OVERVIEW_QUERY_KEY,
   fetchFederationOverview,
@@ -28,12 +28,10 @@ export function SsoOverviewPanel() {
   if (error) {
     return (
       <Card styles={{ body: { padding: 18 } }}>
-        <Alert
-          type="error"
-          showIcon
-          icon={<CloseCircleFilled aria-hidden="true" />}
-          message={t('ssoLoadFailed')}
-          description={error instanceof Error ? error.message : t('retryLater')}
+        <NoticeTip
+          kind="error"
+          title={t('ssoLoadFailed')}
+          detail={error instanceof Error ? error.message : t('retryLater')}
           action={
             <Button size="small" onClick={() => { void refetch(); }}>
               {t('ssoRetry')}
@@ -115,13 +113,7 @@ export function SsoOverviewPanel() {
 
   return (
     <>
-      <Alert
-        type="info"
-        showIcon
-        icon={<InfoCircleFilled aria-hidden="true" />}
-        message={t('ssoOverviewHint')}
-        style={{ marginBottom: 16 }}
-      />
+      <NoticeTip kind="info" title={t('ssoOverviewHint')} style={{ marginBottom: 16 }} />
 
       <Card title={t('ssoIdpSection')} style={{ marginBottom: 16 }} styles={{ body: { padding: 18 } }}>
         <Table<FederationOverviewIdp>

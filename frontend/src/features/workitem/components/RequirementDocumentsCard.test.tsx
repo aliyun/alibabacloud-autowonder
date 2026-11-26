@@ -43,11 +43,11 @@ describe('RequirementDocumentsCard', () => {
     uploadMutate.mockClear();
   });
 
-  it('shows requirement/design context terminology and limit guidance', () => {
+  it('shows attachment terminology and limit guidance', () => {
     render(<RequirementDocumentsCard workitemId={1} documents={[]} />);
 
-    expect(screen.getByText('需求/设计上下文')).toBeInTheDocument();
-    expect(screen.getByText(/支持任意类型文件（包括 Excel）/)).toBeInTheDocument();
+    expect(screen.getByText('附件')).toBeInTheDocument();
+    expect(screen.getByText(/暂无附件/)).toBeInTheDocument();
     expect(screen.getByText(/最多 10 个.*20 MB/)).toBeInTheDocument();
   });
 
@@ -71,7 +71,7 @@ describe('RequirementDocumentsCard', () => {
 
   it('allows every file type in the picker and explains the limits', () => {
     render(<RequirementDocumentsCard workitemId={1} documents={[]} />);
-    expect(screen.getByText(/支持任意类型文件/)).toBeInTheDocument();
+    expect(screen.getByText(/最多 10 个文件/)).toBeInTheDocument();
     expect(screen.getByTestId('requirement-document-file-input')).not.toHaveAttribute('accept');
   });
 

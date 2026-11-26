@@ -2,12 +2,13 @@ import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { useState } from 'react';
-import { Button, Card, Form, Input, message, Typography } from 'antd';
-import { EyeOutlined, EyeInvisibleOutlined, LockOutlined, SaveOutlined } from '@ant-design/icons';
+import { Button, Form, Input, message } from 'antd';
+import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useMutation } from '@tanstack/react-query';
 import { changePassword } from './profileApi';
 
-const { Text } = Typography;
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 
 type PasswordFormValues = {
   oldPassword: string;
@@ -24,6 +25,10 @@ export function ChangePasswordPanel() {
   const [form] = Form.useForm<PasswordFormValues>();
   useLocalizedValidation(form);
   const [successVisible, setSuccessVisible] = useState(false);
+  const oldPassword = Form.useWatch('oldPassword', form) ?? '';
+  const newPassword = Form.useWatch('newPassword', form) ?? '';
+  const confirmPassword = Form.useWatch('confirmPassword', form) ?? '';
+  const canSubmit = Boolean(oldPassword && newPassword && confirmPassword);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -44,13 +49,20 @@ export function ChangePasswordPanel() {
   });
 
   return (
-    <Card title={t('password.title')} styles={{ body: { padding: 18 } }}>
-      <Form
-        form={form}
-        layout="vertical"
-        disabled={mutation.isPending}
-        onFinish={() => mutation.mutate()}
-      >
+    <section className="aw-card prof-panel" aria-label={t('password.title')}>
+      <div className="prof-sec-head">
+        <div className="prof-sec-head-text">
+          <b>{t('password.submit')}</b>
+          <div className="prof-sec-desc">{t('password.desc')}</div>
+        </div>
+      </div>
+      <div className="prof-sec-body">
+        <Form
+          form={form}
+          layout="vertical"
+          disabled={mutation.isPending}
+          onFinish={() => mutation.mutate()}
+        >
         <Form.Item
           label={t('password.current')}
           name="oldPassword"
@@ -59,7 +71,7 @@ export function ChangePasswordPanel() {
           <Input.Password
             iconRender={visible => <Button type="text" htmlType="button" aria-label={t(visible ? 'password.hide' : 'password.show')} disabled={mutation.isPending}
               icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />} style={{ padding: 0, width: 16, height: 16 }} />}
-            prefix={<LockOutlined aria-hidden="true" />}
+            prefix={<AwStrokeIcon name="lock" />}
             placeholder={t('password.currentRequired')}
             autoComplete="current-password"
           />
@@ -76,7 +88,7 @@ export function ChangePasswordPanel() {
           <Input.Password
             iconRender={visible => <Button type="text" htmlType="button" aria-label={t(visible ? 'password.hide' : 'password.show')} disabled={mutation.isPending}
               icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />} style={{ padding: 0, width: 16, height: 16 }} />}
-            prefix={<LockOutlined aria-hidden="true" />}
+            prefix={<AwStrokeIcon name="lock" />}
             placeholder={t('password.newRequired')}
             autoComplete="new-password"
           />
@@ -101,25 +113,31 @@ export function ChangePasswordPanel() {
           <Input.Password
             iconRender={visible => <Button type="text" htmlType="button" aria-label={t(visible ? 'password.hide' : 'password.show')} disabled={mutation.isPending}
               icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />} style={{ padding: 0, width: 16, height: 16 }} />}
-            prefix={<LockOutlined aria-hidden="true" />}
+            prefix={<AwStrokeIcon name="lock" />}
             placeholder={t('password.confirmRequired')}
             autoComplete="new-password"
           />
         </Form.Item>
 
         {successVisible ? (
-          <Text type="success" style={{ display: 'block', marginBottom: 12 }}>{t('password.successHint')}</Text>
+          <NoticeTip
+            kind="success"
+            title={t('password.successHint')}
+            style={{ marginBottom: 14 }}
+          />
         ) : null}
 
-        <Form.Item>
+        <div className="prof-actions" style={{ marginTop: 4 }}>
           <Button aria-label={t('password.submit')}
             type="primary"
             htmlType="submit"
-            icon={<SaveOutlined aria-hidden="true" />}
+            icon={<AwStrokeIcon name="check" />}
+            disabled={!canSubmit}
             loading={mutation.isPending}
           >{t('password.submit')}</Button>
-        </Form.Item>
-      </Form>
-    </Card>
+        </div>
+        </Form>
+      </div>
+    </section>
   );
 }

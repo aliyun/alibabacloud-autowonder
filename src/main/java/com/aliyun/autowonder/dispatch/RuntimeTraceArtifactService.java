@@ -23,13 +23,16 @@ public class RuntimeTraceArtifactService {
     private final ObjectStorage storage;
     private final DispatchDao dispatchDao;
     private final DispatchRuntimeEventDao runtimeEventDao;
+    private final RuntimeTraceUsageFallback usageFallback;
 
     public RuntimeTraceArtifactService(ArtifactDao artifactDao, ObjectStorage storage, DispatchDao dispatchDao,
-                                       DispatchRuntimeEventDao runtimeEventDao) {
+                                       DispatchRuntimeEventDao runtimeEventDao,
+                                       RuntimeTraceUsageFallback usageFallback) {
         this.artifactDao = artifactDao;
         this.storage = storage;
         this.dispatchDao = dispatchDao;
         this.runtimeEventDao = runtimeEventDao;
+        this.usageFallback = usageFallback;
     }
 
     public RuntimeTraceVO loadOutline(long tenantId, long dispatchId) {
@@ -61,7 +64,7 @@ public class RuntimeTraceArtifactService {
         var failover = runtimeEventDao.findLatestByDispatchAndType(tenantId, dispatchId, "dispatch.executor_failover");
         String expected = failover == null ? null : dispatch.getExecutorId() + ":" + failover.getEventId();
         ArtifactDO artifact = findArtifactOrNull(tenantId, dispatchId, TRACE_NAME, expected);
-        return artifact == null ? null : outline(loadTrace(dispatchId, artifact));
+        return artifact == null ? null : outline(loadTrace(tenantId, dispatchId, artifact));
     }
 
     public RuntimeTraceVO.Turn loadTurn(long tenantId, long dispatchId, String traceId) {
@@ -98,10 +101,10 @@ public class RuntimeTraceArtifactService {
     }
 
     private RuntimeTraceVO loadTrace(long tenantId, long dispatchId) {
-        return loadTrace(dispatchId, findArtifact(tenantId, dispatchId, TRACE_NAME));
+        return loadTrace(tenantId, dispatchId, findArtifact(tenantId, dispatchId, TRACE_NAME));
     }
 
-    private RuntimeTraceVO loadTrace(long dispatchId, ArtifactDO artifact) {
+    private RuntimeTraceVO loadTrace(long tenantId, long dispatchId, ArtifactDO artifact) {
         byte[] bytes = storage.get(artifact.getOssRef());
         if (bytes == null) {
             throw new BizException(ErrorCode.ARTIFACT_NOT_FOUND);
@@ -115,6 +118,7 @@ public class RuntimeTraceArtifactService {
         } catch (RuntimeException ignored) {
             trace.setDispatchId(dispatchId);
         }
+        usageFallback.apply(tenantId, dispatchId, trace);
         return trace;
     }
 

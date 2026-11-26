@@ -1,0 +1,39 @@
+/* 28-environment-variables.html 页面级样式：
+ * - .env-vars-toolbar = 原型 .toolbar-right（表格卡内右对齐刷新行，padding 14/16/6）
+ * - .env-vars-time = 原型 .aw-table .mono（更新时间列 mono 微字 text-3）
+ * - .env-vars-value-alert = 编辑弹窗内未勾选替换时的 info 提示（走 NoticeTip 契约，仅补 14px 下间距）
+ * 全局骨架（PageHead/TableCard/表格密度/op 按钮）由 crystal.css 与 shared/ui 承担。 */
+.env-vars-toolbar { padding: 14px 16px 6px; text-align: right; }
+.aw-page-head + .aw-table-card > .env-vars-toolbar:first-child { padding-top: 0; }
+
+.env-vars-time {
+  font-family: var(--aw-font-mono);
+  font-size: 11px;
+  color: var(--aw-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.env-vars-value-alert { margin-bottom: 14px; }
+
+/* 41 号原型 C2 弹窗：头/尾分割线，正文 14/18，字段间距 14 */
+html .env-vars-editor .ant-modal-content { padding: 0; }
+html .env-vars-editor .ant-modal-header { margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--aw-border); background: transparent; }
+html .env-vars-editor .ant-modal-title { padding-right: 24px; font-size: 15px; font-weight: 600; line-height: 22px; }
+html .env-vars-editor .ant-modal-close { top: 12px; right: 14px; width: 24px; height: 24px; }
+html .env-vars-editor .ant-modal-body { padding: 14px 18px; }
+html .env-vars-editor .ant-modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0; padding: 12px 18px; border-top: 1px solid var(--aw-border); }
+html .env-vars-editor .ant-modal-footer .ant-btn { margin-inline-start: 0; }
+
+/* 快捷创建块：对应原型 .quick-card（浅底、1px 边框、10/12 内距、14 下距） */
+.env-quick-create { padding: 10px 12px; margin-bottom: 14px; border: 1px solid var(--aw-border); border-radius: 6px; background: var(--aw-header-bg); }
+.env-quick-head { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.env-quick-title { font-size: 12px; font-weight: 600; line-height: 20px; color: var(--aw-text); }
+.env-quick-reset.ant-btn { margin-left: auto; padding: 0; height: auto; font-size: 11px; }
+.env-quick-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.env-quick-hint { margin-top: 6px; font-size: 11px; line-height: 16px; color: var(--aw-text-3); }
+
+html .env-vars-editor .env-vars-form .ant-form-item { margin-bottom: 14px; }
+html .env-vars-editor .env-vars-form .ant-form-item-label > label { height: auto; font-size: 12px; line-height: 18px; color: var(--aw-text-2); }
+html .env-vars-editor .env-vars-form .ant-form-item .ant-form-item-extra { margin-top: 4px; font-size: 11px; line-height: 16px; color: var(--aw-text-3); }
+html .env-vars-editor .env-vars-form .ant-input,
+html .env-vars-editor .env-vars-form .ant-input-affix-wrapper { font-size: 12px; }

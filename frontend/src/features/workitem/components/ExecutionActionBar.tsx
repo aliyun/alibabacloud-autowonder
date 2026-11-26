@@ -1,24 +1,27 @@
 import { Button, Dropdown, Modal, Space, Tooltip } from 'antd';
-import { MoreOutlined, PauseCircleOutlined, PlayCircleOutlined, StopOutlined, WarningOutlined } from '@ant-design/icons';
+import { StopOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { DispatchAttempt } from '@/shared/types/workitem';
 import type { ExecutionActionKind } from '../hooks';
 import { executionActionLabel, resolveExecutionActions } from '../executionControl';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 
 interface ExecutionActionBarProps {
   attempt: DispatchAttempt;
   pending?: { dispatchId: number; action: ExecutionActionKind } | null;
   onAction: (action: ExecutionActionKind) => void;
+  // 侧栏轨道空间有限，主操作需要实心按钮建立唯一视觉焦点；工作台保持默认样式。
+  emphasis?: boolean;
 }
 
 function actionIcon(action: ExecutionActionKind) {
-  if (action === 'pause') return <PauseCircleOutlined aria-hidden="true" />;
-  if (action === 'resume' || action === 'restartLatest') return <PlayCircleOutlined aria-hidden="true" />;
-  if (action === 'forceEnd') return <WarningOutlined aria-hidden="true" />;
+  if (action === 'pause') return <AwStrokeIcon name="pause" />;
+  if (action === 'resume' || action === 'restartLatest') return <AwStrokeIcon name="play" />;
+  if (action === 'forceEnd') return <AwStrokeIcon name="alert-t" />;
   return <StopOutlined aria-hidden="true" />;
 }
 
-export function ExecutionActionBar({ attempt, pending, onAction }: ExecutionActionBarProps) {
+export function ExecutionActionBar({ attempt, pending, onAction, emphasis = false }: ExecutionActionBarProps) {
   const { t } = useTranslation('workitem');
   const resolved = resolveExecutionActions(attempt);
   if (!resolved.primary && resolved.overflow.length === 0 && resolved.disabled.length === 0) return null;
@@ -98,11 +101,12 @@ export function ExecutionActionBar({ attempt, pending, onAction }: ExecutionActi
   const renderButton = (action: ExecutionActionKind) => {
     const label = executionActionLabel(attempt, action, t);
     const danger = action === 'end' || action === 'forceEnd';
+    const primary = danger ? resolved.primary === action : emphasis && resolved.primary === action;
     return (
       <Tooltip key={action} title={danger ? label : undefined}>
         <Button
           size="small"
-          type={danger && resolved.primary === action ? 'primary' : 'default'}
+          type={primary ? 'primary' : 'default'}
           danger={danger}
           aria-label={label}
           icon={actionIcon(action)}
@@ -136,7 +140,7 @@ export function ExecutionActionBar({ attempt, pending, onAction }: ExecutionActi
           <Button
             size="small"
             aria-label={t('delivery.moreActions')}
-            icon={<MoreOutlined aria-hidden="true" />}
+            icon={<AwStrokeIcon name="more" />}
             loading={resolved.overflow.some(isPending)}
           />
         </Dropdown>

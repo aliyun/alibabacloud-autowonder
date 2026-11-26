@@ -7,6 +7,7 @@ import { message } from 'antd';
 import { beforeEach, describe, expect, it, afterAll, afterEach, beforeAll } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { useAuthStore } from '@/shared/auth/store';
+import { i18n } from '@/shared/i18n';
 import type { WorkspaceListItem } from '@/shared/types/common';
 import { AllWorkspacesTab } from './AllWorkspacesTab';
 
@@ -166,7 +167,7 @@ describe('AllWorkspacesTab', () => {
     const notMemberCard = screen.getByTestId('all-workspace-card-3');
 
     expect(within(memberCard).getByText('星云工坊')).toBeInTheDocument();
-    expect(within(memberCard).getByText(/进入工作空间/)).toBeInTheDocument();
+    expect(within(memberCard).getByText('已加入')).toHaveClass('ws-membership');
     expect(within(memberCard).queryByRole('button', { name: /申请权限/ })).not.toBeInTheDocument();
 
     const memberEnter = within(memberCard).getByTestId('all-workspace-enter-1');
@@ -819,14 +820,6 @@ describe('AllWorkspacesTab', () => {
     expect(screen.queryByText('申请已撤销，可随时再次申请')).not.toBeInTheDocument();
   });
 
-  // F7.5. The fade is applied as an inline style on one wrapper, so read it back from the
-  // inline style rather than through getComputedStyle, which jsdom fills with defaults that
-  // would make an unfaded element indistinguishable from a faded one.
-  function fadedBlocks(scope: HTMLElement): HTMLElement[] {
-    return Array.from(scope.querySelectorAll<HTMLElement>('*'))
-      .filter((element) => element.style.opacity === '0.62');
-  }
-
   it('styles the apply control as an enabled brand button rather than a disabled one', async () => {
     useListHandler(() => pageEnvelope([memberWorkspace, pendingWorkspace, notMemberWorkspace]));
 
@@ -847,44 +840,70 @@ describe('AllWorkspacesTab', () => {
     expect(apply).toHaveAccessibleName('申请权限');
   });
 
-  it('fades only the descriptive half of a card, never the control that acts on it', async () => {
+  it('marks ordinary unjoined cards without putting status or actions inside the selectively styled mark/name', async () => {
     useListHandler(() => pageEnvelope([memberWorkspace, pendingWorkspace, notMemberWorkspace]));
 
     renderTab();
+    await screen.findByTestId('all-workspace-card-3');
 
-    const notMemberCard = await screen.findByTestId('all-workspace-card-3');
-    const faded = fadedBlocks(notMemberCard);
-    expect(faded).toHaveLength(1);
-    // The name, the description and the status badge are the informational half.
-    expect(faded[0]).toContainElement(within(notMemberCard).getByText('数据中台'));
-    expect(faded[0]).toContainElement(within(notMemberCard).getByText('离线与实时数据资产'));
-    expect(faded[0]).toContainElement(within(notMemberCard).getByText('未加入'));
-    // Fading the whole card used to drag 申请权限 down to 0.62 as well, which both drops its
-    // contrast below what F7 requires and makes an actionable state read as a disabled one.
-    expect(faded[0]).not.toContainElement(screen.getByTestId('apply-access-3'));
-    expect(screen.getByTestId('apply-access-3').parentElement).toBe(notMemberCard);
+    // These are CSS hooks and DOM boundaries, not proof of visual contrast in jsdom:
+    // is-unjoined selects the gray card, .ws-mark opacity .65 and .ws-name secondary color.
+    for (const [workspace, status, action] of [
+      [notMemberWorkspace, '未加入', '申请权限'],
+      [pendingWorkspace, '审批中', '撤销申请'],
+    ] as const) {
+      const card = screen.getByTestId(`all-workspace-card-${workspace.id}`);
+      expect(card).toHaveClass('ws-card', 'is-unjoined');
+      const body = card.querySelector('.ws-card-enter');
+      expect(body?.tagName).toBe('DIV');
+      expect(body?.parentElement).toBe(card);
+      const mark = card.querySelector('.ws-mark');
+      expect(mark).toHaveAttribute('aria-hidden', 'true');
+      const name = within(card).getByText(workspace.name).closest<HTMLElement>('.ws-name');
+      expect(name).toBeInTheDocument();
+      const badge = within(card).getByText(status);
+      expect(badge).toHaveClass('ws-membership');
+      expect(badge.parentElement).toHaveClass('ws-title');
+      expect(body).toContainElement(name);
+      expect(body).toContainElement(badge);
+      expect(body).toContainElement(within(card).getByText(workspace.description));
+      expect(mark).not.toContainElement(badge);
+      expect(name).not.toContainElement(badge);
 
-    const pendingCard = screen.getByTestId('all-workspace-card-2');
-    const pendingFaded = fadedBlocks(pendingCard);
-    expect(pendingFaded).toHaveLength(1);
-    expect(pendingFaded[0]).toContainElement(within(pendingCard).getByText('审批中'));
-    expect(pendingFaded[0])
-      .not.toContainElement(within(pendingCard).getByRole('button', { name: /撤销申请/ }));
+      const control = within(card).getByRole('button', { name: action });
+      expect(control).toBeEnabled();
+      expect(control).toHaveClass('aw-apply-access-button');
+      expect(control.parentElement).toHaveClass('ws-access-line');
+      expect(control.parentElement?.parentElement).toHaveClass('ws-foot');
+      expect(control.parentElement?.parentElement?.parentElement).toBe(card);
+      expect(body).not.toContainElement(control);
+      expect(mark).not.toContainElement(control);
+      expect(name).not.toContainElement(control);
+    }
   });
 
-  it('does not fade a member card, whose whole surface is the enter control', async () => {
+  it('uses a normal member card with separate enter and background controls', async () => {
     useListHandler(() => pageEnvelope([memberWorkspace, notMemberWorkspace]));
 
     renderTab();
 
     const memberCard = await screen.findByTestId('all-workspace-card-1');
-    expect(fadedBlocks(memberCard)).toEqual([]);
-    expect(within(memberCard).getByTestId('all-workspace-enter-1')).toHaveStyle({ cursor: 'pointer' });
+    expect(memberCard).toHaveClass('ws-card');
+    expect(memberCard).not.toHaveClass('is-unjoined');
+    const enter = within(memberCard).getByTestId('all-workspace-enter-1');
+    expect(enter).toHaveClass('ws-card-enter');
+    expect(enter.tagName).toBe('BUTTON');
+    expect(enter).toHaveAttribute('type', 'button');
+    expect(enter).toBeEnabled();
+    const background = within(memberCard).getByRole('button', { name: '查看工作空间背景 星云工坊' });
+    expect(enter).not.toContainElement(background);
+    expect(background).toHaveClass('ws-background');
+    expect(memberCard.querySelector('.ws-foot')).toContainElement(background);
 
-    // The non-member card has no enter handler at all, so it must not promise a click
-    // that enters — the only thing to click inside it is 申请权限.
+    // An ordinary non-member has a descriptive div, not a workspace-enter button.
     const notMemberCard = screen.getByTestId('all-workspace-card-3');
-    expect(fadedBlocks(notMemberCard)).toHaveLength(1);
+    expect(notMemberCard).toHaveClass('ws-card', 'is-unjoined');
+    expect(notMemberCard.querySelector('.ws-card-enter')?.tagName).toBe('DIV');
     expect(within(notMemberCard).queryByTestId(/all-workspace-enter-/)).not.toBeInTheDocument();
     expect(notMemberCard.tagName).not.toBe('BUTTON');
   });
@@ -903,8 +922,10 @@ describe('AllWorkspacesTab', () => {
     expect(enter).toBeEnabled();
     // Not a member, so the accessible name must not claim 已加入 either.
     expect(enter).toHaveAccessibleName('进入工作空间 数据中台');
-    // F7.5: every action on this card is real, so nothing on it may fade.
-    expect(fadedBlocks(card)).toEqual([]);
+    // Manageable non-members use the normal card contract, not is-unjoined styling.
+    expect(card).toHaveClass('ws-card');
+    expect(card).not.toHaveClass('is-unjoined');
+    expect(enter).toHaveClass('ws-card-enter');
     expect(within(card).getByTestId('all-workspace-manage-area-3')).toBeInTheDocument();
     expect(within(card).getByTestId('all-workspace-edit-3'))
       .toHaveAccessibleName('编辑工作空间 数据中台');
@@ -952,6 +973,184 @@ describe('AllWorkspacesTab', () => {
     });
   });
 
+  it.each([notMemberWorkspace, pendingWorkspace])(
+    'hides private background and counts from an ordinary $membershipStatus card even when returned',
+    async (workspace) => {
+      useListHandler(() => pageEnvelope([{
+        ...workspace, canManage: false, background: '私有技术路线 <b>不可公开</b>',
+        memberCount: 0, workitemCount: 9,
+      }]));
+
+      renderTab();
+      const card = await screen.findByTestId(`all-workspace-card-${workspace.id}`);
+      expect(card).toHaveClass('ws-card', 'is-unjoined');
+      expect(card.querySelector('.ws-stats')).not.toBeInTheDocument();
+      expect(card.querySelector('.ws-count')).not.toBeInTheDocument();
+      expect(within(card).queryByRole('button', { name: /查看工作空间背景/ })).not.toBeInTheDocument();
+      expect(screen.queryByText('私有技术路线 <b>不可公开</b>')).not.toBeInTheDocument();
+      expect(within(card).queryByText('0 名成员')).not.toBeInTheDocument();
+      expect(within(card).queryByText('9 个工单')).not.toBeInTheDocument();
+      expect(within(card).queryByTestId(/all-workspace-enter-/)).not.toBeInTheDocument();
+      expect(within(card).queryByTestId(/all-workspace-manage-area-/)).not.toBeInTheDocument();
+      expect(within(card).getByText(workspace.membershipStatus === 'PENDING' ? '审批中' : '未加入'))
+        .toHaveClass('ws-membership');
+      expect(within(card).getByRole('button', {
+        name: workspace.membershipStatus === 'PENDING' ? '撤销申请' : '申请权限',
+      })).toBeEnabled();
+    },
+  );
+
+  it('opens a READ_ONLY member background as plain text without switching or offering edits', async () => {
+    const user = userEvent.setup();
+    const workspace = {
+      ...memberWorkspace, accessLevel: 'READ_ONLY' as const, canManage: false,
+      background: '原始背景 <strong>不是 HTML</strong>\n第二行 & 原文',
+    };
+    useListHandler(() => pageEnvelope([workspace]));
+    server.use(http.get('/api/__ordering_sentinel__', () => new HttpResponse(null, { status: 204 })));
+
+    renderTab();
+    const card = await screen.findByTestId('all-workspace-card-1');
+    const enter = within(card).getByTestId('all-workspace-enter-1');
+    const background = within(card).getByRole('button', { name: '查看工作空间背景 星云工坊' });
+    expect(background).toHaveClass('ws-background');
+    expect(background).toHaveAttribute('type', 'button');
+    expect(enter).not.toContainElement(background);
+    expect(card.querySelector('.ws-foot')).toContainElement(background);
+    expect(within(card).queryByTestId('all-workspace-manage-area-1')).not.toBeInTheDocument();
+    await user.click(background);
+
+    const dialog = await screen.findByRole('dialog', { name: workspace.name });
+    expect(dialog.querySelector('.ws-background-description')?.textContent).toBe(workspace.description);
+    const text = dialog.querySelector('.ws-background-text');
+    expect(text?.textContent).toBe(workspace.background);
+    expect(text?.querySelector('*')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /^编\s*辑$/ })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: /^关\s*闭$/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    // Await a later request rather than sleeping to expose any accidental switch POST.
+    await fetch('/api/__ordering_sentinel__');
+    expect(startedRequests.filter((url) => url.includes('/switch'))).toEqual([]);
+    expect(useAuthStore.getState().accessToken).toBeNull();
+    expect(useAuthStore.getState().currentWorkspace).toBeNull();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/workspaces');
+  });
+
+  it('lets a canManage non-member edit from background without claiming membership or switching', async () => {
+    const user = userEvent.setup();
+    const workspace = { ...notMemberWorkspace, canManage: true, background: '管理者可编辑的原始背景' };
+    useListHandler(() => pageEnvelope([workspace]));
+    server.use(http.get('/api/__ordering_sentinel__', () => new HttpResponse(null, { status: 204 })));
+
+    renderTab();
+    const card = await screen.findByTestId('all-workspace-card-3');
+    expect(card).toHaveClass('ws-card');
+    expect(card).not.toHaveClass('is-unjoined');
+    expect(within(card).getByTestId('all-workspace-enter-3')).toHaveAccessibleName('进入工作空间 数据中台');
+    expect(within(card).getByText('可管理')).toHaveClass('ws-membership');
+    expect(within(card).queryByText('已加入')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: /已加入/ })).not.toBeInTheDocument();
+    expect(within(card).queryByTestId('apply-access-3')).not.toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: '查看工作空间背景 数据中台' }));
+
+    const dialog = await screen.findByRole('dialog', { name: '数据中台' });
+    expect(dialog.querySelector('.ws-background-text')?.textContent).toBe(workspace.background);
+    await user.click(within(dialog).getByRole('button', { name: /^编\s*辑$/ }));
+    const edit = await screen.findByRole('dialog', { name: '编辑「数据中台」' });
+    expect(within(edit).getByRole('textbox', { name: '工作空间背景' })).toHaveValue(workspace.background);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '数据中台' }))
+      .not.toBeInTheDocument());
+
+    await fetch('/api/__ordering_sentinel__');
+    expect(startedRequests.filter((url) => url.includes('/switch'))).toEqual([]);
+    expect(useAuthStore.getState().accessToken).toBeNull();
+    expect(useAuthStore.getState().currentWorkspace).toBeNull();
+    expect(screen.getByTestId('location-path')).toHaveTextContent('/workspaces');
+  });
+
+  it.each([
+    { ...memberWorkspace, accessLevel: 'READ_ONLY' as const, canManage: false },
+    { ...notMemberWorkspace, canManage: true },
+  ])('closes an open background when a live response revokes readability for $membershipStatus', async (workspace) => {
+    const user = userEvent.setup();
+    let live: WorkspaceListItem = { ...workspace, background: '撤权后不可继续读取的背景', memberCount: 4, workitemCount: 8 };
+    useListHandler(() => pageEnvelope([live]));
+    const { queryClient } = renderTab();
+    const card = await screen.findByTestId(`all-workspace-card-${workspace.id}`);
+    await user.click(within(card).getByRole('button', { name: `查看工作空间背景 ${workspace.name}` }));
+    expect(await screen.findByRole('dialog', { name: workspace.name })).toBeInTheDocument();
+    expect(screen.getByText(live.background!)).toBeInTheDocument();
+
+    // Keep the same row and leaked mock fields: only the live permission facts change.
+    live = { ...live, membershipStatus: 'NOT_MEMBER', canManage: false, accessLevel: null };
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['workspaces', 'all'] });
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: workspace.name })).not.toBeInTheDocument();
+      expect(screen.queryByText(live.background!)).not.toBeInTheDocument();
+    });
+    const updated = screen.getByTestId(`all-workspace-card-${workspace.id}`);
+    expect(updated).toHaveClass('is-unjoined');
+    expect(updated.querySelector('.ws-stats')).not.toBeInTheDocument();
+    expect(within(updated).queryByRole('button', { name: /查看工作空间背景/ })).not.toBeInTheDocument();
+    expect(within(updated).queryByTestId(/all-workspace-enter-/)).not.toBeInTheDocument();
+    expect(within(updated).getByRole('button', { name: '申请权限' })).toBeEnabled();
+  });
+
+  it.each(['zh-CN', 'en-US'] as const)('keeps real zero, plural counts and original name/background in %s', async (locale) => {
+    const previousLanguage = i18n.language;
+    const user = userEvent.setup();
+    const name = '星云 Atlas <原文>';
+    const backgroundText = '研发原文 / Original context <b>不是标记</b>\n第二行 & untouched';
+    const workspaces: WorkspaceListItem[] = [0, 1, 2].map((count) => ({
+      ...memberWorkspace, id: 100 + count, name: count === 0 ? name : `原文空间 ${count}`,
+      memberCount: count, workitemCount: count, background: backgroundText,
+    }));
+    workspaces.push({ ...memberWorkspace, id: 103, name: '缺失计数原文', memberCount: null, workitemCount: undefined });
+    useListHandler(() => pageEnvelope(workspaces));
+
+    try {
+      await act(async () => { await i18n.changeLanguage(locale); });
+      renderTab();
+      await screen.findByTestId('all-workspace-card-100');
+      for (const count of [0, 1, 2]) {
+        const card = screen.getByTestId(`all-workspace-card-${100 + count}`);
+        const memberLabel = locale === 'zh-CN' ? `${count} 名成员` : `${count} ${count === 1 ? 'member' : 'members'}`;
+        const workitemLabel = locale === 'zh-CN' ? `${count} 个工单` : `${count} ${count === 1 ? 'work item' : 'work items'}`;
+        expect(card.querySelectorAll('.ws-count')).toHaveLength(2);
+        expect(within(card).getByText(memberLabel)).toBeInTheDocument();
+        expect(within(card).getByTitle(memberLabel)).toHaveClass('ws-count');
+        expect(within(card).getByText(workitemLabel)).toBeInTheDocument();
+        expect(within(card).getByTitle(workitemLabel)).toHaveClass('ws-count');
+        expect(within(card).getByRole('button', {
+          name: `${locale === 'zh-CN' ? '查看工作空间背景' : 'View workspace background'} ${workspaces[count].name}`,
+        })).toHaveTextContent(locale === 'zh-CN' ? '背景' : 'Background');
+      }
+      const missing = screen.getByTestId('all-workspace-card-103');
+      expect(missing.querySelectorAll('.ws-count')).toHaveLength(0);
+      expect(within(missing).getByRole('button', {
+        name: `${locale === 'zh-CN' ? '查看工作空间背景' : 'View workspace background'} 缺失计数原文`,
+      })).toBeInTheDocument();
+
+      const card = screen.getByTestId('all-workspace-card-100');
+      expect(within(card).getByText(name).textContent).toBe(name);
+      expect(within(card).getByTestId('all-workspace-enter-100')).toHaveAccessibleName(
+        locale === 'zh-CN' ? `进入工作空间 ${name}（已加入）` : `Open workspace ${name} (member)`,
+      );
+      await user.click(within(card).getByRole('button', {
+        name: `${locale === 'zh-CN' ? '查看工作空间背景' : 'View workspace background'} ${name}`,
+      }));
+      const dialog = await screen.findByRole('dialog', { name });
+      expect(dialog.querySelector('.ws-background-text')?.textContent).toBe(backgroundText);
+      expect(dialog.querySelector('.ws-background-text')?.querySelector('*')).toBeNull();
+    } finally {
+      await act(async () => { await i18n.changeLanguage(previousLanguage); });
+    }
+  });
+
   it('leaves the apply button reachable by keyboard', async () => {
     const user = userEvent.setup();
     useListHandler(() => pageEnvelope([memberWorkspace, notMemberWorkspace]));
@@ -963,8 +1162,11 @@ describe('AllWorkspacesTab', () => {
     expect(screen.getByRole('textbox', { name: /搜索工作空间/ })).toHaveFocus();
     await user.tab();
     expect(screen.getByTestId('all-workspace-enter-1')).toHaveFocus();
-    // Every card wrapper is a plain <div>, so the enter control and 申请权限 are the
-    // only stops — F7.3's visible focus ring has something to be visible on.
+    // The background is its own keyboard stop between entering a readable card and
+    // applying to the next card; the plain card wrappers themselves are not stops.
+    await user.tab();
+    expect(within(screen.getByTestId('all-workspace-card-1'))
+      .getByRole('button', { name: '查看工作空间背景 星云工坊' })).toHaveFocus();
     await user.tab();
     expect(screen.getByTestId('apply-access-3')).toHaveFocus();
   });

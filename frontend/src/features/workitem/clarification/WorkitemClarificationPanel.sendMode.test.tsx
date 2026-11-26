@@ -616,8 +616,18 @@ it('renders malformed conversation dates harmlessly while preserving the convers
   try {
     await openPanel();
     expect(await screen.findByText('历史提问')).toBeInTheDocument();
-    expect(screen.getByTestId('clarification-conversation-select')).toHaveTextContent('最近 —');
-    expect(screen.getByTestId('clarification-conversation-select')).toHaveTextContent('创建 —');
+    // 05d：选中态只展示「会话 #id · 最近 X」，「创建 Y」仅出现在下拉菜单项的副行
+    const selector = screen.getByTestId('clarification-conversation-select');
+    expect(selector).toHaveTextContent('会话 #1');
+    expect(selector).toHaveTextContent('最近 —');
+    fireEvent.mouseDown(within(selector).getByRole('combobox'));
+    const option = await screen.findByRole('option', { name: /会话 #1/ });
+    const menuItem = document.querySelector('.ant-select-item-option .aw-cl-menu-item');
+    expect(menuItem).not.toBeNull();
+    expect(menuItem).toHaveTextContent('最近 —');
+    expect(menuItem).toHaveTextContent('创建 —');
+    expect(option).toBeInTheDocument();
+    expect(screen.getByText('历史提问')).toBeInTheDocument();
   } finally {
     clearClarificationPrefill('100');
   }

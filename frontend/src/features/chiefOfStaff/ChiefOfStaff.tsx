@@ -6,7 +6,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Input, Spin, Switch, Tag, message } from 'antd';
-import { CloseOutlined, HistoryOutlined, CopyOutlined, PictureOutlined, StopOutlined, ArrowUpOutlined, PlusOutlined, HolderOutlined, LeftOutlined, RightOutlined, FullscreenOutlined, CompressOutlined } from '@ant-design/icons';
+import { PictureOutlined, StopOutlined, HolderOutlined, FullscreenOutlined, CompressOutlined, LockOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useAuthStore } from '@/shared/auth/store';
 import { useRealtime } from '@/shared/realtime/useRealtime';
 import { useLocale } from '@/shared/i18n/LocaleProvider';
@@ -19,9 +20,11 @@ import { ElicitationWizard } from '@/features/workitem/clarification/cards/Elici
 import { buildExecutorLaunchCommand } from '@/features/executor/api';
 import { formatDateTime } from '@/shared/i18n/format';
 import * as api from './api';
+import { platformAgentIssue, usePlatformAgentStatus } from '@/features/agent/usePlatformAgentStatus';
 import { ChiefIcon } from './ChiefIcon';
 import { ChiefWelcome } from './ChiefWelcome';
 import { ChiefActionPlan } from './ChiefActionPlan';
+import { GuideStrip } from '@/features/workspaceGuide/GuideStrip';
 import { copyTextToClipboard } from '@/shared/lib/clipboard';
 import { filesFromClipboard } from '@/shared/lib/documentUpload';
 import { IMAGE_ACCEPT, validateImageSelection } from './imageUpload';
@@ -29,6 +32,7 @@ import { createUuidV4 } from '@/shared/lib/uuid';
 import {
   emitGuideEvent,
   registerGuideSendPreparation,
+  publishChiefPanelOpen,
   subscribeChiefClosePanel,
   subscribeChiefOpenPanel,
   useGuideRuntime,
@@ -110,12 +114,17 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
   const queryClient = useQueryClient();
   const admin = useAuthStore(s => s.hasAccess('ADMIN'));
   const canWrite = useAuthStore(s => s.hasAccess('READ_WRITE'));
+  // 浮标与面板头部共用执行器状态：未就绪时角标变琥珀色并写明原因。
+  const statusIssue = platformAgentIssue(usePlatformAgentStatus().data?.state);
   const preferenceKey = `chief-of-staff:${userId}:${workspaceId}`;
   const [prefs, setPrefs] = useState(() => preference(preferenceKey));
+  // 入口策略 B：顶栏入口与右下浮标双入口常驻（原型 35 五节已选定）。
   const [narrow, setNarrow] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 600px)').matches);
   const [images, setImages] = useState<api.ConversationImage[]>([]);
   const filePicker = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
+  // 顶栏入口的主色弱底只在面板打开时出现（原型 35 一节）。
+  useEffect(() => { publishChiefPanelOpen(open); return () => publishChiefPanelOpen(false); }, [open]);
   const [history, setHistory] = useState(false);
   const [archived, setArchived] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
@@ -143,7 +152,7 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
   const [waitEpoch, setWaitEpoch] = useState(0);
   const [waitExpired, setWaitExpired] = useState(false);
   const waitStartedAt = useRef<number | null>(null);
-  const guidedWaiting = guided && guideRuntime.stage === 1 && guideRuntime.substep === 5;
+  const guidedWaiting = guided && guideRuntime.stage === 1 && guideRuntime.substep === 1;
   const { locale } = useLocale();
   const { t: guideT } = useTranslation('workspaceGuide');
   const panel = useRef<HTMLDivElement>(null);
@@ -216,11 +225,15 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
 
   // 引导打开 Chief：同一实例，按请求切换 expanded、复用引导会话并按需预填提示词。
   useEffect(() => subscribeChiefOpenPanel(request => {
+    // 引导期间忽略用户入口：顶栏/浮标打开的是同一个 Chief，但会与引导阶段面板抢表面。
+    if (request.source === 'user' && guidedRef.current) return;
     setOpen(true);
     setHistory(false);
-    if (request.expanded) setPrefs(current => ({ ...current, expanded: true }));
+    // 引导不接管展开态：沿用用户自己的窗口位置与尺寸，需要全屏由用户自行切换。
+    if (request.source !== 'guide' && request.expanded) setPrefs(current => ({ ...current, expanded: true }));
+    // 引导阶段 1 不带会话：清掉上次残留的会话，避免打开时请求已删除的会话报「会话不存在或无权访问」。
     if (request.conversationId !== null) setPrefs(current => ({ ...current, conversationId: request.conversationId }));
-    else if (request.prefill !== null) setPrefs(current => ({ ...current, conversationId: null }));
+    else if (request.prefill !== null || request.source === 'guide') setPrefs(current => ({ ...current, conversationId: null }));
     if (request.clientMessageId !== null) reservedClientMessageId.current = request.clientMessageId;
     if (request.prefill !== null) {
       const accepted = draftRef.current.trim() === '' && imagesRef.current.length === 0;
@@ -277,12 +290,12 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
     return () => registerGuideSendPreparation(null);
   }, [userId, workspaceId]);
 
-  // 阶段 1 只在真实 setup.ready 后通知引导进入阶段 2；点击“我已启动”本身不推进。
+  // 阶段 1 只在真实 setup.ready 后通知引导进入初始化阶段；点击“我已启动”本身不推进。
   useEffect(() => {
-    if (guided && guideRuntime.stage === 1 && !guideRuntime.reviewing && setup.data?.ready) {
+    if (guided && guideRuntime.stage === 1 && setup.data?.ready) {
       emitGuideEvent({ type: 'setup-ready' });
     }
-  }, [guided, guideRuntime.stage, guideRuntime.reviewing, setup.data?.ready]);
+  }, [guided, guideRuntime.stage, setup.data?.ready]);
 
   // 等待在线：5 秒刷新由 setup 查询负责，2 分钟后停止自动刷新并提示手动重试。
   useEffect(() => {
@@ -375,6 +388,33 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, prefs.expanded]);
+  // 引导面板是唯一表面：Tab 循环留在面板内，避免焦点跑到蒙版下的页面。
+  useEffect(() => {
+    if (!guided || !open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || !panel.current) return;
+      const focusables = Array.from(panel.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+      if (!focusables.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      const outside = !(active instanceof Node) || !panel.current.contains(active);
+      if (!event.shiftKey && (outside || active === last)) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && (outside || active === first)) {
+        event.preventDefault();
+        last.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [guided, open]);
   useLayoutEffect(() => {
     if (open) followLatest.current = true;
   }, [open]);
@@ -434,7 +474,7 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
     setOpen(value => !value);
   }
   function beginDrag(event: PointerEvent<HTMLElement>, axis: DragAxis) {
-    if (prefs.expanded) return;
+    if (prefs.expanded || guidedRef.current) return;
     if (event.button !== 0 || dragPointer.current !== null) return;
     const button = (event.target as HTMLElement).closest('button');
     if (button && button !== event.currentTarget) return;
@@ -506,7 +546,25 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
     return { anchoredPlans, orphanPlans };
   }, [conversation.data?.turns, plans.data]);
   const pendingPlans = useMemo(() => (plans.data ?? []).filter(plan => plan.status === PENDING).sort(planOrder), [plans.data]);
-  const composerVisible = !history && !guideConfiguring && !(guided && (guideRuntime.stage === 4 || guideRuntime.reviewing));
+  // 收尾阶段只多一条成功讲解；对话本身还在跑，输入区必须保留（处理中即正常禁用/停止态）。
+  const composerVisible = !history && !guideConfiguring;
+  // 轮询重取会短暂清空 error，导致输入区闪回可输入；按会话 id 锁存失败态，直到取到数据或换会话。
+  const [failedConversation, setFailedConversation] = useState<{ id: number | null; failed: boolean }>({ id: null, failed: false });
+  if (conversation.error && (!failedConversation.failed || failedConversation.id !== prefs.conversationId)) {
+    setFailedConversation({ id: prefs.conversationId, failed: true });
+  } else if (conversation.data && failedConversation.failed) {
+    setFailedConversation({ id: prefs.conversationId, failed: false });
+  }
+  const conversationFailed = !!conversation.error || (failedConversation.failed && failedConversation.id === prefs.conversationId);
+  // 输入区两态（原型 35 ⑧）：不可输入时下沉底色并给出原因，不能只靠 antd 的 disabled 文字色区分。
+  const inputDisabledReason = conversationFailed
+    ? t('composerDisabledError')
+    : conversation.data?.archivedAt
+      ? t('composerDisabledArchived')
+      : !setup.data?.ready
+        ? t('composerDisabledSetup')
+        : null;
+  const inputDisabled = inputDisabledReason !== null;
   const pendingNoticeVisible = composerVisible && pendingPlans.length > 0 && !conversation.data?.archivedAt;
   function copyMessage(content: string) {
     void copyTextToClipboard(content).then(ok => {
@@ -531,7 +589,7 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
     return <div key={plan.id} className="aw-chief-plan-anchor" data-plan-id={plan.id}
       ref={node => { if (node) planNodes.current.set(plan.id, node); else planNodes.current.delete(plan.id); }}>
       <ChiefActionPlan plan={plan}>
-        {plan.status === PENDING && <div className="aw-chief-actions"><Button type="primary" disabled={!canWrite || processing || !!conversation.data?.archivedAt || Date.parse(plan.expiresAt) < Date.now()} loading={perform.isPending} onClick={() => perform.mutate(async () => {
+        {plan.status === PENDING && <div className="aw-chief-actions aw-chief-plan-actions"><Button type="primary" disabled={!canWrite || processing || !!conversation.data?.archivedAt || Date.parse(plan.expiresAt) < Date.now()} loading={perform.isPending} onClick={() => perform.mutate(async () => {
           const id = prefs.conversationId!;
           const completed = await api.resolvePlan(id, plan.id, plan.payloadHash, true);
           const next = api.initializationContinuation(completed);
@@ -548,17 +606,24 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
     </div>;
   }
   const error = upload.error || perform.error || setup.error || conversation.error || plans.error || conversations.error;
-  return <div className={`aw-chief${open ? ' aw-chief-open' : ''}${guided ? ' aw-chief-guide' : ''}`} style={{ right: prefs.x, bottom: prefs.y }}>
+  const puckTitle = statusIssue
+    ? `${t('open')} · ${t(statusIssue === 'NOT_CONFIGURED' ? 'statusNotConfigured' : 'statusOffline')}`
+    : t('open');
+  return <div className={`aw-chief${open ? ' aw-chief-open' : ''}${guided ? ' aw-chief-guide' : ''}${guided && !guideRuntime.pending ? ' aw-chief-guide-focus' : ''}`} style={{ right: prefs.x, bottom: prefs.y }}>
     {open && <div ref={panel} className={`aw-chief-panel${prefs.expanded ? ' aw-chief-expanded' : ''}${guided ? ' aw-chief-guide-panel' : ''}`} role="dialog" aria-label={t('name')}
       style={prefs.expanded ? undefined : { width: prefs.width, height: prefs.height }}>
-      <header className="aw-chief-header" onPointerDown={event => { if (!prefs.expanded) beginDrag(event, prefs.docked ? 'vertical' : 'both'); }}>
-        <ChiefIcon size={24} /><div><strong>{t('name')}</strong><div className="aw-chief-secondary">{setup.data?.ready ? t('ready') : t('notReady')}</div></div>
-        {!guided && <div className="aw-chief-tools">
+      <header className="aw-chief-header" onPointerDown={event => { if (!prefs.expanded && !guided) beginDrag(event, prefs.docked ? 'vertical' : 'both'); }}>
+        <ChiefIcon size={24} /><div><strong>{t('name')}</strong><div className="aw-chief-secondary">{setup.data?.ready ? t('ready') : (statusIssue ? t(statusIssue === 'NOT_CONFIGURED' ? 'statusNotConfigured' : 'statusOffline') : t('notReady'))}</div></div>
+        <div className="aw-chief-tools">
           {!narrow && <Button type="text" icon={prefs.expanded ? <CompressOutlined aria-hidden="true" /> : <FullscreenOutlined aria-hidden="true" />} aria-label={prefs.expanded ? t('exitWide') : t('expandWide')} aria-pressed={prefs.expanded} onClick={() => setPrefs(p => ({ ...p, expanded: !p.expanded }))} />}
-          <Button type="text" icon={<HistoryOutlined />} aria-label={t('history')} disabled={submit.isPending || upload.isPending} onClick={() => setHistory(!history)} />
-          <Button type="text" icon={<PlusOutlined />} aria-label={t('newConversation')} disabled={submit.isPending || upload.isPending} onClick={() => { setPrefs(p => ({ ...p, conversationId: null })); setDraft(''); setImages([]); setRename(null); pendingMessage.current = null; setHistory(false); }} />
-          <Button type="text" icon={<CloseOutlined />} aria-label={t('collapse')} onClick={() => { setOpen(false); setCommand(null); }} /></div>}
+          {!guided && <>
+            <Button type="text" icon={<AwStrokeIcon name="history" />} aria-label={t('history')} disabled={submit.isPending || upload.isPending} onClick={() => setHistory(!history)} />
+            <Button type="text" icon={<AwStrokeIcon name="plus" />} aria-label={t('newConversation')} disabled={submit.isPending || upload.isPending} onClick={() => { setPrefs(p => ({ ...p, conversationId: null })); setDraft(''); setImages([]); setRename(null); pendingMessage.current = null; setHistory(false); }} />
+            <Button type="text" icon={<AwStrokeIcon name="x" />} aria-label={t('collapse')} onClick={() => { setOpen(false); setCommand(null); }} />
+          </>}
+        </div>
       </header>
+      {guided && <GuideStrip />}
       {!guided && <div className="aw-chief-context"><span>{t('contextHeader', { page: contextLabel })}</span><Switch size="small" checked={context} onChange={setContext} aria-label={t('pageContext')} /></div>}
       <div ref={scroll} onScroll={() => { const el = scroll.current; if (el) { followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; turnHistory.onScroll(el); } }} className="aw-chief-body" aria-live="polite">
         <div className="aw-chief-body-inner">
@@ -571,7 +636,6 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
         : guideConfiguring ? <>
           {setup.data
             ? <ChiefGuidedSetup setup={setup.data} substep={guideRuntime.substep}
-              reviewing={guideRuntime.reviewing}
               clientKind={clientKind} onClientKindChange={setClientKind}
               os={os} onOsChange={value => { setOs(value); setCommand(null); }}
               command={command} onCommandChange={setCommand}
@@ -621,7 +685,7 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
           {turnHistory.turns.map(turn => <section key={turn.id} data-turn-id={turn.id} className={`aw-chief-message ${turn.direction === INBOUND ? 'aw-chief-user' : ''}`}>
             <div className="aw-chief-message-heading">
               {turn.direction !== INBOUND && <div className="aw-chief-secondary">{t('name')}</div>}
-              <div className="aw-chief-message-actions">{turn.contentHasMore ? <ConversationTurnCopyButton base={`/api/platform/conversations/${prefs.conversationId}`} conversationId={prefs.conversationId!} turn={turn} label={t('copyMessage')} /> : <Button type="text" size="small" icon={<CopyOutlined />} aria-label={t('copyMessage')} title={t('copyMessage')} onClick={() => copyMessage(turn.content)} />}</div>
+              <div className="aw-chief-message-actions">{turn.contentHasMore ? <ConversationTurnCopyButton base={`/api/platform/conversations/${prefs.conversationId}`} conversationId={prefs.conversationId!} turn={turn} label={t('copyMessage')} /> : <Button type="text" size="small" icon={<AwStrokeIcon name="copy" />} aria-label={t('copyMessage')} title={t('copyMessage')} onClick={() => copyMessage(turn.content)} />}</div>
             </div>
             {turn.direction === INBOUND ? <><AutoConversationTurnContent base={`/api/platform/conversations/${prefs.conversationId}`} conversationId={prefs.conversationId!} turn={turn} enabled={open} /><ChiefTurnEvents key={`${prefs.conversationId}:${turn.id}`} onContentChange={followContent} onSettledQuestions={recordSettledQuestions} scope={scopedKey} conversationId={prefs.conversationId!} turnId={turn.id} processing={processing && turn.id === conversation.data?.processingTurnId}
                 questionHistory={conversation.data?.questionHistory ?? conversation.data?.answerDeliveries}
@@ -633,7 +697,7 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
                 }} /></>
               : turnNotices.get(turn.id)?.[0] ?? <AutoConversationTurnContent base={`/api/platform/conversations/${prefs.conversationId}`} conversationId={prefs.conversationId!} turn={turn} enabled={open} copyCodeBlocks />}
             {!!turn.images?.length && <div className="aw-chief-images">{turn.images.map(image => <a key={image.id} href={image.url} target="_blank" rel="noreferrer"><img src={image.url} alt={image.name} /></a>)}</div>}
-            <div className="aw-chief-message-actions">{turn.contentHasMore ? <ConversationTurnCopyButton base={`/api/platform/conversations/${prefs.conversationId}`} conversationId={prefs.conversationId!} turn={turn} label={t('copyMessage')} /> : <Button type="text" size="small" icon={<CopyOutlined />} aria-label={t('copyMessage')} title={t('copyMessage')} onClick={() => copyMessage(turn.content)} />}</div>
+            <div className="aw-chief-message-actions">{turn.contentHasMore ? <ConversationTurnCopyButton base={`/api/platform/conversations/${prefs.conversationId}`} conversationId={prefs.conversationId!} turn={turn} label={t('copyMessage')} /> : <Button type="text" size="small" icon={<AwStrokeIcon name="copy" />} aria-label={t('copyMessage')} title={t('copyMessage')} onClick={() => copyMessage(turn.content)} />}</div>
             {turn.error && <Alert type="error" message={turnNotices.get(turn.id)?.[1] ?? turn.error} />}
             {planLayout.anchoredPlans.get(turn.id)?.map(renderPlan)}
           </section>)}
@@ -666,17 +730,20 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
           <span>{t('pendingPlansNotice', { count: pendingPlans.length })}</span>
           <Button type="link" size="small" onClick={revealPendingPlan}>{t('pendingPlansView')}</Button>
         </div>}
-      {composerVisible && <footer className="aw-chief-composer">
+      {composerVisible && <footer className="aw-chief-composer"
+        data-guide-spot={guided && guideRuntime.stage === 3 ? 'send' : undefined}>
         <div className="aw-chief-composer-inner">
-        <div className="aw-chief-input-shell" onPaste={event => { const files = filesFromClipboard(event.clipboardData).filter(file => file.type.startsWith('image/')); if (files.length && !upload.isPending && !submit.isPending && setup.data?.ready && !conversation.data?.archivedAt) { event.preventDefault(); upload.mutate(files); } }}>
-          {!!images.length && <div className="aw-chief-images">{images.map(image => <div className="aw-chief-image-draft" key={image.id}><img src={image.url} alt={image.name} /><Button type="text" size="small" icon={<CloseOutlined />} aria-label={t('removeImage', { name: image.name })} onClick={() => setImages(current => current.filter(item => item.id !== image.id))} /></div>)}</div>}
-          <Input.TextArea aria-label={t('input')} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); if ((draft.trim() || images.length) && !submit.isPending && !upload.isPending && !processing && setup.data?.ready && !conversation.data?.archivedAt && !conversation.error) submit.mutate(); } }} placeholder={t('placeholder')} autoSize={{ minRows: 2, maxRows: 5 }} disabled={!setup.data?.ready || !!conversation.data?.archivedAt || !!conversation.error} />
+        <div className={`aw-chief-input-shell${inputDisabled ? ' aw-chief-input-disabled' : ''}`} onPaste={event => { const files = filesFromClipboard(event.clipboardData).filter(file => file.type.startsWith('image/')); if (files.length && !inputDisabled && !upload.isPending && !submit.isPending) { event.preventDefault(); upload.mutate(files); } }}>
+          {!!images.length && <div className="aw-chief-images">{images.map(image => <div className="aw-chief-image-draft" key={image.id}><img src={image.url} alt={image.name} /><Button type="text" size="small" icon={<AwStrokeIcon name="x" />} aria-label={t('removeImage', { name: image.name })} onClick={() => setImages(current => current.filter(item => item.id !== image.id))} /></div>)}</div>}
+          <Input.TextArea id="aw-chief-composer-input" aria-label={t('input')} aria-describedby={inputDisabled ? 'aw-chief-composer-note' : undefined} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); if ((draft.trim() || images.length) && !submit.isPending && !upload.isPending && !processing && !inputDisabled) submit.mutate(); } }} placeholder={t('placeholder')} autoSize={{ minRows: 2, maxRows: 5 }} disabled={inputDisabled} />
           <div className="aw-chief-input-tools">
-            <input ref={filePicker} type="file" accept={IMAGE_ACCEPT} multiple hidden aria-label={t('uploadImage')} onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ''; if (files.length) upload.mutate(files); }} />
-            <Button type="text" size="small" icon={<PictureOutlined />} aria-label={t('uploadImage')} loading={upload.isPending} disabled={!setup.data?.ready || submit.isPending || upload.isPending || !!conversation.data?.archivedAt} onClick={() => filePicker.current?.click()} />
-            <span className="aw-chief-secondary">{t('privateSaved')}</span>
+            <input ref={filePicker} type="file" accept={IMAGE_ACCEPT} multiple hidden aria-label={t('uploadImage')} onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ''; if (files.length && !inputDisabled) upload.mutate(files); }} />
+            <Button type="text" size="small" icon={<PictureOutlined />} aria-label={t('uploadImage')} loading={upload.isPending} disabled={inputDisabled || submit.isPending || upload.isPending} onClick={() => filePicker.current?.click()} />
+            {inputDisabled
+              ? <span className="aw-chief-composer-note" id="aw-chief-composer-note"><LockOutlined aria-hidden="true" />{inputDisabledReason}</span>
+              : <span className="aw-chief-secondary">{t('privateSaved')}</span>}
             {processing && conversation.data?.cancelSupported ? <Button className="aw-chief-send" type="text" shape="circle" size="small" icon={<StopOutlined />} aria-label={t('stop')} loading={perform.isPending} onClick={() => perform.mutate(() => api.cancelTurn(prefs.conversationId!, conversation.data!.processingTurnId!))} />
-              : <Button className="aw-chief-send" data-guide-target="send" type="primary" shape="circle" size="small" aria-label={t('send')} icon={<ArrowUpOutlined />} loading={submit.isPending} disabled={(!draft.trim() && !images.length) || upload.isPending || processing || !setup.data?.ready || !!conversation.data?.archivedAt || !!conversation.error} onClick={() => submit.mutate()} />}
+              : <Button className="aw-chief-send" type="primary" shape="circle" size="small" aria-label={t('send')} icon={<AwStrokeIcon name="up" />} loading={submit.isPending} disabled={(!draft.trim() && !images.length) || upload.isPending || processing || inputDisabled} onClick={() => submit.mutate()} />}
           </div>
         </div>
         </div>
@@ -684,8 +751,8 @@ function Assistant({ userId, workspaceId, hideLauncher }: { userId: number; work
     </div>}
     {!hideLauncher && !(open && prefs.expanded) && <div className={`aw-chief-launch${prefs.docked && !open ? ' aw-chief-tucked' : ''}`}>
       {!prefs.docked && <span onPointerDown={event => beginDrag(event, 'both')} className="aw-chief-grip" aria-hidden="true"><HolderOutlined /></span>}
-      <button type="button" className="aw-chief-puck" aria-label={t('open')} onPointerDown={event => beginDrag(event, prefs.docked ? 'vertical' : 'both')} onClick={togglePuck}><ChiefIcon size={22} /></button>
-      <button type="button" className="aw-chief-dock" aria-label={prefs.docked ? t('undock') : t('dock')} aria-expanded={!prefs.docked} onPointerDown={prefs.docked ? event => beginDrag(event, 'vertical') : undefined} onClick={toggleDock}>{prefs.docked ? <RightOutlined /> : <LeftOutlined />}</button>
+      <button type="button" className="aw-chief-puck" aria-label={t('open')} title={puckTitle} onPointerDown={event => beginDrag(event, prefs.docked ? 'vertical' : 'both')} onClick={togglePuck}><ChiefIcon size={22} />{statusIssue && <span className="aw-chief-status-dot" aria-hidden="true" />}</button>
+      <button type="button" className="aw-chief-dock" aria-label={prefs.docked ? t('undock') : t('dock')} title={prefs.docked ? t('undock') : t('dock')} aria-expanded={!prefs.docked} onPointerDown={prefs.docked ? event => beginDrag(event, 'vertical') : undefined} onClick={toggleDock}>{prefs.docked ? <AwStrokeIcon name="chev-r" /> : <AwStrokeIcon name="chev-l" />}</button>
     </div>}
   </div>;
 }

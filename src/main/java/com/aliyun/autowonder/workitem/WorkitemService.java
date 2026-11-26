@@ -119,6 +119,8 @@ public class WorkitemService {
     private static final int MAX_TAG_CONDITIONS = 30;
     private static final int MAX_TAG_CONDITIONS_LENGTH = 4000;
     private static final Set<String> TAG_CONDITION_OPS = Set.of("AND", "OR", "IN", "NOT");
+    /** 人工流转备注上限：与前端 maxLength 一致，避免超长/纯空白串写入状态事件。 */
+    private static final int MAX_TRANSITION_REASON_LENGTH = 500;
     /** 时间线每个方向最多展示的标签数，完整 diff 保存在 detail_json。 */
     private static final int TAG_EVENT_DETAIL_LIMIT = 5;
     private static final int TAG_EVENT_VALUE_MAX_LENGTH = 256;
@@ -926,6 +928,12 @@ public class WorkitemService {
     @Transactional
     public WorkitemVO transition(long id, long toNodeId, long tenantId, long userId,
                                  Long expectedFromNodeId, Integer expectedVersion) {
+        return transition(id, toNodeId, tenantId, userId, expectedFromNodeId, expectedVersion, null);
+    }
+
+    @Transactional
+    public WorkitemVO transition(long id, long toNodeId, long tenantId, long userId,
+                                 Long expectedFromNodeId, Integer expectedVersion, String reason) {
         WorkitemDO w = workitemDao.findById(id);
         if (w == null || !Long.valueOf(tenantId).equals(w.getTenantId())) {
             throw new BizException(ErrorCode.WORKITEM_NOT_FOUND);
@@ -938,7 +946,8 @@ public class WorkitemService {
         if (w.getTemplateId() == null || w.getStatusNodeId() == null) {
             throw new BizException(ErrorCode.ILLEGAL_TRANSITION);
         }
-        return applyTransition(w, toNodeId, "HUMAN", userId, TRANSITION_SOURCE_HUMAN, null);
+        return applyTransition(w, toNodeId, "HUMAN", userId, TRANSITION_SOURCE_HUMAN,
+                normalizeTransitionReason(reason));
     }
 
     @Transactional
@@ -1031,6 +1040,19 @@ public class WorkitemService {
                         n.getCategory() == null ? "" : n.getCategory().trim()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /** 人工流转备注归一：trim、空白归 null、超限拒绝，避免依赖前端单点校验（CR-59979-02）。 */
+    static String normalizeTransitionReason(String reason) {
+        if (reason == null) return null;
+        String trimmed = reason.trim();
+        if (trimmed.isEmpty()) return null;
+        if (trimmed.length() > MAX_TRANSITION_REASON_LENGTH) {
+            throw new KeyedIllegalArgumentException("workitem.transition.reason_too_long",
+                    new Object[]{MAX_TRANSITION_REASON_LENGTH},
+                    "transition reason length=" + trimmed.length() + ", limit=" + MAX_TRANSITION_REASON_LENGTH);
+        }
+        return trimmed;
     }
 
     static String transitionDetailJson(String source, String reason, boolean outOfTemplate) {
@@ -1939,6 +1961,7 @@ public class WorkitemService {
         }
         List<Long> agentIds = resolveProgressAgentIds(w, tenantId, dispatches);
 
+        List<DispatchAttemptVO> executions = buildExecutionProgress(dispatches, context);
         List<AgentDeliveryProgressVO> agentProgress = new ArrayList<>();
         for (Long agentId : agentIds) {
             AgentDeliveryProgressVO agentVO = buildAgentProgress(w, tenantId, agentId, dispatches, context);
@@ -1960,18 +1983,6 @@ public class WorkitemService {
             compatSteps = buildLegacySteps(w, dispatches, context);
         }
         DeliveryProgressVO result = new DeliveryProgressVO();
-        List<DispatchAttemptVO> executions = buildAttempts(dispatches, null, context.latestEvents, context);
-        Date timingNow = new Date();
-        for (int i = 0; i < dispatches.size(); i++) {
-            DispatchDO dispatch = dispatches.get(i);
-            // Resolve the flow from this execution's entry step, not the employee's current binding.
-            SdlcStepDO entryStep = dispatch.getSdlcStepId() == null ? null : context.step(dispatch.getSdlcStepId());
-            if (!isInteractionDispatch(dispatch) && entryStep != null && entryStep.getSdlcId() != null) {
-                executions.get(i).setStepTimings(DispatchStepTimings.buildProgress(dispatch,
-                        context.eventsByDispatch.getOrDefault(dispatch.getId(), List.of()),
-                        context.maxEventTime.get(dispatch.getId()), context.steps(entryStep.getSdlcId()), timingNow));
-            }
-        }
         result.setExecutions(executions);
         result.setAgents(agentProgress);
         result.setSteps(compatSteps);
@@ -1984,8 +1995,29 @@ public class WorkitemService {
         result.setCanReopen(context.controlClosed && allTerminal);
         result.setReopenReasonKey(allTerminal ? null : "dispatch.recovery.cancel_pending");
         result.setReopenReasonArgs(List.of());
-        if (context.spill != null) context.eventsByDispatch.values().forEach(context.spill::discard);
+        if (context.spill != null) {
+            context.eventsByDispatch.values().forEach(context.spill::discard);
+            context.timingEventsByDispatch.values().forEach(context.spill::discard);
+        }
         return result;
+    }
+
+    private List<DispatchAttemptVO> buildExecutionProgress(List<DispatchDO> dispatches, ProgressReadContext context) {
+        List<DispatchAttemptVO> executions = buildAttempts(dispatches, null, context.latestEvents, context);
+        Date timingNow = new Date();
+        for (int i = 0; i < dispatches.size(); i++) {
+            DispatchDO dispatch = dispatches.get(i);
+            // Resolve the flow from this execution's entry step, not the employee's current binding.
+            SdlcStepDO entryStep = dispatch.getSdlcStepId() == null ? null : context.step(dispatch.getSdlcStepId());
+            if (!isInteractionDispatch(dispatch) && entryStep != null && entryStep.getSdlcId() != null) {
+                var steps = context.steps(entryStep.getSdlcId());
+                executions.get(i).setStepTimings(DispatchStepTimings.buildProgress(dispatch,
+                        context.eventsByDispatch.getOrDefault(dispatch.getId(), List.of()),
+                        context.indexTimings(dispatch.getId(), steps),
+                        context.lastActivityTime.get(dispatch.getId()), steps, timingNow));
+            }
+        }
+        return executions;
     }
 
     private ProcessGraphVO buildProcessGraph(WorkitemDO workitem, long tenantId,
@@ -2270,8 +2302,14 @@ public class WorkitemService {
         Iterable<DispatchRuntimeEventDO> agentEvents = () -> java.util.stream.StreamSupport
                 .stream(displayRuntimeEvents.spliterator(), false)
                 .filter(event -> Objects.equals(agentId, event.getAgentId())).iterator();
-        RuntimeStepTimeline runtimeState = RuntimeStepTimeline.fromProgress(
-                agentEvents, sdlcSteps, new Date(), true, context.spill);
+        Date agentActivity = latestAgentDispatch == null ? null
+                : context.agentActivityTime.get(new ActivityKey(agentId, latestAgentDispatch.getId()));
+        Date now = new Date();
+        Date cutoff = context.hasTiming(latestAgentDispatch, sdlcSteps)
+                ? DispatchStepTimings.observedCutoff(latestAgentDispatch, agentActivity, now)
+                : DispatchStepTimings.elapsedCutoff(latestAgentDispatch, displayRuntimeEvents, now);
+        RuntimeStepTimeline runtimeState = RuntimeStepTimeline.fromProgress(agentEvents, sdlcSteps,
+                cutoff, true, context.spill);
 
         List<DeliveryStepVO> stepVOs = new ArrayList<>();
         for (SdlcStepDO step : sdlcSteps) {
@@ -2721,9 +2759,12 @@ public class WorkitemService {
         private final DeliveryProgressSpill spill;
         private final Map<Long, DispatchRuntimeEventDO> latestEvents = new HashMap<>();
         private final Map<ActivityKey, DispatchRuntimeEventDO> latestActivity = new HashMap<>();
-        private final Map<Long, Date> maxEventTime = new HashMap<>();
+        private final Map<Long, Date> lastActivityTime = new HashMap<>();
+        private final Map<ActivityKey, Date> agentActivityTime = new HashMap<>();
         private DispatchRuntimeEventDO latestPlan;
         private final Map<Long, List<DispatchRuntimeEventDO>> eventsByDispatch = new HashMap<>();
+        private final Map<Long, List<DispatchRuntimeEventDO>> timingEventsByDispatch = new HashMap<>();
+        private final Map<Long, Boolean> validTimingsByDispatch = new HashMap<>();
         private final Map<Long, String> waitingReasons = new HashMap<>();
         private final Map<Long, String> names = new HashMap<>();
         private final Map<Long, String> executorNames = new HashMap<>();
@@ -2746,19 +2787,41 @@ public class WorkitemService {
                 latestPlan = event;
             }
             if (dispatchId == null) return;
-            latestEvents.merge(dispatchId, event, WorkitemService.this::laterProgressEvent);
+            if ("operation.timing".equals(event.getEventType())) return;
+            if (!"step.timing".equals(event.getEventType())) {
+                latestEvents.merge(dispatchId, event, WorkitemService.this::laterProgressEvent);
+            }
             if ("agent.progress".equals(event.getEventType()) && event.getMessage() != null
                     && !event.getMessage().isBlank() && !looksLikeMojibake(event.getMessage())) {
                 latestActivity.merge(new ActivityKey(event.getAgentId(), dispatchId), event,
                         WorkitemService.this::laterProgressEvent);
             }
             Date time = event.getEventTime() == null ? event.getGmtCreate() : event.getEventTime();
-            if (time != null) maxEventTime.merge(dispatchId, time, (left, right) -> left.after(right) ? left : right);
-            if (event.getStepOrder() != null || event.getStepId() != null || event.getStepKey() != null
-                    || event.getStepName() != null || "dispatch.executor_failover".equals(event.getEventType())) {
-                eventsByDispatch.computeIfAbsent(dispatchId,
+            if (time != null && DispatchStepTimings.isActivity(event.getEventType())) {
+                lastActivityTime.merge(dispatchId, time, java.util.function.BinaryOperator.maxBy(Date::compareTo));
+                agentActivityTime.merge(new ActivityKey(event.getAgentId(), dispatchId), time,
+                        java.util.function.BinaryOperator.maxBy(Date::compareTo));
+            }
+            if (RuntimeStepTimeline.hasStepIdentity(event) || RuntimeStepTimeline.isTimingBoundary(event.getEventType())) {
+                var destination = "step.timing".equals(event.getEventType()) ? timingEventsByDispatch : eventsByDispatch;
+                destination.computeIfAbsent(dispatchId,
                         ignored -> spill == null ? new ArrayList<>() : spill.list(DispatchRuntimeEventDO.class)).add(event);
             }
+        }
+
+        private Map<SdlcStepDO, Map<String, JSONObject>> indexTimings(long dispatchId, List<SdlcStepDO> steps) {
+            var events = timingEventsByDispatch.get(dispatchId);
+            if (events == null) return Map.of();
+            var summaries = StepTimingSummaries.index(events, steps);
+            validTimingsByDispatch.put(dispatchId, !summaries.isEmpty());
+            return summaries;
+        }
+
+        private boolean hasTiming(DispatchDO dispatch, List<SdlcStepDO> steps) {
+            if (dispatch == null || !timingEventsByDispatch.containsKey(dispatch.getId())) return false;
+            Boolean valid = validTimingsByDispatch.get(dispatch.getId());
+            // A legacy dispatch without an entry step only has the agent view's fallback flow.
+            return valid != null ? valid : !indexTimings(dispatch.getId(), steps).isEmpty();
         }
 
         private void bindDelivery(long tenantId, long workitemId, List<DispatchDO> dispatches) {
@@ -3387,6 +3450,7 @@ public class WorkitemService {
             item.setFromValDisplay(fromVal);
             item.setToValDisplay(toVal);
             applyControlDetail(item, e);
+            applyStatusChangeDetail(item, e);
             String operator = "EXTERNAL".equals(e.getActorType()) && externalWorkitemViewService != null
                     && ("STATUS_CHANGE".equals(e.getEventType()) || "ASSIGN".equals(e.getEventType()))
                     && e.getActorRef() != null && e.getActorRef() != 0L
@@ -3465,6 +3529,18 @@ public class WorkitemService {
             control.setAffectedDispatches(affected);
             item.setDeliveryControl(control);
         }
+    }
+
+    /** 人工流转备注：只把 HUMAN 来源的状态事件 reason 透出为时间线纯文本备注（CR-59979-01）。 */
+    private void applyStatusChangeDetail(TimelineItemVO item, WorkitemEventDO event) {
+        if (event == null || event.getDetailJson() == null) return;
+        if (!WorkitemEventType.STATUS_CHANGE.code().equals(event.getEventType())) return;
+        JSONObject detail = JSON.parseObject(event.getDetailJson());
+        if (!TRANSITION_SOURCE_HUMAN.equals(detail.getString("source"))) return;
+        String reason = detail.getString("reason");
+        if (reason == null) return;
+        String note = reason.trim();
+        if (!note.isEmpty()) item.setNote(note);
     }
 
     private String formatTimelineEventContent(WorkitemEventDO event, String fromVal, String toVal, String operator) {

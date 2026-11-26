@@ -29,7 +29,7 @@ class RuntimeTraceArtifactServiceTest {
         dispatch.setTenantId(1L);
         when(dispatches.findById(44L)).thenReturn(dispatch);
         var events = mock(DispatchRuntimeEventDao.class);
-        var service = new RuntimeTraceArtifactService(artifacts, storage, dispatches, events);
+        var service = new RuntimeTraceArtifactService(artifacts, storage, dispatches, events, usageFallback());
         for (String status : List.of(DispatchStatus.PENDING, DispatchStatus.PACKAGING,
                 DispatchStatus.DISPATCHED, DispatchStatus.ACKED, DispatchStatus.RUNNING)) {
             dispatch.setStatus(status);
@@ -70,7 +70,7 @@ class RuntimeTraceArtifactServiceTest {
         staleAlias.setId(20L);
         staleAlias.setMetaJson("{\"runtimeArchiveIdentity\":\"51:none\"}");
         when(artifacts.listByDispatch(1L, 44L)).thenReturn(List.of(staleAlias, artifact));
-        var service = new RuntimeTraceArtifactService(artifacts, storage, dispatches, events);
+        var service = new RuntimeTraceArtifactService(artifacts, storage, dispatches, events, usageFallback());
         var statuses = List.of(DispatchStatus.PAUSED, DispatchStatus.SUCCEEDED, DispatchStatus.FAILED, DispatchStatus.CANCELED);
         for (String status : statuses) {
             dispatch.setStatus(status);
@@ -113,7 +113,7 @@ class RuntimeTraceArtifactServiceTest {
         when(storage.get("bucket/context")).thenReturn("# Issue\n".getBytes(StandardCharsets.UTF_8));
 
         RuntimeTraceArtifactService service = new RuntimeTraceArtifactService(artifactDao, storage,
-                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class));
+                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class), usageFallback());
 
         RuntimeTraceVO.Turn turn = service.loadTurn(1L, 44L, "turn-1");
         RuntimeTraceVO.Observation observation = service.loadObservation(1L, 44L, "call-1");
@@ -136,8 +136,76 @@ class RuntimeTraceArtifactServiceTest {
     @Test
     void rejectsContextTraversal() {
         RuntimeTraceArtifactService service = new RuntimeTraceArtifactService(mock(ArtifactDao.class), mock(ObjectStorage.class),
-                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class));
+                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class), usageFallback());
         assertThrows(IllegalArgumentException.class, () -> service.loadContext(1L, 44L, "../trace.json"));
+    }
+
+    @Test
+    void archivedTraceWithoutProviderUsageUsesAttributedProxyUsage() {
+        ArtifactDao artifactDao = mock(ArtifactDao.class);
+        ObjectStorage storage = mock(ObjectStorage.class);
+        ArtifactDO traceArtifact = artifact(1L, 44L, "observability/trace.json", "bucket/trace");
+        when(artifactDao.listByDispatch(1L, 44L)).thenReturn(List.of(traceArtifact));
+        when(storage.get("bucket/trace")).thenReturn(("""
+                {"schemaVersion":"autowonder.runtime-trace.v2","dispatchId":"44","sessions":[{
+                  "sessionId":"qoder-session","turns":[{
+                    "traceId":"turn-1","turnId":"turn-1","stepId":"400554",
+                    "usage":{"available":false,"availability":"UNAVAILABLE"},
+                    "observations":[{"observationId":"turn-1:provider","type":"PROVIDER"}]
+                  }]
+                }]}
+                """).getBytes(StandardCharsets.UTF_8));
+        var usageDao = mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class);
+        when(usageDao.listByDispatchIds(1L, List.of(44L))).thenReturn(List.of(
+                usage("400554", 1000, 100, "1.5"),
+                usage("400555", 2000, 200, "1.5")));
+
+        RuntimeTraceVO outline = new RuntimeTraceArtifactService(artifactDao, storage,
+                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class),
+                new RuntimeTraceUsageFallback(usageDao)).loadOutline(1L, 44L);
+
+        assertTrue(outline.getTokenUsage().isAvailable());
+        assertEquals("TOKEN_PROXY", outline.getTokenUsage().getSource());
+        assertEquals(3.0D, outline.getTokenUsage().getCredits(), 1e-9);
+        RuntimeTraceVO.Turn turn = outline.getSessions().get(0).getTurns().get(0);
+        assertEquals(1.5D, turn.getUsage().getCredits(), 1e-9);
+        assertEquals(1.5D, turn.getObservations().get(0).getUsage().getCredits(), 1e-9);
+        assertEquals(1.5D, outline.getSessions().get(0).getTokenUsage().getCredits(), 1e-9);
+    }
+
+    @Test
+    void archivedTraceWithProviderUsageKeepsItAndSkipsAttributedRows() {
+        ArtifactDao artifactDao = mock(ArtifactDao.class);
+        ObjectStorage storage = mock(ObjectStorage.class);
+        ArtifactDO traceArtifact = artifact(1L, 44L, "observability/trace.json", "bucket/trace");
+        when(artifactDao.listByDispatch(1L, 44L)).thenReturn(List.of(traceArtifact));
+        when(storage.get("bucket/trace")).thenReturn(("""
+                {"schemaVersion":"autowonder.runtime-trace.v2","dispatchId":"44",
+                 "tokenUsage":{"available":true,"availability":"AVAILABLE","source":"PROVIDER_REPORTED","credits":0.25},
+                 "sessions":[]}
+                """).getBytes(StandardCharsets.UTF_8));
+        var usageDao = mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class);
+
+        RuntimeTraceVO outline = new RuntimeTraceArtifactService(artifactDao, storage,
+                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class),
+                new RuntimeTraceUsageFallback(usageDao)).loadOutline(1L, 44L);
+
+        assertEquals(0.25D, outline.getTokenUsage().getCredits(), 1e-9);
+        org.mockito.Mockito.verifyNoInteractions(usageDao);
+    }
+
+    private static com.aliyun.autowonder.aiusage.DispatchAiUsageDO usage(String stepId, long input, long output,
+                                                                        String credits) {
+        var usage = new com.aliyun.autowonder.aiusage.DispatchAiUsageDO();
+        usage.setStepId(stepId);
+        usage.setInputTokens(input);
+        usage.setOutputTokens(output);
+        usage.setCredits(new java.math.BigDecimal(credits));
+        return usage;
+    }
+
+    private static RuntimeTraceUsageFallback usageFallback() {
+        return new RuntimeTraceUsageFallback(mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class));
     }
 
     private static ArtifactDO artifact(long tenantId, long dispatchId, String name, String ossRef) {
@@ -179,7 +247,7 @@ class RuntimeTraceArtifactServiceTest {
                 """).getBytes(StandardCharsets.UTF_8));
 
         RuntimeTraceVO outline = new RuntimeTraceArtifactService(artifactDao, storage,
-                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class)).loadOutline(1L, 55L);
+                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class), usageFallback()).loadOutline(1L, 55L);
 
         assertEquals("OSS", outline.getSource());
         RuntimeTraceVO.Event terminal = outline.getEvents().get(0);
@@ -212,7 +280,7 @@ class RuntimeTraceArtifactServiceTest {
     @Test
     void invalidContextRefKeepsIllegalArgumentTypeAndRawDiagnosticAtBilingualBoundary() {
         RuntimeTraceArtifactService service = new RuntimeTraceArtifactService(mock(ArtifactDao.class), mock(ObjectStorage.class),
-                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class));
+                mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class), usageFallback());
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> service.loadContext(1L,44L,"../trace.json"));
         assertEquals("invalid context content ref", ex.getMessage());
         var previous = org.springframework.context.i18n.LocaleContextHolder.getLocaleContext();

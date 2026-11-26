@@ -31,7 +31,10 @@
     "workitem": "Work item",
     "phase": "Current phase",
     "workitemStatus": "Work item status",
-    "plannedAt": "Scheduled execution time"
+    "plannedAt": "Scheduled execution time",
+    "startedAt": "Started at",
+    "duration": "Duration",
+    "result": "Result"
   },
   "labels": {
     "agent": "Agent",
@@ -42,6 +45,7 @@
   "list": {
     "awaitingResult": "Running / awaiting result",
     "tasksTitle": "Scheduled tasks",
+    "tasksTab": "Schedules",
     "workitemsTitle": "Scheduled work items",
     "summaryAria": "Task summary",
     "summaryScope": "Summary for current filters (all creators)",
@@ -51,10 +55,6 @@
     "squadFilter": "Squad filter",
     "statusFilter": "Status filter",
     "successRate": "Success rate over 30 days: <rate>{{rate}}</rate>% (<success>{{success}}</success>/<completed>{{completed}}</completed>)",
-    "totalTasks_one": "<number>{{total}}</number> task",
-    "totalTasks_other": "<number>{{total}}</number> tasks",
-    "totalWorkitems_one": "<number>{{total}}</number> work item",
-    "totalWorkitems_other": "<number>{{total}}</number> work items",
     "totalRows_one": "{{total}} record",
     "totalRows_other": "{{total}} records",
     "runningCount_one": "<number>{{total}}</number> running task",
@@ -77,7 +77,7 @@
     "cancel": "Cancel",
     "confirmDelete": "Confirm deletion",
     "delete": "Delete",
-    "newTask": "New task",
+    "newTask": "New scheduled task",
     "backToList": "Back to scheduled task list",
     "createEnable": "Create and enable",
     "savePaused": "Save as paused",
@@ -98,7 +98,11 @@
     "preview": "Preview",
     "search": "Search",
     "clearTaskSearch": "Clear task search",
-    "clearWorkitemSearch": "Clear scheduled work item search"
+    "clearWorkitemSearch": "Clear scheduled work item search",
+    "more": "More actions",
+    "deleteTask": "Delete task",
+    "expandAll": "Expand all",
+    "collapse": "Collapse"
   },
   "commands": {
     "runNow": "Run scheduled task now",
@@ -109,8 +113,18 @@
   },
   "create": {
     "title": "New scheduled task",
+    "sections": {
+      "content": "Task content",
+      "executor": "Executor",
+      "schedule": "Schedule",
+      "policy": "Run policy"
+    },
+    "optional": "Optional",
+    "flowLine": "<k>Runs with</k><b>{{workflow}}</b>",
+    "stepChip": "{{order}}. {{name}}",
+    "policySummary": "{{session}} · Overlap: {{overlap}} · Missed: {{misfire}} · Start timeout {{seconds}}s",
+    "docPauseNote": "Tasks with documents are first created as paused, then automatically enabled once the document upload succeeds; if the upload fails, the task stays paused with a notice.",
     "noWorkflow": "no SDLC workflow (uses scheduling instructions directly)",
-    "agentWorkflow": "{{agent}} will use {{workflow}}",
     "uploadFailed": "Task saved as paused; requirement document upload failed. Retry the upload in task details before enabling it.",
     "uploadFailedReason": "Task saved as paused; requirement document upload failed: {{reason}}. Retry the upload in task details before enabling it.",
     "enableFailed": "Requirement documents uploaded, but enabling failed. The task is still paused; retry enabling it in task details.",
@@ -126,21 +140,19 @@
     "name": "Task name",
     "namePlaceholder": "For example: nightly main branch regression",
     "instruction": "Task instruction",
-    "instructionPlaceholder": "Markdown supported. Describe the goal, inputs, completion criteria and precautions.",
+    "instructionHelp": "Markdown supported. Describe the goal, inputs, completion criteria and precautions.",
     "squad": "Squad",
     "squadPlaceholder": "Select an execution squad",
     "initialAgent": "Initial Agent",
     "agentPlaceholder": "Select the initial Agent from this squad",
     "timezone": "Time zone",
-    "policySection": "Run policy and continuous session settings",
     "documents": "Requirement documents",
     "documentsHelp": "Uploaded after task creation and frozen with each run.",
     "documentsAria": "Requirement document upload area (click, drag or paste)",
     "documentsPrompt": "Click or drag requirement documents here, or paste screenshots with Ctrl/Cmd+V",
+    "removeDocument": "Remove {{name}}",
     "cron": "Cron expression",
     "sessionMode": "Session mode",
-    "overlap": "Overlap policy",
-    "misfire": "Misfire policy",
     "overlapExecution": "Overlap policy",
     "missedTrigger": "Missed trigger policy",
     "startDeadline": "Start timeout (seconds)",
@@ -158,7 +170,9 @@
     "numberRequired": "Enter {{field}}"
   },
   "edit": {
-    "title": "Edit scheduled task"
+    "title": "Edit scheduled task",
+    "scheduleValue": "{{type}} · {{tz}}",
+    "readonlyNote": "These fields can't be changed after creation"
   },
   "session": {
     "isolated": "Isolated session",
@@ -170,13 +184,36 @@
     "loadFailed": "Task not found or failed to load",
     "initialAgent": "Initial Agent",
     "schedule": "Schedule",
-    "sessionOverlap": "Session / concurrency",
-    "health": "Health over the last 30 days",
     "instruction": "Task instruction",
     "history": "Run history",
     "noCompletedRuns": "No completed runs yet",
-    "nextExecution": "Next execution: {{time}}",
-    "healthResult": "Succeeded {{success}}/{{completed}} ({{rate}}%)"
+    "taskId": "task #{{id}}",
+    "metaCron": "Schedule <kw>{{cron}}</kw> · {{tz}}",
+    "metaOnce": "Once <v>{{time}}</v> · {{tz}}",
+    "metaNext": "Next run <v>{{time}}</v> ({{rel}})",
+    "metaNextNone": "Next run —",
+    "metaLast": "Last triggered <v>{{time}}</v>",
+    "metaUpdated": "Updated {{time}}",
+    "successRate": "Success rate (30 days)",
+    "healthFoot": "Succeeded <n>{{success}}</n> / Completed <n>{{completed}}</n>",
+    "latestRun": "Latest run",
+    "latestRunFoot": "{{time}} · Took <n>{{duration}}</n>",
+    "noRuns": "No runs yet",
+    "streak": "The last {{n}} runs failed. Reason: <kw>{{reason}}</kw>. <link>View Run #{{id}}</link>",
+    "streakNoReason": "The last {{n}} runs failed. <link>View Run #{{id}}</link>",
+    "historySub": "Newest first",
+    "historyEmpty": "No runs yet",
+    "documentsSub": "Frozen with each run",
+    "documentsEmpty": "No requirement documents. Upload them on the edit page.",
+    "execution": "Execution settings",
+    "upcoming": "Next 5 triggers",
+    "nextBadge": "Next",
+    "startDeadline": "Start timeout",
+    "affinityTimeout": "Affinity timeout",
+    "deadlineNote": "Skipped if not started within {{seconds}} seconds",
+    "affinityNote": "Applies to continuous sessions only",
+    "nextFoot": "{{weekday}} · {{tz}}",
+    "documentMeta": "{{size}} · {{date}}"
   },
   "run": {
     "invalidId": "Invalid run ID",
@@ -186,9 +223,13 @@
     "finishedAt": "Finished at",
     "executor": "Executor",
     "resumedFrom": "Resumed from",
+    "members": "Squad members",
+    "rid": "run #{{id}}",
+    "realtimeChannel": "Realtime channel: <value/>",
+    "degradedResume": "Degraded resume: this run was restored from the snapshot of {{run}} after it was interrupted (degradedReason: {{reason}}).",
     "result": "Execution result",
-    "triggerSchedule": "Trigger: {{trigger}} · Scheduled: {{time}}",
-    "duration": " · Duration: {{duration}}"
+    "triggerSchedule": "Trigger: <value/> · Scheduled: {{time}}",
+    "duration": "Duration: <value/>"
   },
   "comment": {
     "label": "Comment on this run",
@@ -211,7 +252,8 @@
     "scopeAria": "Scheduled work item scope",
     "keywordAria": "Work item title filter",
     "searchPlaceholder": "Search work item titles",
-    "actionAria": "{{action}} #{{id}}"
+    "actionAria": "{{action}} #{{id}}",
+    "empty": "No scheduled work items · Set a scheduled start from \"Start delivery\" on the work item details"
   },
   "phase": {
     "pending": "Pending trigger",
@@ -230,7 +272,11 @@
     "monthly": "Monthly",
     "custom": "Custom",
     "cronPlaceholder": "Second minute hour day month weekday, e.g. 0 0 2 * * *",
-    "previewHelp": "The next five execution times are calculated by the server from the Cron expression.",
+    "cronHelp": "Second minute hour day month weekday · Time zone {{tz}} (fixed)",
+    "upcoming": "Next 5 runs",
+    "serverComputed": "Server computed",
+    "fireTime": "{{date}} {{weekday}} {{time}}",
+    "previewInvalid": "Enter a valid expression to see the next 5 runs",
     "previewAria": "Upcoming execution times",
     "previewLoading": "Calculating upcoming execution times…",
     "runDate": "Execution date",
@@ -263,10 +309,6 @@
     "title": "Derived work items",
     "empty": "No derived work items"
   },
-  "artifacts": {
-    "title": "Run artifacts",
-    "empty": "No artifacts"
-  },
   "messages": {
     "runCreated": "Run created",
     "taskDeleted": "Scheduled task deleted",
@@ -277,5 +319,22 @@
     "scheduled": "Scheduled",
     "manual": "Manual",
     "misfire": "Catch-up"
+  },
+  "skipReason": {
+    "overlap": "Previous run still active, skipped",
+    "misfirePolicy": "Skipped by missed trigger policy",
+    "startDeadline": "Start timeout exceeded",
+    "ownerInactive": "Owner is no longer active",
+    "sourceExecutorTimeout": "Source executor timed out"
+  },
+  "policyNote": {
+    "isolated": "Each run uses a fresh session",
+    "continuous": "Continues the session context of the previous run",
+    "skip": "No new trigger while the previous run is active",
+    "queue": "Runs after the previous run finishes",
+    "allow": "Multiple runs can execute at the same time",
+    "skipAll": "All triggers missed during downtime are skipped",
+    "fireLatest": "Only the most recent missed trigger is run",
+    "fireAll": "Each missed trigger is run in turn"
   }
 }

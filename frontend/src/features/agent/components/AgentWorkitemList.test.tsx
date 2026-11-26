@@ -4,7 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
-import { AgentWorkitemList } from './AgentWorkitemList';
+import { AgentWorkitemList, PRIORITY_TAG_COLOR } from './AgentWorkitemList';
+import { priorityMap } from '@/features/workitem/constants';
 
 function ok(data: unknown) {
   return HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data });
@@ -56,8 +57,11 @@ describe('AgentWorkitemList 优先级展示', () => {
     ]);
     renderList();
 
-    expect(await screen.findByText('紧急')).toHaveClass('ant-tag-red');
+    // jsdom drops var() inline styles, so assert the label text and the palette entry behind it.
+    expect(await screen.findByText('紧急')).toBeInTheDocument();
     expect(screen.getByText('低')).toBeInTheDocument();
+    expect(PRIORITY_TAG_COLOR[priorityMap[0].color]).toBe('red');
+    expect(PRIORITY_TAG_COLOR[priorityMap[3].color]).toBe('gray');
   });
 
   it('shows 未知优先级 for unknown priority values', async () => {

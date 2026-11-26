@@ -1,7 +1,7 @@
 import { artifactTypeLabel } from '../runtimeLabels';
 import { useTranslation } from 'react-i18next';
 import { Card, Typography, Space, Spin } from 'antd';
-import { FileOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { Artifact } from '@/shared/types/workitem';
 
 const { Text } = Typography;
@@ -36,7 +36,7 @@ export function ArtifactList({ artifacts, loading }: ArtifactListProps) {
               key={String(a.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
-              <FileOutlined style={{ color: 'var(--aw-muted)', fontSize: 14 }} />
+              <span style={{ color: 'var(--aw-muted)', display: 'inline-flex' }}><AwStrokeIcon name="file" /></span>
               <Text ellipsis style={{ flex: 1, fontSize: 13 }}>{a.name}</Text>
               <Text type="secondary" style={{ fontSize: 11, flexShrink: 0 }}>{artifactTypeLabel(a.type)}</Text>
             </div>

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { DollarOutlined } from '@ant-design/icons';
 import { Popover } from 'antd';
 import { MetricCardShell } from './MetricCardShell';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { i18n } from '@/shared/i18n';
 import { formatCredits } from '@/shared/lib/tokenFormat';
 import type { CostMetrics, WorkerCost } from '../types';
@@ -71,7 +71,7 @@ export function CreditsCostCard({ cost, variant = 'card' }: CreditsCostCardProps
   ) : (
     <MetricCardShell
       title={t('cost.title')}
-      icon={<DollarOutlined aria-hidden="true" />}
+      icon={<AwStrokeIcon name="coin" />}
       color="var(--aw-warning)"
       bg="color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))"
       kpis={kpis}

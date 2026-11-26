@@ -21,7 +21,19 @@ function mount(isAdmin = true) {
 }
 
 describe('WorkspaceRolesPanel', () => {
-  it('creates a custom role with grouped read-only features and a raw name', async () => {
+  it('shows the role source, permission model and member count in the table', async () => {
+    mount();
+    const row = (await screen.findByText('交付协作 / Delivery')).closest('tr')!;
+    expect(within(row).getByText('自定义角色')).toBeInTheDocument();
+    expect(within(row).getByText('自定义')).toBeInTheDocument();
+    expect(within(row).getByText('SDLC 流程')).toBeInTheDocument();
+    const collaborator = screen.getByText('读写者').closest('tr')!;
+    expect(within(collaborator).getByText('内置角色')).toBeInTheDocument();
+    expect(within(collaborator).getByText('全部读写')).toBeInTheDocument();
+    expect(screen.getByText(/共 4 个角色/)).toBeInTheDocument();
+  });
+
+  it('creates a custom role by turning one feature read-only', async () => {
     const user = userEvent.setup();
     const saved = vi.fn();
     server.use(http.post('/api/workspaces/current/roles', async ({ request }) => { saved(await request.json()); return ok(mockRoles[3]); }));
@@ -30,10 +42,10 @@ describe('WorkspaceRolesPanel', () => {
     await user.click(screen.getByRole('button', { name: '新建角色' }));
     const dialog = within(screen.getByRole('dialog'));
     await user.type(dialog.getByRole('textbox', { name: '角色名称' }), '<QA> 验收');
-    expect(dialog.queryByText('访问等级')).not.toBeInTheDocument();
-    expect(dialog.getByRole('button', { name: /^交付与工单协作/ })).toHaveAttribute('aria-expanded', 'false');
-    await user.click(dialog.getByRole('button', { name: /^流程与工作空间配置/ }));
-    await user.click(within(dialog.getByRole('group', { name: 'SDLC 流程' })).getByRole('radio', { name: '只读' }));
+    expect(dialog.getByText('全部读写')).toBeInTheDocument();
+    await user.click(dialog.getByRole('tab', { name: /^流程与工作空间配置/ }));
+    await user.click(within(dialog.getByRole('radiogroup', { name: 'SDLC 流程权限' })).getByText('只读', { selector: '.ant-segmented-item-label' }));
+    expect(dialog.getByText('1 项只读 · 28 项读写')).toBeInTheDocument();
     await user.click(dialog.getByRole('button', { name: /保\s*存/ }));
     await waitFor(() => expect(saved).toHaveBeenCalledWith({ name: '<QA> 验收', readOnlyDomains: ['SDLC'] }));
   });
@@ -44,15 +56,15 @@ describe('WorkspaceRolesPanel', () => {
     server.use(http.put('/api/workspaces/current/roles/14', async ({ request }) => { saved(await request.json()); return ok(mockRoles[3]); }));
     mount();
     const row = (await screen.findByText('交付协作 / Delivery')).closest('tr')!;
-    await user.click(within(row).getByRole('button', { name: '编辑' }));
+    await user.click(within(row).getByRole('button', { name: '编辑权限' }));
     await act(async () => { await i18n.changeLanguage('en-US'); });
     try {
       const dialog = within(screen.getByRole('dialog'));
       expect(dialog.getByRole('textbox', { name: 'Role name' })).toHaveValue('交付协作 / Delivery');
-      expect(dialog.getByRole('button', { name: /^Workflow and workspace configuration/ })).toHaveTextContent('1 read only');
-      await user.click(dialog.getByRole('button', { name: /^Workflow and workspace configuration/ }));
-      await user.click(within(dialog.getByRole('group', { name: 'SDLC workflows' })).getByRole('radio', { name: 'Read/write' }));
-      await user.click(dialog.getByRole('button', { name: 'Save' }));
+      expect(dialog.getByRole('tab', { name: /^Workflow and workspace configuration/ })).toHaveTextContent('1 read only');
+      await user.click(dialog.getByRole('tab', { name: /^Workflow and workspace configuration/ }));
+      await user.click(within(dialog.getByRole('radiogroup', { name: 'SDLC workflows permission' })).getByText('Read/write', { selector: '.ant-segmented-item-label' }));
+      await user.click(dialog.getByRole('button', { name: 'Save role' }));
       await waitFor(() => expect(saved).toHaveBeenCalledWith({ name: '交付协作 / Delivery', readOnlyDomains: [], version: 2 }));
     } finally { await act(async () => { await i18n.changeLanguage('zh-CN'); }); }
   });
@@ -67,49 +79,52 @@ describe('WorkspaceRolesPanel', () => {
     mount();
     const row = (await screen.findByText('读写者')).closest('tr')!;
     expect(within(row).queryByRole('button', { name: '删除角色' })).not.toBeInTheDocument();
-    await user.click(within(row).getByRole('button', { name: '编辑' }));
-    expect(within(screen.getByRole('dialog')).getByRole('textbox', { name: '角色名称' })).toBeDisabled();
-    await act(async () => { await i18n.changeLanguage('en-US'); });
-    try {
-      const dialog = within(screen.getByRole('dialog'));
-      expect(dialog.getByRole('textbox', { name: 'Role name' })).toHaveValue('Collaborator');
-      expect(dialog.getByRole('textbox', { name: 'Role name' })).toBeDisabled();
-      await user.click(dialog.getByRole('button', { name: /^Workflow and workspace configuration/ }));
-      await user.click(within(dialog.getByRole('group', { name: 'SDLC workflows' })).getByRole('radio', { name: 'Read only' }));
-      await user.click(dialog.getByRole('button', { name: 'Save' }));
-      await waitFor(() => expect(saved).toHaveBeenCalledWith({ readOnlyDomains: ['SDLC'], version: 0 }));
-    } finally { await act(async () => { await i18n.changeLanguage('zh-CN'); }); }
-  });
-
-  it.each(['只读者', '管理员'])('keeps the %s role fixed and undeletable for administrators', async (name) => {
-    const user = userEvent.setup();
-    mount();
-    const row = (await screen.findByText(name)).closest('tr')!;
-    expect(within(row).queryByRole('button', { name: '编辑' })).not.toBeInTheDocument();
-    expect(within(row).queryByRole('button', { name: '删除角色' })).not.toBeInTheDocument();
-    await user.click(within(row).getByRole('button', { name: '查看角色' }));
+    await user.click(within(row).getByRole('button', { name: '编辑权限' }));
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByRole('textbox', { name: '角色名称' })).toBeDisabled();
+    await user.click(dialog.getByRole('tab', { name: /^流程与工作空间配置/ }));
+    await user.click(within(dialog.getByRole('radiogroup', { name: 'SDLC 流程权限' })).getByText('只读', { selector: '.ant-segmented-item-label' }));
+    await user.click(dialog.getByRole('button', { name: '保存角色' }));
+    await waitFor(() => expect(saved).toHaveBeenCalledWith({ readOnlyDomains: ['SDLC'], version: 0 }));
+  });
+
+  it('renders the view-only role with a fixed banner and no save action', async () => {
+    const user = userEvent.setup();
+    mount();
+    const row = (await screen.findByText('只读者')).closest('tr')!;
+    expect(within(row).getByRole('button', { name: '查看权限' })).toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: '查看权限' }));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByText('内置角色，权限不可修改；如需不同的权限组合，请新建自定义角色。')).toBeInTheDocument();
+    expect(dialog.getByRole('textbox', { name: '角色名称' })).toBeDisabled();
+    expect(dialog.queryByRole('button', { name: /保\s*存/ })).not.toBeInTheDocument();
+    for (const control of within(dialog.getByRole('radiogroup', { name: '工单权限' })).getAllByRole('radio')) expect(control).toBeDisabled();
+  });
+
+  it('shows administrators as all-permission roles without a matrix', async () => {
+    const user = userEvent.setup();
+    mount();
+    const row = (await screen.findByText('管理员')).closest('tr')!;
+    await user.click(within(row).getByRole('button', { name: '查看权限' }));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByText('拥有全部权限')).toBeInTheDocument();
+    expect(dialog.queryByRole('tablist')).not.toBeInTheDocument();
     expect(dialog.queryByRole('button', { name: /保\s*存/ })).not.toBeInTheDocument();
   });
 
-  it('disables all edits for non-admins, including collaborator permissions', async () => {
+  it('keeps view access but disables all role edits for non-admins', async () => {
     const user = userEvent.setup();
     useAuthStore.getState().setAccessLevel('READ_WRITE');
     mount(false);
-    const row = (await screen.findByText('只读者')).closest('tr')!;
-    expect(screen.getByRole('button', { name: '新建角色' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '删除角色' })).toBeDisabled();
-    await user.click(within(row).getByRole('button', { name: '查看角色' }));
+    expect(await screen.findByRole('button', { name: '新建角色' })).toBeDisabled();
+    const collaborator = (await screen.findByText('读写者')).closest('tr')!;
+    await user.click(within(collaborator).getByRole('button', { name: '查看权限' }));
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByRole('textbox', { name: '角色名称' })).toBeDisabled();
     expect(dialog.queryByRole('button', { name: /保\s*存/ })).not.toBeInTheDocument();
-    await user.click(dialog.getByRole('button', { name: /^流程与工作空间配置/ }));
-    expect(within(dialog.getByRole('group', { name: 'SDLC 流程' })).getByRole('radio', { name: '只读' })).toBeDisabled();
-    await user.click(dialog.getByRole('button', { name: '关闭' }));
-    const collaborator = screen.getByText('读写者').closest('tr')!;
-    await user.click(within(collaborator).getByRole('button', { name: '查看角色' }));
-    expect(within(screen.getByRole('dialog')).queryByRole('button', { name: /保\s*存/ })).not.toBeInTheDocument();
+    for (const control of within(dialog.getByRole('radiogroup', { name: '工单权限' })).getAllByRole('radio')) expect(control).toBeDisabled();
+    const custom = screen.getByText('交付协作 / Delivery').closest('tr')!;
+    expect(within(custom).getByRole('button', { name: '删除角色' })).toBeDisabled();
   });
 
   it('deletes an unused role with its version after confirmation', async () => {
@@ -122,5 +137,15 @@ describe('WorkspaceRolesPanel', () => {
     expect(deleted).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'OK' }));
     await waitFor(() => expect(deleted).toHaveBeenCalledWith('2'));
+  });
+
+  it('blocks deleting a role that still has members', async () => {
+    server.use(http.get('/api/workspaces/current/roles', () => ok([
+      ...mockRoles.slice(0, 3),
+      { ...mockRoles[3], memberCount: 3 },
+    ])));
+    mount();
+    const row = (await screen.findByText('交付协作 / Delivery')).closest('tr')!;
+    expect(within(row).getByRole('button', { name: '删除角色' })).toBeDisabled();
   });
 });

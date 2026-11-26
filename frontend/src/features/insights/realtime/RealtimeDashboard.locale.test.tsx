@@ -173,7 +173,8 @@ it('keeps the snapshot, pipeline panel and open KPI modal intact across a langua
   expect(screen.getByRole('img', { name: 'Work item status share stack' })).toBeInTheDocument();
   expect(screen.getByText('Pipeline health')).toBeInTheDocument();
   expect(screen.getByText('Success rate')).toBeInTheDocument();
-  expect(screen.getByText('1h 30m')).toBeInTheDocument();
+  // 数值与单位分属两个节点（数字放大、单位小字），只能按卡片文本整体断言
+  expect(screen.getByText('Average duration').closest('.insight-pl-card')).toHaveTextContent('1h 30m');
   const timestamp = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(overview.generatedAt));
   expect(screen.getByText(/Updated at/, { selector: '.insight-stamp' })).toHaveTextContent(`Updated at ${timestamp}`);
   expect(container.querySelector('em, strong strong')).toBeNull();
@@ -269,7 +270,7 @@ it('updates the cached panels and accessible charts without resetting keyboard f
   expect(screen.getByText('Requirements')).toBeInTheDocument();
   expect(screen.getByText('Pipeline health')).toBeInTheDocument();
   expect(screen.getByText('Success rate')).toBeInTheDocument();
-  expect(screen.getByText('1h 30m')).toBeInTheDocument();
+  expect(screen.getByText('Average duration').closest('.insight-pl-card')).toHaveTextContent('1h 30m');
   expect(screen.getByRole('img', { name: 'Busy members 1 / 4' }).firstElementChild).toHaveStyle({ width: '25%' });
   expect(screen.getByText('<b>交付小队</b>')).toBeInTheDocument();
   expect(screen.getByText('Squad production lines')).toBeInTheDocument();

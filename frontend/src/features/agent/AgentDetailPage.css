@@ -1,0 +1,28 @@
+.aw-agent-head-name .aw-robot-head { font-size: 16px; }
+
+.aw-agent-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 24px; padding: 10px 0; border-radius: 6px; background: var(--aw-header-bg); }
+.aw-agent-stat { min-width: 0; padding: 0 16px; }
+.aw-agent-stat-k { font-size: 11px; color: var(--aw-text-3); }
+.aw-agent-stat-v { margin-top: 2px; font-size: 16px; font-weight: 600; color: var(--aw-text); }
+.aw-agent-stat-v--warn { color: var(--aw-warning-deep); }
+
+.aw-agent-detail-diff { margin-bottom: 24px; }
+.aw-agent-sec-count { font-size: 11px; font-weight: 400; color: var(--aw-text-3); }
+.aw-agent-sub-title { margin: 16px 0 6px; font-size: 13px; font-weight: 600; line-height: 20px; color: var(--aw-text); }
+.aw-agent-detail-tabs { margin-top: 24px; }
+.aw-agent-tab-table .aw-toolbar-in-card { padding: 0 0 12px; }
+
+/* Read-only tags row under the identity grid. */
+.aw-agent-tags-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--aw-border);
+}
+
+.aw-agent-tags-row .aw-dk {
+  flex: 0 0 64px;
+  padding-top: 3px;
+}

@@ -349,6 +349,91 @@ class WorkspaceServiceTest {
     }
 
     @Test
+    void listMembersDirectoryFiltersByKeywordUserAndPagesResults() {
+        WorkspaceMemberDO aliceMember = activeMember(100L, 8L, WorkspaceAccessLevel.READ_WRITE, "[]");
+        WorkspaceMemberDO bobMember = activeMember(100L, 9L, WorkspaceAccessLevel.READ_ONLY, "[]");
+        WorkspaceMemberDO carolMember = activeMember(100L, 10L, WorkspaceAccessLevel.READ_WRITE, "[]");
+        WorkspaceMemberDO ghostMember = activeMember(100L, 11L, WorkspaceAccessLevel.READ_ONLY, "[]");
+        UserDO alice = activeUser(8L);
+        alice.setUsername("alice");
+        alice.setNickname("Alice");
+        alice.setEmail("alice@example.com");
+        UserDO bob = activeUser(9L);
+        bob.setUsername("bob");
+        bob.setNickname("Bob");
+        bob.setEmail("bob@corp.example.com");
+        UserDO carol = activeUser(10L);
+        carol.setUsername("carol");
+        carol.setNickname("Carol Zhang");
+        carol.setEmail("carol@corp.test");
+        when(workspaceDao.findById(100L)).thenReturn(workspace(100L, 7L));
+        var roster = List.of(aliceMember, bobMember, carolMember, ghostMember);
+        when(workspaceMemberDao.listActivePage(100L, 200, 0, null)).thenReturn(roster);
+        when(workspaceMemberDao.listActivePage(100L, 20, 0, null)).thenReturn(roster);
+        when(workspaceMemberDao.listActivePage(100L, 1, 1, null)).thenReturn(List.of(bobMember));
+        when(workspaceMemberDao.countActiveByTenant(100L)).thenReturn(4L);
+        when(workspaceMemberDao.findByWorkspaceAndUser(100L, 9L)).thenReturn(bobMember);
+        when(userDao.listByIdsIncludingDeleted(List.of(8L, 9L, 10L, 11L))).thenReturn(List.of(alice, bob, carol));
+        when(userDao.listByIdsIncludingDeleted(List.of(9L))).thenReturn(List.of(bob));
+        when(userDao.findByIdIncludingDeleted(9L)).thenReturn(bob);
+
+        com.aliyun.autowonder.common.result.PageResult<MemberVO> byEmail =
+                service.listMembers(100L, "EXAMPLE.COM", null, 1, 20);
+        assertEquals(2, byEmail.getTotal());
+        assertEquals(1, byEmail.getPageNum());
+        assertEquals(20, byEmail.getPageSize());
+        assertEquals(2, byEmail.getList().size());
+
+        com.aliyun.autowonder.common.result.PageResult<MemberVO> byNickname =
+                service.listMembers(100L, "alice", null, 1, 20);
+        assertEquals(1, byNickname.getTotal());
+        assertEquals("alice", byNickname.getList().get(0).getUsername());
+
+        com.aliyun.autowonder.common.result.PageResult<MemberVO> nicknameOnly =
+                service.listMembers(100L, "zhang", null, 1, 20);
+        assertEquals(1, nicknameOnly.getTotal());
+        assertEquals(10L, nicknameOnly.getList().get(0).getUserId());
+
+        com.aliyun.autowonder.common.result.PageResult<MemberVO> byUserId =
+                service.listMembers(100L, null, 9L, 1, 20);
+        assertEquals(1, byUserId.getTotal());
+        assertEquals(9L, byUserId.getList().get(0).getUserId());
+
+        com.aliyun.autowonder.common.result.PageResult<MemberVO> unfiltered =
+                service.listMembers(100L, null, null, 1, 20);
+        assertEquals(4, unfiltered.getTotal());
+        assertEquals(11L, unfiltered.getList().get(3).getUserId());
+
+        com.aliyun.autowonder.common.result.PageResult<MemberVO> secondPage =
+                service.listMembers(100L, " ", null, 2, 1);
+        assertEquals(4, secondPage.getTotal());
+        assertEquals(1, secondPage.getList().size());
+        assertEquals(9L, secondPage.getList().get(0).getUserId());
+
+        com.aliyun.autowonder.common.result.PageResult<MemberVO> beyondLastPage =
+                service.listMembers(100L, null, 404L, 1, 20);
+        assertEquals(0, beyondLastPage.getTotal());
+        assertTrue(beyondLastPage.getList().isEmpty());
+    }
+
+    @Test
+    void exactDirectoryLookupDoesNotReadTheRestOfTheWorkspace() {
+        var member = activeMember(100L, 9L, WorkspaceAccessLevel.READ_ONLY, "[]");
+        var user = activeUser(9L);
+        user.setNickname("Alice");
+        when(workspaceDao.findById(100L)).thenReturn(workspace(100L, 9L));
+        when(workspaceMemberDao.findByWorkspaceAndUser(100L, 9L)).thenReturn(member);
+        when(userDao.findByIdIncludingDeleted(9L)).thenReturn(user);
+
+        var result = service.listMembers(100L, "aLiCe", 9L, 1, 20);
+
+        assertEquals(1, result.getTotal());
+        assertEquals(9L, result.getList().getFirst().getUserId());
+        assertTrue(result.getList().getFirst().isOwner());
+        verify(workspaceMemberDao, never()).listByTenant(anyLong());
+    }
+
+    @Test
     void currentMembershipMapsCurrentActiveMemberAndRejectsMissingOrInactive() {
         WorkspaceMemberDO member = activeMember(
                 100L, 7L, WorkspaceAccessLevel.ADMIN, "[\" owner \",\"owner\"]");
@@ -774,6 +859,62 @@ class WorkspaceServiceTest {
         member.setRoleCode(level.name());
         member.setIdentityTags(tags);
         return member;
+    }
+
+    @Test
+    void mineCountsOnlyReturnedWorkspacesInTwoBatchesIncludingRealZero() {
+        WorkspaceDO first = workspace(10L, 7L);
+        first.setBackground("owner background");
+        WorkspaceDO second = workspace(20L, 8L);
+        second.setBackground("read-only background");
+        when(workspaceDao.listMembershipsByUser(7L)).thenReturn(List.of(
+                membership(10L, "first", WorkspaceAccessLevel.ADMIN),
+                membership(20L, "second", WorkspaceAccessLevel.READ_ONLY),
+                membership(30L, "outside returned cards", WorkspaceAccessLevel.READ_WRITE)));
+        when(workspaceDao.listByUser(7L)).thenReturn(List.of(first, second));
+        when(workspaceDao.countMembersByWorkspaceIds(List.of(10L, 20L), 7L, false))
+                .thenReturn(List.of(cardCount(20L, 1L), cardCount(10L, 3L)));
+        when(workspaceDao.countWorkitemsByWorkspaceIds(List.of(10L, 20L), 7L, false))
+                .thenReturn(List.of(cardCount(20L, 0L), cardCount(10L, 12L)));
+
+        List<WorkspaceVO> result = service.listByUser(7L);
+
+        assertEquals(List.of(10L, 20L), result.stream().map(WorkspaceVO::getId).toList());
+        assertEquals(List.of(3L, 1L), result.stream().map(WorkspaceVO::getMemberCount).toList());
+        assertEquals(List.of(12L, 0L), result.stream().map(WorkspaceVO::getWorkitemCount).toList());
+        assertEquals("read-only background", result.get(1).getBackground());
+        assertEquals(WorkspaceAccessLevel.READ_ONLY, result.get(1).getAccessLevel());
+        assertFalse(result.get(1).getCanManage());
+        verify(workspaceDao).countMembersByWorkspaceIds(List.of(10L, 20L), 7L, false);
+        verify(workspaceDao).countWorkitemsByWorkspaceIds(List.of(10L, 20L), 7L, false);
+        verifyNoInteractions(workspaceMemberDao);
+    }
+
+    @Test
+    void mineSkipsCountQueriesForEmptyCards() {
+        assertTrue(service.listByUser(7L).isEmpty());
+        verify(workspaceDao, never()).countMembersByWorkspaceIds(any(), anyLong(), any(Boolean.class));
+        verify(workspaceDao, never()).countWorkitemsByWorkspaceIds(any(), anyLong(), any(Boolean.class));
+    }
+
+    @Test
+    void minePassesServerResolvedPlatformAdminIdentityToBothCountQueries() {
+        when(workspaceDao.listMembershipsByUser(7L))
+                .thenReturn(List.of(membership(10L, "first", WorkspaceAccessLevel.READ_ONLY)));
+        when(workspaceDao.listByUser(7L)).thenReturn(List.of(workspace(10L, 8L)));
+        when(systemAdminService.isSystemAdmin(7L)).thenReturn(true);
+
+        service.listByUser(7L);
+
+        verify(workspaceDao).countMembersByWorkspaceIds(List.of(10L), 7L, true);
+        verify(workspaceDao).countWorkitemsByWorkspaceIds(List.of(10L), 7L, true);
+    }
+
+    private static WorkspaceCardCountDO cardCount(long workspaceId, long count) {
+        WorkspaceCardCountDO row = new WorkspaceCardCountDO();
+        row.setWorkspaceId(workspaceId);
+        row.setCount(count);
+        return row;
     }
 
     @Test

@@ -62,10 +62,66 @@
   gap: 16px;
 }
 
+/* 群聊卡表单在容器内独立成段；与 .aw-channel-section 共用同一 16px 节奏。 */
+.aw-platform-group-content > form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Card 标题旁的状态标签行（对齐原型 panel-head + config-tags）。 */
+.aw-config-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.aw-config-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .aw-channel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+/* 原型 config-check：开关与文字同行（gap 8），f-help 提示 11px/text-3 在下方；行距由父容器 gap 统一。 */
+.aw-config-check-row .aw-config-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--aw-text);
+}
+
+.aw-config-check-row .aw-config-help {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--aw-text-3);
+}
+
+/* Chrome 会把保存的登录凭据注入首个用户名+密码对；隐藏诱饵先行吸收，真实凭据保持空白。 */
+.aw-autofill-decoy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  pointer-events: none;
 }

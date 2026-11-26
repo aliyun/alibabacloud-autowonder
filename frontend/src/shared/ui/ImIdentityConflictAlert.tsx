@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Alert, Space, Typography } from 'antd';
+import { Space, Typography } from 'antd';
+import { NoticeTip } from './NoticeTip';
 
 export interface IdentityConflictWorkspace {
   workspaceId: number;
@@ -54,11 +55,10 @@ export function ImIdentityConflictAlert({ error }: Props) {
   if (conflict.reason === IDENTITY_CONFLICT_REASONS.LEGACY_BINDING_OCCUPIED) {
     const unavailable = workspaces.length === 0 && !conflict.restricted;
     return (
-      <Alert
-        type="warning"
-        showIcon
-        message={t('conflictTitle')}
-        description={
+      <NoticeTip
+        kind="warning"
+        title={t('conflictTitle')}
+        detail={
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Typography.Text>{t('conflictLegacyBody')}</Typography.Text>
             {workspaces.length > 0 && (
@@ -92,5 +92,5 @@ export function ImIdentityConflictAlert({ error }: Props) {
     : conflict.reason === IDENTITY_CONFLICT_REASONS.SHARED_IDENTITY_OCCUPIED
       ? t('conflictShared')
       : t('conflictUnknown');
-  return <Alert type="warning" showIcon message={t('conflictTitle')} description={message} />;
+  return <NoticeTip kind="warning" title={t('conflictTitle')} detail={message} />;
 }

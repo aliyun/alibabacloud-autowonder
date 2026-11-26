@@ -49,6 +49,33 @@
           AND m.is_deleted = 0 AND o.is_deleted = 0
         ORDER BY o.gmt_create DESC
     </select>
+    <!-- Non-empty IDs are derived from readable cards by the service, never supplied by clients.
+         Recheck caller authorization here because these exact statements bypass tenant rewriting. -->
+    <sql id="cardCountReadFilter">
+        WHERE o.is_deleted = 0 AND o.status = 0 AND o.id IN
+        <foreach collection="workspaceIds" item="workspaceId" open="(" separator="," close=")">#{workspaceId}</foreach>
+        <if test="!systemAdmin">
+            AND (o.owner_id = #{userId}
+                 OR EXISTS (SELECT 1 FROM org_member reader
+                            WHERE reader.tenant_id = o.id AND reader.user_id = #{userId}
+                              AND reader.status = 0 AND reader.is_deleted = 0))
+        </if>
+    </sql>
+    <!-- Separate LEFT JOIN aggregates preserve true zero and avoid member/workitem multiplication. -->
+    <select id="countMembersByWorkspaceIds" resultType="com.aliyun.autowonder.workspace.WorkspaceCardCountDO">
+        SELECT o.id AS workspace_id, COUNT(m.id) AS count
+        FROM `org` o
+        LEFT JOIN org_member m ON m.tenant_id = o.id AND m.status = 0 AND m.is_deleted = 0
+        <include refid="cardCountReadFilter"/>
+        GROUP BY o.id
+    </select>
+    <select id="countWorkitemsByWorkspaceIds" resultType="com.aliyun.autowonder.workspace.WorkspaceCardCountDO">
+        SELECT o.id AS workspace_id, COUNT(w.id) AS count
+        FROM `org` o
+        LEFT JOIN workitem w ON w.tenant_id = o.id AND w.is_deleted = 0
+        <include refid="cardCountReadFilter"/>
+        GROUP BY o.id
+    </select>
     <select id="countOwnedByUser" resultType="long">
         SELECT COUNT(*) FROM `org`
         WHERE owner_id = #{userId} AND is_deleted = 0

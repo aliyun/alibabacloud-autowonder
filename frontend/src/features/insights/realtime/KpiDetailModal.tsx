@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Empty, List, Modal, Spin } from 'antd';
+import { formatMinutes } from '@/shared/lib/duration';
+import { Alert, Button, Empty, Modal, Spin } from 'antd';
 import type { KpiKey } from './KpiRow';
 import type { CompletedWorkitem, RunningWorkitem, TodayCreatedWorkitem } from './api';
 import { useRunningWorkitems, useTodayCompleted, useTodayCreatedWorkitems, useWeekCompleted } from './hooks';
@@ -16,8 +17,15 @@ const TITLES = {
   weekCompletedTasks: 'kpi.weekCompletedTasks',
 } as const satisfies Record<KpiKey, string>;
 
+const SCOPES = {
+  todayCreatedWorkitems: 'kpi.scope.todayCreatedWorkitems',
+  runningWorkitems: 'kpi.scope.runningWorkitems',
+  todayCompletedTasks: 'kpi.scope.todayCompletedTasks',
+  weekCompletedTasks: 'kpi.scope.weekCompletedTasks',
+} as const satisfies Record<KpiKey, string>;
+
 export default function KpiDetailModal({ kpiKey, onClose }: Props) {
-  const { t } = useTranslation(['insights', 'common']);
+  const { t } = useTranslation('insights');
   const open = kpiKey != null;
   const showCreatedToday = kpiKey === 'todayCreatedWorkitems';
   const createdToday = useTodayCreatedWorkitems(showCreatedToday);
@@ -47,50 +55,70 @@ export default function KpiDetailModal({ kpiKey, onClose }: Props) {
     : completedList;
 
   const renderWorkitemRow = (item: TodayCreatedWorkitem | CompletedWorkitem) => (
-    <List.Item className="insight-detail-row">
-      <a href={`/workitems/${item.workitemId}`} style={{ fontWeight: 500, overflowWrap: 'anywhere', minWidth: 0 }}>
-        #{item.workitemId} {item.title ?? ''}
-      </a>
-    </List.Item>
+    <a
+      key={item.workitemId}
+      className="insight-kpi-modal-row"
+      href={`/workitems/${item.workitemId}`}
+      title={item.title ?? undefined}
+    >
+      <span className="insight-kpi-modal-row-title">#{item.workitemId} {item.title ?? ''}</span>
+    </a>
   );
 
   return (
     <Modal
+      className="insight-kpi-modal"
       title={kpiKey ? t(TITLES[kpiKey]) : ''}
       open={open}
       onCancel={onClose}
       footer={null}
-      width={560}
+      width={600}
+      centered
       destroyOnHidden
-      styles={{ body: { maxHeight: '65vh', overflowY: 'auto' } }}
+      focusTriggerAfterClose={false}
     >
+      <div className="insight-kpi-modal-summary">
+        {!isLoading && !query.isError && (
+          <span className="insight-kpi-modal-total">{t('kpi.total', { count: showRunning ? runningList.length : workitemList.length })}</span>
+        )}
+        <span className="insight-kpi-modal-scope">{kpiKey ? t(SCOPES[kpiKey]) : ''}</span>
+      </div>
       {query.isError ? <Alert type="error" showIcon message={t('kpi.loadFailure')} action={<Button onClick={() => { void query.refetch(); }}>{t('kpi.retry')}</Button>} /> : isLoading ? (
-        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+        <div className="insight-kpi-modal-state">
           <Spin tip={t('kpi.loading')}><div style={{ minHeight: 40 }} /></Spin>
         </div>
       ) : showRunning ? (
         runningList.length === 0 ? (
-          <Empty description={t('kpi.emptyRunning')} />
+          <div className="insight-kpi-modal-state">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('kpi.emptyRunning')} />
+          </div>
         ) : (
-          <List
-            dataSource={runningList}
-            renderItem={(item) => (
-              <List.Item className="insight-detail-row">
-                <a href={`/workitems/${item.workitemId}`} style={{ fontWeight: 500, overflowWrap: 'anywhere', minWidth: 0 }}>
-                  #{item.workitemId} {item.title ?? ''}
-                </a>
-                <span style={{ marginLeft: 'auto', color: 'var(--aw-muted)', fontSize: 12 }}>
+          <div className="insight-kpi-modal-list">
+            {runningList.map((item) => (
+              <a
+                key={item.workitemId}
+                className="insight-kpi-modal-row is-running"
+                href={`/workitems/${item.workitemId}`}
+                title={item.title ?? undefined}
+              >
+                <span className="insight-kpi-modal-row-title">#{item.workitemId} {item.title ?? ''}</span>
+                <span className="insight-kpi-modal-row-meta">
                   {item.runningDispatchCount > 1 ? t('kpi.multiRunning', { count: item.runningDispatchCount }) : null}
-                  {t('kpi.runningMeta', { agent: item.agentName ?? t('kpi.noValue'), step: item.stepName ?? t('kpi.noValue') })} · <span className="insight-realtime-metric">{t('common:duration.minute', { count: item.runningMinutes })}</span>
+                  {t('kpi.runningMeta', { agent: item.agentName ?? t('kpi.noValue'), step: item.stepName ?? t('kpi.noValue') })} · <span className="insight-kpi-modal-duration">{formatMinutes(item.runningMinutes)}</span>
                 </span>
-              </List.Item>
-            )}
-          />
+              </a>
+            ))}
+          </div>
         )
       ) : workitemList.length === 0 ? (
-        <Empty description={showCreatedToday ? t('kpi.emptyTodayCreated') : t('kpi.emptyCompleted')} />
+        <div className="insight-kpi-modal-state">
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={showCreatedToday ? t('kpi.emptyTodayCreated') : t('kpi.emptyCompleted')}
+          />
+        </div>
       ) : (
-        <List dataSource={workitemList} renderItem={renderWorkitemRow} />
+        <div className="insight-kpi-modal-list">{workitemList.map(renderWorkitemRow)}</div>
       )}
     </Modal>
   );

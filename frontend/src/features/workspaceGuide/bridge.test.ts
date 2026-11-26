@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  openChiefPanel,
   prepareGuideSend,
   registerGuideSendPreparation,
   resetWorkspaceGuideBridge,
+  subscribeChiefOpenPanel,
 } from './bridge';
 
 beforeEach(() => {
@@ -31,5 +33,15 @@ describe('workspace guide bridge', () => {
     await expect(prepareGuideSend(55)).resolves.toEqual({ conversationId: 55, clientMessageId: 'message-1' });
     expect(prepare).toHaveBeenNthCalledWith(1, null);
     expect(prepare).toHaveBeenNthCalledWith(2, 55);
+  });
+
+  it('replays an open requested before Chief subscribes', () => {
+    openChiefPanel({ source: 'guide', expanded: false });
+    const listener = vi.fn();
+    subscribeChiefOpenPanel(listener);
+
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'guide', expanded: false, prefill: null,
+    }));
   });
 });

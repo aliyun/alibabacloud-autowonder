@@ -28,7 +28,7 @@ describe('WorkitemCreditsBadge', () => {
 
     const badge = screen.getByTestId('workitem-credits-badge');
     expect(badge).toHaveTextContent('70.00 Credits');
-    expect(badge.querySelector('.anticon-thunderbolt')).not.toBeNull();
+    expect(badge.querySelector('.aw-stroke-icon')).not.toBeNull();
   });
 
   it('keeps trailing zeros for whole-number credits', () => {
@@ -213,7 +213,7 @@ it('renders new owned run labels reactively while retaining raw and unknown labe
  expect(popup).toHaveTextContent('agent-77 第 1 次执行:'); expect(popup).toHaveTextContent('未知 第 1 次执行:');
  expect(popup).toHaveTextContent('<b>DEV</b> run-2:'); expect(popup).toHaveTextContent('unknown run-1:');
  expect(popup.querySelector('b')).toBeNull(); expect(screen.queryByRole('img', { name: 'thunderbolt' })).not.toBeInTheDocument();
- expect(container.querySelector('.anticon-thunderbolt')).not.toBeNull();
+ expect(container.querySelector('.aw-stroke-icon')).not.toBeNull();
  await act(async () => { await i18n.changeLanguage('en-US'); });
  expect(screen.getByTestId('workitem-credits-breakdown')).toBe(popup); expect(screen.getByTestId('workitem-credits-badge')).toBe(badge);
  expect(popup).toHaveTextContent('<b>DEV</b> run-2:'); expect(popup).toHaveTextContent('Unknown run-1:');
@@ -224,7 +224,7 @@ it('renders new owned run labels reactively while retaining raw and unknown labe
 it.each(['zh-CN', 'en-US'])('keeps the installed bolt decorative in %s', async locale => {
  await i18n.changeLanguage(locale);
  const { container } = render(<WorkitemCreditsBadge usage={usage} />);
- expect(container.querySelector('.anticon-thunderbolt')).not.toBeNull();
+ expect(container.querySelector('.aw-stroke-icon')).not.toBeNull();
  expect(screen.queryByRole('img', { name: 'thunderbolt' })).not.toBeInTheDocument();
  await act(async () => { await i18n.changeLanguage('zh-CN'); });
 });

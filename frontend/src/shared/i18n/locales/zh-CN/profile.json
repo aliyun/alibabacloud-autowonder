@@ -1,6 +1,9 @@
 {
   "basic": {
     "title": "基本信息",
+    "desc": "用户名不可修改；修改邮箱后需验证新地址才会生效。",
+    "nicknameHint": "在成员列表、工单与评论中展示。",
+    "identityLine": "{{username}} · {{email}}",
     "saved": "基本信息已保存",
     "saveFailed": "基本信息保存失败",
     "loadFailed": "基本信息加载失败",
@@ -39,6 +42,7 @@
   "retry": "重试",
   "password": {
     "title": "账号安全",
+    "desc": "修改成功后请使用新密码重新登录；该操作不会结束其他已登录会话。",
     "success": "密码修改成功",
     "failed": "密码修改失败",
     "current": "当前密码",
@@ -56,6 +60,9 @@
   },
   "deactivation": {
     "title": "账号注销",
+    "desc": "注销立即生效，无法在个人中心自行恢复。",
+    "dangerTag": "危险操作",
+    "confirmHint": "需要输入用户名二次确认",
     "notice": "注销后您的账号将立即无法登录，已签发的登录凭证立即失效。您创建的历史工单、评论等数据将被保留，名称显示为删除前的用户名。",
     "warning": "此操作将立即删除您的账号（数据保留）",
     "warningHint": "账号删除后无法在个人中心自行恢复；如需恢复，请联系平台管理员在用户管理中处理。",
@@ -75,8 +82,28 @@
   "close": "关闭",
   "title": "个人设置",
   "description": "管理只属于当前账号的全局个人配置。",
+  "nav": {
+    "heading": "个人设置",
+    "label": "个人设置分区",
+    "basicDesc": "昵称、邮箱与联系方式",
+    "imDesc": "钉钉 · 飞书消息投递",
+    "federatedDesc": "SSO 身份绑定与解绑",
+    "mcpDesc": "外部客户端接入凭证",
+    "passwordDesc": "账号安全",
+    "deactivateDesc": "永久失效当前账号",
+    "foot": "个人设置对所有工作空间生效。"
+  },
+  "account": {
+    "unavailable": "(无法获取)",
+    "normal": "正常"
+  },
   "im": {
     "title": "IM 工号",
+    "desc": "保存工号后可接收指派与测试通知；消息渠道由平台统一配置。",
+    "robotHint": "请联系平台管理员配置系统统一机器人。",
+    "footerHint": "测试消息会发送到已保存的工号。",
+    "feishuBadge": "飞",
+    "dingtalkBadge": "钉",
     "feishu": "飞书",
     "dingtalk": "钉钉",
     "saveFirst": "请先保存工号",
@@ -100,6 +127,10 @@
   },
   "federated": {
     "title": "企业身份",
+    "desc": "绑定后可使用公司身份系统登录；身份按稳定主体标识绑定，不按邮箱自动合并。",
+    "emptySub": "绑定后可用企业账号直接登录 AutoWonder，解绑后立即失效。",
+    "boundTag": "已绑定",
+    "unboundTag": "未绑定",
     "loadFailed": "企业身份加载失败",
     "empty": "尚未绑定企业身份",
     "hint": "绑定企业身份后可使用公司身份系统登录 AutoWonder；身份按稳定主体标识绑定，不根据邮箱自动合并。",

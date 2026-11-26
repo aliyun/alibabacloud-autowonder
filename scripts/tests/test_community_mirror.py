@@ -62,6 +62,49 @@ class MirrorTests(unittest.TestCase):
         self.assertTrue(result.stdout.strip(), result.stderr)
         return result.returncode, json.loads(result.stdout)
 
+    def standalone_output(self):
+        shutil.rmtree(self.public / 'ai-sdlc')
+        (self.public / 'README.md').unlink()
+        shutil.copytree(self.internal, self.public, symlinks=True, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('.git'))
+        return self.commit(self.public)
+
+    def test_standalone_root_matches_exact_tree(self):
+        public = self.standalone_output()
+        code, report = self.run_gate(**{'github-commit': public, 'github-root': '.'})
+        self.assertEqual(code, 0)
+        self.assertEqual(report['verdict'], 'MATCH')
+        self.assertEqual(report['githubSubtree'], '.')
+        self.assertEqual(report['outsideChanges'], [])
+        self.assertEqual(report['trees']['github']['tree'], report['trees']['accepted']['tree'])
+
+    def test_standalone_root_rejects_missing_extra_and_mode_changes(self):
+        public = self.standalone_output()
+        for change in ('deleted', 'extra', 'mode'):
+            with self.subTest(change=change):
+                self.git(self.public, 'reset', '--hard', public)
+                if change == 'deleted':
+                    (self.public / 'a.txt').unlink()
+                if change == 'extra':
+                    (self.public / 'outside.txt').write_text('unexpected')
+                if change == 'mode':
+                    (self.public / 'run.sh').chmod(0o644)
+                code, report = self.run_gate(**{'github-commit': self.commit(self.public),
+                                               'github-root': '.'})
+                self.assertEqual(code, 1)
+                self.assertEqual(report['verdict'], 'MISMATCH')
+                self.assertEqual(report['comparisons']['communityToGithub']['differenceCount'], 1)
+
+    def test_standalone_root_rejects_non_ancestor_base(self):
+        public = self.standalone_output()
+        self.git(self.public, 'reset', '--hard', self.base)
+        (self.public / 'README.md').write_text('different history')
+        other_base = self.commit(self.public)
+        code, report = self.run_gate(**{'github-commit': public, 'github-base': other_base,
+                                       'github-root': '.'})
+        self.assertEqual(code, 2)
+        self.assertEqual(report['verdict'], 'ERROR')
+
     def test_identical_committed_trees_ignore_dirty_and_untracked_files(self):
         (self.target / 'a.txt').write_text('uncommitted\n')
         (self.target / 'secret.local').write_text('untracked\n')

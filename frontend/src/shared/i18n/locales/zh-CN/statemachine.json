@@ -1,6 +1,7 @@
 {
   "page": {
     "title": "状态模版管理",
+    "description": "按工单类型维护状态节点与推荐流转；编辑节点与流转需要读写权限",
     "create": "新建模版",
     "empty": "暂无模版"
   },
@@ -29,11 +30,13 @@
   "templates": {
     "current": "当前模版:",
     "default": "默认",
+    "defaultOption": "{{name}} · 默认",
     "setDefault": "设为默认",
     "confirmDelete": "确认删除该模版？",
     "name": "模版名称",
     "nameRequired": "请输入模版名称",
-    "namePlaceholder": "如: 自定义需求流程"
+    "namePlaceholder": "如: 自定义需求流程",
+    "nameHelp": "创建后进入空白节点列表，逐个添加状态节点与推荐流转。"
   },
   "categories": {
     "INIT": "初始态",
@@ -51,6 +54,7 @@
     "code": "编码",
     "codeRequired": "请输入状态编码",
     "codeHelp": "英文标识符，如 developing、verifying",
+    "codeHelpLocked": "英文标识符，如 developing、verifying；编辑时不可修改。",
     "codePlaceholder": "如: developing",
     "name": "显示名称",
     "nameRequired": "请输入显示名称",
@@ -58,7 +62,7 @@
     "category": "分类",
     "categoryRequired": "请选择分类",
     "sort": "排序",
-    "sortHelp": "数字越小越靠前"
+    "sortHelp": "数字越小越靠前；新建时自动取当前最大值 + 1。"
   },
   "transitions": {
     "title": "推荐流转 (快捷操作)",

@@ -113,6 +113,51 @@ describe('AgentDetailPage', () => {
     expect(screen.getByText('推动工单流转、任务指派和进度汇报，不直接开发代码。')).toBeInTheDocument();
   });
 
+  it('stacks full-width identity documents in SOUL/AGENT order and preserves rich Markdown', async () => {
+    mockAgent({
+      businessBackground: '# Soul heading\n\n- Context item\n\n[Reference](https://example.com/guide)\n\n```text\nsoul code\n```',
+      responsibilities: '## Agent heading\n\n| Task | Owner |\n| --- | --- |\n| Review | Agent |\n\n**Complete responsibility**',
+    });
+    renderPage();
+    const soul = (await screen.findByText('SOUL.md')).parentElement as HTMLElement;
+    const agentDoc = screen.getByText('AGENT.md').parentElement as HTMLElement;
+    expect(soul.parentElement).toBe(agentDoc.parentElement);
+    expect(soul.parentElement?.classList.contains('aw-agent-sec')).toBe(true);
+    expect(soul).toHaveStyle({ width: '100%', minWidth: 0 });
+    expect(agentDoc).toHaveStyle({ width: '100%', minWidth: 0 });
+    expect(soul.nextElementSibling).toBe(agentDoc);
+    expect(within(soul).getByRole('heading', { name: 'Soul heading', level: 1 })).toBeInTheDocument();
+    expect(within(soul).getByRole('listitem')).toHaveTextContent('Context item');
+    expect(within(soul).getByRole('link', { name: 'Reference' })).toHaveAttribute('href', 'https://example.com/guide');
+    expect(within(soul).getByText('soul code').closest('pre')).not.toBeNull();
+    expect(within(agentDoc).getByRole('table')).toHaveTextContent('Review');
+    expect(within(agentDoc).getByText('Complete responsibility').tagName).toBe('STRONG');
+  });
+
+  it('does not replace empty official documents with legacy content', async () => {
+    mockAgent({
+      kind: 'PLATFORM', businessBackground: 'Legacy soul', responsibilities: 'Legacy agent',
+      officialConfiguration: { businessBackground: '', responsibilities: '', fingerprint: 'release', capabilities: [] },
+    });
+    renderPage();
+    const soul = (await screen.findByText('SOUL.md')).parentElement as HTMLElement;
+    const agentDoc = screen.getByText('AGENT.md').parentElement as HTMLElement;
+    expect(within(soul).getByText('暂未配置')).toBeInTheDocument();
+    expect(within(agentDoc).getByText('暂未配置')).toBeInTheDocument();
+    expect(screen.queryByText('Legacy soul')).not.toBeInTheDocument();
+    expect(screen.queryByText('Legacy agent')).not.toBeInTheDocument();
+  });
+
+  it('keeps draft-agent document content from agent detail rather than version bindings', async () => {
+    mockAgent({ status: 'DRAFT', onlineVersionId: null, businessBackground: '# Draft soul', responsibilities: '- Draft duty' });
+    renderPage();
+    const soul = (await screen.findByText('SOUL.md')).parentElement as HTMLElement;
+    const agentDoc = screen.getByText('AGENT.md').parentElement as HTMLElement;
+    expect(within(soul).getByRole('heading', { name: 'Draft soul' })).toBeInTheDocument();
+    expect(within(agentDoc).getByRole('listitem')).toHaveTextContent('Draft duty');
+    expect(screen.getByText('数字员工尚未提交审核')).toBeInTheDocument();
+  });
+
   it('guides draft agents to edit configuration and submit for review', async () => {
     mockAgent({ status: 'DRAFT' });
     renderPage();
@@ -129,14 +174,22 @@ describe('AgentDetailPage', () => {
     expect(screen.queryByText('数字员工尚未提交审核')).not.toBeInTheDocument();
   });
 
-  it('computes stat cards from workitems and memories', async () => {
+  it('computes four business stats in the borderless strip with labels above values and keeps the warning tone', async () => {
     mockAgent();
-    renderPage();
-    expect(await screen.findByText('记忆数')).toBeInTheDocument();
-    expect(screen.getByText('执行中')).toBeInTheDocument();
-    // '待决策' appears both as a stat-card title and as a workitem status cell
-    expect(screen.getAllByText('待决策').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('已完成')).toBeInTheDocument();
+    const { container } = renderPage();
+    await screen.findByText('记忆数');
+    const stats = [...container.querySelectorAll('.aw-agent-stats .aw-agent-stat')];
+    expect(stats).toHaveLength(4);
+    expect(stats.map(stat => stat.querySelector('.aw-agent-stat-k')?.textContent))
+      .toEqual(['执行中', '待决策', '已完成', '记忆数']);
+    await waitFor(() => expect(stats.map(stat => stat.querySelector('.aw-agent-stat-v')?.textContent))
+      .toEqual(['1', '1', '1', '2']));
+    for (const stat of stats) {
+      expect(stat.firstElementChild).toHaveClass('aw-agent-stat-k');
+      expect(stat.children[1]).toHaveClass('aw-agent-stat-v');
+    }
+    expect(stats[1].querySelector('.aw-agent-stat-v')).toHaveClass('aw-agent-stat-v--warn');
+    expect(container.querySelector('.aw-stat-card')).toBeNull();
   });
 
   it('renders task list rows and filters by status', async () => {
@@ -411,19 +464,18 @@ describe('AgentDetailPage', () => {
 
     expect(await screen.findByText('交付小队')).toBeInTheDocument();
     expect(screen.getByText(/2\/3 在线/)).toBeInTheDocument();
-    // 版本详情查询返回后，tab 标题带上数量；tab 内容懒渲染，逐个点开后断言
-    expect(await screen.findByRole('tab', { name: /仓库权限 \(2\)/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /仓库权限 \(2\)/ }));
+    // 仓库/能力/环境变量合并在「配置」Tab 内平铺为三个分区，分区标题带数量
+    fireEvent.click(await screen.findByRole('tab', { name: '配置' }));
     expect(await screen.findByText('frontend-app')).toBeInTheDocument();
     expect(screen.getByText('feature/*')).toBeInTheDocument();
     expect(screen.getByText('不限制')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('tab', { name: /能力配置 \(1\)/ }));
-    expect(await screen.findByText('代码评审')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('tab', { name: /环境变量 \(1\)/ }));
-    expect(await screen.findByText('API_KEY')).toBeInTheDocument();
+    expect(screen.getByText('代码评审')).toBeInTheDocument();
+    expect(screen.getByText('API_KEY')).toBeInTheDocument();
     expect(screen.getByText('接口凭证')).toBeInTheDocument();
+    const sectionCount = (sec: string) => document.querySelector(`[data-sec="${sec}"] .aw-agent-sec-count`)?.textContent;
+    expect(sectionCount('repo')).toBe('2');
+    expect(sectionCount('capability')).toBe('1');
+    expect(sectionCount('env')).toBe('1');
   });
 
   it('falls back to the repo id when the version detail has no repository name', async () => {
@@ -444,8 +496,7 @@ describe('AgentDetailPage', () => {
     renderPage();
 
     // 仓库已删除或跨租户时后端不返回名称，列表回退展示 #id
-    expect(await screen.findByRole('tab', { name: /仓库权限 \(1\)/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /仓库权限 \(1\)/ }));
+    fireEvent.click(await screen.findByRole('tab', { name: '配置' }));
     expect(await screen.findByText('#31')).toBeInTheDocument();
   });
 
@@ -652,5 +703,33 @@ describe('AgentDetailPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /查看草稿差异/ }));
 
     expect(await screen.findByText(/基线版本已不可用/)).toBeInTheDocument();
+  });
+});
+
+describe('AgentDetailPage tags', () => {
+  beforeEach(() => {
+    useAuthStore.getState().clear();
+    useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
+  });
+
+  it('mirrors the agent tags read-only under the identity grid', async () => {
+    mockAgent({ systemTags: ['REQ_CLARIFY', 'PROTOTYPE_DESIGN'], customTags: ['报表'] });
+    renderPage();
+
+    const row = await screen.findByTestId('agent-detail-tags');
+    expect(within(row).getByText('需求澄清')).toBeInTheDocument();
+    expect(within(row).getByText('原型设计')).toBeInTheDocument();
+    expect(within(row).getByText('报表')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-detail-tags-row')).toHaveTextContent('标签');
+    // The detail page never offers a tag edit entry; editing stays inline in the list.
+    expect(screen.queryByRole('button', { name: /编辑 .*的标签/ })).not.toBeInTheDocument();
+  });
+
+  it('shows the empty hint for an untagged agent', async () => {
+    mockAgent({ systemTags: [], customTags: [] });
+    renderPage();
+
+    const row = await screen.findByTestId('agent-detail-tags');
+    expect(row).toHaveTextContent('暂无标签');
   });
 });

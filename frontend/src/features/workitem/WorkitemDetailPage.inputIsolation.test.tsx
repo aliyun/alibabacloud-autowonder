@@ -16,10 +16,12 @@ vi.mock('./components/WorkitemHeader', () => ({
   },
 }));
 
+// The page now hands the comment composer to UnifiedTimeline as a `composer` slot, so the probe
+// must render that slot (like the real component) for the composer to be reachable.
 vi.mock('./components/UnifiedTimeline', () => ({
-  UnifiedTimeline: () => {
+  UnifiedTimeline: ({ composer }: { composer?: import('react').ReactNode }) => {
     renderCounts.timeline += 1;
-    return <div data-testid="probe-unified-timeline" />;
+    return <div data-testid="probe-unified-timeline">{composer}</div>;
   },
 }));
 
@@ -117,7 +119,12 @@ describe('WorkitemDetailPage composer input isolation', () => {
     const user = userEvent.setup();
     await user.type(composer, '@Coder');
 
-    expect(await screen.findByRole('menuitem', { name: /Coder-01/ })).toBeInTheDocument();
+    // 命中片段会被包进 <span> 拆开可访问名，按 title（完整名称）定位。
+    expect(await waitFor(() => {
+      const item = screen.getAllByRole('menuitem').find((el) => /Coder-01/.test(el.getAttribute('title') ?? ''));
+      if (!item) throw new Error('mention item not found: Coder-01');
+      return item;
+    })).toBeInTheDocument();
     await waitFor(() => expect(renderCounts.timeline).toBe(timelineRenders));
     expect(renderCounts.header).toBe(headerRenders);
   });

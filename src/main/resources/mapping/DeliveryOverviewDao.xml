@@ -60,8 +60,7 @@
       模板条件必须留在子查询 WHERE：MySQL 8 不允许 JOIN ... ON 引用外层查询列
       （Unknown column 'w.template_id' in 'on clause'），H2 MySQL 模式会错误放行。
     -->
-    <select id="countDeliveredWorkitems" resultType="long">
-        SELECT COUNT(*)
+    <sql id="deliveredScope">
         FROM (
             SELECT w.id AS id,
                    (SELECT MAX(e.gmt_create)
@@ -81,6 +80,18 @@
               AND sn.category = 'DONE'
         ) delivered
         WHERE delivered.delivered_at &gt;= #{start} AND delivered.delivered_at &lt; #{end}
+    </sql>
+
+    <select id="countDeliveredWorkitems" resultType="long">
+        SELECT COUNT(*)
+        <include refid="deliveredScope"/>
+    </select>
+
+    <select id="listDeliveredWorkitems"
+            resultType="com.aliyun.autowonder.insights.DeliveryOverviewService$DeliveredWorkitem">
+        SELECT delivered.id AS id, delivered.delivered_at AS deliveredAt
+        <include refid="deliveredScope"/>
+        ORDER BY delivered.delivered_at, delivered.id
     </select>
 
     <!--

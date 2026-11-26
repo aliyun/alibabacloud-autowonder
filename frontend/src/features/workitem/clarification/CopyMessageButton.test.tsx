@@ -40,8 +40,8 @@ describe('CopyMessageButton', () => {
     expect(screen.queryAllByRole('img')).toHaveLength(0);
     // 图标本身也要钉住，不能只看无障碍名称：✓ 是唯一的成功反馈（刻意不弹
     // message），而把 icon 写死成 <CopyOutlined /> 时全套用例仍会绿。
-    expect(container.querySelector('.anticon-copy')).not.toBeNull();
-    expect(container.querySelector('.anticon-check')).toBeNull();
+    expect(container.querySelector('[data-glyph="copy"]')).not.toBeNull();
+    expect(container.querySelector('[data-glyph="check"]')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: '复制' }));
     // findBy* 在假时钟下会挂死（testing-library 只在存在 jest 全局时才自动推进
@@ -49,18 +49,18 @@ describe('CopyMessageButton', () => {
     await act(async () => {});
     expect(screen.getByRole('button', { name: '已复制' })).toBeInTheDocument();
     expect(screen.queryAllByRole('img')).toHaveLength(0);
-    expect(container.querySelector('.anticon-check')).not.toBeNull();
-    expect(container.querySelector('.anticon-copy')).toBeNull();
+    expect(container.querySelector('[data-glyph="check"]')).not.toBeNull();
+    expect(container.querySelector('[data-glyph="copy"]')).toBeNull();
 
     // 卡住 1.5s 这个边界：早于它不复原、到点才复原
     act(() => { vi.advanceTimersByTime(1499); });
     expect(screen.getByRole('button', { name: '已复制' })).toBeInTheDocument();
-    expect(container.querySelector('.anticon-check')).not.toBeNull();
+    expect(container.querySelector('[data-glyph="check"]')).not.toBeNull();
 
     act(() => { vi.advanceTimersByTime(1); });
     expect(screen.getByRole('button', { name: '复制' })).toBeInTheDocument();
-    expect(container.querySelector('.anticon-copy')).not.toBeNull();
-    expect(container.querySelector('.anticon-check')).toBeNull();
+    expect(container.querySelector('[data-glyph="copy"]')).not.toBeNull();
+    expect(container.querySelector('[data-glyph="check"]')).toBeNull();
   });
 
   it('resets the 1.5s window on re-click instead of letting the first timer cut ✓ short', async () => {

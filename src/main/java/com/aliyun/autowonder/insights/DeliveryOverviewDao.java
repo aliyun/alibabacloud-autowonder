@@ -26,6 +26,10 @@ public interface DeliveryOverviewDao {
     long countDeliveredWorkitems(
             @Param("tenantId") long tenantId, @Param("start") Date start, @Param("end") Date end);
 
+    /** 与完成数同口径的真实完成时间行，每个工单仅取最近一次进入 DONE 的事件。 */
+    List<DeliveryOverviewService.DeliveredWorkitem> listDeliveredWorkitems(
+            @Param("tenantId") long tenantId, @Param("start") Date start, @Param("end") Date end);
+
     /** 当前用户待处理工单总数（未完成/取消且处理人为本人的工单）。 */
     long countPendingWorkitems(@Param("tenantId") long tenantId, @Param("currentUserId") long currentUserId);
 

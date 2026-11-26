@@ -176,6 +176,22 @@ describe('帮助中心静态文档', () => {
     }
   });
 
+  it('IM集成章末展示网络排查问答，目录与标题锚点一致', async () => {
+    renderHelp('/help?chapter=im-integration#im-integration-troubleshooting');
+    await screen.findByRole('heading', { level: 1, name: 'IM平台集成' });
+    expect(screen.getByRole('heading', { level: 2, name: '常见问题排查' })).toHaveAttribute('id', 'im-integration-troubleshooting');
+    expect(screen.getByRole('link', { name: '常见问题排查' })).toHaveAttribute('href', '/help?chapter=im-integration#im-integration-troubleshooting');
+    const article = screen.getByRole('article');
+    const labels = [...article.querySelectorAll('.help-markdown strong')].map(node => node.textContent);
+    expect(labels).toEqual(expect.arrayContaining(['Q：', 'A：']));
+    expect(article).toHaveTextContent('消息无法发出或在群聊中 @ 机器人后无响应');
+    expect(article).toHaveTextContent('检查部署 AutoWonder 的服务器是否具备互联网出站访问权限');
+    expect(article).toHaveTextContent('按照 IM 平台提供的 API 域名配置访问规则');
+    expect([...article.querySelectorAll('h2[id]')].map(heading => heading.id)).toEqual(['im-integration-0', 'im-integration-1', 'im-integration-2', 'im-integration-troubleshooting']);
+    expect([...article.querySelectorAll('img')].map(image => image.getAttribute('src')))
+      .toEqual([expect.stringMatching(/^\/help\/assets\/14-zh-CN-(light|dark)\.png$/)]);
+  });
+
   it('documents platform-managed bots and a workspace Project Manager without an SDLC workflow', () => {
     const zh = chapters.find(chapter => chapter.id === 'im-integration')!.markdown;
     const en = englishChapters.find(chapter => chapter.id === 'im-integration')!.markdown;
@@ -418,6 +434,22 @@ describe('complete bilingual help corpus', () => {
       expect(cards.map(card => card.querySelectorAll('li').length)).toEqual([0, 0, 0, 0, 3, 3, 0, 2]);
       expect(cards[5]).toHaveTextContent('next day');
     }
+  });
+  it('英文章末展示网络排查问答，锚点与中文一致', async () => {
+    const zh = chapters.find(chapter => chapter.id === 'im-integration')!;
+    const en = englishChapters.find(chapter => chapter.id === 'im-integration')!;
+    expect(en.sections.map(section => section.id)).toEqual(zh.sections.map(section => section.id));
+    expect(zh.sections.at(-1)).toEqual({ id: 'im-integration-troubleshooting', title: '常见问题排查' });
+    expect(en.sections.at(-1)).toEqual({ id: 'im-integration-troubleshooting', title: 'Troubleshooting' });
+    await i18n.changeLanguage('en-US');
+    renderHelp('/help?chapter=im-integration#im-integration-troubleshooting');
+    await screen.findByRole('heading', { level: 1, name: 'IM integration' });
+    expect(screen.getByRole('heading', { level: 2, name: 'Troubleshooting' })).toHaveAttribute('id', 'im-integration-troubleshooting');
+    expect(screen.getByRole('link', { name: 'Troubleshooting' })).toHaveAttribute('href', '/help?chapter=im-integration#im-integration-troubleshooting');
+    const article = screen.getByRole('article');
+    expect([...article.querySelectorAll('.help-markdown strong')].map(node => node.textContent)).toEqual(expect.arrayContaining(['Q:', 'A:']));
+    expect(article).toHaveTextContent('outbound internet access');
+    expect(article).toHaveTextContent('configure access rules using the API domains provided by the IM platform');
   });
   it('recovers from a failed locale and an empty retry without changing selected chapter/hash', async () => {
     const router = createMemoryRouter([{ path: '/help', element: <HelpCenterPage /> }], { initialEntries: ['/help?chapter=faq&keep=raw#faq'] });

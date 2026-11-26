@@ -56,6 +56,8 @@ export function AccessRequestModal({ workspace, onClose }: AccessRequestModalPro
 
   return (
     <Modal
+      // 原型用原生 dialog，关闭后不把焦点还给「申请权限」触发按钮；antd 默认还原会留下 :focus-visible 主题色描边。
+      focusTriggerAfterClose={false}
       title={workspace ? t('access.title', { name: workspace.name }) : ''}
       open={workspace !== null}
       okText={t('access.submit')}

@@ -123,15 +123,9 @@ public class PlatformConversationService {
         AgentConversationTurnDO active = turnDao.findActiveHistoryTurn(tenantId, conversationId);
         var page = historyPage(conv, tenantId, conversationId, null, 50);
         List<PlatformTurnVO> turns = page.items();
-        if (active == null) {
-            var visibleActive = turns.stream().filter(t -> "IN".equals(t.getDirection())
-                    && ("PROCESSING".equals(t.getStatus()) || "QUEUED".equals(t.getStatus())))
-                    .min(java.util.Comparator.comparingInt((PlatformTurnVO t) -> "PROCESSING".equals(t.getStatus()) ? 0 : 1)
-                            .thenComparing(PlatformTurnVO::getId)).orElse(null);
-            if (visibleActive != null) {
-                active = new AgentConversationTurnDO(); active.setId(visibleActive.getId()); active.setStatus(visibleActive.getStatus());
-            }
-        }
+        active = ConversationTurnSnapshot.activeInbound(active, turns,
+                PlatformTurnVO::getId, PlatformTurnVO::getDirection, PlatformTurnVO::getStatus, PlatformTurnVO::getGmtCreate,
+                () -> turnDao.findActiveHistoryTurn(tenantId, conversationId));
 
         // 列表页不查这些：挂起卡片和命令快照都要额外读 Redis，逐会话查会白跑 N 次。
         PlatformConversationVO vo = toVO(conv, userId);

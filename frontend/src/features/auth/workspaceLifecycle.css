@@ -1,118 +1,139 @@
-/*
-  Workspace lifecycle controls (F1/F2/F4/F7).
-
-  These need real CSS pseudo-classes: :hover/:active/:focus-visible cannot be expressed with
-  inline styles, and F7 explicitly requires a visible keyboard focus state.
-
-  Shared semantic colors preserve the same interaction states in both appearances.
-*/
-
 .aw-apply-access-button {
-  margin-top: 18px;
   align-self: flex-end;
   border: 1px solid var(--aw-accent-text);
   background: var(--aw-panel);
   color: var(--aw-accent-text);
-  border-radius: 6px;
-  padding: 5px 14px;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.4;
+  border-radius: 4px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 400;
   cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease;
 }
-
-.aw-apply-access-button:hover {
-  background: var(--aw-button-hover);
-  border-color: var(--aw-accent-text);
-}
-
-.aw-apply-access-button:active {
-  background: var(--aw-button-active);
-  border-color: var(--aw-accent-text);
-  box-shadow: none;
-}
-
-.aw-apply-access-button:focus-visible {
-  outline: 2px solid var(--aw-accent-text);
-  outline-offset: 2px;
-}
-
+.aw-apply-access-button:hover { background: var(--aw-button-hover); border-color: var(--aw-accent-text); }
+.aw-apply-access-button:active { background: var(--aw-button-active); border-color: var(--aw-accent-text); }
+.aw-apply-access-button:focus-visible { outline: 2px solid var(--aw-accent-text); outline-offset: 2px; }
 .aw-apply-access-button:disabled {
   border-color: var(--aw-border);
   background: var(--aw-panel);
   color: var(--aw-muted);
   cursor: not-allowed;
 }
-
-/* The management area is a sibling of the enter button (F1.2), never nested inside it, so it
-   carries its own focus ring rather than inheriting the card's border highlight. */
 .aw-card-manage-button {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--aw-border);
-  border-radius: 6px;
-  background: var(--aw-panel);
-  color: var(--aw-muted);
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--aw-text-3);
   cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
-
-.aw-card-manage-button:hover {
-  border-color: var(--aw-accent-text);
-  background: var(--aw-button-hover);
-  color: var(--aw-accent-text);
-}
-
-.aw-card-manage-button:active {
-  background: var(--aw-button-active);
-}
-
-.aw-card-manage-button:focus-visible {
-  outline: 2px solid var(--aw-accent-text);
-  outline-offset: 2px;
-}
-
-.aw-card-manage-button--danger:hover {
-  border-color: var(--aw-error);
-  background: var(--aw-button-hover);
-  color: var(--aw-error);
-}
-
-.aw-card-manage-button--danger:focus-visible {
-  outline-color: var(--aw-error);
-}
-
-/* F4.1: the recycle bin entry sits on the right of the workspace tab bar. It is an
-   icon-plus-text button, not a decorative element, so it needs the same focus affordance. */
+.aw-card-manage-button:hover { background: var(--aw-gray-bg); color: var(--aw-text); }
+.aw-card-manage-button:active { background: var(--aw-gray-bg); }
+.aw-card-manage-button--danger:hover { background: var(--aw-error-bg); color: var(--aw-error-deep); }
+.aw-card-manage-button:focus-visible { outline: 2px solid var(--aw-accent-text); outline-offset: 2px; }
+.aw-card-manage-button--danger:focus-visible { outline-color: var(--aw-error); }
 .aw-recycle-bin-entry {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--aw-border);
-  border-radius: 999px;
-  background: var(--aw-panel);
-  color: var(--aw-accent-text);
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 700;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--aw-text-2);
+  font-size: 12px;
+  font-weight: 400;
   cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease;
 }
-
-.aw-recycle-bin-entry:hover {
-  background: var(--aw-button-hover);
-  border-color: var(--aw-accent-text);
+.aw-recycle-bin-entry:hover { background: var(--aw-gray-bg) !important; color: var(--aw-text) !important; }
+.aw-recycle-bin-entry:active { background: var(--aw-button-active); }
+.aw-recycle-bin-entry:focus-visible { outline: 2px solid var(--aw-accent-text); outline-offset: 2px; }
+.ws-tab-label { display: inline-flex; align-items: center; gap: 6px; }
+.ws-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px; }
+.ws-new-wrap { display: grid; min-width: 0; }
+.ws-new-wrap > .ws-new { grid-area: 1 / 1; width: 100%; }
+.ws-new-wrap > .aw-apply-access-button { grid-area: 1 / 1; place-self: end; margin: 0; }
+@media (max-width: 960px) { .ws-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .ws-grid { grid-template-columns: minmax(0, 1fr); } }
+.ws-card, .ws-new { box-sizing: border-box; height: 148px; }
+.ws-card {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--aw-panel);
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  padding: 16px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
-
-.aw-recycle-bin-entry:active {
-  background: var(--aw-button-active);
-}
-
-.aw-recycle-bin-entry:focus-visible {
-  outline: 2px solid var(--aw-accent-text);
-  outline-offset: 2px;
-}
+.ws-card:hover,
+.ws-card:active,
+.ws-card:focus-within { border-color: var(--aw-primary); box-shadow: 0 2px 6px rgba(0, 0, 0, .08); }
+.ws-card-enter { display: block; width: 100%; min-width: 0; margin-bottom: auto; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; appearance: none; }
+button.ws-card-enter { cursor: pointer; }
+button.ws-card-enter:disabled { cursor: wait; }
+.ws-switching { position: absolute; top: 8px; right: 8px; color: var(--aw-primary); }
+.ws-card-head { display: flex; gap: 10px; align-items: center; }
+.ws-mark { width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--aw-primary); color: var(--aw-primary-ink); font-size: 14px; font-weight: 600; }
+.ws-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; line-height: 20px; }
+.ws-name { flex: 1; min-width: 0; }
+.ws-cur, .ws-membership { flex-shrink: 0; display: inline-flex; align-items: center; height: 16px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; line-height: 16px; }
+.ws-cur { background: var(--aw-primary-weak); color: var(--aw-primary); }
+.ws-membership { color: var(--aw-text-3); background: var(--aw-gray-bg); }
+.ws-desc { display: block; margin-top: 4px; height: 36px; min-height: 36px; font-size: 12px; color: var(--aw-text-3); line-height: 18px; overflow-wrap: anywhere; }
+.ws-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; min-height: 26px; flex-shrink: 0; color: var(--aw-text-3); font-size: 11px; }
+.ws-stats { display: flex; flex: 1; min-width: 0; align-items: center; gap: 10px; }
+.ws-count { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
+.ws-count > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-count > svg { flex-shrink: 0; }
+.ws-background { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; border: 0; padding: 0; background: transparent; color: var(--aw-text-2); font: inherit; line-height: 24px; cursor: pointer; }
+.ws-background:hover { color: var(--aw-primary); }
+.ws-ops { display: flex; align-items: center; justify-content: flex-end; margin-left: auto; gap: 4px; flex-shrink: 0; }
+.ws-op { width: 24px; height: 24px; padding: 0; border: 0; background: transparent; cursor: pointer; color: var(--aw-text-3); border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; }
+.ws-op:hover { background: var(--aw-gray-bg); color: var(--aw-text); }
+.ws-op:active { background: var(--aw-gray-bg); }
+.ws-op--danger:hover { background: var(--aw-error-bg); color: var(--aw-error-deep); }
+.ws-access-line { display: flex; align-items: center; justify-content: flex-end; margin-left: auto; }
+.ws-card.is-unjoined { background: var(--aw-gray-bg); }
+.ws-card.is-unjoined:hover { border-color: var(--aw-border); box-shadow: none; }
+.ws-card.is-unjoined .ws-name { color: var(--aw-text-2); }
+.ws-card.is-unjoined .ws-mark { opacity: .65; }
+.ws-card.is-unjoined .ws-membership { color: var(--aw-text-2); background: var(--aw-panel); }
+.ws-new { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; border: 1px dashed var(--aw-border); border-radius: 8px; background: transparent; color: var(--aw-text-3); font: inherit; cursor: pointer; transition: border-color 150ms ease, background 150ms ease, color 150ms ease; }
+.ws-new:hover { border-color: var(--aw-primary); color: var(--aw-primary); background: var(--aw-primary-weak); }
+.ws-new--full { grid-column: 1 / -1; }
+.ws-new-title { font-size: 13px; font-weight: 600; }
+.ws-new-desc { font-size: 11px; }
+.ws-discovery-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 16px 16px 0; flex-wrap: wrap; }
+.ws-discovery-empty { border: 1px dashed var(--aw-border); background: var(--aw-panel); border-radius: 8px; padding: 32px; margin: 16px; }
+.ws-modal { max-width: calc(100vw - 32px); padding-bottom: 0; }
+.ws-modal .ant-modal-content { padding: 0; border-radius: 8px; background: var(--aw-panel); box-shadow: var(--aw-shadow-modal); display: flex; flex-direction: column; max-height: calc(100dvh - 32px); overflow: hidden; }
+.ws-modal .ant-modal-header { margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--aw-border); background: transparent; flex-shrink: 0; }
+.ws-modal .ant-modal-title { padding-right: 24px; font-size: 14px; font-weight: 600; line-height: 20px; overflow-wrap: anywhere; }
+.ws-modal .ant-modal-close { top: 12px; right: 14px; width: 24px; height: 24px; }
+.ws-modal .ant-modal-body { padding: 14px 18px; overflow-y: auto; min-height: 0; }
+.ws-modal .ant-modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0; padding: 12px 18px; border-top: 1px solid var(--aw-border); flex-shrink: 0; }
+.ws-modal .ant-modal-footer .ant-btn { height: 32px; margin-inline-start: 0; font-size: 12px; }
+.ws-workspace-form .ant-form-item { margin-bottom: 24px; }
+.ws-workspace-form .ant-form-item:last-child { margin-bottom: 0; }
+.ws-workspace-form .ant-form-item-label { padding-bottom: 6px; }
+.ws-workspace-form .ant-form-item-label > label { height: 20px; color: var(--aw-text-2); font-size: 12px; line-height: 20px; }
+.ws-workspace-form .ant-form-item-control-input { min-height: 0; }
+.ws-workspace-form input.ant-input { height: 32px; }
+.ws-workspace-form .ant-input { font-size: 12px; }
+.ws-workspace-form .ant-form-item-additional { min-height: 0 !important; }
+.ws-workspace-form .ant-form-item-margin-offset { display: none; }
+.ws-workspace-form .ant-form-item-with-help .ant-form-item-explain { margin-top: 6px; }
+.ws-workspace-form .ant-form-item-explain { font-size: 12px; line-height: 20px; }
+.ws-workspace-form .ant-form-item-explain-error { font-size: 12px; line-height: 20px; }
+.ws-background-description { margin: 0; color: var(--aw-text-3); font-size: 12px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ws-background-label { font-size: 12px; font-weight: 600; margin: 12px 0 6px; color: var(--aw-text); }
+.ws-background-text { max-height: 340px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 22px; color: var(--aw-text); }

@@ -21,15 +21,30 @@ import { RecoveryControls } from './components/RecoveryControls';
 import { StartDeliveryModal } from './components/StartDeliveryModal';
 import { RuntimeTraceDrawer } from './components/RuntimeTraceDrawer';
 import { writeClarificationPrefill } from './clarification/prefill';
-import type { DeliveryProgress as Progress } from '@/shared/types/workitem';
+import type { DeliveryProgress as Progress, RuntimeTrace } from '@/shared/types/workitem';
 const authored = 'Agent <strong>Alice</strong>';
 const ok = (data: unknown) => HttpResponse.json({ success: true, code: '0', message: '', data });
+const traceFixture = (dispatchId: number): RuntimeTrace => ({
+  schemaVersion: 'autowonder.runtime-trace.v2', dispatchId, source: 'LIVE', provider: 'qoder', changed: true, lastSeq: 0,
+  tokenUsage: { available: false, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0 },
+  events: [], sessions: [],
+});
 function route(element: React.ReactNode) {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={createMemoryRouter([{ path: '/', element }])} /></QueryClientProvider>);
 }
 const language = async (locale: 'zh-CN' | 'en-US') => { await act(async () => { await i18n.changeLanguage(locale); }); };
-beforeEach(async () => { server.use(http.get('/api/dispatches/:id/runtime-trace/events/window', () => ok({ events: [], changed: true }))); vi.restoreAllMocks(); localStorage.clear(); useAuthStore.setState({ accessLevel: 'READ_WRITE' }); await language('zh-CN'); });
-afterEach(async () => { Modal.destroyAll(); cleanup(); await language('zh-CN'); });
+beforeEach(async () => {
+  vi.restoreAllMocks();
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  server.use(
+    http.get('/api/dispatches/:id/runtime-trace', ({ params }) => ok(traceFixture(Number(params.id)))),
+    http.get('/api/dispatches/:id/runtime-trace/events', ({ params }) => ok({ dispatchId: Number(params.id), events: [], changed: true })),
+    http.get('/api/dispatches/:id/runtime-trace/events/window', () => ok({ events: [], changed: true })),
+    http.get('/api/dispatches/:id/runtime-trace/activities', ({ params }) => ok({ dispatchId: Number(params.id), activities: [] })),
+  );
+  localStorage.clear(); useAuthStore.setState({ accessLevel: 'READ_WRITE' }); await language('zh-CN');
+});
+afterEach(async () => { Modal.destroyAll(); cleanup(); vi.unstubAllGlobals(); await language('zh-CN'); });
 it('formats feature durations with the current locale and retains rounding boundaries', async () => {
   expect([null, -1, 0, 59499, 59500, 61000, 3600000, 3660000].map(formatDuration)).toEqual(['', '', '0秒', '59秒', '1分', '1分1秒', '1时', '1时1分']);
   await language('en-US');
@@ -39,7 +54,9 @@ it('updates delivery cards and retains expanded history and authored names', asy
   server.use(http.get('/api/dispatches/:id/live-activity', () => ok({ actions: [], currentAction: null })), http.get('/api/dispatches/:id/runtime-trace/activities', () => ok({ activities: [] })));
   const progress = { steps: [], totalDurationMs: 61000, agents: [{ agentId: 1, agentName: authored, status: 'failed', durationMs: 61000, steps: [{ stepId: 1, name: 'AI 原文', executorName: null, status: 'failed', durationMs: 61000, attempts: [{ dispatchId: 44, executorName: null, startedAt: null, durationMs: null, status: 'FAILED', canContinue: true }], subSteps: [] }] }], processGraph: { nodes: [], edges: [] } } as Progress;
   route(<DeliveryProgress progress={progress} onContinue={() => {}} artifacts={[{ id: 1, name: authored, type: 'EVIDENCE', dispatchId: 44, workitemId: 42, size: 0, gmtCreate: '' }]} />);
-  fireEvent.click(screen.getByText('产物（1 artifacts）'));
+  // 工作台为模态：先进入，再切到产物 tab。
+  fireEvent.click(screen.getAllByTestId('delivery-agent-row')[0]);
+  fireEvent.click(await screen.findByRole('tab', { name: /^产物（/ }));
   await language('en-US');
   expect(screen.getAllByText('Delivery progress').length).toBeGreaterThan(0);
   expect(screen.getAllByText(/1m 1s/).length).toBeGreaterThan(0);
@@ -67,8 +84,8 @@ it('switches recovery controls without changing submitted command codes or diagn
 it('keeps the delivery state grouped with its disabled reopen button across locales', async () => {
   server.use(http.get('/api/workitems/43/recovery', () => ok({ closed: true, canReopen: false, executions: [] })));
   route(<RecoveryControls workitemId="43" />);
-  expect(await screen.findByText('交付已关闭')).toBeInTheDocument();
-  const group = screen.getByTestId('delivery-toggle');
+  const group = await screen.findByTestId('delivery-toggle');
+  expect(within(group).getByText('交付已关闭')).toBeInTheDocument();
   expect(within(group).getByRole('button', { name: '重新开启交付' })).toBeDisabled();
   await language('en-US');
   expect(within(group).getByText('Delivery closed')).toBeInTheDocument();
@@ -92,7 +109,7 @@ it('keeps delivery writes blocked for read-only members', async () => {
   expect(screen.getByText('交付已开启')).toBeInTheDocument();
 });
 it('switches lazy trace details while keeping selected turn and raw prompts', async () => {
-  server.use(http.get('/api/dispatches/44/runtime-trace', () => ok({ changed: true, source: 'LIVE', events: [], sessions: [{ sessionId: 's1', status: 'COMPLETED', boundaries: [], turns: [{ turnId: '1', durationMs: 61000, prompt: authored, systemPrompt: '系统原文', output: 'AI 原文', observations: [], contextFiles: [], spans: [] }] }] })));
+  server.use(http.get('/api/dispatches/44/runtime-trace', () => ok({ ...traceFixture(44), sessions: [{ sessionId: 's1', status: 'COMPLETED', tokenUsage: traceFixture(44).tokenUsage, eventIds: [], boundaries: [], turns: [{ turnId: '1', durationMs: 61000, prompt: authored, systemPrompt: '系统原文', output: 'AI 原文', tokenUsage: traceFixture(44).tokenUsage, eventIds: [], observations: [], contextFiles: [], spans: [] }] }] })));
   route(<RuntimeTraceDrawer node={{ key: 'n1', dispatchId: 44, agentName: authored, status: 'SUCCEEDED' }} processGraph={{ nodes: [], edges: [] }} onClose={() => {}} />);
   fireEvent.click(await screen.findByText('Turn 1'));
   expect(screen.getByText('系统原文')).toBeInTheDocument();
@@ -135,23 +152,43 @@ it('refreshes visible validation and preserves canonical assignment across async
 });
 it('keeps graph selection, zoom and selected dispatch while independently localized options refresh', async () => {
   server.use(http.get('/api/dispatches/:id/live-activity', () => ok({ actions: [], currentAction: null, lastUpdatedAt: null, truncated: false })), http.get('/api/dispatches/:id/runtime-trace/activities', () => ok({ activities: [] })));
-  const progress: Progress = { steps: [], agents: [{ agentId: 1, agentName: authored, status: 'finished', durationMs: 61000, steps: [{ stepId: 1, name: 'AI 原文', executorName: null, status: 'done', durationMs: null, subSteps: [], attempts: [44, 45].map(dispatchId => ({ dispatchId, executorName: null, startedAt: null, durationMs: null, status: 'SUCCEEDED' })) }] }], processGraph: { nodes: [{ key: 'n1', agentName: authored, status: 'SUCCEEDED', durationMs: 61000 }, { key: 'n2', agentName: '需求', status: 'HUMAN' }], edges: [{ sourceKey: 'n1', targetKey: 'n2', type: 'COMMENT_REWORK', commentId: 5, label: '用户返工（评论 #5）' }] } };
+  const progress: Progress = { steps: [], agents: [{ agentId: 1, agentName: authored, status: 'finished', durationMs: 61000, steps: [{ stepId: 1, currentDispatchId: 45, name: 'AI 原文', executorName: null, status: 'done', durationMs: null, subSteps: [], attempts: [44, 45].map(dispatchId => ({ dispatchId, agentId: 1, agentName: authored, executorName: null, startedAt: null, durationMs: 61000, status: 'SUCCEEDED', stepTimings: [{ stepId: 1, name: 'AI 原文', status: 'done', durationMs: 61000 }] })) }] }], processGraph: { nodes: [{ key: 'dispatch:44', dispatchId: 44, agentId: 1, agentName: authored, stepName: 'AI 原文', status: 'SUCCEEDED', durationMs: 61000 }, { key: 'human:5', agentName: '需求', status: 'HUMAN' }], edges: [{ sourceKey: 'dispatch:44', targetKey: 'human:5', sourceDispatchId: 44, type: 'COMMENT_REWORK', commentId: 5, label: '用户返工（评论 #5）' }] } };
   route(<DeliveryProgress progress={progress} />);
   fireEvent.click(screen.getAllByTestId('execution-graph-worker')[0]);
+  const workbench = await screen.findByTestId('delivery-workbench');
+  expect(within(workbench).getByRole('tab', { name: 'Trace 时间线' })).toHaveAttribute('aria-selected', 'true');
+  expect(document.querySelector('.ant-drawer')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '放大' }));
   const viewport = screen.getByTestId('execution-graph-viewport');
   const zoom = viewport.getAttribute('data-zoom');
-  fireEvent.click(screen.getByRole('button', { name: '查看执行' }));
-  const select = screen.getByTestId('live-activity-dispatch-select');
-  fireEvent.mouseDown(within(select).getByRole('combobox'));
-  fireEvent.click(await screen.findByText('Dispatch 44'));
+  const pan = viewport.getAttribute('data-pan');
+  fireEvent.click(within(workbench).getByRole('tab', { name: '近期动作' }));
+  fireEvent.click(within(workbench).getByRole('button', { name: '按时间' }));
+  fireEvent.click(within(workbench).getByRole('button', { name: /Dispatch 45/ }));
+  const select = within(workbench).getByTestId('live-activity-dispatch-select');
+  expect(select).toHaveTextContent('Dispatch 45（最新）');
+  fireEvent.click(within(workbench.querySelector('aside')!).getByRole('button', { name: /Dispatch 44/ }));
+  expect(select).toHaveTextContent('Dispatch 44');
   await language('en-US');
   expect(viewport).toHaveAttribute('data-zoom', zoom);
-  expect(screen.getByTestId('execution-graph-detail-panel')).toHaveTextContent('Status: Succeeded · Duration: 1m 1s');
+  expect(viewport).toHaveAttribute('data-pan', pan);
+  expect(screen.getByTestId('execution-graph-detail-panel')).toHaveTextContent('#44 · Succeeded');
+  expect(screen.getByTestId('execution-graph-detail-panel')).toHaveTextContent(authored);
+  expect(screen.getByTestId('execution-graph-detail-panel')).toHaveTextContent('AI 原文');
   expect(select).toHaveTextContent('Dispatch 44');
-  fireEvent.mouseDown(within(select).getByRole('combobox'));
-  expect(await screen.findByText('Dispatch 45 (latest)')).toBeInTheDocument();
+  expect(within(workbench).getByRole('tab', { name: 'Recent activity' })).toHaveAttribute('aria-selected', 'true');
+  expect(within(workbench).getByRole('button', { name: 'By time' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByText('Dispatch 45（最新）')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: `Transition 1 from ${authored} to 需求: User rework (comment #5)` })).toBeInTheDocument();
+  expect(document.querySelector('strong strong')).toBeNull();
+  fireEvent.click(within(workbench).getByRole('button', { name: /Dispatch 45/ }));
+  expect(select).toHaveTextContent('Dispatch 45 (latest)');
+  fireEvent.click(within(workbench.querySelector('aside')!).getByRole('button', { name: /Dispatch 44/ }));
+  await language('zh-CN');
+  expect(viewport).toHaveAttribute('data-zoom', zoom);
+  expect(select).toHaveTextContent('Dispatch 44');
+  expect(within(workbench).getByRole('tab', { name: '近期动作' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByTestId('execution-graph-detail-panel')).toHaveTextContent('合计 1分1秒');
 });
 it('localizes live action fallback labels and relative durations without rewriting reported summaries', async () => {
   const eventTime = new Date(Date.now() - 120000).toISOString();
@@ -231,13 +268,13 @@ it.each([
   server.use(http.get('/api/dispatches/44/runtime-trace', () => {
     requests += 1;
     return ok({
-      schemaVersion: 'autowonder.runtime-trace.v2', dispatchId: 44, source: 'LIVE', provider: 'qoder',
-      changed: true, lastSeq: 1, sessions: [],
+      ...traceFixture(44),
+      lastSeq: 1, sessions: [],
       events: status === 'FAILED' ? [{ eventId: 'e-failed', eventType: 'step.failed', detail: { reason: rawReason } }] : [],
     });
   }));
   route(<RuntimeTraceDrawer node={{ key: 'n1', dispatchId: 44, agentName: authored, status }} processGraph={{ nodes: [], edges: [] }} onClose={() => {}} />);
-  await screen.findByText('Trace 时间线');
+  await screen.findByText(chinese);
   const drawer = screen.getByTestId('runtime-trace-drawer');
   expect(screen.getByText(chinese)).toBeInTheDocument();
   expect(screen.queryByText(english)).not.toBeInTheDocument();
@@ -256,15 +293,16 @@ it.each([
 });
 
 it('translates only explicitly owned cached substeps and missing human graph names, preserving raw collisions', async () => {
-  const progress = { steps: [{ stepId: 1, name: authored, status: 'active', agentName: authored, executorName: null, error: null, durationMs: null, attempts: null, subSteps: [
+  const progress = { steps: [{ stepId: 1, currentDispatchId: 44, name: authored, status: 'done', agentName: authored, executorName: null, error: null, durationMs: null,
+    attempts: [{ dispatchId: 44, agentId: 1, agentName: authored, executorName: null, status: 'SUCCEEDED', startedAt: null, durationMs: null, stepTimings: [{ stepId: 1, name: authored, status: 'done', durationMs: null }] }], subSteps: [
     { name: '开始执行', status: 'done', fallbackCode: 'START_EXECUTION' },
     { name: '开始执行', status: 'done' },
     { name: '<b>unknown</b>', status: 'done', fallbackCode: 'NEW_CODE' },
   ] }], agents: [], processGraph: { nodes: [{ key: 'human:1', agentName: '真人', agentNameFallback: 'HUMAN', status: 'HUMAN' }, { key: 'human:2', agentName: '真人', status: 'HUMAN' }], edges: [] } } as Progress;
   progress.agents = [{ agentId: 1, agentName: authored, status: 'finished', durationMs: null, steps: progress.steps }];
   route(<DeliveryProgress progress={progress} />);
-  fireEvent.click(screen.getByRole('button', { name: '查看执行详情' }));
-  fireEvent.click(screen.getByText('执行记录'));
+  fireEvent.click(screen.getAllByTestId('delivery-agent-row')[0]);
+  fireEvent.click(await screen.findByRole('tab', { name: '执行详情' }));
   await language('en-US');
   expect(screen.getByText('Start execution')).toBeInTheDocument();
   expect(screen.getByText('开始执行')).toBeInTheDocument();

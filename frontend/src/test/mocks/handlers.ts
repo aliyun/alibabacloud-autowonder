@@ -332,7 +332,44 @@ export const handlers = [
       traceId: null,
     });
   }),
-  // AppLayout 的平台智能体状态横幅会对管理员发起该请求；全局兜底为一切正常，
+  // 员工列表的分组视图会顺带拉取 SDLC 模板用于分组标题；澄清面板头部按小队拉成员判断执行器在线。
+  // 这两类都是页面装饰数据，多数用例不关心，全局兜底为空列表，避免用例收尾时迟到的请求落入 unhandled。
+  http.get('/api/sdlcs', () => {
+    return HttpResponse.json({ success: true, code: '0', message: '', data: [], traceId: null });
+  }),
+  http.get('/api/squads/:squadId/members', () => {
+    return HttpResponse.json({ success: true, code: '0', message: '', data: [], traceId: null });
+  }),
+  // 执行记录详情轮的轨迹窗口分页；兜底为空窗口，语义等同「暂无新事件」。
+  http.get('/api/dispatches/:dispatchId/runtime-trace/events/window', ({ params }) => {
+    return HttpResponse.json({
+      success: true, code: '0', message: '', traceId: null,
+      data: { dispatchId: Number(params.dispatchId), events: [], changed: false },
+    });
+  }),
+  // 轨道数字人行/执行卡进入工作台后即读取运行轨迹与活动时间线；只断言其它端点的用例
+  // 原先落在这两个接口上，全局兜底为空轨迹/空活动，用例按需 server.use 覆盖。
+  http.get('/api/dispatches/:dispatchId/runtime-trace', ({ params }) => {
+    return HttpResponse.json({
+      success: true, code: '0', message: '', traceId: null,
+      data: {
+        schemaVersion: 'autowonder.runtime-trace.v2',
+        dispatchId: Number(params.dispatchId),
+        changed: false,
+        lastSeq: 0,
+        tokenUsage: { available: false, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0 },
+        events: [],
+        sessions: [],
+      },
+    });
+  }),
+  http.get('/api/dispatches/:dispatchId/runtime-trace/activities', ({ params }) => {
+    return HttpResponse.json({
+      success: true, code: '0', message: '', traceId: null,
+      data: { dispatchId: Number(params.dispatchId), activities: [] },
+    });
+  }),
+  // 管理员登录后 Chief 入口、浮标与执行器页共用该状态查询；全局兜底为一切正常，
   // 避免个别用例未 mock 时请求落入 unhandled → 拦截器 401 处理清空 auth store。
   http.get('/api/platform-agent/status', () => {
     return HttpResponse.json({
@@ -341,6 +378,17 @@ export const handlers = [
       message: '',
       data: { state: 'OK', agentId: 1, executorCount: 1, onlineExecutorCount: 1 },
       traceId: 'trace-platform-agent-status',
+    });
+  }),
+  // Chief 面板在独立页面挂载即读取准备状态；默认未就绪，具体用例按需 server.use 覆盖。
+  http.get('/api/platform-agent/setup', () => {
+    return HttpResponse.json({
+      success: true,
+      code: '0',
+      message: '',
+      data: { agentId: null, executorId: null, agentConfigured: false, skillsConfigured: false,
+        executorConfigured: false, launchConfigured: false, ready: false, missingSkills: [] },
+      traceId: 'trace-platform-agent-setup',
     });
   }),
   // 执行器列表页挂载即读自动升级开关；msw 配的是 onUnhandledRequest:'error'，
@@ -646,6 +694,9 @@ export const handlers = [
       traceId: 'trace-workspaces-mine',
     });
   }),
+  http.get('/api/scheduled-tasks/preview', () => {
+    return HttpResponse.json({ success: true, code: '0', message: '', data: [], traceId: 'trace-scheduled-task-preview' });
+  }),
   http.get('/api/agents', () => {
     return HttpResponse.json({
       success: true,
@@ -774,6 +825,17 @@ export const handlers = [
       message: '',
       data: [],
       traceId: 'trace-workitem-watchers',
+    });
+  }),
+  // 交付恢复状态在详情页头卡与右栏各挂载一次（同一 queryKey 去重），
+  // 只渲染右栏的用例没写 mock 时会落到 unhandled；全局兜底为无执行、无重启轮次。
+  http.get('/api/workitems/:workitemId/recovery', () => {
+    return HttpResponse.json({
+      success: true,
+      code: '0',
+      message: '',
+      data: { closed: false, canReopen: true, executions: [], restarts: [] },
+      traceId: 'trace-workitem-recovery',
     });
   }),
   // 工单详情页的 PRD 设计入口卡片挂载即读只读摘要；全局兜底为「尚无设计」，
@@ -990,5 +1052,9 @@ export const handlers = [
       },
       traceId: null,
     });
+  }),
+  // 阶段耗时工作区视图先探测只读概览；默认模拟旧后端 404，客户端回退为单请求，分片用例按需覆盖。
+  http.get('/api/insights/stage-duration/plan', () => {
+    return HttpResponse.json({ success: false, code: '404', message: 'Not Found', traceId: null }, { status: 404 });
   }),
 ];

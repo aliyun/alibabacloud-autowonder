@@ -39,6 +39,10 @@ export interface Agent {
   environmentVariables?: AgentEnvironmentVariableRef[];
   squadIds?: number[] | null;
   squadNames?: string[] | null;
+  /** System tag codes in platform declaration order; absent until the tag endpoints respond. */
+  systemTags?: string[] | null;
+  /** Custom tag names in creation order. */
+  customTags?: string[] | null;
 }
 
 export interface AgentVersionSummary {
@@ -224,6 +228,22 @@ export async function onlineAgent(agentId: number): Promise<Agent> {
 
 export async function deleteAgent(agentId: number): Promise<void> {
   await apiClient.delete(`/api/agents/${agentId}`);
+}
+
+// --- Tags ---
+export interface UpdateAgentTagsRequest {
+  systemTags: string[];
+  customTags: string[];
+}
+
+export async function updateAgentTags(agentId: number, payload: UpdateAgentTagsRequest): Promise<Agent> {
+  const resp = await apiClient.put<Agent>(`/api/agents/${agentId}/tags`, payload);
+  return resp.data;
+}
+
+export async function fetchAgentTagOptions(): Promise<string[]> {
+  const resp = await apiClient.get<string[]>('/api/agents/tag-options');
+  return resp.data;
 }
 
 // --- Repo permissions ---

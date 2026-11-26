@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { getAgentRoleLabel } from '@/features/agent/constants';
 import { useState } from 'react';
 import { Card, Row, Col, Tag, Button, Modal, message, Space, Typography, Avatar, Spin, Steps, Alert } from 'antd';
-import { TeamOutlined, UserOutlined, UsergroupAddOutlined, ArrowRightOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { listSquadTemplates, applySquadTemplate, getSquadTemplateDetail } from './api';
@@ -14,9 +14,9 @@ import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 const { Text, Paragraph } = Typography;
 
 const iconMap: Record<string, React.ReactNode> = {
-  solo: <UserOutlined aria-hidden="true" style={{ fontSize: 32 }} />,
-  pair: <UsergroupAddOutlined aria-hidden="true" style={{ fontSize: 32 }} />,
-  team: <TeamOutlined aria-hidden="true" style={{ fontSize: 32 }} />,
+  solo: <AwStrokeIcon name="user" size={32} />,
+  pair: <AwStrokeIcon name="user-plus" size={32} />,
+  team: <AwStrokeIcon name="team" size={32} />,
 };
 
 const kindColors: Record<string, string> = {
@@ -67,7 +67,7 @@ export function SquadTemplateGallery() {
       setApplyError(null);
       setConfirming(null);
       setPreviewId(null);
-      navigate('/agents?tab=squads');
+      navigate('/squads');
     },
     onError: (error) => {
       setApplyError(error);
@@ -113,7 +113,7 @@ export function SquadTemplateGallery() {
                 <Space align="start">
                   <Avatar
                     size={48}
-                    icon={(Object.prototype.hasOwnProperty.call(iconMap, template.icon || '') ? iconMap[template.icon || ''] : null) || <TeamOutlined aria-hidden="true" />}
+                    icon={(Object.prototype.hasOwnProperty.call(iconMap, template.icon || '') ? iconMap[template.icon || ''] : null) || <AwStrokeIcon name="team" size={32} />}
                     style={{ backgroundColor: 'rgba(var(--aw-accent-rgb), .10)', color: 'var(--aw-accent-text)' }}
                   />
                   <div>
@@ -225,7 +225,7 @@ function TemplatePreview({ detail }: { detail: SquadTemplateDetail }) {
                 {getAgentRoleLabel(agent.roleCode, agent.roleName)}
               </Tag>
               {idx < detail.agents.length - 1 && (
-                <ArrowRightOutlined aria-hidden="true" style={{ color: 'var(--aw-muted)', fontSize: 12 }} />
+                <span style={{ color: 'var(--aw-muted)' }}><AwStrokeIcon name="chev-r" size={12} /></span>
               )}
             </span>
           ))}

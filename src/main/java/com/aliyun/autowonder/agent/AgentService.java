@@ -16,6 +16,7 @@ import com.aliyun.autowonder.agent.dto.RepoPermRequest;
 import com.aliyun.autowonder.agent.dto.SkillRequest;
 import com.aliyun.autowonder.agent.dto.UpdateConfigRequest;
 import com.aliyun.autowonder.agent.dto.UpdateAgentRequest;
+import com.aliyun.autowonder.agent.dto.UpdateAgentTagsRequest;
 import com.aliyun.autowonder.executor.ExecutorDO;
 import com.aliyun.autowonder.executor.ExecutorDao;
 import com.aliyun.autowonder.executor.ExecutorRegistry;
@@ -72,6 +73,7 @@ public class AgentService {
     private SquadMemberDao squadMemberDao;
     private MemoryDao memoryDao;
     private UserDao userDao;
+    private AgentTagService agentTagService;
     /** Maximum submit note length accepted by POST /api/agents/{id}/submit. */
     static final int SUBMIT_NOTE_MAX_LENGTH = 500;
 
@@ -103,6 +105,11 @@ public class AgentService {
     @Autowired(required = false)
     public void setRepoDao(RepoDao repoDao) {
         this.repoDao = repoDao;
+    }
+
+    @Autowired(required = false)
+    public void setAgentTagService(AgentTagService agentTagService) {
+        this.agentTagService = agentTagService;
     }
 
     public AgentService(AgentDao agentDao, AgentVersionDao versionDao,
@@ -220,12 +227,29 @@ public class AgentService {
         int offset = (p - 1) * s;
         List<AgentVO> result = new ArrayList<>();
         for (AgentDO a : agentDao.list(tenantId, status, kind, squadIds, offset, s)) {
-            result.add(toSummaryVO(a));
+            result.add(toSummaryVO(a, false));
         }
         if (squadAttributionService != null) {
             squadAttributionService.fillAgentSquads(tenantId, result);
         }
+        fillTags(result, tenantId);
         return result;
+    }
+
+    /** Full replacement of an agent's tags; returns the refreshed VO so the row updates in place. */
+    @Transactional
+    public AgentVO updateTags(long agentId, UpdateAgentTagsRequest req, long tenantId, long userId) {
+        AgentDO agent = lockAgentInTenant(agentId, tenantId);
+        if (agentTagService == null) {
+            throw new IllegalStateException("AgentTagService is not configured");
+        }
+        agentTagService.replaceTags(agent, req, tenantId, userId);
+        return toSummaryVO(agent);
+    }
+
+    /** Custom tag names already used by agents in this workspace, for editor suggestions. */
+    public List<String> listAgentTagOptions(long tenantId) {
+        return agentTagService == null ? List.of() : agentTagService.listTagOptions(tenantId);
     }
 
     public long countPendingReviews(long tenantId) {
@@ -577,6 +601,9 @@ public class AgentService {
         // squad copy pre-checks fail with an unresolvable dependency (agent#<id>).
         if (squadMemberDao != null) {
             squadMemberDao.deleteByAgent(agentId, tenantId);
+        }
+        if (agentTagService != null) {
+            agentTagService.deleteForAgent(tenantId, agentId);
         }
     }
 
@@ -1208,6 +1235,14 @@ public class AgentService {
     }
 
     private AgentVO toSummaryVO(AgentDO a) {
+        return toSummaryVO(a, true);
+    }
+
+    /**
+     * withTags=false is the list path: callers batch fill all rows in one query afterwards instead
+     * of issuing one tag query per agent.
+     */
+    private AgentVO toSummaryVO(AgentDO a, boolean withTags) {
         AgentVO vo = toVO(a);
         if (isPlatform(a) && chiefConfig != null) {
             vo.setOfficialConfiguration(chiefConfig.officialView());
@@ -1247,7 +1282,17 @@ public class AgentService {
         }
         vo.setExecutorTotalCount(total);
         vo.setExecutorOnlineCount(online);
+        if (withTags) {
+            fillTags(List.of(vo), a.getTenantId());
+        }
         return vo;
+    }
+
+    private void fillTags(List<AgentVO> vos, Long tenantId) {
+        if (agentTagService == null || tenantId == null || vos.isEmpty()) {
+            return;
+        }
+        agentTagService.fillTags(vos, tenantId);
     }
 
     /**

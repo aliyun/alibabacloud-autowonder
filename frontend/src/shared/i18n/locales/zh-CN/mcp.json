@@ -1,4 +1,5 @@
 {
+  "title": "MCP 令牌",
   "permissionHint": "MCP token 权限跟随你在目标工作空间中的权限；调用工作空间域工具时需要传入 workspaceId。",
   "revokedNotice": "令牌已撤销",
   "copied": "已复制",
@@ -22,6 +23,7 @@
   "output": "出参",
   "noInput": "无入参",
   "result": "返回工具执行结果",
+  "fieldCount_other": "{{count}} 个字段",
   "tools": "工具",
   "endpointLoading": "正在加载 MCP 服务地址",
   "endpointFailed": "MCP 服务地址加载失败",
@@ -89,5 +91,8 @@
     }
   },
   "expandRow": "展开行",
-  "collapseRow": "收起行"
+  "collapseRow": "收起行",
+  "readOnly": "只读",
+  "tokenSummary": "共 {{total}} 个 · {{active}} 个有效",
+  "toolsSummary": "共 {{groups}} 个能力组 · {{tools}} 个工具"
 }

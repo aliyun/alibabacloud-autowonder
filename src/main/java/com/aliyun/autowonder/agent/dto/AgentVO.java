@@ -43,4 +43,8 @@ public class AgentVO {
     /** Squads this digital worker belongs to; empty when unaffiliated. */
     private List<Long> squadIds;
     private List<String> squadNames;
+    /** System tag codes in enum declaration order; empty when the worker has no system tag. */
+    private List<String> systemTags = List.of();
+    /** Custom tag names in creation order; empty when the worker has no custom tag. */
+    private List<String> customTags = List.of();
 }

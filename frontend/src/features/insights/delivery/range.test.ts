@@ -21,6 +21,17 @@ describe('delivery bucket ranges', () => {
     expect(tooltipRange(range('2026-12-29', '2027-01-04'))).toBe('2026/12/29 – 2027/01/04');
     expect(tooltipRange(range('2026-10-19', '2026-10-25'))).toBe('2026/10/19 – 2026/10/25');
   });
+
+  it('falls back to the bucket start/end dates when an older backend omits the display range', () => {
+    const legacy = { start: '2026-10-19T00:00:00', end: '2026-10-26T00:00:00', partial: false };
+    expect(axisRange(legacy)).toBe('10/19\n10/26');
+    expect(tooltipRange(legacy)).toBe('2026/10/19 – 2026/10/26');
+  });
+
+  it('degrades to empty labels instead of throwing when no dates are returned', () => {
+    expect(axisRange({})).toBe('\n');
+    expect(tooltipRange({})).toBe(' – ');
+  });
 });
 
 describe('delivery label density', () => {

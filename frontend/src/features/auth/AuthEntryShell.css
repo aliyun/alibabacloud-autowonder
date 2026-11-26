@@ -1,92 +1,134 @@
-.auth-entry-page {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(340px, .85fr);
+.login-topbar {
+  height: 48px;
+  background: var(--aw-panel);
+  border-bottom: 1px solid var(--aw-border);
+  display: flex;
   align-items: center;
-  gap: clamp(40px, 6vw, 100px);
-  min-height: calc(100svh - 60px);
-  max-width: 1500px;
-  margin: 0 auto;
-  padding: 64px clamp(24px, 5vw, 80px);
-  background: var(--aw-bg);
+  padding: 0 24px;
+  gap: 8px;
+}
+.login-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.login-topbar-right .ant-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; color: var(--aw-text-3); font-size: 16px; }
+.login-topbar-right .ant-btn:hover { background: var(--aw-gray-bg); color: var(--aw-text); }
+.login-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 80px;
+  min-height: calc(100svh - 48px);
+  padding: 48px 48px 64px;
+  flex-wrap: wrap;
+  background: var(--aw-canvas);
 }
 
-.auth-entry-story { min-width: 0; }
-.auth-entry-intro { text-align: center; }
-.auth-entry-eyebrow {
-  margin: 0 0 22px;
-  color: var(--aw-accent-text);
-  font-size: clamp(26px, 2.8vw, 40px);
-  font-weight: 500;
-  letter-spacing: -.015em;
-}
-.auth-entry-story h1 {
+.login-story { width: 520px; max-width: 100%; min-width: 0; }
+.login-story-eyebrow {
   margin: 0;
+  color: var(--aw-primary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-family: var(--aw-font-mono);
+}
+.login-story h1 {
+  margin: 12px 0 16px;
   color: var(--aw-text);
-  font-size: clamp(22px, 2.1vw, 30px);
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: .025em;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 44px;
+  letter-spacing: .5px;
 }
+.login-story-sub { margin: 0; max-width: 420px; color: var(--aw-text-3); font-size: 13px; line-height: 22px; }
 
-/* A delivery circuit, not a live status display. Color follows the platform accent. */
-.auth-delivery {
-  position: relative;
-  margin: 48px 0 0;
-  aspect-ratio: 640 / 240;
-}
-.auth-delivery-lines { display: block; width: 100%; height: auto; overflow: visible; }
-.auth-delivery-track { stroke: var(--aw-border); stroke-width: 1.5; }
-.auth-delivery-return { stroke: var(--aw-border); stroke-width: 1; }
-.auth-delivery-flow {
-  stroke: var(--aw-accent-text);
+.login-flow { position: relative; width: 432px; max-width: 100%; height: 204px; margin: 40px 0 0; }
+.login-flow .flow-track { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.login-flow .flow-track path { fill: none; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.login-flow .flow-track-base { stroke: #c9d6e4; }
+.login-flow .flow-track .flow-track-current {
+  stroke: var(--aw-primary);
   stroke-width: 2;
   stroke-linecap: round;
-  stroke-dasharray: 7 93;
-  animation: auth-delivery-travel 8s linear infinite;
+  stroke-dasharray: 4 96;
+  animation: login-flow-circulate 8s linear infinite;
 }
-.auth-delivery-flow--return { opacity: .45; animation-delay: -4s; stroke-width: 1.5; }
-.auth-delivery-steps {
-  position: absolute;
-  inset: 0 0 auto;
-  height: calc(200% / 3);
+@keyframes login-flow-circulate { to { stroke-dashoffset: -100; } }
+.login-flow .flow-nodes {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  align-items: center;
-  list-style: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, 54px);
+  row-gap: 86px;
   margin: 0;
-  padding: 0;
+  padding: 8px 0 0;
+  list-style: none;
 }
-.auth-delivery-steps li { position: relative; display: grid; justify-items: center; }
-.auth-delivery-node {
-  display: grid;
-  place-items: center;
-  width: min(48px, 70%);
-  aspect-ratio: 1;
-  border: 1px solid var(--aw-border);
-  border-radius: 12px;
+.login-flow .flow-node { display: flex; justify-content: center; min-width: 0; }
+.login-flow .flow-step { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.login-flow .flow-dot {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid #c9d6e4;
   background: var(--aw-panel);
-  color: var(--aw-text);
-  font-size: clamp(16px, 2vw, 22px);
-}
-.auth-delivery-steps li:last-child .auth-delivery-node { color: var(--aw-accent-text); border-color: var(--aw-accent-text); }
-.auth-delivery-label { position: absolute; top: calc(100% + 12px); color: var(--aw-muted); font-size: clamp(9px, 1vw, 12px); white-space: nowrap; }
-.auth-delivery-label--accent { color: var(--aw-accent-text); }
-.auth-delivery figcaption {
-  position: absolute;
-  top: 75%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 2px 14px;
-  background: var(--aw-bg);
-  color: var(--aw-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--aw-text-3);
   font-size: 11px;
-  letter-spacing: .12em;
 }
-@keyframes auth-delivery-travel { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+.login-flow .flow-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; color: var(--aw-text-2); font-size: 11px; line-height: 20px; white-space: nowrap; }
+.login-flow .flow-node--hot .flow-dot { border-color: var(--aw-primary); background: var(--aw-primary-weak); color: var(--aw-primary); font-weight: 600; }
+.login-flow .flow-node--hot .flow-label { color: var(--aw-primary); font-weight: 600; }
+.login-flow .flow-loop {
+  position: absolute;
+  left: 50%;
+  top: 100px;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border: 1px dashed #c9d6e4;
+  border-radius: 14px;
+  color: var(--aw-text-3);
+  background: var(--aw-canvas);
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.login-flow .flow-loop svg { width: 12px; height: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .login-flow .flow-track .flow-track-current { animation: none; stroke-dasharray: none; opacity: .35; }
+}
 
-.auth-entry-form-panel { display: flex; align-items: center; justify-content: center; min-width: 0; }
-.auth-entry-card { width: min(420px, 100%); border: 1px solid var(--aw-border); border-radius: 12px; background: var(--aw-panel); box-shadow: none; }
-.auth-entry-card .ant-card-body { padding: 36px; }
+.login-entry-form { display: flex; align-items: center; justify-content: center; flex: 0 1 400px; width: 400px; max-width: 100%; min-width: 0; }
+.auth-entry-card { width: 100%; border-radius: 8px; box-shadow: var(--aw-shadow-modal); }
+.login-entry-form .auth-entry-card { border: 1px solid var(--aw-border); box-shadow: var(--aw-shadow-modal); }
+.auth-entry-card .ant-card-body { padding: 32px; }
+.auth-entry-title { margin: 0 0 4px !important; color: var(--aw-text) !important; font-size: 20px !important; font-weight: 600 !important; line-height: 28px !important; text-align: left !important; }
+.auth-entry-hint { margin: 0; color: var(--aw-text-3); font-size: 12px; line-height: 20px; }
+/* 有 SSO 时本地账号表单需要分组标签：紧跟「或」分隔线，并与表单收紧距离（原型 01）。 */
+.auth-entry-card .auth-local-hint { margin-top: 16px; }
+.auth-sso-section { margin-top: 20px; }
+.auth-entry-card .auth-sso-btn { height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; }
+/* SSO 是企业用户的首选入口：主色弱底 + 主色文字，与下方实心「登录」保持主次（原型 01 方案 C）。 */
+html .auth-entry-card .auth-sso-btn.ant-btn:not(:disabled) {
+  font-weight: 600;
+  color: var(--aw-primary);
+  background: var(--aw-primary-weak);
+  border-color: rgba(var(--aw-accent-rgb), .35);
+}
+html .auth-entry-card .auth-sso-btn.ant-btn:not(:disabled):hover {
+  color: var(--aw-primary);
+  background: rgba(var(--aw-accent-rgb), .18);
+  border-color: var(--aw-primary);
+}
+.auth-divider-or { display: flex; align-items: center; gap: 12px; margin: 20px 0 0; color: var(--aw-text-disabled); font-size: 11px; }
+.auth-divider-or::before,
+.auth-divider-or::after { content: ""; flex: 1; height: 1px; background: var(--aw-border); }
 .auth-entry-card .ant-input-affix-wrapper.ant-input-outlined,
 .auth-entry-card .ant-input-affix-wrapper.ant-input-outlined:hover,
 .auth-entry-card .ant-input-affix-wrapper.ant-input-outlined:focus-within { background: transparent; }
@@ -97,22 +139,51 @@ html .auth-entry-card input.ant-input:is(:autofill, :-webkit-autofill) {
   -webkit-text-fill-color: var(--aw-text);
   caret-color: var(--aw-text);
 }
-.auth-entry-title { margin: 0 0 28px !important; color: var(--aw-text) !important; text-align: left !important; }
-.auth-entry-subtitle { margin: -16px 0 22px; color: var(--aw-muted); font-size: 13px; line-height: 1.6; }
-.auth-entry-card .ant-btn-primary { height: 44px; }
+.auth-entry-subtitle { margin: 0 0 22px; color: var(--aw-muted); font-size: 13px; line-height: 1.6; }
+.auth-entry-card .ant-btn-primary { height: 36px; margin-top: 24px; }
 .auth-entry-link { text-align: center; }
-.auth-entry-link a { color: var(--aw-accent-text); font-weight: 500; }
+.auth-entry-link a { color: var(--aw-primary); font-weight: 500; }
+.auth-entry-card .auth-login-form { margin-top: 20px; }
+/* 本地账号标签与表单是一组：标签紧跟分隔线，表单与标签只留 8px。 */
+.auth-entry-card .auth-local-hint + .auth-login-form { margin-top: 8px; }
+.auth-login-form .ant-form-item { margin-bottom: 24px; }
+.auth-login-form .auth-login-submit { margin-bottom: 16px; }
+.auth-login-form .ant-form-item-label { padding-bottom: 6px; }
+.auth-login-form .ant-form-item-label > label { display: flex; height: 20px; color: var(--aw-text-2); font-size: 12px; line-height: 20px; }
+.auth-login-form .auth-login-required { margin-left: 2px; color: var(--aw-error); font-family: inherit; font-size: 12px; line-height: 20px; }
+.auth-login-form .ant-form-item-control-input { min-height: 0; }
+.auth-login-form .ant-form-item-control-input-content { display: flex; }
+.auth-login-form .ant-input-affix-wrapper { height: 36px; }
+/* Ant Design borrows and then offsets the field margin to reserve help height. */
+.auth-login-form .ant-form-item-additional { min-height: 0 !important; }
+.auth-login-form .ant-form-item-margin-offset { display: none; }
+.auth-login-form .ant-form-item-with-help .ant-form-item-explain { margin-top: 6px; }
+.auth-login-form .ant-form-item-explain,
+.auth-login-form .ant-form-item-explain-error { font-size: 12px; line-height: 20px; }
+.auth-entry-card .auth-login-form .ant-btn-primary { margin-top: 0; }
+.auth-login-form .auth-entry-link { color: var(--aw-text-3); font-size: 12px; line-height: 20px; }
+.auth-login-form .auth-entry-link a { font-weight: 400; }
 
-@media (max-width: 900px) {
-  .auth-entry-page { gap: 28px; padding: 48px 24px; grid-template-columns: minmax(0, 1fr) minmax(300px, .9fr); }
-  .auth-entry-card .ant-card-body { padding: 28px; }
+.auth-register-form .ant-form-item { margin-bottom: 24px; }
+.auth-register-form .ant-form-item-label { padding-bottom: 6px; }
+.auth-register-form .ant-form-item-label > label { height: 20px; font-size: 12px; line-height: 20px; }
+.auth-register-form .ant-form-item-additional { min-height: 0 !important; }
+.auth-register-form .ant-form-item-margin-offset { display: none; }
+.auth-register-form .ant-form-item-with-help .ant-form-item-explain { margin-top: 6px; }
+.auth-register-form .ant-form-item-explain,
+.auth-register-form .ant-form-item-explain-error { font-size: 12px; line-height: 20px; }
+.auth-entry-card .auth-register-form .ant-btn-primary { margin-top: 0; }
+.auth-register-form .auth-register-submit { margin-bottom: 16px; }
+.auth-register-form .auth-entry-link { color: var(--aw-text-3); font-size: 12px; line-height: 20px; }
+.auth-register-form .auth-entry-link a { font-weight: 400; }
+
+@media (max-width: 1100px) {
+  .login-hero { gap: 40px; }
+  .login-story { width: 460px; }
 }
 @media (max-width: 680px) {
-  .auth-entry-page { grid-template-columns: minmax(0, 1fr); gap: 36px; padding: 40px 20px; }
-  .auth-entry-story { width: min(480px, 100%); margin: 0 auto; }
-  .auth-entry-story h1 { font-size: 24px; }
-  .auth-delivery { margin-top: 26px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .auth-delivery-flow { animation: none; stroke-dasharray: none; opacity: .25; }
+  .login-hero { padding: 40px 20px; gap: 32px; }
+  .auth-entry-card .ant-card-body { padding: 28px; }
+  .login-story h1 { font-size: 26px; line-height: 36px; }
+  .login-flow { margin-top: 28px; }
 }

@@ -2,19 +2,21 @@ import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
-import { PageHeading } from '@/shared/ui/PageHeading';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
+import { StatusTag } from '@/shared/ui/StatusTag';
 import { useState } from 'react';
 import {
   Card, Descriptions, Button, Spin, Result, message, Tabs, Form, Input, Space,
-  Tag, Modal, Select, Popconfirm, Drawer} from 'antd';
+  Modal, Select, Popconfirm, Drawer} from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { ScanOutlined, EditOutlined, SaveOutlined, DeleteOutlined, PlusOutlined, CloseCircleFilled } from '@ant-design/icons';
-import { useParams, useNavigate } from 'react-router-dom';
+import { ScanOutlined, CloseCircleFilled } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getRepo, getConclusion, updateConclusion, listRelations, listRepos,
-  createRelation, deleteRelation, deleteRepo, updateRepo, RELATION_TYPES,
+  createRelation, deleteRelation, deleteRepo, updateRepo, RELATION_TYPES, RELATION_TAG_COLORS,
+  relationHintKey,
 } from './api';
 import type { RepoRelation, CreateRelationRequest, UpdateRepoRequest } from './api';
 import type { ColumnsType } from 'antd/es/table';
@@ -23,11 +25,14 @@ import { MarkdownView } from '@/shared/ui/MarkdownView';
 import { EllipsisText } from '@/shared/ui/EllipsisText';
 import { AiSessionPanel } from '@/shared/ui/AiSessionPanel';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+import './RepoDetailPage.css';
 
 const { TextArea } = Input;
 
 // 临时隐藏仓库扫描入口(发起扫描按钮/扫描结论页签/扫描状态字段),置回 true 即可恢复
 const REPO_SCAN_ENABLED: boolean = false;
+
+const MISSING = '-';
 
 export function RepoDetailPage() {
   const { t } = useTranslation('repo');
@@ -43,10 +48,13 @@ export function RepoDetailPage() {
   const [addRelationOpen, setAddRelationOpen] = useState(false);
   const [aiScanOpen, setAiScanOpen] = useState(false);
   const [deleteRepoOpen, setDeleteRepoOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('info');
   const [pendingRelationDeleteId, setPendingRelationDeleteId] = useState<string | number | null>(null);
   const [repoForm] = Form.useForm();
   const [conclusionForm] = Form.useForm();
   const [relationForm] = Form.useForm();
+  const relationTypeValue = Form.useWatch('relationType', relationForm);
+  const relationTargetValue = Form.useWatch('toRepoId', relationForm);
 
   const { data: repo, isLoading, isError, error } = useQuery({
     queryKey: ['repo', repoId],
@@ -144,6 +152,15 @@ export function RepoDetailPage() {
 
   const repoNameMap = new Map(allRepos.map(r => [String(r.id), r.name]));
 
+  const relationHintOf = (value: string, source: string, target: string) => {
+    const key = relationHintKey(value);
+    return key ? t(key, { source, target }) : '';
+  };
+  const relationTargetName = allRepos.find(r => String(r.id) === String(relationTargetValue))?.name;
+  const relationHintVars = relationTargetName
+    ? { source: repo.name, target: relationTargetName }
+    : { source: t('fields.source'), target: t('fields.target') };
+
   const handleSaveConclusion = async () => {
     await runWithAccess('READ_WRITE', t('actions.saveConclusion'), async () => {
       const values = await conclusionForm.validateFields();
@@ -153,6 +170,7 @@ export function RepoDetailPage() {
 
   const handleStartRepoEdit = () => {
     runWithAccess('READ_WRITE', t('actions.editRepo'), () => {
+      setActiveTab('info');
       repoForm.setFieldsValue({
         name: repo?.name || '',
         url: repo?.url || '',
@@ -195,7 +213,7 @@ export function RepoDetailPage() {
   const handleAddRelation = async () => {
     await runWithAccess('READ_WRITE', t('actions.addRepoRelation'), async () => {
       const values = await relationForm.validateFields().catch(() => null);
-      if (values) createRelationMut.mutate(values);
+      if (values) createRelationMut.mutate({ ...values, fromRepoId: repo.id });
     });
   };
 
@@ -205,31 +223,42 @@ export function RepoDetailPage() {
 
   const relationColumns: ColumnsType<RepoRelation> = [
     {
-      title: t('fields.peer'), key: 'peer', ellipsis: { showTitle: false },
+      title: t('fields.peer'), key: 'peer', width: 280, ellipsis: { showTitle: false },
       render: (_: unknown, r: RepoRelation) => {
         const fromRepoId = String(r.fromRepoId);
         const toRepoId = String(r.toRepoId);
         const peerId = fromRepoId === repoId ? toRepoId : fromRepoId;
         const direction = fromRepoId === repoId ? '→' : '←';
         const peerName = repoNameMap.get(peerId) || `#${peerId}`;
-        return <EllipsisText tooltip={peerName}>{direction} {peerName}</EllipsisText>;
+        return (
+          <EllipsisText tooltip={peerName}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontWeight: 600, color: 'var(--aw-primary)' }}>{direction}</span>
+              <Link to={`/repos/${peerId}`}>{peerName}</Link>
+            </span>
+          </EllipsisText>
+        );
       },
     },
     {
-      // 不设固定 width：关系类型标签长短不一（如「客户端调用服务端」），固定 100px 会把长标签挤成省略号
-      title: t('fields.relationType'), dataIndex: 'relationType', width: 140, ellipsis: { showTitle: false },
-      render: (t: string) => (
-        <EllipsisText tooltip={RELATION_TYPES.find(rt => rt.value === t)?.label || t}>
-          <Tag style={{ marginInlineEnd: 0 }}>{RELATION_TYPES.find(rt => rt.value === t)?.label || t}</Tag>
-        </EllipsisText>
-      ),
+      // 固定 150px 容纳「客户端-服务端」等最长标签；再短会挤成省略号
+      title: t('fields.relationType'), dataIndex: 'relationType', width: 150, ellipsis: { showTitle: false },
+      render: (value: string) => {
+        const label = RELATION_TYPES.find(rt => rt.value === value)?.label || value;
+        const tone = RELATION_TAG_COLORS[value];
+        return (
+          <EllipsisText tooltip={label}>
+            <StatusTag label={label} colorKey="gray" style={tone ? { background: tone.bg, color: tone.fg } : undefined} />
+          </EllipsisText>
+        );
+      },
     },
     {
       title: t('fields.description'), dataIndex: 'description', align: 'left', ellipsis: { showTitle: false },
-      render: (v: string | null) => (v ? <EllipsisText>{v}</EllipsisText> : '-'),
+      render: (v: string | null) => (v ? <EllipsisText>{v}</EllipsisText> : MISSING),
     },
     {
-      title: t('fields.actions'), width: 80,
+      title: t('fields.actions'), width: 72,
       render: (_: unknown, r: RepoRelation) => (
         <Popconfirm
           title={t('confirm.deleteRelation')}
@@ -244,11 +273,12 @@ export function RepoDetailPage() {
           )}
         >
           <Button
-            type="link"
+            type="text"
             size="small"
-            danger
+            className="aw-op-btn aw-op-btn--del"
             aria-label={t('actions.deleteRepoRelation')}
-            icon={<DeleteOutlined aria-hidden="true" />}
+            title={t('actions.deleteRepoRelation')}
+            icon={<AwStrokeIcon name="trash" />}
             onClick={() => runWithAccess(
               'READ_WRITE',
               t('actions.deleteRepoRelation'),
@@ -265,7 +295,7 @@ export function RepoDetailPage() {
       key: 'info',
       label: t('tabs.info'),
       children: editingRepo ? (
-        <Form form={repoForm} layout="vertical">
+        <Form form={repoForm} layout="vertical" className="aw-repo-form">
           <Form.Item label={t('fields.repoName')} name="name"
             rules={[
               { required: true, message: t('validation.nameRequired') },
@@ -290,35 +320,54 @@ export function RepoDetailPage() {
             <TextArea rows={3} placeholder={t('placeholders.clearDescription')} allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('actions.clearDescription')} /> }} />
           </Form.Item>
           <Space>
-            <Button type="primary" icon={<SaveOutlined aria-hidden="true" />} onClick={handleSaveRepo}
+            <Button type="primary" icon={<AwStrokeIcon name="check" />} onClick={handleSaveRepo}
               loading={updateRepoMut.isPending}>{t('actions.save')}</Button>
             <Button onClick={() => setEditingRepo(false)}>{t('actions.cancel')}</Button>
           </Space>
         </Form>
       ) : (
-        <>
-          <Descriptions column={2}>
-            <Descriptions.Item label={t('fields.repoName')}>{repo.name}</Descriptions.Item>
-            <Descriptions.Item label={t('fields.url')} span={2}>{repo.url}</Descriptions.Item>
-            <Descriptions.Item label={t('fields.branch')}>{repo.defaultBranch || '-'}</Descriptions.Item>
-            {REPO_SCAN_ENABLED && (
-              <Descriptions.Item label={t('scan.status')}>
+        <div className="aw-repo-meta">
+          <div className="aw-repo-meta-item">
+            <div className="aw-repo-meta-label">{t('fields.repoName')}</div>
+            <div className="aw-repo-meta-value">{repo.name}</div>
+          </div>
+          <div className="aw-repo-meta-item">
+            <div className="aw-repo-meta-label">{t('fields.branch')}</div>
+            <div className="aw-repo-meta-value aw-repo-meta-value--mono">{repo.defaultBranch || MISSING}</div>
+          </div>
+          <div className="aw-repo-meta-item">
+            <div className="aw-repo-meta-label">{t('fields.id')}</div>
+            <div className="aw-repo-meta-value aw-repo-meta-value--mono">{repo.id}</div>
+          </div>
+          <div className="aw-repo-meta-item">
+            <div className="aw-repo-meta-label">{t('fields.created')}</div>
+            <div className="aw-repo-meta-value">{formatDateTime(repo.gmtCreate)}</div>
+          </div>
+          {REPO_SCAN_ENABLED && (
+            <div className="aw-repo-meta-item">
+              <div className="aw-repo-meta-label">{t('scan.status')}</div>
+              <div className="aw-repo-meta-value">
                 {conclusion
-                  ? <Tag color="success">{t('scan.complete')}</Tag>
-                  : <Tag>{t('scan.notScanned')}</Tag>}
-              </Descriptions.Item>
-            )}
-            {REPO_SCAN_ENABLED && conclusion && (
-              <Descriptions.Item label={t('scan.lastTime')}>
-                {formatDateTime(conclusion.gmtCreate)}
-              </Descriptions.Item>
-            )}
-            <Descriptions.Item label={t('fields.description')} span={2}>{repo.description || '-'}</Descriptions.Item>
-          </Descriptions>
-          <Button icon={<EditOutlined aria-hidden="true" />} onClick={handleStartRepoEdit} style={{ marginTop: 16 }}>
-            {t('actions.edit')}
-          </Button>
-        </>
+                  ? <StatusTag dot label={t('scan.complete')} colorKey="green" />
+                  : <StatusTag label={t('scan.notScanned')} colorKey="gray" />}
+              </div>
+            </div>
+          )}
+          {REPO_SCAN_ENABLED && conclusion && (
+            <div className="aw-repo-meta-item">
+              <div className="aw-repo-meta-label">{t('scan.lastTime')}</div>
+              <div className="aw-repo-meta-value">{formatDateTime(conclusion.gmtCreate)}</div>
+            </div>
+          )}
+          <div className="aw-repo-meta-item aw-repo-meta-item--wide">
+            <div className="aw-repo-meta-label">{t('fields.url')}</div>
+            <div className="aw-repo-meta-value aw-repo-meta-value--mono aw-repo-meta-value--url">{repo.url}</div>
+          </div>
+          <div className="aw-repo-meta-item aw-repo-meta-item--wide">
+            <div className="aw-repo-meta-label">{t('fields.description')}</div>
+            <div className="aw-repo-meta-value">{repo.description || MISSING}</div>
+          </div>
+        </div>
       ),
     },
     ...(REPO_SCAN_ENABLED ? [{
@@ -342,7 +391,7 @@ export function RepoDetailPage() {
             <TextArea rows={8} placeholder={t('scan.summaryPlaceholder')} />
           </Form.Item>
           <Space>
-            <Button type="primary" icon={<SaveOutlined aria-hidden="true" />} onClick={handleSaveConclusion}
+            <Button type="primary" icon={<AwStrokeIcon name="check" />} onClick={handleSaveConclusion}
               loading={updateConclusionMut.isPending}>{t('actions.save')}</Button>
             <Button onClick={() => setEditingConclusion(false)}>{t('actions.cancel')}</Button>
           </Space>
@@ -366,7 +415,7 @@ export function RepoDetailPage() {
           ) : (
             <Result status="info" title={t('scan.empty')} subTitle={t('scan.emptyHint')} />
           )}
-          <Button icon={<EditOutlined aria-hidden="true" />} onClick={handleStartEdit} style={{ marginTop: 16 }}>
+          <Button icon={<AwStrokeIcon name="edit" />} onClick={handleStartEdit} style={{ marginTop: 16 }}>
             {t('actions.editConclusionButton')}
           </Button>
         </div>
@@ -377,9 +426,10 @@ export function RepoDetailPage() {
       label: t('tabs.relations'),
       children: (
         <div>
-          <div style={{ marginBottom: 16, textAlign: 'right' }}>
+          <div style={{ marginBottom: 12, textAlign: 'right' }}>
             <Button
-              icon={<PlusOutlined aria-hidden="true" />}
+              size="small"
+              icon={<AwStrokeIcon name="plus" />}
               onClick={() => runWithAccess(
                 'READ_WRITE',
                 t('actions.addRepoRelation'),
@@ -389,72 +439,103 @@ export function RepoDetailPage() {
               {t('actions.addRelation')}
             </Button>
           </div>
-          <Table rowKey="id" columns={relationColumns} dataSource={repoRelations} pagination={false} size="small" />
+          <Table rowKey="id" columns={relationColumns} dataSource={repoRelations} pagination={false} size="small" scroll={{ x: 760 }} />
         </div>
       ),
     },
   ];
 
   return (
-    <div>
+    <div className="aw-repo-detail">
 
-      <Card
-        className="aw-content-card" title={<PageHeading title={<span className="aw-detail-title"><PageBackButton to="/repos" label={t('actions.backList')} /><span>{repo.name}</span></span>} />}
-        extra={
-          <Space>
-            {REPO_SCAN_ENABLED && (
-              <Button icon={<ScanOutlined aria-hidden="true" />} onClick={openAiScan}>
-                {t('actions.scan')}
-              </Button>
+      <div className="aw-repo-head">
+        <div className="aw-detail-title" style={{ gap: 10 }}>
+          <PageBackButton to="/repos" label={t('actions.backList')} />
+          <span className="aw-repo-title">{repo.name}</span>
+        </div>
+        <Space wrap>
+          {REPO_SCAN_ENABLED && (
+            <Button size="small" icon={<ScanOutlined aria-hidden="true" />} onClick={openAiScan}>
+              {t('actions.scan')}
+            </Button>
+          )}
+          {!editingRepo && (
+            <Button
+              size="small"
+              icon={<AwStrokeIcon name="edit" />}
+              onClick={handleStartRepoEdit}
+            >
+              {t('actions.edit')}
+            </Button>
+          )}
+          <Popconfirm
+            title={t('confirm.deleteRepo', { name: repo.name })}
+            description={t('confirm.deleteHint')}
+            open={deleteRepoOpen}
+            onOpenChange={(open) => setDeleteRepoOpen(open)}
+            onConfirm={() => runWithAccess(
+              'READ_WRITE',
+              t('actions.deleteRepo'),
+              () => deleteRepoMut.mutate(),
             )}
-            <Popconfirm
-              title={t('confirm.deleteRepo', { name: repo.name })}
-              description={t('confirm.deleteHint')}
-              open={deleteRepoOpen}
-              onOpenChange={(open) => setDeleteRepoOpen(open)}
-              onConfirm={() => runWithAccess(
+            okText={t('actions.delete')}
+            okButtonProps={{ danger: true, loading: deleteRepoMut.isPending }}
+            cancelText={t('actions.cancel')}
+          >
+            <Button
+              size="small"
+              danger
+              icon={<AwStrokeIcon name="trash" />}
+              onClick={() => runWithAccess(
                 'READ_WRITE',
                 t('actions.deleteRepo'),
-                () => deleteRepoMut.mutate(),
+                () => setDeleteRepoOpen(true),
               )}
-              okText={t('actions.delete')}
-              okButtonProps={{ danger: true, loading: deleteRepoMut.isPending }}
-              cancelText={t('actions.cancel')}
             >
-              <Button
-                danger
-                icon={<DeleteOutlined aria-hidden="true" />}
-                onClick={() => runWithAccess(
-                  'READ_WRITE',
-                  t('actions.deleteRepo'),
-                  () => setDeleteRepoOpen(true),
-                )}
-              >
-                {t('actions.deleteRepo')}
-              </Button>
-            </Popconfirm>
-          </Space>
-        }
-      >
-        <Tabs items={tabItems} />
-      </Card>
+              {t('actions.delete')}
+            </Button>
+          </Popconfirm>
+        </Space>
+      </div>
+
+      <Tabs className="aw-repo-tabs" activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
 
       <Modal title={t('actions.addRepoRelation')} open={addRelationOpen}
         onOk={handleAddRelation} onCancel={() => setAddRelationOpen(false)}
         confirmLoading={createRelationMut.isPending}>
         <Form form={relationForm} layout="vertical">
-          <Form.Item label={t('fields.source')} name="fromRepoId" initialValue={repoId} rules={[{ required: true }]}>
-            <Select showSearch optionFilterProp="label"
-              options={allRepos.map(r => ({ value: r.id, label: r.name }))}
-            />
+          <Form.Item label={t('fields.source')}>
+            <Input value={repo.name} disabled />
           </Form.Item>
           <Form.Item label={t('fields.target')} name="toRepoId" rules={[{ required: true, message: t('validation.targetRequired') }]}>
             <Select placeholder={t('placeholders.target')} showSearch optionFilterProp="label"
               options={allRepos.filter(r => String(r.id) !== repoId).map(r => ({ value: r.id, label: r.name }))}
             />
           </Form.Item>
-          <Form.Item label={t('fields.relationType')} name="relationType" rules={[{ required: true, message: t('validation.typeRequired') }]}>
-            <Select placeholder={t('placeholders.type')} options={RELATION_TYPES.map(t => ({ value: t.value, label: t.label }))} />
+          <Form.Item
+            label={t('fields.relationType')}
+            name="relationType"
+            rules={[{ required: true, message: t('validation.typeRequired') }]}
+            extra={(
+              <span data-testid="relation-direction-hint">
+                {relationTypeValue
+                  ? relationHintOf(relationTypeValue, relationHintVars.source, relationHintVars.target)
+                  : t('relation.directionPrompt')}
+              </span>
+            )}
+          >
+            <Select
+              placeholder={t('placeholders.type')}
+              options={RELATION_TYPES.map(type => ({ value: type.value, label: type.label, title: type.label }))}
+              optionRender={(option) => (
+                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '18px', padding: '2px 0' }}>
+                  <span>{option.data.label as string}</span>
+                  <span style={{ fontSize: 12, color: 'var(--aw-text-3)' }}>
+                    {relationHintOf(option.data.value as string, t('fields.source'), t('fields.target'))}
+                  </span>
+                </div>
+              )}
+            />
           </Form.Item>
           <Form.Item label={t('fields.description')} name="description">
             <Input placeholder={t('placeholders.description')} />

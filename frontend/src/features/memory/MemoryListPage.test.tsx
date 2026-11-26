@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -47,18 +47,18 @@ describe('MemoryListPage', () => {
     expect(screen.queryByRole('button', { name: '分页主题10' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByTitle('2'));
     expect(await screen.findByRole('button', { name: '分页主题10' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: '变更历史' }));
-    expect(await screen.findByText('修改 · history_0.md')).toBeInTheDocument();
-    expect(screen.queryByText('修改 · history_10.md')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: '历史' }));
+    expect(await screen.findByText('history_0.md')).toBeInTheDocument();
+    expect(screen.queryByText('history_10.md')).not.toBeInTheDocument();
   });
 
   it('keeps the access dialog open when required fields are invalid', async () => {
     handlers(); renderPage();
     await screen.findByText('社区发布工程师');
-    await userEvent.click(screen.getByRole('tab', { name: '访问权限' }));
+    await userEvent.click(screen.getByRole('tab', { name: '访问控制' }));
     await userEvent.click(await screen.findByRole('button', { name: '添加访问权限' }));
     await userEvent.click(screen.getByRole('button', { name: '保 存' }));
-    expect(await screen.findByRole('dialog', { name: '新增记忆权限' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: '添加访问权限' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('对象编号')).toHaveAttribute('aria-invalid', 'true'));
   });
 
@@ -83,8 +83,8 @@ describe('MemoryListPage', () => {
     expect(await screen.findByText('社区发布工程师')).toBeInTheDocument();
     expect(await screen.findByText('MEMORY.md')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '社区发布检查' })).toBeInTheDocument();
-    expect(screen.getByText('记忆库修订版本 8')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '记忆内容 (1)' })).toBeInTheDocument();
+    expect(screen.getByText('当前修订版 8')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /主题/ })).toBeInTheDocument();
     expect(screen.queryByText(/Claude Code 兼容/)).not.toBeInTheDocument();
     expect(screen.queryByText(/待审核|采纳|审核台/)).not.toBeInTheDocument();
   });
@@ -114,10 +114,11 @@ describe('MemoryListPage', () => {
     );
     renderPage();
     await screen.findByText('社区发布工程师');
-    await userEvent.click(screen.getByRole('tab', { name: '访问权限' }));
+    await userEvent.click(screen.getByRole('tab', { name: '访问控制' }));
     expect(await screen.findByRole('button', { name: '添加访问权限' })).toBeInTheDocument();
-    expect(await screen.findByText('数字人 · 42')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: '本地来源' }));
+    expect(await screen.findByText('数字员工')).toBeInTheDocument();
+    expect(screen.getByText('#42')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: '导入来源' }));
     expect(await screen.findByText('qoder · MEMORY.md')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '暂停' }));
     await waitFor(() => expect(requestedStatus).toBe('PAUSED'));
@@ -126,8 +127,8 @@ describe('MemoryListPage', () => {
   it('shows owners without stores and allows creating memory without manual file paths', async () => {
     handlers(); renderPage();
     await userEvent.click(await screen.findByText('尚未执行的测试工程师'));
-    expect(screen.getByText('暂无记忆，可通过“新增记忆”添加')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /新增记忆/ }));
+    expect(screen.getByText('暂无记忆，可通过“新建记忆”添加')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /新建记忆/ }));
     expect(await screen.findByLabelText('归属范围')).toBeInTheDocument();
     expect(screen.getByLabelText('记忆类型')).toBeInTheDocument();
     expect(screen.queryByLabelText('路径')).not.toBeInTheDocument();
@@ -136,7 +137,7 @@ describe('MemoryListPage', () => {
   it('opens topic body as readable content rather than requiring edit', async () => {
     handlers(); renderPage();
     await userEvent.click(await screen.findByRole('button', { name: '社区发布检查' }));
-    expect(await screen.findByRole('dialog', { name: '社区发布检查' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /^社区发布检查/ })).toBeInTheDocument();
     expect(screen.getByText('需要 E2E 验证')).toBeInTheDocument();
   });
 
@@ -147,8 +148,8 @@ describe('MemoryListPage', () => {
       { id: 22, agentId: 99, targetStoreId: 22, providerFamily: 'qoder', logicalPath: 'other-agent.md', status: 'ACTIVE', version: 1 },
     ] })));
     renderPage(); await screen.findByText('社区发布工程师');
-    await userEvent.click(screen.getByRole('tab', { name: '本地来源' }));
-    expect(await screen.findByText(/未找到本地文件不代表平台记忆丢失/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: '导入来源' }));
+    expect(await screen.findByText(/本地文件消失不代表平台记忆丢失/)).toBeInTheDocument();
     expect(screen.queryByText('qoder · other-agent.md')).not.toBeInTheDocument();
     await userEvent.click(screen.getByText(/未找到本地文件（1）/));
     expect(await screen.findByText('qoder · MEMORY.md')).toBeInTheDocument();
@@ -157,7 +158,7 @@ describe('MemoryListPage', () => {
   it('disables every editing entry for a member with read-only store access while content stays readable', async () => {
     handlers('READ'); renderPage('READ_WRITE');
     expect(await screen.findByText('社区发布工程师')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /新增记忆/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /新建记忆/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: '编辑索引' })).toBeDisabled();
     for (const button of screen.getAllByRole('button', { name: /编辑/ })) {
       expect(button).toBeDisabled();
@@ -170,10 +171,50 @@ describe('MemoryListPage', () => {
   it('disables every editing entry for a read-only workspace member regardless of store permission', async () => {
     handlers('ADMIN'); renderPage('READ_ONLY');
     expect(await screen.findByText('MEMORY.md')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /新增记忆/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /新建记忆/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: '编辑索引' })).toBeDisabled();
     for (const button of screen.getAllByRole('button', { name: /编辑/ })) {
       expect(button).toBeDisabled();
     }
+  });
+
+  it('opens MEMORY.md relative links in the same viewer and degrades unresolved ones to plain text', async () => {
+    handlers();
+    server.use(
+      http.get('/api/memory-stores/11/documents', () => HttpResponse.json({ success: true, data: [
+        { id: 1, storeId: 11, path: 'MEMORY.md', contentMd: '- [发布规则](project_release.md)\n- [缺失记忆](missing_note.md)\n- [外部规范](https://example.com/spec)', contentSha256: 'a', byteSize: 90, modifiedAt: '2026-09-17', version: 3 },
+        { id: 2, storeId: 11, path: 'project_release.md', title: '发布检查规则', memoryType: 'feedback', description: '发布时参考', body: '需要 E2E 验证', contentMd: '需要 E2E 验证', contentSha256: 'b', byteSize: 20, modifiedAt: '2026-09-17', version: 1 },
+      ] })),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'MEMORY.md' }));
+    const viewer = await screen.findByRole('dialog');
+    const relative = within(viewer).getByRole('button', { name: '发布规则' });
+    expect(relative).toHaveClass('aw-markdown-relative-link');
+    const unresolved = within(viewer).getByText('缺失记忆');
+    expect(unresolved).toHaveClass('aw-markdown-unresolved-link');
+    expect(within(viewer).queryByRole('link', { name: '缺失记忆' })).not.toBeInTheDocument();
+    expect(within(viewer).getByRole('link', { name: '外部规范' }))
+      .toHaveAttribute('href', 'https://example.com/spec');
+    await userEvent.click(relative);
+    await waitFor(() => expect(within(viewer).getByText('需要 E2E 验证')).toBeInTheDocument());
+    expect(within(viewer).getByText('发布检查规则')).toBeInTheDocument();
+  });
+
+  it('collapses owner groups and forces them open while filtering', async () => {
+    handlers(); renderPage();
+    await screen.findByText('社区发布工程师');
+    const agentGroupHead = () => Array.from(document.querySelectorAll<HTMLButtonElement>('.mem-owner-group-head'))
+      .find((node) => node.textContent?.includes('数字员工记忆'))!;
+    expect(agentGroupHead()).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(agentGroupHead());
+    await waitFor(() => expect(agentGroupHead()).toHaveAttribute('aria-expanded', 'false'));
+    expect(screen.queryByText('社区发布工程师')).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('筛选归属者'), '尚未执行');
+    await waitFor(() => expect(agentGroupHead()).toHaveAttribute('aria-expanded', 'true'));
+    expect(await screen.findByText('尚未执行的测试工程师')).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText('筛选归属者'));
+    await waitFor(() => expect(agentGroupHead()).toHaveAttribute('aria-expanded', 'false'));
+    expect(screen.queryByText('尚未执行的测试工程师')).not.toBeInTheDocument();
   });
 });

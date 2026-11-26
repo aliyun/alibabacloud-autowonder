@@ -12,6 +12,10 @@ public interface WorkspaceMemberDao {
     WorkspaceMemberDO findByWorkspaceAndUserForUpdate(@Param("tenantId") Long tenantId,
                                           @Param("userId") Long userId);
     List<WorkspaceMemberDO> listByTenant(@Param("tenantId") Long tenantId);
+    long countActiveByTenant(@Param("tenantId") Long tenantId);
+    List<WorkspaceMemberDO> listActivePage(@Param("tenantId") Long tenantId,
+                                          @Param("limit") int limit, @Param("offset") long offset,
+                                          @Param("after") WorkspaceMemberDO after);
     int updateRole(@Param("tenantId") Long tenantId, @Param("userId") Long userId,
                    @Param("roleId") Long roleId, @Param("modifierId") Long modifierId);
     int updateIdentityTags(@Param("tenantId") Long tenantId, @Param("userId") Long userId,

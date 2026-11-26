@@ -51,25 +51,27 @@ describe('memory live locale', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByText(kind === 'topic' ? 'Enter a title' : 'Enter a safe relative Markdown path')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByLabelText(kind === 'topic' ? 'Body' : 'Content')).toHaveValue(kind === 'topic' ? '<script>原文</script>' : '原始文件');
+    expect(screen.getByLabelText(kind === 'topic' ? 'Body (Markdown)' : 'Content')).toHaveValue(kind === 'topic' ? '<script>原文</script>' : '原始文件');
     expect(save).not.toHaveBeenCalled(); expect(cancel).not.toHaveBeenCalled();
   });
   it('updates the cached routed viewer and fixed owner while preserving literal memory data', async () => {
     const calls = fixture(); routed(<MemoryListPage />);
     await userEvent.click(await screen.findByRole('button', { name: raw }));
-    const dialog = screen.getByRole('dialog', { name: raw });
+    const named = (prefix: string) => (accessibleName: string) => accessibleName.startsWith(prefix);
+    const dialog = screen.getByRole('dialog', { name: named(raw) });
     expect(within(dialog).getByRole('button', { name: '关闭' })).toBeInTheDocument();
     await language('en-US');
     expect(screen.getByRole('heading', { name: 'Memory' })).toBeInTheDocument();
-    expect(screen.getByText('Organization shared memory')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Memory content (1)' })).toBeInTheDocument();
+    expect(screen.getByText('Project memory', { selector: '.mem-owner-name' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Topics/ })).toBeInTheDocument();
     expect(within(dialog).getByText(/Feedback and agreements/)).toBeInTheDocument();
-    expect(within(dialog).getByText('<script>原文</script>')).toBeInTheDocument();
+    expect(dialog.querySelector('.mem-viewer-body')).not.toBeNull();
+    expect(dialog).not.toHaveTextContent('原始文件');
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
     expect(dialog.querySelector('script')).toBeNull();
     expect(calls).toMatchObject({ directory: 1, documents: 1 });
     await language('zh-CN');
-    expect(screen.getByRole('dialog', { name: raw })).toBe(dialog);
+    expect(screen.getByRole('dialog', { name: named(raw) })).toBe(dialog);
     expect(within(dialog).getByText(/反馈与约定/)).toBeInTheDocument();
   });
   it('refreshes only displayed topic errors and keeps drafts, semantic codes, versions and retry key', async () => {
@@ -83,7 +85,7 @@ describe('memory live locale', () => {
     expect(await screen.findByText('Enter a title')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
     expect(screen.getByLabelText('Title')).toBe(title);
-    expect(screen.getByLabelText('Body')).toHaveValue('<script>原文</script>');
+    expect(screen.getByLabelText('Body (Markdown)')).toHaveValue('<script>原文</script>');
     expect(screen.queryByText('Enter a body')).not.toBeInTheDocument();
     fireEvent.change(title, { target: { value: raw } });
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -147,14 +149,23 @@ it('renders only explicit parse-warning origin and keeps unknown/absent same-loo
   await language('en-US');
   expect(row('marked')).toHaveTextContent('Metadata could not be parsed. View the original text in the file details.');
   expect(row('authored')).toHaveTextContent(warning); expect(row('unknown')).toHaveTextContent(warning);
+  // 解析告警文档打开时必须展示查看器告警条，同时保留原始正文（QA-60162-F5）。
+  await userEvent.click(screen.getByRole('button', { name: 'marked' }));
+  const enViewer = screen.getByRole('dialog');
+  expect(enViewer.querySelector('.mem-viewer-warn')).toHaveTextContent('Metadata could not be parsed. View the original text in the file details.');
+  expect(enViewer.querySelector('.mem-viewer-body')).not.toBeNull();
   await userEvent.click(screen.getByRole('button', { name: 'unknown' }));
-  const dialog = screen.getByRole('dialog', { name: 'unknown' });
-  expect(dialog).toHaveTextContent('unknown.md · File version 7 · constructor');
-  expect(within(dialog).getByText('<script>原文</script>')).toBeInTheDocument();
+  const dialog = screen.getByRole('dialog', { name: 'unknown unknown.md · Version 7 · constructor' });
+  expect(dialog).toHaveTextContent('unknown.md · Version 7 · constructor');
+  expect(dialog.querySelector('.mem-viewer-body')).not.toBeNull();
   expect(calls.documents).toBe(1); expect(calls.directory).toBe(1);
   const cached = client.getQueryData<MemoryDocument[]>(client.getQueryCache().findAll({ queryKey: ['memory-stores'] }).find(q => q.queryKey.includes('documents') && q.state.data !== undefined)!.queryKey)!;
   expect(cached[0].description).toBe(warning); expect(cached[0].contentMd).toBe('原始文件');
   await language('zh-CN'); expect(row('marked')).toHaveTextContent(warning); expect(row('unknown')).toHaveTextContent(warning);
+  await userEvent.click(screen.getByRole('button', { name: 'marked' }));
+  const zhViewer = screen.getByRole('dialog');
+  expect(zhViewer.querySelector('.mem-viewer-warn')).toHaveTextContent(warning);
+  expect(zhViewer.querySelector('.mem-viewer-body')).not.toBeNull();
 });
 
 it.each(['topic', 'index'])('uses the completion locale for a delayed %s save and preserves its request', async (kind) => {
@@ -187,9 +198,9 @@ it('updates independently rendered import statuses, plural counts and dates with
     http.put('/api/memory-imports/21/status', async ({ request }) => { payload = await request.json(); return HttpResponse.json({ success: true, data: null }); }),
   );
   routed(<MemoryImportSourcesPanel administrator agentId={42} />);
-  await screen.findByText('可导入'); await waitFor(() => expect(receipts.length).toBe(2));
+  await screen.findByText('活跃'); await waitFor(() => expect(receipts.length).toBe(2));
   await language('en-US');
-  expect(screen.getByText('Ready to import')).toBeInTheDocument(); expect(screen.getByText('constructor')).toBeInTheDocument();
+  expect(screen.getByText('Active')).toBeInTheDocument(); expect(screen.getByText('constructor')).toBeInTheDocument();
   expect(screen.getAllByText(/1 successful import in recent records/)).toHaveLength(2);
   expect(screen.getByText('Local file not found (1)')).toBeInTheDocument();
   expect(screen.queryByText(/hidden.md/)).not.toBeInTheDocument();
@@ -199,10 +210,10 @@ it('updates independently rendered import statuses, plural counts and dates with
   expect(await screen.findByText('Local file not found')).toBeInTheDocument();
   expect(screen.getByText(/0 successful imports in recent records/)).toBeInTheDocument();
   expect(receipts).not.toContain(22); expect(imports).toBe(1);
-  const active = screen.getByText('Ready to import').closest('li')!;
+  const active = screen.getByText('Active').closest('li')!;
   await userEvent.click(within(active).getByRole('button', { name: 'Pause' }));
   await waitFor(() => expect(payload).toEqual({ status: 'PAUSED', version: 3 }));
-  await language('zh-CN'); expect(screen.getByText('可导入')).toBeInTheDocument();
+  await language('zh-CN'); expect(screen.getByText('活跃')).toBeInTheDocument();
 });
 
 it('localizes the existing unrouted AI import page without changing its return navigation', async () => {
@@ -223,22 +234,22 @@ it('retains selected owner, topic and history pagination on the cached route acr
   await userEvent.click(screen.getByTitle('2')); expect(await screen.findByRole('button', { name: 'raw10' })).toBeInTheDocument();
   await language('en-US'); expect(screen.getByRole('button', { name: 'raw10' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'raw0' })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('tab', { name: 'Change history' }));
-  const pages = screen.getAllByTitle('2'); await userEvent.click(pages[pages.length - 1]); expect(await screen.findByText('constructor · history_10.md')).toBeInTheDocument();
-  await language('zh-CN'); expect(screen.getByText('constructor · history_10.md')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('tab', { name: 'History' }));
+  const pages = screen.getAllByTitle('2'); await userEvent.click(pages[pages.length - 1]); expect(await screen.findByText('history_10.md')).toBeInTheDocument();
+  await language('zh-CN'); expect(screen.getByText('history_10.md')).toBeInTheDocument();
   expect(documentCalls).toBe(1); expect(historyCalls).toBe(1);
 });
 
 it('renders the ORG owner option from scope while retaining same-looking Squad names', async () => {
   const organization: MemoryOwner = { ...owner, scope: 'ORG', ownerRef: 0, name: 'stored name must stay raw', squadNames: [] };
   routed(<MemoryTopicEditor open owners={[organization]} initialOwner={organization} saving={false} onCancel={vi.fn()} onSave={vi.fn()} />);
-  expect(screen.getByText('组织共享记忆')).toBeInTheDocument();
-  await language('en-US'); expect(screen.getByText('Organization shared memory')).toBeInTheDocument();
+  expect(screen.getByText('项目记忆')).toBeInTheDocument();
+  await language('en-US'); expect(screen.getByText('Project memory')).toBeInTheDocument();
   expect(organization.name).toBe('stored name must stay raw');
   cleanup();
   const squad: MemoryOwner = { ...organization, scope: 'SQUAD', name: '组织共享记忆' };
   routed(<MemoryTopicEditor open owners={[squad]} initialOwner={squad} saving={false} onCancel={vi.fn()} onSave={vi.fn()} />);
   expect(screen.getByText('组织共享记忆')).toBeInTheDocument();
-  expect(screen.queryByText('Organization shared memory')).not.toBeInTheDocument();
+  expect(screen.queryByText('Project memory')).not.toBeInTheDocument();
   await language('zh-CN'); expect(screen.getByText('组织共享记忆')).toBeInTheDocument();
 });

@@ -2,7 +2,9 @@
 .aw-chief-plan-toggle-group { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
 .aw-chief-plan-toggle:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 1px; }
 .aw-chief-plan-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--aw-muted); font-size: 12px; }
-.aw-chief-plan-failed { border-color: var(--ant-color-error, #ff4d4f); }
+.aw-chief-plan-failed { border-color: color-mix(in srgb, var(--aw-error) 32%, var(--aw-border)); background: var(--aw-error-bg); }
+/* 计划操作按钮并排左对齐（原型 35 .plan-actions）；.aw-chief-actions 默认两端对齐是给历史分页用的。 */
+.aw-chief-actions.aw-chief-plan-actions { justify-content: flex-start; }
 @media (max-width: 480px) { .aw-chief-plan-heading { flex-wrap: wrap; } }
 .aw-chief-plan-preview { max-height: 240px; overflow: auto; overscroll-behavior: contain; margin-top: 8px; }
 .aw-chief-plan-detail { max-height: 70dvh; overflow: auto; overscroll-behavior: contain; }

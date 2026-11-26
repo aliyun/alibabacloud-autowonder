@@ -149,18 +149,51 @@ export interface StageDurationSample {
   workitemId: number;
   title: string;
   agentName: string | null;
+  agentId: number | null;
+  agentVersionId: number | string | null;
+  agentVersionNo: number | null;
+  currentAgentVersion: boolean;
   createdAt: string;
   status: string;
   durationMs: number | null;
+  dispatchStatus?: string;
+  timing?: StageTimingBreakdown;
+}
+
+export interface StageTimingOperation {
+  target: string;
+  operation: string;
+  kind: string;
+  count: number;
+  durationMs: number;
+}
+
+export interface StageTimingBreakdown {
+  externalWaitMs: number | null;
+  otherWaitMs: number;
+  unknownMs: number | null;
+  processingMs: number | null;
+  unobservedTailMs: number;
+  afterKnownWaitMs: number | null;
+  observationDelayMs: number;
+  instrumented: boolean;
+  operations: StageTimingOperation[];
+  omittedOperationGroups?: number;
 }
 
 export interface StageDurationStage {
   key: string;
-  sdlcId: number;
+  agentId: number | null;
+  agentName: string | null;
+  agentVersionId: number | string | null;
+  agentVersionNo: number | null;
+  currentAgentVersion: boolean | null;
+  sdlcId: number | string;
   sdlcName: string | null;
   stepId: number | null;
   stepOrder: number | null;
   name: string | null;
+  currentDefinition?: boolean;
   sampleCount: number;
   completedCount: number;
   activeCount: number;
@@ -172,10 +205,24 @@ export interface StageDurationStage {
   averageDurationMs: number | null;
   medianDurationMs: number | null;
   p90DurationMs: number | null;
+  externalWaitMs?: number | null;
+  otherWaitMs?: number;
+  unknownMs?: number;
+  processingMs?: number;
+  unobservedTailMs?: number;
+  afterKnownWaitMs?: number;
+  observationDelayMs?: number;
+  instrumentedSampleCount?: number;
+  coveredSampleCount?: number;
+  afterKnownWaitMedianMs?: number | null;
+  afterKnownWaitP90Ms?: number | null;
+  operations?: StageTimingOperation[];
+  omittedOperationGroups?: number;
   slowest: StageDurationSample[];
 }
 
 export interface StageDurationReport {
+  sampleLimit?: number;
   startDate: string;
   endDate: string;
   timezone: string;
@@ -183,9 +230,84 @@ export interface StageDurationReport {
   executionCount: number;
   workitemCount: number;
   measuredExecutionCount: number;
+  stageExecutionCount?: number;
+  noStageExecutionCount?: number;
+  notApplicableExecutionCount?: number;
   missingDurationCount: number;
   totalDurationMs: number;
   stages: StageDurationStage[];
+  versionSamples?: StageDurationVersionSample[];
+  flowSnapshots?: StageDurationFlowSnapshot[];
+  recoverableSnapshotCount?: number;
+}
+
+export interface StageDurationPlan {
+  snapshot: { maxDispatchId: number | null; calculatedAt: string };
+  mode: 'single' | 'sharded';
+  executionCount: number;
+  workitemCount: number;
+  notApplicableExecutionCount: number;
+  recoverableSnapshotCount: number;
+  firstExecutionDate: string;
+  lastExecutionDate: string;
+  shards: StageDurationShard[];
+}
+
+export interface StageDurationShard {
+  sdlcId: number;
+  sdlcName: string | null;
+  executionCount: number;
+  oversized: boolean;
+}
+
+export interface StageDurationAgentVersion {
+  agentVersionId: number | string;
+  agentVersionNo: number | null;
+  currentAgentVersion: boolean;
+  executionCount: number;
+}
+
+export interface StageDurationStepSample {
+  key: string;
+  stepId: string | number | null;
+  stepOrder: number | null;
+  name: string | null;
+  status: string;
+  durationMs: number | null;
+  timing?: StageTimingBreakdown;
+}
+
+export interface StageDurationVersionSample extends StageDurationSample {
+  sdlcId: number | string | null;
+  sdlcName: string | null;
+  snapshotId: string | number | null;
+  snapshotSource: string | null;
+  complete: boolean;
+  stages: StageDurationStepSample[];
+}
+
+export interface StageSnapshotStep {
+  id: string;
+  name?: string;
+  kind?: string;
+  required?: boolean;
+  instruction?: string;
+  checklist?: unknown[];
+  gatePolicy?: Record<string, unknown>;
+  timeoutSeconds?: number;
+  retryBudget?: number;
+}
+
+export interface StageDurationFlowSnapshot {
+  id: string | number;
+  sdlcId: number | string;
+  contentHash: string;
+  capturedAt: string;
+  configuration: {
+    workflow?: string;
+    steps: StageSnapshotStep[];
+    outputContract?: Record<string, unknown>;
+  };
 }
 
 export interface MemberDeliveryCounts {

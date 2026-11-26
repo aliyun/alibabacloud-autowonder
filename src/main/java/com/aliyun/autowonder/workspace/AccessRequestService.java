@@ -85,6 +85,8 @@ public class AccessRequestService {
         }
 
         List<WorkspaceListItemVO> items = new ArrayList<>(workspaces.size());
+        List<Long> readableWorkspaceIds = new ArrayList<>();
+        Map<Long, WorkspaceListItemVO> readableCardById = new HashMap<>();
         for (WorkspaceDO workspace : workspaces) {
             WorkspaceListItemVO item = new WorkspaceListItemVO();
             item.setId(workspace.getId());
@@ -110,7 +112,26 @@ public class AccessRequestService {
             item.setCanManage(owner
                     || WorkspaceAccessLevel.ADMIN.name().equals(memberLevel)
                     || systemAdmin);
+            if (MEMBERSHIP_MEMBER.equals(item.getMembershipStatus()) || Boolean.TRUE.equals(item.getCanManage())) {
+                item.setBackground(workspace.getBackground());
+                readableWorkspaceIds.add(workspace.getId());
+                readableCardById.put(workspace.getId(), item);
+            }
             items.add(item);
+        }
+        // Private statistics are never queried or populated for ordinary pending/non-member cards.
+        // SQL independently binds currentUserId and the server-resolved platform-admin flag.
+        if (!readableWorkspaceIds.isEmpty()) {
+            for (WorkspaceCardCountDO count : workspaceDao.countMembersByWorkspaceIds(
+                    readableWorkspaceIds, currentUserId, systemAdmin)) {
+                WorkspaceListItemVO card = readableCardById.get(count.getWorkspaceId());
+                if (card != null) card.setMemberCount(count.getCount());
+            }
+            for (WorkspaceCardCountDO count : workspaceDao.countWorkitemsByWorkspaceIds(
+                    readableWorkspaceIds, currentUserId, systemAdmin)) {
+                WorkspaceListItemVO card = readableCardById.get(count.getWorkspaceId());
+                if (card != null) card.setWorkitemCount(count.getCount());
+            }
         }
         return new PageResult<>(items, total, page, size);
     }

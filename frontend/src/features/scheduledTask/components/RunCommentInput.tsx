@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent } from 'react';
 import { Button, Input, Space } from 'antd';
 import type { TextAreaRef } from 'antd/es/input/TextArea';
+import { MentionMenu, type MentionMenuRow, type MentionMenuSection } from '@/shared/ui/MentionMenu';
 import { useScheduledTaskRunMentionCandidates } from '../hooks';
 import type { ScheduledRunCommentBody, ScheduledRunMentionCandidate } from '../types';
 
@@ -11,13 +12,18 @@ interface RunCommentInputProps {
   loading?: boolean;
 }
 
-const mentionOptionHighlightStyle: CSSProperties = {
-  color: 'var(--aw-accent-text)',
-  background: 'rgba(var(--aw-accent-rgb),.10)',
-  borderRadius: 4,
-  padding: '0 4px',
-  fontWeight: 600,
-};
+interface RunMentionOption {
+  key: string;
+  value: string;
+  targetId: number;
+  targetType: 'AGENT' | 'HUMAN';
+  disabled: boolean;
+  disabledReason: string | null;
+  squadName: string | null;
+  currentSquad: boolean;
+  displayId: string | null;
+  online: boolean | null;
+}
 
 const composerTextStyle: CSSProperties = {
   fontFamily: 'inherit',
@@ -26,50 +32,6 @@ const composerTextStyle: CSSProperties = {
   letterSpacing: 0,
   whiteSpace: 'pre-wrap',
   overflowWrap: 'break-word',
-};
-
-const mentionMenuStyle: CSSProperties = {
-  position: 'absolute',
-  left: 0,
-  right: 0,
-  bottom: '100%',
-  marginBottom: 6,
-  padding: '4px 0',
-  background: 'var(--aw-glass)',
-  backdropFilter: 'blur(18px)',
-  border: '1px solid var(--aw-border)',
-  borderRadius: 6,
-  boxShadow: '0 6px 16px rgba(0, 0, 0, 0.08)',
-  zIndex: 20,
-  maxHeight: 350,
-  overflowY: 'auto',
-};
-
-const mentionMenuItemStyle: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: '6px 12px',
-  border: 0,
-  background: 'transparent',
-  color: 'var(--aw-text)',
-  textAlign: 'left',
-  cursor: 'pointer',
-};
-
-const activeMentionMenuItemStyle: CSSProperties = {
-  background: 'rgba(var(--aw-accent-rgb),.10)',
-};
-
-const disabledMentionMenuItemStyle: CSSProperties = {
-  color: 'var(--aw-muted)',
-  cursor: 'not-allowed',
-};
-
-const mentionGroupHeaderStyle: CSSProperties = {
-  padding: '6px 12px 2px',
-  color: 'var(--aw-muted)',
-  fontSize: 12,
-  fontWeight: 600,
 };
 
 function findActiveMentionQuery(value: string, caretIndex: number): string | null {
@@ -100,7 +62,11 @@ export function RunCommentInput({ runId, onSubmit, loading }: RunCommentInputPro
   const [targetHumanIds, setTargetHumanIds] = useState<number[]>([]);
   const textAreaRef = useRef<TextAreaRef>(null);
 
-  const { data: candidateData } = useScheduledTaskRunMentionCandidates(runId, mentionQuery, mentionQuery !== null);
+  const { data: candidateData, isFetching: candidatesFetching } = useScheduledTaskRunMentionCandidates(
+    runId,
+    mentionQuery,
+    mentionQuery !== null,
+  );
   const candidates = useMemo(() => candidateData ?? [], [candidateData]);
 
   const candidateNameByTarget = useMemo(() => {
@@ -113,7 +79,7 @@ export function RunCommentInput({ runId, onSubmit, loading }: RunCommentInputPro
     return names;
   }, [candidates]);
 
-  const mentionOptions = useMemo(() => {
+  const mentionOptions = useMemo<RunMentionOption[]>(() => {
     const normalizedQuery = mentionQuery?.toLowerCase() ?? '';
 
     return candidates
@@ -139,26 +105,8 @@ export function RunCommentInput({ runId, onSubmit, loading }: RunCommentInputPro
           disabledReason,
           squadName: candidate.squadName ?? null,
           currentSquad: Boolean(candidate.currentSquad),
-          label: disabled ? (
-            <span style={{ color: 'var(--aw-muted)' }}>
-              <span>@{candidate.name}</span>
-              {candidate.squadName ? <span>{t('comment.mentionSquadName', { squad: candidate.squadName })}</span> : null}
-              <span style={{ marginLeft: 6 }}>{targetType === 'AGENT' ? t('labels.agent') : t('comment.human')}</span>
-              <span style={{ marginLeft: 6 }}>{t('comment.disabledReason', { reason: disabledReason })}</span>
-            </span>
-          ) : (
-            <span>
-              <span style={mentionOptionHighlightStyle}>@{candidate.name}</span>
-              {candidate.squadName ? (
-                <span style={{ color: 'var(--aw-muted)' }}>{t('comment.mentionSquadName', { squad: candidate.squadName })}</span>
-              ) : null}
-              <span style={{ marginLeft: 6, color: targetType === 'AGENT' ? 'var(--aw-warning)' : 'var(--aw-accent-text)' }}>
-                {targetType === 'AGENT' ? t('labels.agent') : t('comment.human')}
-              </span>
-              {candidate.displayId ? <span style={{ marginLeft: 6, color: 'var(--aw-muted)' }}>{candidate.displayId}</span> : null}
-              {targetType === 'AGENT' && candidate.online === false ? t('comment.offline') : ''}
-            </span>
-          ),
+          displayId: candidate.displayId ?? null,
+          online: candidate.online ?? null,
         };
       });
   }, [candidates, mentionQuery, t]);
@@ -171,6 +119,49 @@ export function RunCommentInput({ runId, onSubmit, loading }: RunCommentInputPro
 
   const enabledOptions = useMemo(() => mentionOptions.filter((option) => !option.disabled), [mentionOptions]);
   const activeOption = enabledOptions[activeMentionIndex];
+  const activeKey = activeOption?.key ?? null;
+  const optionsByKey = useMemo(() => new Map(mentionOptions.map((option) => [option.key, option])), [mentionOptions]);
+
+  const toMentionRow = (option: RunMentionOption): MentionMenuRow => ({
+    key: option.key,
+    name: option.value,
+    isAgent: option.targetType === 'AGENT',
+    active: option.key === activeKey,
+    disabled: option.disabled,
+    online: option.online,
+    meta: [
+      option.targetType === 'AGENT' ? option.squadName : (option.displayId ?? option.squadName),
+      option.targetType === 'AGENT' ? t('labels.agent') : t('comment.human'),
+    ],
+    reason: option.disabledReason,
+    query: mentionQuery,
+  });
+
+  const mentionSections: MentionMenuSection[] = (() => {
+    if (!showMentionSquadGroups) {
+      return [{ key: 'all', rows: mentionOptions.map(toMentionRow) }];
+    }
+
+    const sections: MentionMenuSection[] = [];
+    const currentSquadOptions = mentionOptions.filter((option) => option.currentSquad);
+    if (currentSquadOptions.length > 0) {
+      sections.push({
+        key: 'current',
+        label: t('comment.mentionGroupCurrentSquadUnknown'),
+        squadName: currentSquadOptions[0].squadName,
+        rows: currentSquadOptions.map(toMentionRow),
+      });
+    }
+    const otherOptions = mentionOptions.filter((option) => !option.currentSquad);
+    if (otherOptions.length > 0) {
+      sections.push({
+        key: 'others',
+        label: t('comment.mentionGroupOthers'),
+        rows: otherOptions.map(toMentionRow),
+      });
+    }
+    return sections;
+  })();
 
   useEffect(() => {
     setActiveMentionIndex(0);
@@ -257,26 +248,36 @@ export function RunCommentInput({ runId, onSubmit, loading }: RunCommentInputPro
     setActiveMentionIndex((current) => (current + delta + enabledOptions.length) % enabledOptions.length);
   };
 
+  const selectMentionRow = (row: MentionMenuRow) => {
+    const option = optionsByKey.get(row.key);
+    if (option && !option.disabled) insertMention(option);
+  };
+
+  const hoverMentionRow = (row: MentionMenuRow) => {
+    const index = enabledOptions.findIndex((option) => option.key === row.key);
+    if (index >= 0) setActiveMentionIndex(index);
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return;
 
-    if (mentionQuery !== null && mentionOptions.length > 0) {
-      if (event.key === 'ArrowDown') {
+    if (mentionQuery !== null) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMentionQuery(null);
+        setActiveMentionIndex(0);
+        return;
+      }
+
+      if (event.key === 'ArrowDown' && enabledOptions.length > 0) {
         event.preventDefault();
         moveActiveMention(1);
         return;
       }
 
-      if (event.key === 'ArrowUp') {
+      if (event.key === 'ArrowUp' && enabledOptions.length > 0) {
         event.preventDefault();
         moveActiveMention(-1);
-        return;
-      }
-
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setMentionQuery(null);
-        setActiveMentionIndex(0);
         return;
       }
 
@@ -302,43 +303,15 @@ export function RunCommentInput({ runId, onSubmit, loading }: RunCommentInputPro
   return (
     <Space.Compact style={{ width: '100%', alignItems: 'stretch' }} data-testid="run-comment-input">
       <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-        {mentionQuery !== null && mentionOptions.length > 0 && (
-          <div role="menu" style={mentionMenuStyle}>
-            {mentionOptions.map((option, index) => {
-              const active = !option.disabled && option === activeOption;
-              const startsGroup = showMentionSquadGroups
-                && (index === 0 || Boolean(mentionOptions[index - 1]?.currentSquad) !== option.currentSquad);
-              return (
-                <Fragment key={option.key}>
-                  {startsGroup ? (
-                    <div role="presentation" style={mentionGroupHeaderStyle}>
-                      {option.currentSquad
-                        ? (option.squadName
-                          ? t('comment.mentionGroupCurrentSquad', { squad: option.squadName })
-                          : t('comment.mentionGroupCurrentSquadUnknown'))
-                        : t('comment.mentionGroupOthers')}
-                    </div>
-                  ) : null}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    aria-current={active ? 'true' : undefined}
-                    aria-disabled={option.disabled ? 'true' : undefined}
-                    disabled={option.disabled}
-                    style={{
-                      ...mentionMenuItemStyle,
-                      ...(option.disabled ? disabledMentionMenuItemStyle : {}),
-                      ...(active ? activeMentionMenuItemStyle : {}),
-                    }}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => { if (!option.disabled) insertMention(option); }}
-                  >
-                    {option.label}
-                  </button>
-                </Fragment>
-              );
-            })}
-          </div>
+        {mentionQuery !== null && (
+          <MentionMenu
+            className="aw-mm--floating"
+            sections={mentionSections}
+            loading={candidatesFetching}
+            query={mentionQuery}
+            onSelect={selectMentionRow}
+            onHover={hoverMentionRow}
+          />
         )}
         <Input.TextArea
           ref={textAreaRef}

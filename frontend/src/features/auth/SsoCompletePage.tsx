@@ -2,7 +2,8 @@ import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Button, Card, Form, Input, Spin, Typography } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled, LockOutlined, UserOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { i18n } from '@/shared/i18n';
@@ -168,10 +169,10 @@ export function SsoCompletePage() {
       ) : null}
       <Form form={form} layout="vertical" noValidate onFinish={(values) => bindMutation.mutate(values)}>
         <Form.Item label={t('fields.username')} name="username" rules={[{ required: true, message: t('fields.usernameRequired') }]}>
-          <Input autoComplete="username" prefix={<UserOutlined aria-hidden="true" />} placeholder={t('fields.username')} />
+          <Input autoComplete="username" prefix={<AwStrokeIcon name="user" />} placeholder={t('fields.username')} />
         </Form.Item>
         <Form.Item label={t('fields.password')} name="password" rules={[{ required: true, message: t('fields.passwordRequired') }]}>
-          <Input.Password autoComplete="current-password" prefix={<LockOutlined aria-hidden="true" />} placeholder={t('fields.password')} />
+          <Input.Password autoComplete="current-password" prefix={<AwStrokeIcon name="lock" />} placeholder={t('fields.password')} />
         </Form.Item>
         <Button type="primary" htmlType="submit" block loading={bindMutation.isPending}>{t('sso.bindSubmit')}</Button>
       </Form>

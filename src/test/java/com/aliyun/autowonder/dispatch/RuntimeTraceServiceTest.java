@@ -30,7 +30,7 @@ class RuntimeTraceServiceTest {
             rows.add(row);
         }
         when(eventDao.listWindow(1L, 44L, null, 201)).thenReturn(rows);
-        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao);
+        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao, fallback());
         RuntimeTraceVO window = service.getLogWindow(1L, 44L, null, null);
         assertEquals(200, window.getEvents().size());
         assertEquals(301L, window.getLastSeq());
@@ -57,7 +57,7 @@ class RuntimeTraceServiceTest {
         source.setDetailJson("{\"runtimeId\":\"rt1\",\"provider\":\"codex\",\"sessionId\":\"s1\",\"turnId\":\"t1\",\"spanId\":\"span1\"}");
         when(eventDao.listByDispatchInArrivalOrder(1L, 44L)).thenReturn(List.of(source));
 
-        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao).get(1L, 44L);
+        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao, fallback()).get(1L, 44L);
 
         assertEquals(44L, trace.getDispatchId());
         assertEquals("44:7", trace.getEvents().get(0).getEventId());
@@ -91,7 +91,7 @@ class RuntimeTraceServiceTest {
                 event(14, "turn.interrupted", "2026-07-30T10:01:05Z", "{\"sessionId\":\"s1\",\"turnId\":\"t2\",\"spanId\":\"t2:llm\",\"durationMs\":4000}"),
                 event(15, "session.interrupted", "2026-07-30T10:01:06Z", "{\"sessionId\":\"s1\",\"reason\":\"paused\"}")));
 
-        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao).get(1L, 45L, null);
+        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao, fallback()).get(1L, 45L, null);
 
         assertTrue(trace.isChanged());
         assertEquals(15L, trace.getLastSeq());
@@ -141,7 +141,7 @@ class RuntimeTraceServiceTest {
                 event(10, "agent.message", "2026-07-30T10:00:04Z", "{\"sessionId\":\"qoder-session\",\"turnId\":\"turn-1\",\"spanId\":\"internal\",\"content\":\"runtime diagnostic\"}"),
                 event(11, "turn.completed", "2026-07-30T10:00:04Z", "{\"sessionId\":\"qoder-session\",\"turnId\":\"turn-1\",\"durationMs\":3000}")));
 
-        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao).get(1L, 48L);
+        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao, fallback()).get(1L, 48L);
 
         RuntimeTraceVO.Turn turn = trace.getSessions().get(0).getTurns().get(0);
         assertEquals(4_000L, trace.getSessions().get(0).getDurationMs());
@@ -170,7 +170,7 @@ class RuntimeTraceServiceTest {
         when(eventDao.listByDispatchInArrivalOrder(1L, 46L)).thenReturn(List.of(
                 event(4, "session.started", "2026-07-30T10:00:00Z", "{\"sessionId\":\"s1\"}")));
 
-        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao).get(1L, 46L, 4L);
+        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao, fallback()).get(1L, 46L, 4L);
 
         assertFalse(trace.isChanged());
         assertEquals(4L, trace.getLastSeq());
@@ -187,7 +187,7 @@ class RuntimeTraceServiceTest {
                 event(1, "session.resumed", "2026-07-30T10:00:00Z",
                         "{\"sessionId\":\"s1\",\"parentSessionId\":\"s1\"}")));
 
-        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao).get(1L, 47L);
+        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao, fallback()).get(1L, 47L);
 
         assertEquals(1, trace.getSessions().size());
         assertNull(trace.getSessions().get(0).getParentSessionId());
@@ -215,7 +215,7 @@ class RuntimeTraceServiceTest {
         when(eventDao.listByDispatchInArrivalOrder(1L, 49L)).thenReturn(
                 List.of(firstMessage, secondMessage, toolCall, messageAfterTool));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 49L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 49L);
 
         assertEquals(2, timeline.getActivities().size());
         RuntimeActivityTimelineVO.Activity merged = timeline.getActivities().get(0);
@@ -247,7 +247,7 @@ class RuntimeTraceServiceTest {
         failed.setMessage("stored message");
         when(eventDao.listByDispatchInArrivalOrder(1L, 50L)).thenReturn(List.of(failed));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 50L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 50L);
 
         assertEquals(1, timeline.getActivities().size());
         RuntimeActivityTimelineVO.Activity activity = timeline.getActivities().get(0);
@@ -270,7 +270,7 @@ class RuntimeTraceServiceTest {
         when(eventDao.listByDispatchInArrivalOrder(1L, 51L)).thenReturn(List.of(
                 reasonFallback, errorFallback, messageFallback, textlessFailure, paused));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 51L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 51L);
 
         assertEquals(3, timeline.getActivities().size());
         assertEquals("reason fallback", timeline.getActivities().get(0).getContent());
@@ -294,7 +294,7 @@ class RuntimeTraceServiceTest {
         when(eventDao.listByDispatchInArrivalOrder(1L, 52L)).thenReturn(
                 List.of(firstMessage), List.of(firstMessage, failover, secondMessage));
 
-        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao);
+        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao, fallback());
         RuntimeActivityTimelineVO firstSnapshot = service.getActivities(1L, 52L);
         RuntimeActivityTimelineVO secondSnapshot = service.getActivities(1L, 52L);
 
@@ -320,7 +320,7 @@ class RuntimeTraceServiceTest {
                 event(2, "step.failed", "2026-07-30T10:00:01Z",
                         "{\"reason\":{\"prompt\":\"full secret prompt\"}}}")));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 53L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 53L);
 
         assertTrue(timeline.getActivities().isEmpty());
     }
@@ -348,7 +348,7 @@ class RuntimeTraceServiceTest {
                 storedJsonMessage, detailJsonContent, structuredFailure,
                 plainMessage, plainDetailMessage, plainFailure));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 63L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 63L);
 
         assertEquals(List.of("plain stored message", "plain detail message", "plain stored error"),
                 timeline.getActivities().stream().map(RuntimeActivityTimelineVO.Activity::getContent).toList());
@@ -374,7 +374,7 @@ class RuntimeTraceServiceTest {
         when(eventDao.listByDispatchInArrivalOrder(1L, 64L)).thenReturn(
                 List.of(beforeUpdate), List.of(afterUpdate));
 
-        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao);
+        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao, fallback());
         RuntimeActivityTimelineVO firstSnapshot = service.getActivities(1L, 64L);
         RuntimeActivityTimelineVO secondSnapshot = service.getActivities(1L, 64L);
 
@@ -398,7 +398,7 @@ class RuntimeTraceServiceTest {
                 event(3, "agent.message", "2026-07-30T10:00:02Z",
                         "{\"sessionId\":\"s1\",\"turnId\":\"t1\",\"spanId\":\"llm\",\"content\":\"second\"}")));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 54L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 54L);
 
         assertEquals(2, timeline.getActivities().size());
         assertEquals("first", timeline.getActivities().get(0).getContent());
@@ -414,7 +414,7 @@ class RuntimeTraceServiceTest {
         message.setMessage("stored readable message");
         when(eventDao.listByDispatchInArrivalOrder(1L, 55L)).thenReturn(List.of(message));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 55L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 55L);
 
         assertEquals("stored readable message", timeline.getActivities().get(0).getContent());
     }
@@ -429,7 +429,7 @@ class RuntimeTraceServiceTest {
         source.setGmtCreate(Date.from(Instant.parse("2026-07-30T10:00:00Z")));
         when(eventDao.listByDispatchInArrivalOrder(1L, 56L)).thenReturn(List.of(source));
 
-        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao).get(1L, 56L);
+        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao, fallback()).get(1L, 56L);
 
         assertNull(trace.getEvents().get(0).getEventTime());
     }
@@ -441,7 +441,7 @@ class RuntimeTraceServiceTest {
         when(dispatchDao.findById(57L)).thenReturn(dispatch(57L, 2L));
 
         assertThrows(RuntimeException.class,
-                () -> new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 57L));
+                () -> new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 57L));
     }
 
     @Test
@@ -454,7 +454,7 @@ class RuntimeTraceServiceTest {
         source.setError("stored provider error");
         when(eventDao.listByDispatchInArrivalOrder(1L, 58L)).thenReturn(List.of(source));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 58L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 58L);
 
         assertEquals(1, timeline.getActivities().size());
         assertEquals("ERROR", timeline.getActivities().get(0).getLevel());
@@ -480,7 +480,7 @@ class RuntimeTraceServiceTest {
                 event(6, "agent.message", "2026-07-30T10:00:05Z",
                         "{\"sessionId\":\"s3\",\"turnId\":\"t3\",\"content\":\"missing-span-second\"}")));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 59L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 59L);
 
         assertEquals(6, timeline.getActivities().size());
         assertEquals("missing-session-first", timeline.getActivities().get(0).getContent());
@@ -504,7 +504,7 @@ class RuntimeTraceServiceTest {
                 event(3, "agent.message", "2026-07-30T10:00:02Z",
                         "{\"sessionId\":\"s1\",\"turnId\":\"t1\",\"spanId\":\"llm\",\"content\":\"second\"}")));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 60L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 60L);
 
         assertEquals(1, timeline.getActivities().size());
         assertEquals("firstsecond", timeline.getActivities().get(0).getContent());
@@ -523,7 +523,7 @@ class RuntimeTraceServiceTest {
                 event(3, "agent.message", "2026-07-30T10:00:02Z",
                         "{\"sessionId\":\"s1\",\"turnId\":\"t1\",\"spanId\":\"llm\",\"content\":\"second\"}")));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 61L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 61L);
 
         assertEquals(2, timeline.getActivities().size());
         assertEquals("first", timeline.getActivities().get(0).getContent());
@@ -554,7 +554,7 @@ class RuntimeTraceServiceTest {
         when(eventDao.listByDispatchInArrivalOrder(1L, 62L)).thenReturn(List.of(
                 storedError, detailReason, detailError, storedMessage, detailMessage, textlessFailure));
 
-        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao).getActivities(1L, 62L);
+        RuntimeActivityTimelineVO timeline = new RuntimeTraceService(dispatchDao, eventDao, fallback()).getActivities(1L, 62L);
 
         assertEquals(5, timeline.getActivities().size());
         assertEquals("stored error", timeline.getActivities().get(0).getContent());
@@ -563,6 +563,74 @@ class RuntimeTraceServiceTest {
         assertEquals("stored message", timeline.getActivities().get(3).getContent());
         assertEquals("detail message", timeline.getActivities().get(4).getContent());
         assertTrue(timeline.getActivities().stream().noneMatch(activity -> "45:6".equals(activity.getEventId())));
+    }
+
+    @Test
+    void providerSilentTraceUsesAttributedProxyUsage() {
+        DispatchDao dispatchDao = mock(DispatchDao.class);
+        DispatchRuntimeEventDao eventDao = mock(DispatchRuntimeEventDao.class);
+        com.aliyun.autowonder.aiusage.DispatchAiUsageDao usageDao =
+                mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class);
+        when(dispatchDao.findById(66L)).thenReturn(dispatch(66L, 1L));
+        when(eventDao.listByDispatchInArrivalOrder(1L, 66L)).thenReturn(List.of(
+                event(1, "step.started", "2026-07-30T10:00:00Z",
+                        "{\"stepId\":\"implementation\",\"stepName\":\"Implementation\"}"),
+                event(2, "session.started", "2026-07-30T10:00:01Z",
+                        "{\"sessionId\":\"s1\",\"provider\":\"qoder\"}"),
+                event(3, "turn.started", "2026-07-30T10:00:02Z", "{\"sessionId\":\"s1\",\"turnId\":\"t1\"}"),
+                event(4, "turn.completed", "2026-07-30T10:00:03Z", "{\"sessionId\":\"s1\",\"turnId\":\"t1\"}")));
+        when(usageDao.listByDispatchIds(1L, List.of(66L))).thenReturn(List.of(
+                usage("implementation", 1000, 100, "1.5"),
+                usage("other-step", 500, 50, "0.25")));
+
+        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao,
+                new RuntimeTraceUsageFallback(usageDao)).get(1L, 66L);
+
+        assertTrue(trace.getTokenUsage().isAvailable());
+        assertEquals("AVAILABLE", trace.getTokenUsage().getAvailability());
+        assertEquals("TOKEN_PROXY", trace.getTokenUsage().getSource());
+        assertEquals(1.75D, trace.getTokenUsage().getCredits(), 1e-9);
+        assertEquals(1650L, trace.getTokenUsage().getTotalTokens());
+        RuntimeTraceVO.Turn turn = trace.getSessions().get(0).getTurns().get(0);
+        assertEquals("implementation", turn.getStepId());
+        assertEquals(1.5D, turn.getTokenUsage().getCredits(), 1e-9);
+        assertEquals(1100L, trace.getSessions().get(0).getTokenUsage().getTotalTokens());
+    }
+
+    @Test
+    void providerUsageWinsAndProxyRowsAreNeverQueried() {
+        DispatchDao dispatchDao = mock(DispatchDao.class);
+        DispatchRuntimeEventDao eventDao = mock(DispatchRuntimeEventDao.class);
+        com.aliyun.autowonder.aiusage.DispatchAiUsageDao usageDao =
+                mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class);
+        when(dispatchDao.findById(67L)).thenReturn(dispatch(67L, 1L));
+        when(eventDao.listByDispatchInArrivalOrder(1L, 67L)).thenReturn(List.of(
+                event(1, "session.started", "2026-07-30T10:00:00Z", "{\"sessionId\":\"s1\",\"provider\":\"qoder\"}"),
+                event(2, "turn.started", "2026-07-30T10:00:01Z", "{\"sessionId\":\"s1\",\"turnId\":\"t1\"}"),
+                event(3, "llm.usage", "2026-07-30T10:00:02Z",
+                        "{\"sessionId\":\"s1\",\"turnId\":\"t1\",\"spanId\":\"t1:llm\",\"inputTokens\":100,\"outputTokens\":20}")));
+
+        RuntimeTraceVO trace = new RuntimeTraceService(dispatchDao, eventDao,
+                new RuntimeTraceUsageFallback(usageDao)).get(1L, 67L);
+
+        assertTrue(trace.getTokenUsage().isAvailable());
+        assertNull(trace.getTokenUsage().getSource());
+        assertNull(trace.getTokenUsage().getCredits());
+        org.mockito.Mockito.verifyNoInteractions(usageDao);
+    }
+
+    private static com.aliyun.autowonder.aiusage.DispatchAiUsageDO usage(String stepId, long input, long output,
+                                                                        String credits) {
+        com.aliyun.autowonder.aiusage.DispatchAiUsageDO usage = new com.aliyun.autowonder.aiusage.DispatchAiUsageDO();
+        usage.setStepId(stepId);
+        usage.setInputTokens(input);
+        usage.setOutputTokens(output);
+        usage.setCredits(new java.math.BigDecimal(credits));
+        return usage;
+    }
+
+    private static RuntimeTraceUsageFallback fallback() {
+        return new RuntimeTraceUsageFallback(mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class));
     }
 
     private static DispatchDO dispatch(long id, long tenantId) {
@@ -599,7 +667,7 @@ class RuntimeTraceServiceTest {
         when(eventDao.listByDispatchInArrivalOrder(1L, 65L))
                 .thenReturn(List.of(run1), List.of(run1, run2First, run2Second));
 
-        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao);
+        RuntimeTraceService service = new RuntimeTraceService(dispatchDao, eventDao, fallback());
         RuntimeTraceVO first = service.get(1L, 65L);
         assertEquals(11L, first.getLastSeq());
 

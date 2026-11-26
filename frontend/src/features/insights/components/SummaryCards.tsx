@@ -1,14 +1,14 @@
-import { ApartmentOutlined, AlertOutlined, LineChartOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { InsightCard, Severity } from '../types';
 
 const SEVERITY_STYLES: Record<Severity, { bg: string; border: string; color: string }> = {
-  critical: { bg: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-error) 30%, var(--aw-border))', color: 'var(--aw-error)' },
-  warning: { bg: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border))', color: 'var(--aw-warning)' },
+  critical: { bg: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-error) 30%, var(--aw-border))', color: 'var(--aw-error-deep)' },
+  warning: { bg: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border))', color: 'var(--aw-warning-deep)' },
   info: { bg: 'color-mix(in srgb, var(--aw-info) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-info) 30%, var(--aw-border))', color: 'var(--aw-info)' },
-  good: { bg: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-success) 30%, var(--aw-border))', color: 'var(--aw-success)' },
+  good: { bg: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-success) 30%, var(--aw-border))', color: 'var(--aw-success-deep)' },
 };
 
-const ICONS = [<ApartmentOutlined key="0" />, <AlertOutlined key="1" />, <LineChartOutlined key="2" />];
+const ICONS = [<AwStrokeIcon key="0" name="apartment" />, <AwStrokeIcon key="1" name="alert-t" />, <AwStrokeIcon key="2" name="chart" />];
 
 interface SummaryCardsProps {
   cards: InsightCard[];

@@ -2,15 +2,15 @@ import { useTranslation } from 'react-i18next';
 import { ChiefOfStaff } from '@/features/chiefOfStaff/ChiefOfStaff';
 import { LanguageSwitch } from '@/shared/i18n/LanguageSwitch';
 import { PlatformBrand } from '@/shared/ui/PlatformBrand';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Layout, Dropdown, Typography, Button, message, theme } from 'antd';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Dropdown, Typography, Button, message } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckOutlined, LoadingOutlined, DownOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { CheckOutlined, LoadingOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { AppearanceSwitch } from '@/shared/theme/AppearanceProvider';
 import { EllipsisText } from '@/shared/ui/EllipsisText';
 import { Sidebar } from './Sidebar';
-import { PlatformAgentStatusBanner } from './PlatformAgentStatusBanner';
 import { NotificationBell } from '@/shared/ui/NotificationBell';
 import { NotificationReminderHost } from '@/features/notification/NotificationReminderHost';
 import { PageHeader } from '@/shared/ui/PageHeader';
@@ -18,7 +18,6 @@ import { UserMenu } from '@/shared/ui/UserMenu';
 import { HelpCenterLink } from '@/shared/ui/HelpCenterLink';
 import { ChiefEntryButton } from './ChiefEntryButton';
 import { WorkspaceGuideHost } from '@/features/workspaceGuide/WorkspaceGuideHost';
-import { NavModeProvider } from '@/features/workbench/navMode';
 import { useAuthStore } from '@/shared/auth/store';
 import { refreshCurrentMembership } from '@/shared/auth/refreshCurrentMembership';
 import { myWorkspacesQueryKey } from '@/features/auth/api';
@@ -27,13 +26,46 @@ import type { WorkspaceInfo, SwitchWorkspaceResponse } from '@/shared/types/comm
 import { ApiError } from '@/shared/types/common';
 import { refreshTenantScopedQueries } from '@/features/workitem/queryCache';
 
-const { Sider, Content } = Layout;
 const { Text } = Typography;
 
 const SIDEBAR_COLLAPSED_KEY = 'autowonder.sidebar.collapsed';
 
+/** ≤1080 轨道强制收起为图标轨道（56）；设置面板仍在设置时内联，更窄再由 Sidebar 切浮层。 */
+const COMPACT_NAV_QUERY = '(max-width: 1080px)';
+
+function subscribeCompactNav(callback: () => void) {
+  if (typeof window.matchMedia !== 'function') {
+    return () => {};
+  }
+  const query = window.matchMedia(COMPACT_NAV_QUERY);
+  query.addEventListener('change', callback);
+  return () => query.removeEventListener('change', callback);
+}
+
+function getCompactNavSnapshot() {
+  return typeof window.matchMedia === 'function' && window.matchMedia(COMPACT_NAV_QUERY).matches;
+}
+
+function useCompactNav() {
+  return useSyncExternalStore(subscribeCompactNav, getCompactNavSnapshot, () => false);
+}
+
+// 原型 05 工单详情 / 12 定时任务运行详情 / 43 个人工作台 / 14 SDLC 详情自带整页画布（内部按块分块）；
+// 数据洞察由多个自带边框的 panel 组成，外层不再套全局页框（2026-11-21 用户要求去掉最外层框）。
+const FRAMELESS_ROUTES = [
+  /^\/workitems\/[1-9]\d*\/?$/, /^\/scheduled-task-runs\/[1-9]\d*\/?$/, /^\/scheduled-tasks\/[1-9]\d*\/?$/,
+  /^\/workbench\/?$/, /^\/sdlcs\/[1-9]\d*\/?$/, /^\/insights\/?$/, /^\/profile\/settings\/?$/,
+  // 设置中心自带二级导航与画布，外层不再套 .aw-content-frame。
+  /^\/settings(?:\/|$)/,
+  /^\/agents\/?$/, /^\/agents\/new\/?$/, /^\/agents\/reviews\/?$/,
+  /^\/executors\/?$/, /^\/squads\/?$/, /^\/repos\/?$/, /^\/memories\/?$/, /^\/skills\/?$/,
+  /^\/sdlcs\/?$/, /^\/sdlcs\/generate\/?$/,
+  /^\/status-templates\/?$/, /^\/integrations\/?$/, /^\/audit-logs\/?$/,
+];
+
 function readCollapsedPref(): boolean {
   try {
+    // 34j：默认展开轨道；仅显式收起过（'1'）才保持收起。
     return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
   } catch {
     return false;
@@ -66,7 +98,6 @@ export function removeWorkspaceDeepLink(search: string): string {
 
 export function AppLayout({ helpCenter = false }: { helpCenter?: boolean }) {
   const { t } = useTranslation('common');
-  const { token } = theme.useToken();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -75,6 +106,8 @@ export function AppLayout({ helpCenter = false }: { helpCenter?: boolean }) {
   const setWorkspaceSession = useAuthStore((s) => s.setWorkspaceSession);
 
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsedPref);
+  const compactNav = useCompactNav();
+  const effectiveCollapsed = collapsed || compactNav;
 
   useEffect(() => {
     if (helpCenter) return;
@@ -174,6 +207,8 @@ export function AppLayout({ helpCenter = false }: { helpCenter?: boolean }) {
     });
   };
 
+  const siderClassName = ['aw-sider', effectiveCollapsed ? 'collapsed' : ''].filter(Boolean).join(' ');
+
   const workspaceMenuItems = [
     ...(workspaces || []).map((workspace) => ({
       key: `workspace-${workspace.id}`,
@@ -193,76 +228,37 @@ export function AppLayout({ helpCenter = false }: { helpCenter?: boolean }) {
   ];
 
   const workspaceName = currentWorkspace?.name || t('workspace.unselected');
-  const menuButtonLabel = collapsed ? t('navigation.expand') : t('navigation.collapse');
 
   return (
-    <NavModeProvider>
-    <Layout className={helpCenter ? 'help-layout' : 'aw-shell'} style={{ height: '100vh', minWidth: 0 }}>
+    <div className={helpCenter ? 'aw-shell help-layout' : 'aw-shell'}>
       {!helpCenter && (
-        <Sider
-          width={220}
-          collapsedWidth={72}
-          collapsed={collapsed}
-          theme="light"
-          style={{ borderRight: `1px solid ${token.colorBorderSecondary}`, overflow: 'auto' }}
-        >
-          <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? 0 : '0 18px', borderBottom: `1px solid ${token.colorBorderSecondary}`, gap: 10 }}>
-            <PlatformBrand to="/workitems" collapsed={collapsed} />
+        <aside className={siderClassName}>
+          <div className="aw-brand">
+            <PlatformBrand to="/workbench" collapsed={effectiveCollapsed} />
           </div>
 
-          <Dropdown menu={{ items: workspaceMenuItems }} trigger={['click']} placement="bottomLeft"
-            overlayClassName="aw-workspace-menu" overlayStyle={{ width: 196, minWidth: 196, maxWidth: 196 }}>
-            <div
-              title={collapsed ? workspaceName : undefined}
-              style={{
-                margin: collapsed ? '8px auto' : '8px 12px',
-                padding: collapsed ? 0 : '7px 10px',
-                width: collapsed ? 36 : 'auto',
-                height: collapsed ? 36 : 'auto',
-                borderRadius: 7,
-                border: `1px solid ${token.colorBorder}`,
-                background: token.colorFillAlter,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                gap: 8,
-                minWidth: 0,
-              }}
-            >
-              <div className="aw-initial-mark" style={{
-                width: 20, height: 20, borderRadius: 5,
-
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontWeight: 600, fontSize: 11, flexShrink: 0,
-              }}>
-                {workspaceName[0]}
-              </div>
-              {!collapsed && (
-                <>
-                  <EllipsisText
-                    tooltip={workspaceName}
-                    style={{
-                      fontSize: 12,
-                      flex: 1,
-                      minWidth: 0,
-                      color: token.colorText,
-                      fontWeight: 500,
-                    }}
-                  >
-                    {workspaceName}
-                  </EllipsisText>
-                  <DownOutlined style={{ fontSize: 9, color: token.colorTextSecondary }} />
-                </>
-              )}
-            </div>
-          </Dropdown>
-
-          <Sidebar collapsed={collapsed} />
-        </Sider>
+          <Sidebar
+            collapsed={effectiveCollapsed}
+            onToggleCollapsed={toggleCollapsed}
+            workspaceSwitcher={(
+              <Dropdown menu={{ items: workspaceMenuItems }} trigger={['click']} placement="bottomLeft"
+                overlayClassName="aw-workspace-menu" overlayStyle={{ width: 196, minWidth: 196, maxWidth: 196 }}>
+                <button type="button" className="aw-ws-switch" title={effectiveCollapsed ? workspaceName : undefined}>
+                  <span className="aw-initial-mark" aria-hidden="true">{workspaceName[0]}</span>
+                  <span className="aw-ws-name">
+                    <EllipsisText tooltip={workspaceName} style={{ fontSize: 12, color: 'var(--aw-text-2)' }}>
+                      {workspaceName}
+                    </EllipsisText>
+                  </span>
+                  <AwStrokeIcon name="chev-d" size={12} className="aw-ws-caret" />
+                </button>
+              </Dropdown>
+            )}
+          />
+        </aside>
       )}
 
-      <Layout style={{ minWidth: 0 }}>
+      <div className="aw-main">
         <PageHeader actions={<>
             {user && (helpCenter || currentWorkspace) && <ChiefEntryButton standalone={helpCenter} />}
             {!helpCenter && <HelpCenterLink />}
@@ -271,30 +267,26 @@ export function AppLayout({ helpCenter = false }: { helpCenter?: boolean }) {
             {(!helpCenter || user) && <NotificationBell fetchUnread={!helpCenter} />}
             {helpCenter && !user ? <Button href="/login">{t('account.login')}</Button> : <UserMenu />}
           </>}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, overflow: 'hidden' }}>
-            {helpCenter ? (
+          {helpCenter && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, overflow: 'hidden' }}>
               <PlatformBrand to="/workitems" />
-            ) : <Button
-              className="aw-sidebar-toggle"
-              type="text"
-              onClick={toggleCollapsed}
-              aria-label={menuButtonLabel}
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              style={{ width: 32, padding: 0, fontSize: 16, color: token.colorTextSecondary, flexShrink: 0 }}
-            />}
-            {helpCenter && <Text type="secondary" style={{ marginLeft: 12 }}>{t('navigation.help')}</Text>}
-          </div>
+              <Text type="secondary" style={{ marginLeft: 12 }}>{t('navigation.help')}</Text>
+            </div>
+          )}
         </PageHeader>
-        {!helpCenter && <PlatformAgentStatusBanner />}
         {user && <ChiefOfStaff hideLauncher={helpCenter} />}
         {!helpCenter && user && currentWorkspace && <WorkspaceGuideHost />}
-        <Content style={{ padding: helpCenter ? 0 : 12, overflow: helpCenter ? 'hidden' : 'auto', background: token.colorBgLayout, minWidth: 0, minHeight: 0 }}>
-          {helpCenter ? <Outlet /> : <section className="aw-content-frame" aria-label={t('navigation.content')}><Outlet /></section>}
-        </Content>
-      </Layout>
+        <main
+          className={helpCenter ? 'aw-content help-content' : 'aw-content'}
+          style={helpCenter ? { padding: 0, overflow: 'hidden' } : undefined}
+        >
+          {helpCenter || FRAMELESS_ROUTES.some((pattern) => pattern.test(location.pathname))
+            ? <Outlet />
+            : <section className="aw-content-frame" aria-label={t('navigation.content')}><Outlet /></section>}
+        </main>
+      </div>
       {/* 已登录且有当前空间时挂唯一提醒宿主；身份变化由宿主自行重建隔离状态。 */}
       {!helpCenter && user && currentWorkspace && <NotificationReminderHost />}
-    </Layout>
-    </NavModeProvider>
+    </div>
   );
 }

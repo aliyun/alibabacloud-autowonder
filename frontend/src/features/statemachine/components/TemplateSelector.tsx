@@ -1,8 +1,9 @@
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useTranslation } from 'react-i18next';
 import { useSystemLabel } from '@/shared/i18n/systemLabels';
-import { Select, Button, Tag, Modal, Form, Input, Popconfirm } from 'antd';
-import { StarOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Select, Button, Modal, Form, Input, Popconfirm } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { StatusTag } from '@/shared/ui/StatusTag';
 import type { StatusTemplate, WorkType } from '../types';
 
 interface Props {
@@ -34,39 +35,42 @@ export function TemplateSelector({ createOpen, onCloseCreate, templates, selecte
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-      <span style={{ fontSize: 14, color: 'var(--aw-muted)' }}>{t('templates.current')}</span>
-      <Select
-        aria-label={t('templates.current')}
-        value={selectedId}
-        onChange={onSelect}
-        style={{ minWidth: 200 }}
-        options={templates.map((template) => ({
-          value: template.id,
-          label: (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, height: '100%' }}>
-              <span>{labelOf(template.systemLabelKey, template.name)}</span>
-              {template.isDefault && <Tag color="blue" style={{ fontSize: 10, lineHeight: '18px' }}>{t('templates.default')}</Tag>}
-            </span>
-          ),
-        }))}
-      />
-      {selected && !selected.isDefault && (
-        <Button icon={<StarOutlined aria-hidden="true" />} onClick={() => onSetDefault(selected.id)}>{t('templates.setDefault')}</Button>
-      )}
-      {selected && !selected.isDefault && (
-        <Popconfirm title={t('templates.confirmDelete')} onConfirm={() => onDelete(selected.id)} okText={t('common.delete')} cancelText={t('common.cancel')}>
-          <Button danger icon={<DeleteOutlined aria-hidden="true" />}>{t('common.delete')}</Button>
-        </Popconfirm>
-      )}
+    <>
+      <div className="aw-stpl-row">
+        <span className="aw-stpl-cur">{t('templates.current')}</span>
+        <Select
+          aria-label={t('templates.current')}
+          value={selectedId}
+          onChange={onSelect}
+          style={{ width: 240 }}
+          options={templates.map((template) => {
+            const name = labelOf(template.systemLabelKey, template.name);
+            return {
+              value: template.id,
+              label: template.isDefault ? t('templates.defaultOption', { name }) : name,
+            };
+          })}
+        />
+        {selected?.isDefault && <StatusTag label={t('templates.default')} colorKey="blue" size="sm" />}
+        <div className="aw-stpl-ops">
+          {selected && !selected.isDefault && (
+            <Button icon={<AwStrokeIcon name="star" />} onClick={() => onSetDefault(selected.id)}>{t('templates.setDefault')}</Button>
+          )}
+          {selected && !selected.isDefault && (
+            <Popconfirm title={t('templates.confirmDelete')} onConfirm={() => onDelete(selected.id)} okText={t('common.delete')} cancelText={t('common.cancel')}>
+              <Button danger icon={<AwStrokeIcon name="trash" />}>{t('common.delete')}</Button>
+            </Popconfirm>
+          )}
+        </div>
+      </div>
 
-      <Modal closable={{ 'aria-label': t('common.close') }} title={t('actions.createTemplate')} open={createOpen} onOk={handleCreate} onCancel={() => onCloseCreate()} destroyOnHidden>
+      <Modal closable={{ 'aria-label': t('common.close') }} title={t('actions.createTemplate')} open={createOpen} onOk={handleCreate} onCancel={() => onCloseCreate()} width={420} destroyOnHidden>
         <Form form={form} layout="vertical">
-          <Form.Item name="name" label={t('templates.name')} rules={[{ required: true, message: t('templates.nameRequired') }]}>
+          <Form.Item name="name" label={t('templates.name')} rules={[{ required: true, message: t('templates.nameRequired') }]} extra={t('templates.nameHelp')}>
             <Input placeholder={t('templates.namePlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </>
   );
 }

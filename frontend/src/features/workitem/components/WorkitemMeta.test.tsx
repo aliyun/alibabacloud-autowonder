@@ -4,9 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { WorkitemMeta } from './WorkitemMeta';
 
 const base = {
-  workType: 'REQ',
-  statusName: '开发中',
-  priority: 1,
+  workitemId: 42,
   assigneeName: 'caihe',
   assigneeDisplayName: '蔡何(10000)',
   assigneeType: 'HUMAN',
@@ -15,13 +13,20 @@ const base = {
 };
 
 describe('WorkitemMeta', () => {
-  it('groups type, status, priority, creator and assignee in order', () => {
-    render(<WorkitemMeta {...base} />);
-    const type = screen.getByText('需求').parentElement!;
-    const row = type.parentElement!;
-    expect(Array.from(row.children).slice(0, 5).map((item) => item.textContent)).toEqual([
-      '工单类型: 需求', '工单状态: 开发中', '优先级: 高', '创建者: 淘飞', '当前处理人: 蔡何',
+  it('groups id, creator, assignee and SDLC without action-bar tags', () => {
+    const { container } = render(<WorkitemMeta {...base} />);
+    const row = container.firstElementChild!;
+    expect(Array.from(row.children).map((item) => item.textContent)).toEqual([
+      '工单 ID: 42', '创建者: 淘飞', '当前处理人: 蔡何', 'SDLC: 标准流程',
     ]);
+    expect(screen.queryByText('需求')).not.toBeInTheDocument();
+    expect(screen.queryByText('开发中')).not.toBeInTheDocument();
+    expect(screen.queryByText('高')).not.toBeInTheDocument();
+  });
+
+  it('leads with the workitem id when one is given', () => {
+    const { container } = render(<WorkitemMeta {...base} />);
+    expect(container.firstElementChild!.children[0].textContent).toBe('工单 ID: 42');
   });
 
   it('labels the assignee as 当前处理人 and strips id suffixes from names', () => {
@@ -57,22 +62,9 @@ describe('WorkitemMeta', () => {
     expect(screen.getByText((_, node) => node?.textContent === '当前处理人: caihe')).toBeInTheDocument();
   });
 
-  it('renders the Chinese priority label from the shared mapping', () => {
-    render(<WorkitemMeta {...base} priority={0} />);
-    expect(screen.getByText('紧急')).toHaveClass('ant-tag-red');
-  });
-
-  it('shows 未知优先级 for unknown priority values', () => {
-    render(<WorkitemMeta {...base} priority={9} />);
-    expect(screen.getByText('未知优先级')).toBeInTheDocument();
-  });
-
   it('hides optional meta lines when absent', () => {
     render(
       <WorkitemMeta
-        workType="REQ"
-        statusName={null}
-        priority={2}
         assigneeName={null}
         assigneeType="HUMAN"
         creatorDisplayName={undefined}
@@ -81,7 +73,7 @@ describe('WorkitemMeta', () => {
     );
     expect(screen.queryByText(/SDLC/)).not.toBeInTheDocument();
     expect(screen.queryByText(/创建者/)).not.toBeInTheDocument();
-    expect(screen.getByText((_, node) => node?.textContent === '当前处理人: 未指派')).toBeInTheDocument();
+    expect(screen.getByText((_, node) => node?.tagName === 'SPAN' && node.textContent === '当前处理人: 未指派')).toBeInTheDocument();
   });
 
   it('omits the tag row when there are no tags and editing is disabled', () => {

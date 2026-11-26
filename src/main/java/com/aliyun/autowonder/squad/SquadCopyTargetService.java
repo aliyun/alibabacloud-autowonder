@@ -309,6 +309,7 @@ public class SquadCopyTargetService {
             created.setTenantId(targetTenantId);
             created.setDescription(sdlc.description());
             created.setWorkType(sdlc.workType());
+            created.setStageTimingEnabled(sdlc.stageTimingEnabled());
             created.setStatus(sdlc.status() == null ? "DRAFT" : sdlc.status());
             created.setIsDefault(resolveDefaultFlag(sdlc));
             created.setCreatorId(userId);

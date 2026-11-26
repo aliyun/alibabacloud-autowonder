@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
-import { Modal, Select, Space } from 'antd';
+import { Form, Modal, Select } from 'antd';
 import { useMemberCandidates } from './hooks';
 import { workspaceRoleLabel } from './roles';
 import type { WorkspaceRoleVO } from './api';
+import './MemberAccessModal.css';
 
 interface AddMemberModalProps {
   open: boolean;
@@ -43,8 +44,10 @@ export function AddMemberModal({
 
   return (
     <Modal
+      className="aw-member-modal"
       closable={{ 'aria-label': t('close') }}
       title={t('addMember')}
+      width={420}
       open={open}
       okText={t('addMember')}
       cancelText={t('cancel')}
@@ -54,38 +57,42 @@ export function AddMemberModal({
       onOk={handleOk}
       destroyOnHidden
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
-        <Select
-          showSearch
-          allowClear
-          filterOption={false}
-          aria-label={t('searchPeople')}
-          placeholder={t('searchPeople')}
-          value={selectedUserId}
-          loading={isFetching}
-          style={{ width: '100%' }}
-          onSearch={setKeyword}
-          onClear={() => {
-            setSelectedUserId(undefined);
-            setKeyword('');
-          }}
-          onChange={setSelectedUserId}
-          options={candidates.map((candidate) => ({
-            value: candidate.userId,
-            label: `${candidate.nickname || candidate.username}${candidate.email ? ` (${candidate.email})` : ''}`,
-          }))}
-          notFoundContent={
-            keyword.trim() ? t('noCandidates') : t('searchPeopleHint')
-          }
-        />
-        <Select
-          aria-label={t('newMemberRole')}
-          style={{ width: '100%' }}
-          value={selectedRoleId ?? defaultRoleId}
-          onChange={setSelectedRoleId}
-          options={roles.map((role) => ({ value: role.id, label: workspaceRoleLabel(role) }))}
-        />
-      </Space>
+      <Form layout="vertical">
+        <Form.Item label={t('searchPeople')} extra={t('addMemberSearchHelp')}>
+          <Select
+            showSearch
+            allowClear
+            filterOption={false}
+            aria-label={t('searchPeople')}
+            placeholder={t('searchPeople')}
+            value={selectedUserId}
+            loading={isFetching}
+            style={{ width: '100%' }}
+            onSearch={setKeyword}
+            onClear={() => {
+              setSelectedUserId(undefined);
+              setKeyword('');
+            }}
+            onChange={setSelectedUserId}
+            options={candidates.map((candidate) => ({
+              value: candidate.userId,
+              label: `${candidate.nickname || candidate.username}${candidate.email ? ` (${candidate.email})` : ''}`,
+            }))}
+            notFoundContent={
+              keyword.trim() ? t('noCandidates') : t('searchPeopleHint')
+            }
+          />
+        </Form.Item>
+        <Form.Item label={t('role')} extra={t('roleHelp')}>
+          <Select
+            aria-label={t('role')}
+            style={{ width: '100%' }}
+            value={selectedRoleId ?? defaultRoleId}
+            onChange={setSelectedRoleId}
+            options={roles.map((role) => ({ value: role.id, label: workspaceRoleLabel(role) }))}
+          />
+        </Form.Item>
+      </Form>
     </Modal>
   );
 }

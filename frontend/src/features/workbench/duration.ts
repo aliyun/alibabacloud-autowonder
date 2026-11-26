@@ -22,7 +22,7 @@ export function formatElapsed(elapsedMs: number, translate: Translate): string {
 
 /**
  * 工作台耗时单元格：数字员工取本轮派发起止，真人取最近一次指派后的等待时长。
- * 缺失可靠起点时如实显示「—」；终态不再继续计时。
+ * 缺失可靠起点或终点时只显示「—」（与原型一致），不拼接状态说明。
  */
 export function durationText(
   item: Pick<Workitem, 'roundStartedAt' | 'roundEndedAt' | 'statusCategory'>,
@@ -33,13 +33,11 @@ export function durationText(
   const startedAt = item.roundStartedAt ? Date.parse(item.roundStartedAt) : null;
   const endedAt = item.roundEndedAt ? Date.parse(item.roundEndedAt) : null;
   if (startedAt == null || Number.isNaN(startedAt)) {
-    return terminal
-      ? `${translate('duration.none')} / ${translate('duration.ended')}`
-      : `${translate('duration.none')} / ${translate('duration.notStarted')}`;
+    return translate('duration.none');
   }
   if (terminal) {
     if (endedAt == null || Number.isNaN(endedAt)) {
-      return `${translate('duration.none')} / ${translate('duration.ended')}`;
+      return translate('duration.none');
     }
     return formatElapsed(Math.max(0, endedAt - startedAt), translate);
   }

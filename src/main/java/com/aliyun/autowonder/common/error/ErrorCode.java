@@ -87,6 +87,11 @@ public enum ErrorCode {
     AGENT_PLATFORM_NO_OFFLINE("14013", "平台智能体不可下线"),
     AGENT_PLATFORM_LOCKED("14014", "平台智能体的名称与 SDLC 配置不可修改"),
     AGENT_PLATFORM_REPO_LOCKED("14015", "平台智能体默认拥有全部仓库的只读权限，仓库配置不可修改"),
+    AGENT_TAG_TOO_MANY("14016", "最多 {0} 个标签"),
+    AGENT_TAG_TOO_LONG("14017", "单个标签最长 {0} 个字符"),
+    AGENT_TAG_SYSTEM_CONFLICT("14018", "该名称与系统标签重名，请直接选用系统标签"),
+    AGENT_TAG_INVALID_SYSTEM_CODE("14019", "不支持的系统标签：{0}"),
+    AGENT_PLATFORM_TAG_LOCKED("14020", "平台智能体的标签不可修改"),
     // 15xxx 小队/Squad
     SQUAD_NOT_FOUND("15001", "小队不存在"),
     SQUAD_NAME_REQUIRED("15002", "小队名称不能为空"),

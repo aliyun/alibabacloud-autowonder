@@ -1,7 +1,6 @@
-import { PageHeading } from '@/shared/ui/PageHeading';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
-import { Card, Form, Button, message } from 'antd';
-import { useState, useRef } from 'react';
+import { Form, Button, message } from 'antd';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCreateWorkitem } from './hooks';
 import { uploadRequirementDocuments } from './api';
@@ -12,6 +11,7 @@ import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useWorkitemDuplicateCheck } from './useWorkitemDuplicateCheck';
 import { DuplicateWorkitemsModal } from './components/DuplicateWorkitemsModal';
 import { WORKITEM_CREATE_INITIAL_VALUES, WorkitemCreateFields } from './components/WorkitemCreateFields';
+import './WorkitemCreatePage.css';
 
 export function WorkitemCreatePage() {
   const { t } = useTranslation('workitem');
@@ -68,25 +68,29 @@ export function WorkitemCreatePage() {
   };
 
   return (
-    <Card className="aw-content-card" title={<PageHeading title={<span className="aw-detail-title"><PageBackButton to="/workitems" label={t('create.back')} /><span>{t('create.title')}</span></span>} />}>
-      <Form form={form} layout="vertical" onFinish={handleSubmit} initialValues={WORKITEM_CREATE_INITIAL_VALUES}>
+    <>
+      <div className="aw-form-head">
+        <PageBackButton to="/workitems" label={t('create.back')} />
+        <span className="aw-form-title">{t('create.title')}</span>
+      </div>
+      <Form form={form} className="aw-create-form" layout="vertical" onFinish={handleSubmit} initialValues={WORKITEM_CREATE_INITIAL_VALUES}>
         <WorkitemCreateFields
           titleHandlers={duplicateCheck.titleHandlers}
           attachments={attachments}
           onAttachmentsChange={setAttachments}
         />
-        <Form.Item>
-          <Button
-            type="primary"
-            htmlType="submit"
-            loading={createMut.isPending || submitting}
-            style={{ marginRight: 8 }}
-          >
-            {t('create.submit')}
-          </Button>
-          <Button onClick={() => navigate('/workitems')}>{t('create.cancel')}</Button>
-        </Form.Item>
       </Form>
+      {/* 表单列收窄 600px，footer 移出 Form 让分割线通到内容区右缘；按钮仍与字段列左对齐 */}
+      <div className="aw-form-foot">
+        <Button
+          type="primary"
+          loading={createMut.isPending || submitting}
+          onClick={() => form.submit()}
+        >
+          {t('create.submit')}
+        </Button>
+        <Button onClick={() => navigate('/workitems')}>{t('create.cancel')}</Button>
+      </div>
       <DuplicateWorkitemsModal
         open={duplicateCheck.modal.open}
         matches={duplicateCheck.modal.matches}
@@ -94,6 +98,6 @@ export function WorkitemCreatePage() {
         partial={duplicateCheck.modal.partial}
         onDismiss={duplicateCheck.dismiss}
       />
-    </Card>
+    </>
   );
 }

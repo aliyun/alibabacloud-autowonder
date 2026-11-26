@@ -37,26 +37,10 @@ describe('WorkitemHeader', () => {
     expect(screen.queryByText('需求')).not.toBeInTheDocument();
   });
 
-  it('shows the accumulated workitem credits at the top', () => {
-    renderHeader({
-      usage: {
-        credits: 70,
-        runs: [{ agentId: 40, agentName: 'DEV', runIndex: 1, label: 'DEV run-1', credits: 70 }],
-      },
-    });
-
-    expect(screen.getByTestId('workitem-credits-badge')).toHaveTextContent('70.00 Credits');
-  });
-
-  it('hides the credits badge when the workitem has no usage', () => {
-    renderHeader({ usage: null });
+  it('keeps credits out of the title tools', () => {
+    renderHeader({ workitemId: 54843 });
     expect(screen.queryByTestId('workitem-credits-badge')).not.toBeInTheDocument();
-
-    renderHeader({ usage: { credits: 0 } });
-    expect(screen.queryByTestId('workitem-credits-badge')).not.toBeInTheDocument();
-
-    renderHeader();
-    expect(screen.queryByTestId('workitem-credits-badge')).not.toBeInTheDocument();
+    expect(screen.getByTestId('workitem-share-button').closest('.aw-workitem-header-tools')?.children).toHaveLength(1);
   });
 
   it('renders the share entry once the workitem id is known', () => {

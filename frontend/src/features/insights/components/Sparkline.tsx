@@ -22,7 +22,7 @@ export function Sparkline({ data, color, width = 96, height = 28 }: SparklinePro
   const lastPoint = points[points.length - 1].split(',');
 
   return (
-    <svg aria-hidden="true" width={width} height={height} style={{ display: 'block' }}>
+    <svg aria-hidden="true" width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: 'block' }}>
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.15" />

@@ -2,29 +2,19 @@ import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { useEffect, useRef, useState } from 'react';
-import { Card, Button, Modal, Form, Select, Input, Space, Empty, Spin, message, Popconfirm, theme } from 'antd';
-import { PlusOutlined, DeleteOutlined, ReloadOutlined, FullscreenOutlined, FullscreenExitOutlined, ZoomInOutlined, ZoomOutOutlined, ExclamationCircleFilled, LoadingOutlined } from '@ant-design/icons';
+import { Button, Modal, Form, Select, Input, Empty, Spin, message, Popconfirm, theme } from 'antd';
+import { FullscreenExitOutlined, ExclamationCircleFilled, LoadingOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Graph } from '@antv/g6';
 import type { NodeData, EdgeData, ElementDatum, IElementEvent } from '@antv/g6';
-import { listRepos, listRelations, createRelation, deleteRelation, RELATION_TYPES } from './api';
+import { listRepos, listRelations, createRelation, deleteRelation, RELATION_TYPES, RELATION_COLORS, relationHintKey } from './api';
 import type { CreateRelationRequest, Repo, RepoRelation } from './api';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 
 const DEFAULT_GRAPH_WIDTH = 960;
 const DEFAULT_GRAPH_HEIGHT = 500;
-
-const RELATION_COLORS: Record<string, string> = {
-  FRONTEND: '#1890ff',
-  BACKEND: '#52c41a',
-  CLIENT_SERVER: '#1677ff',
-  SERVER_CLIENT: '#fa8c16',
-  GATEWAY: '#faad14',
-  DEPENDENCY: '#722ed1',
-  SERVICE: '#13c2c2',
-  OTHER: '#8c8c8c',
-};
 
 // A clear line needs no orthogonal detour. Expand cards slightly to keep a visible gutter.
 export function repoHasDirectPath(source: string, target: string, nodes: NodeData[]) {
@@ -74,7 +64,7 @@ function buildGraphNodes(repos: Repo[], relations: RepoRelation[], colors: { suc
         size: [200, 48],
         radius: 8,
         fill: colors.panel,
-        stroke: scanStatus === 'DONE' ? colors.success : repo ? colors.border : colors.warning,
+        stroke: scanStatus === 'CONCLUDED' ? colors.success : repo ? colors.border : colors.warning,
         labelFill: colors.text,
         lineWidth: 1.5,
       },
@@ -136,6 +126,9 @@ export function RepoMapPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [graphError, setGraphError] = useState<'errors.graphRender' | 'errors.graphResize' | null>(null);
   const [relationForm] = Form.useForm();
+  const relationTypeValue = Form.useWatch('relationType', relationForm);
+  const relationFromValue = Form.useWatch('fromRepoId', relationForm);
+  const relationToValue = Form.useWatch('toRepoId', relationForm);
 
   const { data: repos = [], isLoading: reposLoading } = useQuery({
     queryKey: ['repos', 1, 100],
@@ -215,8 +208,8 @@ export function RepoMapPage() {
         labelPadding: [4, 8],
         labelBackgroundRadius: 4,
         labelBackground: true,
-        labelBackgroundFill: token.colorBgContainer,
-        labelFill: token.colorText,
+        labelBackgroundFill: token.colorBgLayout,
+        labelFill: token.colorTextTertiary,
         labelBackgroundOpacity: 1,
         stroke: Object.prototype.hasOwnProperty.call(RELATION_COLORS, rel.relationType) ? RELATION_COLORS[rel.relationType] : '#8c8c8c',
         endArrow: true,
@@ -359,7 +352,7 @@ export function RepoMapPage() {
         graphRef.current = null;
       }
     };
-  }, [repos, relations, navigate, token.colorSuccess, token.colorBorder, token.colorWarning, token.colorBgContainer, token.colorText]);
+  }, [repos, relations, navigate, token.colorSuccess, token.colorBorder, token.colorWarning, token.colorBgContainer, token.colorText, token.colorBgLayout, token.colorTextTertiary]);
 
   useEffect(() => {
     const tooltip = tooltipRef.current;
@@ -390,36 +383,53 @@ export function RepoMapPage() {
   const isLoading = reposLoading || relationsLoading;
   const hasGraphData = repos.length > 0 || relations.length > 0;
 
+  const repoNameOf = (id: unknown) => repos.find(r => String(r.id) === String(id))?.name;
+  const relationHintOf = (value: string, source: string, target: string) => {
+    const key = relationHintKey(value);
+    return key ? t(key, { source, target }) : '';
+  };
+  const relationSourceName = repoNameOf(relationFromValue);
+  const relationTargetName = repoNameOf(relationToValue);
+  const relationHintVars = relationSourceName && relationTargetName
+    ? { source: relationSourceName, target: relationTargetName }
+    : { source: t('fields.source'), target: t('fields.target') };
+
   useLocalizedValidation(relationForm, !isLoading && addRelationOpen);
 
   if (isLoading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
 
   return (
-    <div ref={frameRef} data-testid="repo-map-frame" data-fullscreen={fullscreen} style={{ position: fullscreen ? 'fixed' : undefined, inset: fullscreen ? 0 : undefined, zIndex: fullscreen ? 1000 : undefined, height: fullscreen ? 'auto' : '100%', width: '100%', background: token.colorBgContainer, display: 'flex', flexDirection: 'column' }}>
-      <Card
-        style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
-        styles={{ body: { flex: 1, padding: 0, position: 'relative', minHeight: fullscreen ? 0 : 500, display: 'flex', flexDirection: 'column' } }}
-        title={<span style={{ fontSize: 12, fontWeight: 400, color: token.colorTextSecondary }}>{t('map.help')}</span>}
-        extra={
-          <Space wrap>
-            <Button aria-label={t('map.zoomOut')} icon={<ZoomOutOutlined aria-hidden="true" />} onClick={() => { const graph = graphRef.current; if (graph) void graph.zoomTo(graph.getZoom() / 1.2, false); }} />
-            <Button aria-label={t('map.zoomIn')} icon={<ZoomInOutlined aria-hidden="true" />} onClick={() => { const graph = graphRef.current; if (graph) void graph.zoomTo(graph.getZoom() * 1.2, false); }} />
-            <Button icon={fullscreen ? <FullscreenExitOutlined aria-hidden="true" /> : <FullscreenOutlined aria-hidden="true" />} onClick={() => setFullscreen(value => !value)}>{fullscreen ? t('map.exitFullscreen') : t('map.fullscreen')}</Button>
-            <Button icon={<ReloadOutlined aria-hidden="true" />} onClick={handleFitView}>{t('map.fit')}</Button>
-            <Button
-              type="primary"
-              icon={<PlusOutlined aria-hidden="true" />}
-              onClick={() => runWithAccess(
-                'READ_WRITE',
-                t('actions.addRepoRelation'),
-                () => setAddRelationOpen(true),
-              )}
-            >
-              {t('actions.addRelation')}
-            </Button>
-          </Space>
-        }
-      >
+    <div ref={frameRef} data-testid="repo-map-frame" data-fullscreen={fullscreen} style={{ position: fullscreen ? 'fixed' : undefined, inset: fullscreen ? 0 : undefined, zIndex: fullscreen ? 1000 : undefined, height: fullscreen ? 'auto' : '100%', width: '100%', padding: fullscreen ? 12 : 0, boxSizing: 'border-box', background: token.colorBgContainer, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <span style={{ marginRight: 'auto', fontSize: 12, color: 'var(--aw-text-3)' }}>{t('map.help')}</span>
+        <Button type="text" size="small" aria-label={t('map.zoomOut')} icon={<AwStrokeIcon name="zoom-out" />} onClick={() => { const graph = graphRef.current; if (graph) void graph.zoomTo(graph.getZoom() / 1.2, false); }} />
+        <Button type="text" size="small" aria-label={t('map.zoomIn')} icon={<AwStrokeIcon name="zoom-in" />} onClick={() => { const graph = graphRef.current; if (graph) void graph.zoomTo(graph.getZoom() * 1.2, false); }} />
+        <Button type="text" size="small" icon={fullscreen ? <FullscreenExitOutlined aria-hidden="true" /> : <AwStrokeIcon name="fullscreen" />} onClick={() => setFullscreen(value => !value)}>{fullscreen ? t('map.exitFullscreen') : t('map.fullscreen')}</Button>
+        <Button type="text" size="small" icon={<AwStrokeIcon name="refresh" />} onClick={handleFitView}>{t('map.fit')}</Button>
+        <Button
+          type="primary"
+          size="small"
+          icon={<AwStrokeIcon name="plus" />}
+          onClick={() => runWithAccess(
+            'READ_WRITE',
+            t('actions.addRepoRelation'),
+            () => setAddRelationOpen(true),
+          )}
+        >
+          {t('actions.addRelation')}
+        </Button>
+      </div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: fullscreen ? 1 : undefined,
+        height: fullscreen ? undefined : 'clamp(500px, 65vh, 800px)',
+        minHeight: 0,
+        overflow: 'hidden',
+        background: 'var(--aw-canvas)',
+        border: '1px solid var(--aw-border)',
+        borderRadius: 8,
+      }}>
         {!hasGraphData ? (
           <Empty
             description={
@@ -430,14 +440,14 @@ export function RepoMapPage() {
                 </div>
               </div>
             }
-            style={{ marginTop: 100 }}
+            style={{ margin: 'auto' }}
           />
         ) : graphError ? (
-          <Empty description={t(graphError)} style={{ marginTop: 100 }} />
+          <Empty description={t(graphError)} style={{ margin: 'auto' }} />
         ) : (
-          <div ref={containerRef} style={{ width: '100%', height: fullscreen ? '100%' : 'clamp(500px, 65vh, 800px)', flex: fullscreen ? 1 : undefined, minHeight: 0 }} />
+          <div ref={containerRef} style={{ width: '100%', flex: 1, minHeight: 0 }} />
         )}
-      </Card>
+      </div>
 
       {/* Add Relation Modal */}
       <Modal getContainer={false} title={t('actions.addRepoRelation')} open={addRelationOpen}
@@ -454,8 +464,30 @@ export function RepoMapPage() {
               options={repos.map(r => ({ value: r.id, label: r.name }))}
             />
           </Form.Item>
-          <Form.Item label={t('fields.relationType')} name="relationType" rules={[{ required: true, message: t('validation.typeRequired') }]}>
-            <Select placeholder={t('placeholders.type')} options={RELATION_TYPES.map(t => ({ value: t.value, label: t.label }))} />
+          <Form.Item
+            label={t('fields.relationType')}
+            name="relationType"
+            rules={[{ required: true, message: t('validation.typeRequired') }]}
+            extra={(
+              <span data-testid="relation-direction-hint">
+                {relationTypeValue
+                  ? relationHintOf(relationTypeValue, relationHintVars.source, relationHintVars.target)
+                  : t('relation.directionPrompt')}
+              </span>
+            )}
+          >
+            <Select
+              placeholder={t('placeholders.type')}
+              options={RELATION_TYPES.map(type => ({ value: type.value, label: type.label, title: type.label }))}
+              optionRender={(option) => (
+                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '18px', padding: '2px 0' }}>
+                  <span>{option.data.label as string}</span>
+                  <span style={{ fontSize: 12, color: 'var(--aw-text-3)' }}>
+                    {relationHintOf(option.data.value as string, t('fields.source'), t('fields.target'))}
+                  </span>
+                </div>
+              )}
+            />
           </Form.Item>
           <Form.Item label={t('fields.description')} name="description">
             <Input placeholder={t('placeholders.description')} />
@@ -479,7 +511,7 @@ export function RepoMapPage() {
             )}>
             <Button
               danger
-              icon={<DeleteOutlined aria-hidden="true" />}
+              icon={<AwStrokeIcon name="trash" />}
               aria-label={t('actions.deleteRelation')}
               loading={deleteRelationMut.isPending ? { icon: <LoadingOutlined aria-hidden="true" /> } : false}
               onClick={() => runWithAccess(
@@ -497,14 +529,23 @@ export function RepoMapPage() {
           }}>{t('actions.close')}</Button>,
         ]}
       >
-        {selectedRelation && (
-          <div>
-            <p><strong>{t('map.source')}</strong> {repos.find(r => r.id === selectedRelation.fromRepoId)?.name || `#${selectedRelation.fromRepoId}`}</p>
-            <p><strong>{t('map.target')}</strong> {repos.find(r => r.id === selectedRelation.toRepoId)?.name || `#${selectedRelation.toRepoId}`}</p>
-            <p><strong>{t('map.type')}</strong> {RELATION_TYPES.find(t => t.value === selectedRelation.relationType)?.label || selectedRelation.relationType}</p>
-            <p><strong>{t('map.description')}</strong> {selectedRelation.description || '-'}</p>
-          </div>
-        )}
+        {selectedRelation && (() => {
+          const fromName = repos.find(r => r.id === selectedRelation.fromRepoId)?.name || `#${selectedRelation.fromRepoId}`;
+          const toName = repos.find(r => r.id === selectedRelation.toRepoId)?.name || `#${selectedRelation.toRepoId}`;
+          const typeLabel = RELATION_TYPES.find(type => type.value === selectedRelation.relationType)?.label
+            || selectedRelation.relationType;
+          const typeHint = relationHintOf(selectedRelation.relationType, fromName, toName);
+          return (
+            <div>
+              <p><strong>{t('map.source')}</strong> {fromName}</p>
+              <p><strong>{t('map.target')}</strong> {toName}</p>
+              <p>
+                <strong>{t('map.type')}</strong> {typeHint ? t('map.typeWithHint', { type: typeLabel, hint: typeHint }) : typeLabel}
+              </p>
+              <p><strong>{t('map.description')}</strong> {selectedRelation.description || '-'}</p>
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );

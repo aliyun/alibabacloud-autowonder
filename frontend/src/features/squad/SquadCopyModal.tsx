@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
-import { Alert, Button, Checkbox, Empty, Input, Modal, Pagination, Space, Spin, Tag } from 'antd';
-import { CloseOutlined } from '@ant-design/icons';
+import { Alert, Button, Checkbox, Empty, Input, Modal, Pagination, Spin, Tag } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ApiError } from '@/shared/types/common';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
@@ -149,18 +149,27 @@ export function SquadCopyModal({ squad, onClose }: SquadCopyModalProps) {
     copyMut.mutate({ requestId: pending.requestId, targetWorkspaceIds: pending.ids });
   };
 
+  const succeededCount = results ? results.length - failedResults.length : 0;
+  const chipCloseIcon = <span><AwStrokeIcon name="x" size={10} /></span>;
+
   return (
     <>
       <Modal
-        closable={{ 'aria-label': t('close'), closeIcon: <CloseOutlined aria-hidden="true" /> }}
+        className="squad-sm-modal"
+        closable={{ 'aria-label': t('close'), closeIcon: <AwStrokeIcon name="x" /> }}
         title={results ? t('copyResultTitle') : t('copyToWorkspace')}
         open={open}
         onCancel={onClose}
         footer={null}
         width={640}
       >
+        <div className="squad-sm-sub">
+          {results
+            ? t('copyResultSummary', { success: succeededCount, failed: failedResults.length })
+            : t('copyConfirmSourceLine', { name: squad?.name ?? '' })}
+        </div>
         {checkQuery.isLoading ? (
-          <div style={{ textAlign: 'center', padding: 32 }}>
+          <div className="squad-detail-loading">
             <Spin aria-label={t('loading')} />
           </div>
         ) : checkQuery.isError ? (
@@ -169,7 +178,7 @@ export function SquadCopyModal({ squad, onClose }: SquadCopyModalProps) {
             showIcon
             message={t('copyCheckFailed')}
             action={(
-              <Button size="small" onClick={() => checkQuery.refetch()}>
+              <Button size="small" icon={<AwStrokeIcon name="refresh" />} onClick={() => checkQuery.refetch()}>
                 {t('copyRetryCheck')}
               </Button>
             )}
@@ -177,110 +186,107 @@ export function SquadCopyModal({ squad, onClose }: SquadCopyModalProps) {
         ) : !eligible ? (
           <div data-testid="copy-blocked">
             {missingOnlineVersions.length > 0 ? (
-              <>
+              <div className="squad-blk-group">
                 <Alert type="error" showIcon message={t('copyIneligible')} />
-                <ul data-testid="copy-blocked-list">
+                <div className="squad-blk-list" data-testid="copy-blocked-list">
                   {missingOnlineVersions.map((item) => (
-                    <li key={item.agentId}>{item.agentName}</li>
+                    <div key={item.agentId} className="squad-blk-row">
+                      <span className="squad-member-avatar" aria-hidden>{(item.agentName ?? '').slice(0, 2)}</span>
+                      <span>{item.agentName}</span>
+                    </div>
                   ))}
-                </ul>
-                <div style={{ color: 'var(--aw-muted)' }}>{t('copyIneligibleHint')}</div>
-              </>
+                </div>
+                <div className="squad-blk-hint">{t('copyIneligibleHint')}</div>
+              </div>
             ) : null}
             {missingDependencies.length > 0 ? (
-              <div
-                data-testid="copy-blocked-dependencies"
-                style={{ marginTop: missingOnlineVersions.length > 0 ? 12 : 0 }}
-              >
+              <div className="squad-blk-group" data-testid="copy-blocked-dependencies">
                 <Alert type="error" showIcon message={t('copyDependenciesMissing')} />
-                <ul data-testid="copy-blocked-dependencies-list">
+                <div className="squad-blk-list" data-testid="copy-blocked-dependencies-list">
                   {missingDependencies.map((reference) => (
-                    <li key={reference}>{dependencyLabel(reference)}</li>
+                    <div key={reference} className="squad-blk-row">{dependencyLabel(reference)}</div>
                   ))}
-                </ul>
-                <div style={{ color: 'var(--aw-muted)' }}>{t('copyDependenciesMissingHint')}</div>
+                </div>
+                <div className="squad-blk-hint">{t('copyDependenciesMissingHint')}</div>
               </div>
             ) : null}
           </div>
         ) : results ? (
           <div>
-            <div style={{ display: 'grid', gap: 10 }}>
-              {results.map((item) => (
-                <div
-                  key={item.workspaceId}
-                  data-testid={`copy-result-${item.workspaceId}`}
-                  style={{
-                    border: '1px solid var(--aw-border)',
-                    borderRadius: 8,
-                    padding: '10px 12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, color: 'var(--aw-text)' }}>{item.workspaceName}</div>
-                    {item.success ? (
-                      <a href={`/agents?tab=squads&squadId=${item.squadId}&workspaceId=${item.workspaceId}`}>
-                        {t('copyResultSquadLink', { id: item.squadId ?? '' })}
-                      </a>
-                    ) : (
-                      <div style={{ color: 'var(--aw-error)', fontSize: 12 }}>{item.message || item.errorCode}</div>
-                    )}
-                  </div>
-                  {item.success ? (
-                    <Tag color="green">{t('copyResultSuccess')}</Tag>
-                  ) : (
-                    <Space size={6}>
-                      <Tag color="red">{t('copyResultFailed')}</Tag>
+            <div className="squad-cp-list squad-cp-list--flush">
+              {results.map((item) => {
+                const retrying = retryIds.includes(item.workspaceId);
+                return (
+                  <div
+                    key={item.workspaceId}
+                    data-testid={`copy-result-${item.workspaceId}`}
+                    className={`squad-cp-row is-static${retrying ? ' is-sel' : ''}`}
+                  >
+                    {item.success ? null : (
                       <Checkbox
                         aria-label={t('copyRetrySelect', { name: item.workspaceName })}
-                        checked={retryIds.includes(item.workspaceId)}
+                        checked={retrying}
                         onChange={(event) => setRetryIds((prev) => (
                           event.target.checked
                             ? [...prev, item.workspaceId]
                             : prev.filter((id) => id !== item.workspaceId)
                         ))}
                       />
-                    </Space>
-                  )}
-                </div>
-              ))}
+                    )}
+                    <div className="squad-cp-tx">
+                      <div className="squad-cp-nm">{item.workspaceName}</div>
+                      {item.success ? (
+                        <div className="squad-cp-ds">
+                          <a className="squad-text-link" href={`/squads?squadId=${item.squadId}&workspaceId=${item.workspaceId}`}>
+                            {t('copyResultSquadLink', { id: item.squadId ?? '' })}
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="squad-cp-err">{item.message || item.errorCode}</div>
+                      )}
+                    </div>
+                    <span className="squad-cp-end">
+                      {item.success
+                        ? <Tag color="green">{t('copyResultSuccess')}</Tag>
+                        : <Tag color="red">{t('copyResultFailed')}</Tag>}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
-            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <span style={{ color: 'var(--aw-muted)', fontSize: 12 }}>
+            <div className="squad-sm-foot">
+              <span className="squad-sm-foot-left">
                 {failedResults.length > 0 ? t('copyRetryHint') : null}
               </span>
-              <Space>
-                {failedResults.length > 0 ? (
-                  <Button disabled={retryIds.length === 0} onClick={() => openConfirm(retryIds)}>
-                    {t('copyRetrySelected', { count: retryIds.length })}
-                  </Button>
-                ) : null}
-                <Button type="primary" onClick={onClose}>{t('copyDone')}</Button>
-              </Space>
+              {failedResults.length > 0 ? (
+                <Button disabled={retryIds.length === 0} onClick={() => openConfirm(retryIds)}>
+                  {t('copyRetrySelected', { count: retryIds.length })}
+                </Button>
+              ) : null}
+              <Button type="primary" onClick={onClose}>{t('copyDone')}</Button>
             </div>
           </div>
         ) : (
           <div>
-            <Input
-              aria-label={t('copyTargetsSearch')}
-              placeholder={t('copyTargetsSearch')}
-              allowClear
-              value={keyword}
-              onChange={(event) => {
-                setKeyword(event.target.value);
-                // 改搜索词后停留在旧页码会落在空页上。
-                setPage(1);
-              }}
-              style={{ maxWidth: 320 }}
-            />
-            <div style={{ marginTop: 8, color: 'var(--aw-muted)' }}>{t('copyTargetsTotal', { count: total })}</div>
+            <div className="squad-cp-search">
+              <Input
+                aria-label={t('copyTargetsSearch')}
+                placeholder={t('copyTargetsSearch')}
+                prefix={<AwStrokeIcon name="search" />}
+                allowClear
+                value={keyword}
+                onChange={(event) => {
+                  setKeyword(event.target.value);
+                  // 改搜索词后停留在旧页码会落在空页上。
+                  setPage(1);
+                }}
+              />
+              <span className="squad-cp-cnt">{t('copyTargetsTotal', { count: total })}</span>
+            </div>
 
             {targetsQuery.isLoading ? (
-              <div style={{ textAlign: 'center', padding: 32 }}>
+              <div className="squad-detail-loading">
                 <Spin aria-label={t('loading')} />
               </div>
             ) : targets.length === 0 ? (
@@ -290,42 +296,34 @@ export function SquadCopyModal({ squad, onClose }: SquadCopyModalProps) {
                   : t('copyTargetsEmpty')}
               />
             ) : (
-              <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-                {targets.map((target: SquadCopyTarget) => (
-                  <div
-                    key={target.id}
-                    style={{
-                      border: '1px solid var(--aw-border)',
-                      borderRadius: 8,
-                      padding: '10px 12px',
-                      display: 'flex',
-                      gap: 10,
-                      alignItems: 'flex-start',
-                    }}
-                  >
-                    <Checkbox
-                      aria-label={target.name}
-                      checked={selected.has(target.id)}
-                      onChange={(event) => toggleSelection(target.id, target.name, event.target.checked)}
-                    />
-                    {/* 点击行文本同样切换选择；antd Checkbox 自带 label，行容器不能再用 label 包裹。 */}
-                    <div
-                      style={{ cursor: 'pointer', flex: 1, minWidth: 0 }}
-                      onClick={() => toggleSelection(target.id, target.name, !selected.has(target.id))}
-                    >
-                      <div style={{ fontWeight: 700, color: 'var(--aw-text)' }}>{target.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--aw-muted)' }}>
-                        {target.description || t('noDescription')}
+              <div className="squad-cp-list">
+                {targets.map((target: SquadCopyTarget) => {
+                  const checked = selected.has(target.id);
+                  return (
+                    <div key={target.id} className={`squad-cp-row${checked ? ' is-sel' : ''}`}>
+                      <Checkbox
+                        aria-label={target.name}
+                        checked={checked}
+                        onChange={(event) => toggleSelection(target.id, target.name, event.target.checked)}
+                      />
+                      {/* 点击行文本同样切换选择；antd Checkbox 自带 label，行容器不能再用 label 包裹。 */}
+                      <div
+                        className="squad-cp-tx"
+                        onClick={() => toggleSelection(target.id, target.name, !checked)}
+                      >
+                        <div className="squad-cp-nm">{target.name}</div>
+                        <div className="squad-cp-ds">{target.description || t('noDescription')}</div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             {total > TARGET_PAGE_SIZE ? (
-              <div style={{ marginTop: 12, textAlign: 'right' }}>
+              <div className="squad-cp-pager">
                 <Pagination
+                  size="small"
                   current={page}
                   pageSize={TARGET_PAGE_SIZE}
                   total={total}
@@ -335,33 +333,34 @@ export function SquadCopyModal({ squad, onClose }: SquadCopyModalProps) {
               </div>
             ) : null}
 
-            {selected.size > 0 ? (
-              <div data-testid="copy-selected-summary" style={{ marginTop: 12 }}>
-                <div style={{ color: 'var(--aw-muted)', marginBottom: 6 }}>
-                  {t('copySelectedCount', { count: selected.size })}
-                </div>
-                <Space size={[6, 6]} wrap>
+            <div data-testid="copy-selected-summary">
+              {selected.size > 0 ? (
+                <div className="squad-chips">
                   {Array.from(selected.entries()).map(([id, name]) => (
-                    <Tag key={id} closable onClose={() => toggleSelection(id, name, false)}>{name}</Tag>
+                    <Tag key={id} closable closeIcon={chipCloseIcon} onClose={() => toggleSelection(id, name, false)}>{name}</Tag>
                   ))}
-                </Space>
+                </div>
+              ) : null}
+              <div className="squad-sm-foot">
+                <span className="squad-sm-foot-left">
+                  <Trans t={t} ns="squad" i18nKey="copySelectedCount" count={selected.size} components={{ number: <b /> }} />
+                </span>
+                <Button onClick={onClose}>{t('cancel')}</Button>
+                <Button type="primary" disabled={selected.size === 0} onClick={() => openConfirm(Array.from(selected.keys()))}>
+                  {t('copyConfirmAction')}
+                </Button>
               </div>
-            ) : null}
-
-            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Button onClick={onClose}>{t('cancel')}</Button>
-              <Button type="primary" disabled={selected.size === 0} onClick={() => openConfirm(Array.from(selected.keys()))}>
-                {t('copyConfirmAction')}
-              </Button>
             </div>
           </div>
         )}
       </Modal>
 
       <Modal
-        closable={!copyMut.isPending}
+        className="squad-sm-modal"
+        closable={copyMut.isPending ? false : { 'aria-label': t('close'), closeIcon: <AwStrokeIcon name="x" /> }}
         title={t('copyConfirmTitle')}
         open={pending !== null}
+        width={480}
         okText={t('copyConfirmAction')}
         cancelText={t('cancel')}
         confirmLoading={copyMut.isPending}
@@ -374,26 +373,27 @@ export function SquadCopyModal({ squad, onClose }: SquadCopyModalProps) {
           setSubmitError(null);
         }}
       >
-        <Space direction="vertical" size={10} style={{ width: '100%' }}>
-          <div>{t('copyConfirmSourceLine', { name: squad?.name ?? '' })}</div>
-          <div>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>{t('copyConfirmTargets')}</div>
-            <Space size={[6, 6]} wrap>
-              {pendingNames.map((name) => <Tag key={name}>{name}</Tag>)}
-            </Space>
+        <div className="squad-cf-kv">
+          <div className="squad-cf-k">{t('copySource')}</div>
+          <div className="squad-cf-v">{squad?.name ?? ''}</div>
+          <div className="squad-cf-k">{t('copyConfirmTargets')}</div>
+          <div className="squad-cf-v">
+            <div className="squad-chips">
+              {pendingNames.map((name) => <Tag key={name} className="squad-chip-plain">{name}</Tag>)}
+            </div>
           </div>
-          <div>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>{t('copyConfirmScope')}</div>
-            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--aw-text)' }}>
+          <div className="squad-cf-k">{t('copyConfirmScope')}</div>
+          <div className="squad-cf-v">
+            <ul>
               <li>{t('copyConfirmScopeValue')}</li>
               <li>{t('copyConfirmReposExcluded')}</li>
               <li>{t('copyConfirmAgentsOnline')}</li>
               <li>{t('copyConfirmExecutorRestart')}</li>
             </ul>
           </div>
-          {copyMut.isPending ? <Spin aria-label={t('copyRunning')} /> : null}
-          {submitError ? <Alert type="error" showIcon message={submitError} /> : null}
-        </Space>
+        </div>
+        {copyMut.isPending ? <div className="squad-cf-status"><Spin aria-label={t('copyRunning')} /></div> : null}
+        {submitError ? <div className="squad-cf-status"><Alert type="error" showIcon message={submitError} /></div> : null}
       </Modal>
     </>
   );

@@ -1,28 +1,59 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { http, HttpResponse } from 'msw';
+import { server } from '@/test/mocks/server';
 import { setupStatus } from '@/features/chiefOfStaff/api';
 import { useAuthStore } from '@/shared/auth/store';
 import { ChiefEntryButton } from './ChiefEntryButton';
 import {
-  publishGuideRuntime,
   resetWorkspaceGuideBridge,
   subscribeChiefOpenPanel,
-  subscribeGuideEntryClick,
   type ChiefOpenRequest,
 } from '@/features/workspaceGuide/bridge';
 
 let opens: ChiefOpenRequest[] = [];
-let entries = 0;
 
 vi.mock('@/features/chiefOfStaff/api', () => ({ setupStatus: vi.fn() }));
+
+function renderEntry(props: { standalone?: boolean } = {}) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ChiefEntryButton {...props} />
+    </QueryClientProvider>,
+  );
+}
+
+let statusCalls = 0;
+
+function mockStatus(state: string) {
+  statusCalls = 0;
+  server.use(
+    http.get('/api/platform-agent/status', () => {
+      statusCalls += 1;
+      return HttpResponse.json({
+        success: true, code: '0', message: '',
+        data: { state, agentId: 11, executorCount: state === 'NOT_CONFIGURED' ? 0 : 2, onlineExecutorCount: state === 'OK' ? 2 : 0 },
+        traceId: null,
+      });
+    }),
+  );
+}
+
+function enterWorkspaceAs(accessLevel: 'ADMIN' | 'READ_WRITE') {
+  useAuthStore.getState().setCurrentWorkspace(
+    { id: 7, name: '星云工坊', description: '' },
+    accessLevel,
+  );
+}
 
 beforeEach(() => {
   resetWorkspaceGuideBridge();
   opens = [];
-  entries = 0;
   vi.mocked(setupStatus).mockReset();
   subscribeChiefOpenPanel(request => opens.push(request));
-  subscribeGuideEntryClick(() => { entries += 1; });
 });
 
 afterEach(() => {
@@ -38,7 +69,7 @@ describe('ChiefEntryButton', () => {
       ready, agentId: 2, executorId: 3, agentConfigured: true, skillsConfigured: true,
       executorConfigured: true, launchConfigured: ready, missingSkills: [],
     });
-    render(<ChiefEntryButton standalone />);
+    renderEntry({ standalone: true });
 
     fireEvent.click(screen.getByRole('button', { name: '打开 Chief' }));
 
@@ -51,35 +82,41 @@ describe('ChiefEntryButton', () => {
   });
 
   it('prompts users to enter a workspace before checking standalone Chief', async () => {
-    render(<ChiefEntryButton standalone />);
+    renderEntry({ standalone: true });
     fireEvent.click(screen.getByRole('button', { name: '打开 Chief' }));
     expect(await screen.findByText('请先进入一个工作空间，再使用 Chief。')).toBeVisible();
     expect(setupStatus).not.toHaveBeenCalled();
     expect(opens).toHaveLength(0);
   });
 
-  it('only opens Chief without contacting the guide outside phase 2', () => {
-    render(<ChiefEntryButton />);
+  it('opens Chief in docked mode and leaves guide targeting to the overlay', () => {
+    renderEntry();
 
     const button = screen.getByRole('button', { name: '打开 Chief' });
-    expect(button).not.toHaveClass('aw-guide-focus');
     fireEvent.click(button);
 
-    expect(entries).toBe(0);
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({ expanded: false });
   });
 
-  it('notifies the guide and forces expanded mode on the phase 2 entry', () => {
-    publishGuideRuntime({ active: true, workspaceId: 1, stage: 2, substep: 0, capabilityReady: true });
-    render(<ChiefEntryButton />);
+  it('marks the entry with the concrete reason when the platform agent is not ready', async () => {
+    mockStatus('OFFLINE');
+    enterWorkspaceAs('ADMIN');
+    const { container } = renderEntry();
 
-    const button = screen.getByRole('button', { name: '打开 Chief' });
-    expect(button).toHaveClass('aw-guide-focus');
-    fireEvent.click(button);
+    await waitFor(() => expect(statusCalls).toBe(1));
+    expect(container.querySelector('.aw-chief-entry-dot')).not.toBeNull();
 
-    expect(entries).toBe(1);
-    expect(opens).toHaveLength(1);
-    expect(opens[0]).toMatchObject({ expanded: true });
+    await userEvent.hover(screen.getByRole('button', { name: '打开 Chief' }));
+    expect(await screen.findByText('Chief of Staff · 执行器全部离线')).toBeInTheDocument();
+  });
+
+  it('leaves the entry unmarked when the platform agent is ready', async () => {
+    mockStatus('OK');
+    enterWorkspaceAs('ADMIN');
+    const { container } = renderEntry();
+
+    await waitFor(() => expect(statusCalls).toBe(1));
+    expect(container.querySelector('.aw-chief-entry-dot')).toBeNull();
   });
 });

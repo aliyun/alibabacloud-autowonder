@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -14,7 +13,6 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -93,11 +91,28 @@ public class S3ObjectStorage implements ObjectStorage {
 
     @Override
     public byte[] get(String ossRef) {
+        return get(ossRef, Integer.MAX_VALUE);
+    }
+
+    @Override
+    public byte[] get(String ossRef, int maxBytes) {
+        if (maxBytes < 0) throw new IllegalArgumentException("Negative object size limit");
         String[] bk = StorageRefs.split(ossRef);
         try {
-            ResponseBytes<GetObjectResponse> obj = serviceClient.getObjectAsBytes(
-                    GetObjectRequest.builder().bucket(bk[0]).key(bk[1]).build());
-            return obj.asByteArray();
+            try (var stream = serviceClient.getObject(GetObjectRequest.builder().bucket(bk[0]).key(bk[1]).build())) {
+                try {
+                    Long length = stream.response().contentLength();
+                    if (length != null && length > maxBytes) throw new SizeLimitExceededException();
+                    byte[] bytes = stream.readNBytes(maxBytes);
+                    if (stream.read() != -1) throw new SizeLimitExceededException();
+                    return bytes;
+                } catch (Exception e) {
+                    try { stream.abort(); } catch (RuntimeException abortFailure) { e.addSuppressed(abortFailure); }
+                    throw e;
+                }
+            }
+        } catch (SizeLimitExceededException e) {
+            throw e;
         } catch (NoSuchKeyException e) {
             LOGGER.info("s3 object not found ref={}", ossRef);
             return null;

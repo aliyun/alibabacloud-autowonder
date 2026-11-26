@@ -231,6 +231,48 @@ class WorkitemTimelineTest {
     }
 
     @Test
+    void unifiedTimelineExposesHumanStatusNoteOnlyWhenReasonPresent() {
+        var owner = new WorkitemDO();
+        owner.setId(5L);
+        owner.setTenantId(100L);
+        when(workitemDao.findById(5L)).thenReturn(owner);
+        when(commentDao.listByWorkitem(100L, 5L)).thenReturn(List.of());
+        var withNote = statusEvent(1L, "HUMAN", "{\"source\":\"HUMAN\",\"reason\":\"  与需求方确认后流转  \"}");
+        var withoutNote = statusEvent(2L, "HUMAN", "{\"source\":\"HUMAN\"}");
+        var systemNote = statusEvent(3L, "HUMAN",
+                "{\"source\":\"SYSTEM_DELIVERY_START\",\"reason\":\"派发开始执行，自动推进到模板首个执行中节点\"}");
+        var blankNote = statusEvent(4L, "HUMAN", "{\"source\":\"HUMAN\",\"reason\":\"   \"}");
+        when(eventDao.listByWorkitem(5L)).thenReturn(List.of(withNote, withoutNote, systemNote, blankNote));
+
+        var rows = service.getUnifiedTimeline(5L);
+
+        assertEquals("与需求方确认后流转", rowById(rows, 1L).getNote());
+        assertNull(rowById(rows, 2L).getNote());
+        assertNull(rowById(rows, 3L).getNote(), "系统来源的状态说明不得渲染为人工备注");
+        assertNull(rowById(rows, 4L).getNote(), "纯空白备注不透出");
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        assertFalse(json.valueToTree(rowById(rows, 2L)).has("note"));
+        assertFalse(json.valueToTree(rowById(rows, 4L)).has("note"));
+    }
+
+    private static WorkitemEventDO statusEvent(long id, String actorType, String detailJson) {
+        var event = new WorkitemEventDO();
+        event.setId(id);
+        event.setEventType("STATUS_CHANGE");
+        event.setActorType(actorType);
+        event.setActorRef(9L);
+        event.setFromVal("new");
+        event.setToVal("developing");
+        event.setDetailJson(detailJson);
+        return event;
+    }
+
+    private static com.aliyun.autowonder.workitem.dto.TimelineItemVO rowById(
+            List<com.aliyun.autowonder.workitem.dto.TimelineItemVO> rows, long id) {
+        return rows.stream().filter(row -> Long.valueOf(id).equals(row.getId())).findFirst().orElseThrow();
+    }
+
+    @Test
     void externalNameFallbackHasSourceIdentityWhileRawNamesAndHistoryRemainUntouched() {
         var links = mock(com.aliyun.autowonder.integration.common.ExternalWorkitemLinkDao.class);
         var principals = mock(com.aliyun.autowonder.integration.common.ExternalPrincipalDao.class);

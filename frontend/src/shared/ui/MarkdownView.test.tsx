@@ -494,4 +494,46 @@ describe('MarkdownView', () => {
     const { container } = render(<MarkdownView content={null as unknown as string} mentionNames={['张三']} />);
     expect(container.firstElementChild).toBeInTheDocument();
   });
+
+  describe('relative links', () => {
+    it('hands resolvable relative links to the caller as in-app buttons', async () => {
+      const open = vi.fn();
+      render(<MarkdownView content={'[发布规则](./project_release.md)'} resolveRelativeLink={() => open} />);
+      const button = screen.getByRole('button', { name: '发布规则' });
+      expect(button).toHaveClass('aw-markdown-relative-link');
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+      await userEvent.click(button);
+      expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it('degrades unresolved relative links to plain text without navigation', () => {
+      const { container } = render(
+        <MarkdownView content={'索引：[缺失文档](missing_note.md)'} resolveRelativeLink={() => null} />,
+      );
+      const plain = container.querySelector('.aw-markdown-unresolved-link');
+      expect(plain).toHaveTextContent('缺失文档');
+      expect(screen.queryByRole('button', { name: '缺失文档' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    });
+
+    it('keeps absolute, hash and external links as new-tab anchors', () => {
+      render(
+        <MarkdownView
+          content={'[外链](https://example.com/spec) [站内](/workitems) [锚点](#section)'}
+          resolveRelativeLink={() => { throw new Error('must not resolve non-relative hrefs'); }}
+        />,
+      );
+      const links = screen.getAllByRole('link');
+      expect(links.map((link) => link.getAttribute('href'))).toEqual(['https://example.com/spec', '/workitems', '#section']);
+      links.forEach((link) => {
+        expect(link).toHaveAttribute('target', '_blank');
+        expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      });
+    });
+
+    it('leaves every link untouched when the caller supplies no resolver', () => {
+      render(<MarkdownView content={'[发布规则](./project_release.md)'} />);
+      expect(screen.getByRole('link', { name: '发布规则' })).toHaveAttribute('href', './project_release.md');
+    });
+  });
 });

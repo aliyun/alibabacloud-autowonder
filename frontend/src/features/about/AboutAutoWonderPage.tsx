@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { PageHeading } from '@/shared/ui/PageHeading';
 import { useId } from 'react';
-import { AuditOutlined, CheckCircleOutlined, CodeOutlined, CloudUploadOutlined, ExperimentOutlined, FileTextOutlined, PlayCircleOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { ExperimentOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useQuery } from '@tanstack/react-query';
 import { BRANDING_QUERY_KEY, DEFAULT_BRANDING, getPublicBranding } from '@/features/platform/brandingApi';
 import './AboutAutoWonderPage.css';
@@ -10,14 +11,14 @@ import './AboutAutoWonderPage.css';
 const returnPath = 'M600 80H624Q640 80 640 96V160Q640 180 620 180H20Q0 180 0 160V96Q0 80 16 80H40';
 
 const deliverySteps = [
-  { id: 'clarification', accent: false, icon: <FileTextOutlined aria-hidden="true" /> },
-  { id: 'start', accent: false, icon: <PlayCircleOutlined aria-hidden="true" /> },
-  { id: 'development', icon: <CodeOutlined aria-hidden="true" />, accent: true },
-  { id: 'verification', icon: <SafetyCertificateOutlined aria-hidden="true" />, accent: true },
-  { id: 'review', icon: <AuditOutlined aria-hidden="true" />, accent: true },
-  { id: 'deployment', icon: <CloudUploadOutlined aria-hidden="true" />, accent: true },
+  { id: 'clarification', accent: false, icon: <AwStrokeIcon name="file" size={22} /> },
+  { id: 'start', accent: false, icon: <AwStrokeIcon name="play" size={22} /> },
+  { id: 'development', icon: <AwStrokeIcon name="code" size={22} />, accent: true },
+  { id: 'verification', icon: <AwStrokeIcon name="shield" size={22} />, accent: true },
+  { id: 'review', icon: <AwStrokeIcon name="audit" size={22} />, accent: true },
+  { id: 'deployment', icon: <AwStrokeIcon name="upload" size={22} />, accent: true },
   { id: 'testing', icon: <ExperimentOutlined aria-hidden="true" />, accent: true },
-  { id: 'delivery', icon: <CheckCircleOutlined aria-hidden="true" />, accent: true },
+  { id: 'delivery', icon: <AwStrokeIcon name="check" size={22} />, accent: true },
 ] as const;
 
 export function AboutAutoWonderPage() {

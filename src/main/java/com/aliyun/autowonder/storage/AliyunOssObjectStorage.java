@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URL;
 import java.time.Duration;
@@ -50,16 +49,27 @@ public class AliyunOssObjectStorage implements ObjectStorage {
 
     @Override
     public byte[] get(String ossRef) {
+        return get(ossRef, Integer.MAX_VALUE);
+    }
+
+    @Override
+    public byte[] get(String ossRef, int maxBytes) {
+        if (maxBytes < 0) throw new IllegalArgumentException("Negative object size limit");
         String[] bk = StorageRefs.split(ossRef);
         try (OSSObject obj = serviceClient.getObject(bk[0], bk[1]);
              InputStream in = obj.getObjectContent()) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) != -1) {
-                out.write(buf, 0, n);
+            try {
+                var metadata = obj.getObjectMetadata();
+                if (metadata != null && metadata.getContentLength() > maxBytes) throw new SizeLimitExceededException();
+                byte[] bytes = in.readNBytes(maxBytes);
+                if (in.read() != -1) throw new SizeLimitExceededException();
+                return bytes;
+            } catch (Exception failure) {
+                try { obj.forcedClose(); } catch (Exception abortFailure) { failure.addSuppressed(abortFailure); }
+                throw failure;
             }
-            return out.toByteArray();
+        } catch (SizeLimitExceededException e) {
+            throw e;
         } catch (OSSException e) {
             String code = e.getErrorCode();
             if ("NoSuchKey".equals(code) || "404".equals(code)) {

@@ -31,17 +31,16 @@ describe('clarification theme', () => {
     expect(CLARIFICATION_THEME.hairline).toBe('var(--aw-border)');
     expect(CLARIFICATION_THEME.controlBorder).toBe('var(--aw-border)');
     expect(CLARIFICATION_THEME.textPrimary).toBe('var(--aw-text)');
-    expect(CLARIFICATION_THEME.textMuted).toBe('var(--aw-muted)');
-    expect(CLARIFICATION_THEME.userBubble).toBe('var(--aw-raised)');
+    expect(CLARIFICATION_THEME.textMuted).toBe('var(--aw-text-3)');
+    expect(CLARIFICATION_THEME.userBubble).toBe('var(--aw-gray-bg)');
     expect(CLARIFICATION_THEME.codeSurface).toBe('var(--aw-raised)');
     expect(CLARIFICATION_THEME.codeBorder).toBe('var(--aw-border)');
-    expect(CLARIFICATION_THEME.radiusBubble).toBe(14);
+    expect(CLARIFICATION_THEME.radiusBubble).toBe(8);
   });
 
   it('carries no fixed content width token', () => {
-    // 全屏态正文列必须跟着视口铺满（工单 53035）。
-    // 曾经的 contentMaxWidth: 760 是超宽屏横向空出大半空间的唯一来源，删掉后要钉住，
-    // 否则下一次“限宽更好看”的改动会把它悄悄加回来。
+    // 全屏居中列上限（1080px）只落在面板的 fullscreenColumnStyle，不进主题令牌；
+    // 曾经的 contentMaxWidth: 760 在超宽屏横向空出大半（工单 53035），删掉后要钉住。
     expect(CLARIFICATION_THEME).not.toHaveProperty('contentMaxWidth');
     expect(Object.keys(CLARIFICATION_THEME).some((key) => /width/i.test(key))).toBe(false);
   });

@@ -1,8 +1,9 @@
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Divider, Form, Input, Modal, Space, Typography } from 'antd';
-import { CloseCircleFilled, EyeOutlined, EyeInvisibleOutlined, LoadingOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Form, Input, Modal, Space, Typography } from 'antd';
+import { CloseCircleFilled, EyeOutlined, EyeInvisibleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { login } from './api';
@@ -23,7 +24,7 @@ import { readAdministratorContacts, type AdministratorContact } from '@/shared/t
 import { AdministratorContactList } from '@/shared/ui/AdministratorContactList';
 import { AuthEntryShell } from './AuthEntryShell';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 export function LoginPage() {
   const { t } = useTranslation('auth');
@@ -96,7 +97,7 @@ export function LoginPage() {
   const errorText = error && ('key' in error ? t(error.key) : error.message);
   return (
     <AuthEntryShell>
-      <Card className="auth-entry-card" variant="borderless">
+      <Card className="auth-entry-card" variant="outlined">
         <Title level={3} className="auth-entry-title">{t('login.title')}</Title>
         {autoStartUrl && (
           <Alert
@@ -108,15 +109,14 @@ export function LoginPage() {
           />
         )}
         {providers.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ marginBottom: 12 }}>
-              <Text type="secondary">{t('sso.heading')}</Text>
-            </div>
-            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <div className="auth-sso-section">
+            <p className="auth-entry-hint">{t('sso.heading')}</p>
+            <Space direction="vertical" size={8} style={{ width: '100%', marginTop: 12 }}>
               {providers.map((provider) => (
                 <Button
                   key={provider.providerId}
                   block
+                  className="auth-sso-btn"
                   href={ssoStartUrl(provider.providerId, returnTarget)}
                   data-testid={`sso-provider-${provider.providerId}`}
                 >
@@ -124,26 +124,29 @@ export function LoginPage() {
                 </Button>
               ))}
             </Space>
-            <Divider plain>{t('sso.or')}</Divider>
-            <Title level={5} style={{ marginBottom: 0 }}>{t('sso.localHeading')}</Title>
+            <div className="auth-divider-or">{t('sso.or')}</div>
           </div>
         )}
-        {error && <Alert message={errorText} type="error" showIcon icon={<CloseCircleFilled aria-hidden="true" />} style={{ marginBottom: 16 }} />}
-        <Form form={form} onFinish={onFinish} layout="vertical" noValidate>
+        {providers.length > 0 && (
+          <p className="auth-entry-hint auth-local-hint">{t('sso.localHeading')}</p>
+        )}
+        {error && <Alert message={errorText} type="error" showIcon icon={<CloseCircleFilled aria-hidden="true" />} style={{ marginTop: 20 }} />}
+        <Form className="auth-login-form" form={form} onFinish={onFinish} layout="vertical" noValidate
+          requiredMark={(label, { required }) => <>{label}{required && <span className="auth-login-required" aria-hidden="true">{t('fields.requiredMark')}</span>}</>}>
           <Form.Item label={t('fields.username')} name="username" rules={[{ required: true, message: t('fields.usernameRequired') }]}>
-            <Input autoComplete="username" prefix={<UserOutlined aria-hidden="true" />} placeholder={t('fields.username')} />
+            <Input autoComplete="username" prefix={<AwStrokeIcon name="user" />} placeholder={t('fields.username')} />
           </Form.Item>
           <Form.Item label={t('fields.password')} name="password" rules={[{ required: true, message: t('fields.passwordRequired') }]}>
             <Input.Password iconRender={visible => <Button type="text" htmlType="button" aria-label={t(visible ? 'fields.hidePassword' : 'fields.showPassword')}
               icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />} style={{ padding: 0, width: 16, height: 16 }} />}
-              autoComplete="current-password" prefix={<LockOutlined aria-hidden="true" />} placeholder={t('fields.password')} />
+              autoComplete="current-password" prefix={<AwStrokeIcon name="lock" />} placeholder={t('fields.password')} />
           </Form.Item>
-          <Form.Item>
+          <Form.Item className="auth-login-submit">
             <Button type="primary" htmlType="submit" aria-label={t('login.title')} loading={loading ? { icon: <LoadingOutlined aria-hidden="true" /> } : false} block>{t('login.title')}</Button>
           </Form.Item>
           {registrationEnabled && (
             <div className="auth-entry-link">
-              <Link to="/register">{t('login.registerLink')}</Link>
+              {t('login.registerPrompt')}<Link to="/register">{t('login.registerLink')}</Link>
             </div>
           )}
         </Form>

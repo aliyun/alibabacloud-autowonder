@@ -229,6 +229,7 @@
   },
   "brand": {
     "workspaces": "{{name}}, back to workspaces",
+    "workbench": "{{name}}, back to workbench",
     "workitems": "{{name}}, back to work items"
   },
   "bootstrap": {
@@ -237,5 +238,9 @@
     "failedDetail": "Check your network connection and try again.",
     "retry": "Retry",
     "retrying": "Retrying…"
+  },
+  "table": {
+    "total_one": "{{count}} item",
+    "total_other": "{{count}} items"
   }
 }

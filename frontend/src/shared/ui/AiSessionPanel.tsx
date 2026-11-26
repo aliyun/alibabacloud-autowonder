@@ -2,8 +2,8 @@ import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Alert, Input, Button, List, Typography, Space, Tag, Spin, message } from 'antd';
-import { SendOutlined } from '@ant-design/icons';
 import { apiClient } from '@/shared/api/client';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useRealtime } from '@/shared/realtime/useRealtime';
 import { MarkdownView } from './MarkdownView';
 import { ResultPane } from './aiResult/ResultPane';
@@ -296,7 +296,7 @@ export function AiSessionPanel({ scene, bizRefType, bizRefId, autoStartInput, on
             onCompositionStart={() => { composingRef.current = true; }}
             onCompositionEnd={() => { composingRef.current = false; }}
           />
-          <Button type="primary" icon={<SendOutlined />} onClick={handleSend} loading={loading} disabled={!canSend}>{t('ai.send')}</Button>
+          <Button type="primary" icon={<AwStrokeIcon name="send" />} onClick={handleSend} loading={loading} disabled={!canSend}>{t('ai.send')}</Button>
         </Space.Compact>
       </div>
     </div>

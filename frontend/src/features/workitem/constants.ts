@@ -1,4 +1,14 @@
 import { i18n } from '@/shared/i18n';
+import type { StatusColorKey } from '@/shared/ui/StatusTag';
+
+/** 看板分类 → StatusTag 色板键；列表状态列与看板卡片共用。 */
+export const STATUS_CATEGORY_TAG_COLOR: Record<string, StatusColorKey> = {
+  NEW: 'gray',
+  IN_PROGRESS: 'blue',
+  PENDING_DECISION: 'amber',
+  DONE: 'green',
+  CANCELED: 'gray',
+};
 
 export const workTypeMap: Record<string, { color: string; label: string }> = {
   REQ: { color: 'blue', get label() { return i18n.t('workitem:workType.requirement'); } },
@@ -42,8 +52,8 @@ export interface WorkitemStatusInput {
 export const STATUS_COLUMNS: StatusColumn[] = [
   { key: 'NEW', get title() { return i18n.t('workitem:status.new'); }, color: 'var(--aw-border)' },
   { key: 'IN_PROGRESS', get title() { return i18n.t('workitem:status.inProgress'); }, color: 'var(--aw-accent-text)' },
-  { key: 'PENDING_DECISION', get title() { return i18n.t('workitem:status.pendingDecision'); }, color: 'var(--aw-warning)' },
-  { key: 'DONE', get title() { return i18n.t('workitem:status.done'); }, color: 'var(--aw-success)' },
+  { key: 'PENDING_DECISION', get title() { return i18n.t('workitem:status.pendingDecision'); }, color: 'var(--aw-warning-deep)' },
+  { key: 'DONE', get title() { return i18n.t('workitem:status.done'); }, color: 'var(--aw-success-deep)' },
 ];
 
 /** 已取消列仅在状态筛选显式选中「已取消」时展示。 */

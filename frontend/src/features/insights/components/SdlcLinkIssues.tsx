@@ -1,11 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { ApartmentOutlined } from '@ant-design/icons';
 import { Tag } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { WorkerFinding, RiskLevel } from '../types';
 
 const RISK_STYLES: Record<RiskLevel, { bg: string; border: string; color: string }> = {
-  high: { bg: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-error) 30%, var(--aw-border))', color: 'var(--aw-error)' },
-  medium: { bg: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border))', color: 'var(--aw-warning)' },
+  high: { bg: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-error) 30%, var(--aw-border))', color: 'var(--aw-error-deep)' },
+  medium: { bg: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', border: 'color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border))', color: 'var(--aw-warning-deep)' },
   low: { bg: 'var(--aw-raised)', border: 'var(--aw-text)', color: 'var(--aw-muted)' },
 };
 
@@ -18,7 +18,7 @@ export function SdlcLinkIssues({ findings }: SdlcLinkIssuesProps) {
   return (
     <div style={{ background: 'var(--aw-panel)', border: '1px solid var(--aw-border)', borderRadius: 10, padding: '18px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <ApartmentOutlined aria-hidden="true" style={{ color: 'var(--aw-warning)' }} />
+        <span style={{ color: 'var(--aw-warning-deep)', display: 'inline-flex' }}><AwStrokeIcon name="apartment" /></span>
         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--aw-text)' }}>{t('panels.sdlcIssues')}</span>
       </div>
       <div style={{ display: 'grid', gap: 9 }}>

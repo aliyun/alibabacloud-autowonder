@@ -229,18 +229,18 @@ describe('ElicitationWizard 收起/展开（工单 56330）', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-  it('collapsible 缺省：无收起入口、无动效类，结构与现状一致', () => {
+  it('collapsible 缺省：无收起入口、无淡出类', () => {
     render(<ElicitationWizard requestId="r1" schema={schema} onReply={vi.fn()} />);
     expect(screen.queryByTestId('elicitation-toggle-r1')).toBeNull();
     expect(screen.getByTestId('elicitation-skip-r1')).toBeInTheDocument();
     expect(screen.getByTestId('elicitation-step-r1-0')).toBeInTheDocument();
     expect(screen.getByTestId('elicitation-option-q0-0')).toBeInTheDocument();
-    expect(screen.getByTestId('elicitation-wizard-r1').className).toBe('');
+    expect(screen.getByTestId('elicitation-wizard-r1').className).toBe('aw-cl-wizard');
   });
 
   it('默认展开，点箭头收起为一行，再点恢复完整卡片', () => {
     render(<ElicitationWizard requestId="r1" message="请确认以下几点" schema={schema} collapsible onReply={vi.fn()} />);
-    expect(screen.getByTestId('elicitation-wizard-r1')).toHaveClass('aw-elicitation-card');
+    expect(screen.getByTestId('elicitation-wizard-r1')).toHaveClass('aw-cl-wizard');
     expect(toggle()).toHaveAttribute('aria-expanded', 'true');
     expect(toggle()).toHaveAccessibleName('收起问题卡片');
 
@@ -288,49 +288,17 @@ describe('ElicitationWizard 收起/展开（工单 56330）', () => {
     expect(toggle()).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('收起/展开按旧高度到新高度做像素过渡，动画结束归还内联样式', () => {
+  it('收起/展开瞬时切换，不写内联高度或过渡', () => {
     render(<ElicitationWizard requestId="r1" schema={schema} collapsible onReply={vi.fn()} />);
     const root = screen.getByTestId('elicitation-wizard-r1');
-    // jsdom 无布局，这里显式模拟：点击时读到旧高度 300，重排后读到新高度 64。
-    const heights = [300, 64, 300];
-    Object.defineProperty(root, 'offsetHeight', {
-      configurable: true,
-      get: () => heights.shift() ?? 64,
-    });
-
     fireEvent.click(toggle());
-    expect(root.style.height).toBe('64px');
-    expect(root.style.transition).toContain('180ms');
-    fireEvent.transitionEnd(root);
+    expect(root).toHaveClass('aw-cl-wizard', 'collapsed');
     expect(root.style.height).toBe('');
     expect(root.style.transition).toBe('');
-
-    // 新旧高度相同（无布局变化）时不叠加过渡，直接瞬时切换。
     fireEvent.click(toggle());
+    expect(root).not.toHaveClass('collapsed');
     expect(screen.getByTestId('elicitation-skip-r1')).toBeInTheDocument();
     expect(root.style.height).toBe('');
-    expect(root.style.transition).toBe('');
-  });
-
-  it('减少动画偏好下不做像素过渡，收起/展开瞬时呈现', () => {
-    vi.spyOn(window, 'matchMedia').mockImplementation(((query: string) => ({
-      matches: query.includes('prefers-reduced-motion'),
-      media: query,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    })) as unknown as typeof window.matchMedia);
-    render(<ElicitationWizard requestId="r1" schema={schema} collapsible onReply={vi.fn()} />);
-    const root = screen.getByTestId('elicitation-wizard-r1');
-    Object.defineProperty(root, 'offsetHeight', { configurable: true, value: 300 });
-
-    fireEvent.click(toggle());
-    expect(screen.getByTestId('elicitation-collapsed-r1')).toBeInTheDocument();
-    expect(root.style.height).toBe('');
-    expect(root.style.transition).toBe('');
   });
 
   it('dismissing 只在开启 collapsible 时标记淡出类', () => {
@@ -338,7 +306,7 @@ describe('ElicitationWizard 收起/展开（工单 56330）', () => {
     expect(screen.getByTestId('elicitation-wizard-r1')).toHaveClass('is-dismissing');
     first.unmount();
     render(<ElicitationWizard requestId="r1" schema={schema} dismissing onReply={vi.fn()} />);
-    expect(screen.getByTestId('elicitation-wizard-r1').className).toBe('');
+    expect(screen.getByTestId('elicitation-wizard-r1')).not.toHaveClass('is-dismissing');
   });
 });
 

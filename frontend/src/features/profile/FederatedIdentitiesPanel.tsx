@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
-import { Alert, Button, Card, List, Popconfirm, Space, Spin, Tag, Typography, message } from 'antd';
+import { Button, Popconfirm, Space, Spin, Tag, message } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SSO_PROVIDERS_QUERY_KEY, fetchSsoProviders } from '@/features/auth/ssoApi';
 import {
@@ -9,8 +11,6 @@ import {
   startFederatedBinding,
   unbindFederatedIdentity,
 } from './federatedApi';
-
-const { Text } = Typography;
 
 function getApiMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -67,53 +67,66 @@ export function FederatedIdentitiesPanel() {
   // 企业身份绑定是登录用户私有数据（/api/users/me 面），不经工作区访问阶梯。
   const handleUnbind = (identityId: number) => unbindMutation.mutate(identityId);
 
-  return (
-    <Card title={t('federated.title')} styles={{ body: { padding: 18 } }}>
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
-        {identitiesQuery.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message={t('federated.loadFailed')}
-            description={getApiMessage(identitiesQuery.error, t('retryLater'))}
-          />
-        ) : identitiesQuery.isLoading ? (
-          <Spin size="small" />
-        ) : identities.length === 0 ? (
-          <Text type="secondary" data-testid="federated-empty">{t('federated.empty')}</Text>
-        ) : (
-          <List
-            dataSource={identities}
-            renderItem={(identity) => (
-              <List.Item
-                data-testid={`federated-identity-${identity.id}`}
-                actions={[
-                  <Popconfirm
-                    key="unbind"
-                    title={t('federated.unbindConfirm')}
-                    okText={t('federated.unbindConfirmOk')}
-                    cancelText={t('cancel')}
-                    onConfirm={() => handleUnbind(identity.id)}
-                  >
-                    <Button danger size="small">{t('federated.unbind')}</Button>
-                  </Popconfirm>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={
-                    <Space size={8}>
-                      <Text strong>{identity.providerName}</Text>
-                      <Tag>{identity.protocol}</Tag>
-                    </Space>
-                  }
-                  description={identity.email || identity.subject}
-                />
-              </List.Item>
-            )}
-          />
-        )}
+  const renderBody = () => {
+    if (identitiesQuery.isError) {
+      return (
+        <NoticeTip
+          kind="error"
+          title={t('federated.loadFailed')}
+          detail={getApiMessage(identitiesQuery.error, t('retryLater'))}
+          action={<Button size="small" onClick={() => identitiesQuery.refetch()}>{t('retry')}</Button>}
+        />
+      );
+    }
+    if (identitiesQuery.isLoading) {
+      return <Spin size="small" />;
+    }
+    if (identities.length === 0) {
+      return (
+        <div className="prof-empty" data-testid="federated-empty">
+          <span className="prof-empty-icon" aria-hidden="true"><AwStrokeIcon name="link" size={20} /></span>
+          <div className="prof-empty-title">{t('federated.empty')}</div>
+          <div className="prof-empty-sub">{t('federated.emptySub')}</div>
+          {bindableProviders.length > 0 && (
+            <div className="prof-bind-row">
+              {bindableProviders.map((provider) => (
+                <Button
+                  key={provider.providerId}
+                  data-testid={`federated-bind-${provider.providerId}`}
+                  loading={bindMutation.isPending && bindMutation.variables === provider.providerId}
+                  onClick={() => bindMutation.mutate(provider.providerId)}
+                >
+                  {t('federated.bind', { name: provider.name })}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    return (
+      <>
+        {identities.map((identity) => (
+          <div className="prof-id-row" key={identity.id} data-testid={`federated-identity-${identity.id}`}>
+            <div className="prof-id-main">
+              <div className="prof-id-title">
+                <span>{identity.providerName}</span>
+                <Tag>{identity.protocol}</Tag>
+              </div>
+              <div className="prof-id-sub">{identity.email || identity.subject}</div>
+            </div>
+            <Popconfirm
+              title={t('federated.unbindConfirm')}
+              okText={t('federated.unbindConfirmOk')}
+              cancelText={t('cancel')}
+              onConfirm={() => handleUnbind(identity.id)}
+            >
+              <Button danger size="small">{t('federated.unbind')}</Button>
+            </Popconfirm>
+          </div>
+        ))}
         {bindableProviders.length > 0 && (
-          <Space size={[8, 8]} wrap>
+          <Space size={[8, 8]} wrap style={{ marginTop: 14 }}>
             {bindableProviders.map((provider) => (
               <Button
                 key={provider.providerId}
@@ -126,8 +139,29 @@ export function FederatedIdentitiesPanel() {
             ))}
           </Space>
         )}
-        <Text type="secondary" style={{ fontSize: 12 }}>{t('federated.hint')}</Text>
-      </Space>
-    </Card>
+      </>
+    );
+  };
+
+  return (
+    <section className="aw-card prof-panel" aria-label={t('federated.title')}>
+      <div className="prof-sec-head">
+        <div className="prof-sec-head-text">
+          <b>{t('federated.title')}</b>
+          <div className="prof-sec-desc">{t('federated.desc')}</div>
+        </div>
+        <div className="prof-sec-extra">
+          {identitiesQuery.isSuccess ? (
+            <Tag color={identities.length > 0 ? 'green' : undefined}>
+              {identities.length > 0 ? t('federated.boundTag', { count: identities.length }) : t('federated.unboundTag')}
+            </Tag>
+          ) : null}
+        </div>
+      </div>
+      <div className="prof-sec-body">
+        {renderBody()}
+        <div className="prof-foot-hint" style={{ marginTop: 14 }}>{t('federated.hint')}</div>
+      </div>
+    </section>
   );
 }

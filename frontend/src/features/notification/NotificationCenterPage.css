@@ -1,0 +1,268 @@
+/* 原型 17 通知列表：二行式（左列标题/摘要，右侧「时间 + 操作」整组垂直居中）。
+ * 用户明确不要外层卡片框，列表直接平铺在内容框架内，只保留行间分割线。 */
+.ntf-list .ant-list-item.ntf-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* 无外层框后去掉左右内缩，内容与页头/页签左对齐 */
+  padding: 10px 0;
+  border-bottom: 1px solid var(--aw-border);
+  cursor: pointer;
+}
+
+.ntf-list .ant-list-item.ntf-item:last-child {
+  border-bottom: none;
+}
+
+.ntf-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ntf-line1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ntf-line1 > :first-child {
+  flex-shrink: 0;
+}
+
+/* 长标题单行省略，完整标题与正文在详情弹窗里查看 */
+.ntf-title {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--aw-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ntf-unread-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aw-primary);
+}
+
+.ntf-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ntf-line2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 2px;
+}
+
+.ntf-sum {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右侧整组：时间与操作同一水平线，整体随行垂直居中；操作列定宽保证跨行右缘一致 */
+.ntf-side {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ntf-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+  white-space: nowrap;
+}
+
+.ntf-ops {
+  flex-shrink: 0;
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* 窄视口：右侧改为「时间在上、操作在下」的右对齐列 */
+@media (max-width: 900px) {
+  .ntf-side {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+}
+
+/* 「···」行内操作入口：跟时间同一水平线，低频操作展开到菜单里 */
+.ntf-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--aw-text-3);
+  cursor: pointer;
+}
+
+.ntf-more:hover {
+  background: var(--aw-gray-bg);
+  color: var(--aw-text);
+}
+
+.ntf-more:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ntf-more:disabled:hover {
+  background: none;
+  color: var(--aw-text-3);
+}
+
+.ntf-more:focus-visible {
+  outline: 2px solid var(--aw-primary);
+  outline-offset: 1px;
+}
+
+/* 通知详情弹窗：沿用仓库既有弹窗规范（content 去默认内距、头部满宽分割线、正文区滚动） */
+.ntf-detail-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+  padding: 0;
+}
+
+.ntf-detail-modal .ant-modal-header {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--aw-border);
+  background: transparent;
+}
+
+.ntf-detail-modal .ant-modal-title {
+  padding-right: 34px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.ntf-detail-modal .ant-modal-close {
+  top: 13px;
+  inset-inline-end: 20px;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  color: var(--aw-text-3);
+}
+
+.ntf-detail-modal .ant-modal-close:hover {
+  background: var(--aw-gray-bg);
+  color: var(--aw-text);
+}
+
+.ntf-detail-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 20px 18px;
+  overflow-y: auto;
+}
+
+.ntf-detail-modal .ant-modal-footer {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--aw-border);
+  text-align: right;
+}
+
+.ntf-detail-modal .ant-modal-footer .ant-btn {
+  margin-inline-start: 0;
+}
+
+.ntf-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.ntf-detail-ref {
+  color: var(--aw-link);
+  font-family: var(--aw-font-mono);
+}
+
+.ntf-detail-title {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--aw-text);
+}
+
+.ntf-detail-body {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--aw-text);
+  white-space: pre-wrap;
+}
+
+.ntf-detail-body.is-empty {
+  color: var(--aw-text-3);
+}
+
+.ntf-detail-links {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ntf-link-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--aw-text-3);
+}
+
+.ntf-link-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.ntf-detail-links a {
+  color: var(--aw-link);
+  font-family: var(--aw-font-mono);
+  font-size: 12px;
+}

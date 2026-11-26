@@ -85,7 +85,9 @@
     "watch": "Watch",
     "unwatch": "Unwatch",
     "watchAria": "Watch work item",
-    "unwatchAria": "Unwatch work item"
+    "unwatchAria": "Unwatch work item",
+    "watched": "Watching",
+    "more": "More work item actions"
   },
   "tags": {
     "empty": "No tags yet",
@@ -118,8 +120,16 @@
     "descriptionPlaceholder": "Describe the work item (Markdown supported)",
     "attachFiles": "Add files or images",
     "attachmentHint": "Paste screenshots or choose files; up to 5 MB each, 10 files and 20 MB total.",
+    "attachLabel": "Attachments",
+    "optional": "Optional",
+    "attachmentCount": "{{count}} / {{max}} selected",
+    "deliverySquad": "Delivery squad",
+    "deliveryAgent": "Delivery digital worker",
+    "deliveryOptionalHint": "Leave empty to create the work item only without starting delivery. After clarification, choose a digital worker on the detail page to start.",
     "attachmentsUploadFailed": "Attachments could not be uploaded. The work item was created; retry from its detail page.",
-    "assignmentFailed": "The work item was created, but assigning the digital worker failed. Retry from its detail page."
+    "assignmentFailed": "The work item was created, but assigning the digital worker failed. Retry from its detail page.",
+    "duplicateCheckHelp": "Automatic duplicate check on blur; not triggered during IME composition",
+    "priorityHelp": "Optional; defaults to Medium"
   },
   "duplicateCheck": {
     "title": "Possible duplicate work items",
@@ -219,7 +229,14 @@
     "transitionConfirmTitle": "Confirm status change",
     "transitionConfirmText": "Change the status from “{{from}}” to “{{to}}”?",
     "transitionConfirmOk": "Confirm",
-    "transitionVersionConflict": "This work item has changed and the list was refreshed. Choose the target status again."
+    "transitionVersionConflict": "This work item has changed and the list was refreshed. Choose the target status again.",
+    "emptyTitle": "No workitems yet",
+    "emptySubtext": "Create the first workitem and let the digital-worker squad deliver it",
+    "emptyAction": "New workitem",
+    "emptyFilteredTitle": "No matching workitems",
+    "emptyFilteredSubtext": "0 results under the current filters — try relaxing them",
+    "emptyFilteredAction": "Clear filters",
+    "createdRangeSeparator": "to"
   },
   "recycleBin": {
     "title": "Work item recycle bin",
@@ -234,7 +251,9 @@
     "restore": "Restore",
     "restoreCommand": "Restore work item",
     "restoreConfirmTitle": "Restore work item \"{{title}}\"?",
-    "restoreConfirmDescription": "The work item returns to its pre-deletion status and its existing artifacts become visible again. This only restores visibility; delivery does not resume automatically and must be reassigned."
+    "restoreConfirmDescription": "The work item returns to its pre-deletion status and its existing artifacts become visible again. This only restores visibility; delivery does not resume automatically and must be reassigned.",
+    "emptySubtext": "Deleted work items stay here and can be restored at any time.",
+    "noMatchesSubtext": "Try another keyword, or clear the search to see all deleted work items."
   },
   "assignee": {
     "unassigned": "Unassigned",
@@ -253,7 +272,9 @@
     "emptyDecision": "No work items awaiting your decision",
     "updating": "Checking and updating status…",
     "decisionSummary": "Decision maker summary",
-    "loadMore": "Load more (showing {{shown}}/{{total}})"
+    "loadMore": "Load more (showing {{shown}}/{{total}})",
+    "myPendingDecision": "My pending {{count}}",
+    "healthOk": "Healthy"
   },
   "meta": {
     "type": "Work item type: <value/>",
@@ -262,11 +283,13 @@
     "creator": "Creator: <value/>",
     "assignee": "Assignee: <value/>",
     "sdlc": "SDLC: <value/>",
-    "tags": "Tags: <value/>"
+    "tags": "Tags: <value/>",
+    "id": "Work item ID: <value/>"
   },
   "agentList": {
     "filterCount": "{{label}} {{count}}",
-    "empty": "This agent has no linked work items."
+    "empty": "This agent has no linked work items.",
+    "filterAria": "Filter this agent work items by status"
   },
   "messages": {
     "created": "Work item created.",
@@ -305,7 +328,10 @@
     "noTarget": "This template has no status node for “{{title}}”. Use the detail page or ask an administrator to adjust the template.",
     "checkFailed": "Could not check the status. Please try again.",
     "choose": "Choose a target status",
-    "choices": "Current status “{{name}}” can transition to:"
+    "choices": "Current status “{{name}}” can transition to:",
+    "reason": "Transition note",
+    "reasonPlaceholder": "Transition note (optional): explain why. It will be added to the timeline…",
+    "confirm": "Confirm transition"
   },
   "detail": {
     "taskInfo": "Task information",
@@ -313,10 +339,17 @@
     "back": "Back",
     "loadFailed": "Could not load the work item",
     "retryLater": "Please try again later.",
-    "otherWorkspaceTitle": "This work item belongs to the project \"{{name}}\"",
-    "otherWorkspaceHint": "Switch to that project and open the work item? Cancel keeps you in the current project.",
+    "otherWorkspaceTitle": "Open a work item from another project",
+    "otherWorkspaceHint": "This work item is not in your current project. Switch to open it.",
     "otherWorkspaceSwitch": "Switch to \"{{name}}\" and open",
     "otherWorkspaceSwitchFailed": "Failed to switch the project. Please try again later.",
+    "otherWorkspaceFailDetail": "Switch failed: {{message}}",
+    "otherWorkspaceCurrentProject": "Current project",
+    "otherWorkspaceTargetProject": "Target project",
+    "otherWorkspaceNote": "Switching reloads this page as you in the target project; the URL and filters stay unchanged. You can switch back from the project switcher at the top left.",
+    "otherWorkspaceSwitching": "Switching…",
+    "otherWorkspaceRetry": "Retry switch",
+    "otherWorkspaceBackToList": "Back to work item list",
     "reassignCommand": "Reassign work item",
     "startDeliveryCommand": "Start work item delivery",
     "clarifyCommand": "Start AI requirement clarification",
@@ -344,9 +377,10 @@
     "scrollTop": "Back to top",
     "scrollBottom": "Go to bottom",
     "reassign": "Reassign",
+    "deliverAgain": "Deliver again",
     "startDelivery": "Start delivery",
     "reconcile": "Reconcile now",
-    "document": "Requirement/design document",
+    "document": "Requirements & design",
     "externallyMaintained": "Maintained in the external work item",
     "save": "Save",
     "edit": "Edit",
@@ -417,6 +451,8 @@
     "awaitingEvents": "Waiting for new execution events",
     "collapseLog": "Collapse execution records",
     "expandLog": "Expand execution records",
+    "collapseReply": "Collapse reply",
+    "expandReply": "Expand reply",
     "latest": "Jump to latest",
     "unconfirmed": "The execution result could not be confirmed. Investigate the errors below, then retry.",
     "noError": "No underlying error was received. Check the executor logs. The platform does not infer a cause from the failure status.",
@@ -459,19 +495,21 @@
   },
   "documents": {
     "uploadCommand": "Upload requirement/design context",
-    "title": "Requirement/design context",
+    "title": "Attachments",
     "selectFile": "Choose requirement/design context files",
     "upload": "Upload",
     "dropzone": "Requirement/design context upload area",
-    "help": "Supports any file type, including Excel. Click Upload, drag files here, or paste screenshots with Ctrl/Cmd+V. Up to 10 attachments, 5 MB each and 20 MB in total.",
-    "empty": "No requirement/design context yet. Upload requirement clarification, design Markdown documents or screenshots.",
+    "help": "Up to 10 files · 5 MB each · 20 MB in total",
+    "empty": "No attachments yet. Upload requirement documents or designs, or paste screenshots.",
     "preview": "Preview",
     "download": "Download",
     "deleteCommand": "Delete a requirement document",
     "previewFile": "Preview {{name}}",
     "downloadFile": "Download {{name}}",
     "deleteFile": "Delete {{name}}",
-    "deleteConfirm": "Delete {{name}}?"
+    "deleteConfirm": "Delete {{name}}?",
+    "countLabel": "· {{total}}",
+    "itemMeta": "{{size}} · {{type}}"
   },
   "share": {
     "copyFailed": "Copy failed. Check your browser clipboard permissions.",
@@ -488,23 +526,24 @@
     "noAgents": "No agent members",
     "noHumans": "No human participants",
     "humanAvatar": "Human participant avatar",
-    "agents": "Agent members",
-    "humans": "Human participants",
-    "identity": "ID: {{id}} · {{role}}",
+    "agents": "Agents",
+    "humans": "Humans",
+    "identity": "{{id}} · {{role}}",
     "runtime": "Agent status: {{agent}} · Executor: {{executor}}",
     "squadIdentity": "Squad member",
     "humanIdentity": "Human",
     "agentStatus": {
       "DRAFT": "Draft",
       "PENDING_REVIEW": "Pending review"
-    }
+    },
+    "agentAvatar": "Agent avatar"
   },
   "watchers": {
     "empty": "No watchers",
     "avatar": "Watcher avatar",
     "title": "Watchers",
     "titleCount": "Watchers ({{count}})",
-    "identity": "ID: {{id}}"
+    "identity": "ID {{id}}"
   },
   "activity": {
     "executorAccepted": "Executor accepted the task",
@@ -529,7 +568,16 @@
     "minutes_one": "{{count}} minute ago",
     "hours_one": "{{count}} hour ago",
     "loadEarlier_one": "Load {{count}} earlier comment",
-    "loadEarlier_other": "Load {{count}} earlier comments"
+    "loadEarlier_other": "Load {{count}} earlier comments",
+    "loadingEarlier": "Loading earlier records…",
+    "filterAll": "All",
+    "filterComments": "Comments only",
+    "filterEvents": "Timeline only",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "foldComment": "Collapse comment",
+    "unfoldComment": "Expand comment",
+    "sectionSub": "{{commentCount}} comments · {{eventCount}} events"
   },
   "public": {
     "unavailable": "This link is invalid or the artifact is unavailable.",
@@ -583,8 +631,8 @@
     "executionSummary_one": "{{latest}}{{label}} · {{count}} artifact",
     "latest": "Latest · ",
     "categoryCount": "{{label}} ({{count}})",
-    "agentCount_other": "Artifacts ({{count}} artifacts)",
-    "agentCount_one": "Artifacts ({{count}} artifact)"
+    "agentCount_other": "Artifacts ({{count}})",
+    "agentCount_one": "Artifacts ({{count}})"
   },
   "debug": {
     "title": "Debug logs",
@@ -622,9 +670,9 @@
     "exitFullscreen": "Exit fullscreen",
     "fullscreen": "Fullscreen",
     "graphAria": "Execution flow graph",
-    "lineage": "Authoritative lineage",
+    "lineage": "{{sourceName}} → {{targetName}} · Dispatch {{source}} → {{target}}",
     "humanHandoff": "Hand off to a person",
-    "graphHint": "Select a node or arrow to view authoritative flow details.",
+    "graphHint": "Select a node or line to view authoritative flow details.",
     "title": "Delivery progress",
     "durationHint": "Total duration is the sum of agent execution time, excluding handoffs, queues and human handling intervals.",
     "round": "Round {{number}}",
@@ -689,7 +737,57 @@
       "notResumable": "This execution cannot be continued or retried."
     },
     "restartLatest": "Restart with latest workflow",
-    "restartLatestBody": "Start a new round from the entry of this worker’s currently enabled workflow. Keep historical artifacts and operation receipts; the new round starts without the old session or checkpoint."
+    "restartLatestBody": "Start a new round from the entry of this worker’s currently enabled workflow. Keep historical artifacts and operation receipts; the new round starts without the old session or checkpoint.",
+    "fitWidth": "Fit width",
+    "shortEdge": "{{number}} · {{label}}",
+    "graphMinutes_one": "{{count}} min",
+    "graphMinutes_other": "{{count}} min",
+    "stageTotal": "Total {{duration}}",
+    "stageMeta": "{{status}} · {{duration}}",
+    "nodeStatus": "{{name}} · <status>{{status}}</status>",
+    "stageCount_one": "{{count}} stage",
+    "stageCount_other": "{{count}} stages",
+    "reworkComment": "Rework triggered by comment #{{id}}",
+    "openTrace": "Select to view Trace",
+    "graphTransitions_one": "{{count}} transition",
+    "graphTransitions_other": "{{count}} transitions",
+    "empty": "Delivery has not started yet",
+    "railCurrentStage": "Current stage",
+    "railInProgress": "In progress",
+    "railTotalCredits": "Total credits",
+    "railCreditsHint": "View breakdown",
+    "railCreditsTotal": "Total",
+    "railDispatchCount_one": "×{{count}}",
+    "railDispatchCount_other": "×{{count}}",
+    "railCurrentExecution": "Current execution",
+    "railRecentExecution": "Latest execution",
+    "railArtifacts_one": "{{count}} artifact (this dispatch)",
+    "railArtifacts_other": "{{count}} artifacts (this dispatch)",
+    "railOpenExecution": "View execution",
+    "railHistory_one": "All executions ({{count}})",
+    "railHistory_other": "All executions ({{count}})",
+    "railDispatch": "Dispatch {{id}}",
+    "railNoExecution": "No execution yet",
+    "railNoDispatchHint": "This digital worker has not joined a delivery yet. Duration, artifacts and live activity appear here after dispatch.",
+    "railSquadIdle_one": "{{count}} digital worker in the delivery squad has not joined yet; execution progress appears here after dispatch.",
+    "railSquadIdle_other": "{{count}} digital workers in the delivery squad have not joined yet; execution progress appears here after dispatch.",
+    "railAgentsGroup_one": "Digital worker · {{count}}",
+    "railAgentsGroup_other": "Digital workers · {{count}}",
+    "railAgentOrder": "In dispatch order",
+    "railNoticeQueued": "Queued for execution, waiting for an executor to accept it.",
+    "railWaitingReason": "Waiting reason: {{reason}}",
+    "railNoticePackaging": "Packaging the task and execution context; not sent to the executor yet.",
+    "railNoticeAccepted": "The executor accepted the task; waiting for the first runtime event.",
+    "railNoticePaused": "Paused at a safe point; resuming continues from that checkpoint.",
+    "railNoticePausing": "Pause requested; waiting for the executor to confirm.",
+    "railNoticeWaitingPause": "The previous execution has not confirmed pause yet; this one starts automatically once it does.",
+    "railNoticePauseFailed": "The executor did not confirm pause in time; retry pause or end this execution.",
+    "railNoticeFailed": "This execution failed; you can restart it with the latest process.",
+    "railNoticeTimeout": "The execution heartbeat timed out and tracking has stopped.",
+    "railNoticeCanceled": "This execution was canceled; you can trigger delivery again.",
+    "railNoticeSucceeded": "This execution finished and its artifacts are archived.",
+    "railEnterWorkbench": "View delivery progress",
+    "railEmptyExecution": "This digital worker has no executions yet."
   },
   "executionControl": {
     "loadEarlier_one": "Load {{count}} earlier record",
@@ -831,6 +929,15 @@
     "reopenDelivery": "Reopen delivery",
     "deliveryOpen": "Delivery open",
     "deliveryClosed": "Delivery closed",
+    "deliveryStartRecords": "Delivery start records",
+    "unattributedStartRecords": "Delivery starts without a recorded worker",
+    "deliveryStart": "Delivery start",
+    "roundStart": "Round {{number}} start",
+    "recordsQuiet_one": "Delivery start record · {{count}}",
+    "recordsQuiet_other": "Delivery start records · {{count}}",
+    "allRounds_one": "All {{count}} round",
+    "allRounds_other": "All {{count}} rounds",
+    "collapseRounds": "Collapse rounds",
     "closeHint": "Closing delivery stops all unfinished executions and blocks new ones.",
     "reopenHint": "Reopening delivery only restores the scheduling gate; it does not start or restart tasks.",
     "closeConfirmBody": "Close delivery? All unfinished executions will be stopped and new executions blocked. The work item, history and artifacts are retained. All executions must be terminal before reopening.",
@@ -839,7 +946,6 @@
     "allowAgents": "Allow agents to execute",
     "enabled": "Enabled",
     "disabled": "Disabled",
-    "closedHint": "Automatic dispatch is disabled; history and artifacts are retained.",
     "stoppingRound": "Stopping previous executions before restarting (round {{number}})",
     "failedRound": "Could not start delivery round {{number}}",
     "supersededRound": "Round {{number}} was superseded by a newer restart round",
@@ -854,7 +960,10 @@
     "rounds": "Delivery restart rounds ({{count}})",
     "startedDispatchRound": "Delivery round {{number}} started (Dispatch #{{id}})",
     "roundSource": "Source execution #{{id}}",
-    "roundWorkflow": "Workflow #{{id}}"
+    "roundWorkflow": "Workflow #{{id}}",
+    "roundDispatch": "Dispatch #{{id}}",
+    "roundReplaces": "Replaces #{{id}}",
+    "roundNoDispatch": "No dispatch created"
   },
   "runtimeLog": {
     "windowHint": "Shows up to 200 log events at a time; search covers the current window.",
@@ -949,7 +1058,37 @@
     "turnCount_other": "{{count}} turns",
     "turnCount_one": "{{count}} turn",
     "drawerTitle": "{{name}} · {{step}}",
-    "binary": "Binary file"
+    "binary": "Binary file",
+    "turnSteps_one": "{{count}} step in turn {{id}}",
+    "turnSteps_other": "{{count}} steps in turn {{id}}",
+    "stepCount_one": "{{count}} step",
+    "stepCount_other": "{{count}} steps",
+    "failCount_one": "{{count}} failed",
+    "failCount_other": "{{count}} failed",
+    "charCount_one": "{{size}} char",
+    "charCount_other": "{{size}} chars",
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} files",
+    "roleContext": "Task context",
+    "roleHarness": "Runtime harness",
+    "duration": "Duration",
+    "started": "Started",
+    "steps": "Steps",
+    "model": "Model",
+    "turns": "Turns",
+    "failed": "Failed",
+    "kinds": {
+      "model": "Model",
+      "thinking": "Thinking",
+      "command": "Command",
+      "tool": "Tool",
+      "mcp": "MCP",
+      "skill": "Skill",
+      "wait": "Wait",
+      "guidance": "Guidance",
+      "artifact": "Artifact",
+      "agent": "Agent"
+    }
   },
   "failureHistory": {
     "title": "Failure history",
@@ -1000,7 +1139,10 @@
     "execution": "Scheduled execution: {{time}}",
     "taskExecution": "Scheduled task {{name}} execution: {{time}}",
     "triggered": "Scheduled execution triggered: {{time}}",
-    "plannedStart": "Scheduled start: {{time}}"
+    "planned": "Scheduled start",
+    "overdue": "Scheduled time reached",
+    "autoStart": "Starts automatically on schedule",
+    "notStarted": "Not started yet"
   },
   "start": {
     "reassignCommand": "Reassign work item",
@@ -1216,7 +1358,21 @@
       "questionContext": "Earlier question:",
       "redacted": "[Sensitive information or attachment link omitted]",
       "truncated": "[Long context excerpted]"
-    }
+    },
+    "pickIntro": "Pick a digital worker to clarify the requirements of work item #{{id}} with you. An existing conversation opens directly; otherwise a new one is created.",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
+    "startClarify": "Start",
+    "noMembers": "No digital workers available. Add members in the squad settings first.",
+    "membersFailed": "Failed to load members",
+    "executorOnline": "Executor online",
+    "executorOffline": "Executor offline",
+    "switchShort": "Switch",
+    "replyEndedSyncing": "The reply has ended. Syncing the conversation state; input is temporarily unavailable.",
+    "loadingHistory": "Loading message history…",
+    "noHistoryHint": "After you send an opening message, {{name}} will read the work item and start asking questions.",
+    "metaJoin": "{{left}} · {{right}}",
+    "metaAppend": "· {{text}}"
   },
   "projection": {
     "health": {
@@ -1262,7 +1418,8 @@
         "to": "Work item status changed: {{to}}",
         "operator": "Work item status changed (operator: {{operator}})",
         "both_operator": "Work item status changed: {{from}} → {{to}} (operator: {{operator}})",
-        "to_operator": "Work item status changed: {{to}} (operator: {{operator}})"
+        "to_operator": "Work item status changed: {{to}} (operator: {{operator}})",
+        "note": "Note: {{note}}"
       },
       "assign": {
         "label": "Delivery owner changed",
@@ -1418,7 +1575,17 @@
     "endedAt": "Ended: {{time}}",
     "unknownTime": "Not recorded",
     "notEnded": "Not ended",
-    "historyExecutions": "Previous executions"
+    "historyExecutions": "Previous executions",
+    "allStages": "All stages",
+    "recentOnly": "Recent only",
+    "earlierCount": "{{count}} earlier",
+    "executionCount_one": "{{count}} run",
+    "executionCount_other": "{{count}} runs",
+    "grouping": "Execution trail grouping",
+    "byAgent": "By agent",
+    "byTime": "By time",
+    "noControls": "No control records",
+    "dispatchCreditsMissing": "Credits not recorded for this Dispatch"
   },
   "stepTiming": {
     "title": "SDLC step duration",

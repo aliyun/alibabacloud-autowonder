@@ -14,6 +14,11 @@
     "qoderDocs": "Qoder CLI Hooks 官方文档"
   },
   "all": "全部",
+  "view": {
+    "grouped": "分组",
+    "list": "列表",
+    "switch": "切换列表与分组展示"
+  },
   "package": {
     "limit": "最多 500 个文件；压缩包和解压后的总大小均不超过 100 MB。",
     "selectPreview": "选择左侧文件查看内容",
@@ -99,6 +104,11 @@
     "descriptionHint": "供上传人和调用 MCP 的智能体判断适用范围。",
     "save": "保存分类",
     "editHint": "修改名称或说明不改变已有能力的分类关联。",
+    "toggleGroup": "折叠或展开{{name}}",
+    "editTitle": "编辑分类",
+    "createTitle": "新建分类",
+    "pickHint": "选择左侧分类进行编辑，或直接在下方新建。",
+    "cancelEdit": "取消编辑",
     "target": "目标分类",
     "savedTagFailed": "能力已保存，但分类设置失败：{{reason}}",
     "batchSaved_other": "已为 {{count}} 项能力设置分类",
@@ -129,7 +139,9 @@
     "failureReason": "连接失败：{{reason}}",
     "unknown": "未知错误",
     "viewTools_other": "查看 {{count}} 个工具",
+    "toolsShort_other": "{{count}} 个工具",
     "tools_other": "MCP 工具列表（{{count}}）",
+    "retest": "重测",
     "failures": {
       "SELECT_RUNTIME": "请选择在线 Runtime 测试 MCP",
       "RUNTIME_UNAVAILABLE": "Runtime MCP 测试服务不可用",
@@ -161,7 +173,8 @@
   "deleteConfirm": "确认删除该技能吗？",
   "deleteAction": "删除能力",
   "delete": "删除",
-  "title": "能力库",
+  "title": "能力",
+  "pageDescription": "数字员工可用技能 / MCP / 钩子注册表：分类管理、批量归类、连接测试与包详情",
   "clearSelection": "清除选择",
   "detailTitle": "能力详情",
   "close": "关闭",

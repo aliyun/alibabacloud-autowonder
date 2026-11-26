@@ -1,5 +1,6 @@
 {
   "nav": {
+    "title": "导航菜单",
     "delivery": "交付",
     "overview": "总览",
     "workbench": "工作台",
@@ -9,6 +10,7 @@
     "recycled": "回收站",
     "agentsGroup": "数字员工",
     "agents": "员工",
+    "squads": "小队",
     "executors": "执行器",
     "knowledge": "知识",
     "repos": "仓库",
@@ -23,25 +25,28 @@
     "backups": "项目配置备份",
     "environment": "环境变量",
     "settings": "系统设置",
+    "settingsHub": "设置",
+    "groupDeliveryConfig": "配置",
+    "groupWorkspace": "空间与权限",
+    "groupCompliance": "合规",
+    "attention": {
+      "pendingReview": "{{value}} 个版本待审核",
+      "pendingReviewItem": "{{label}}，{{value}} 个版本待审核",
+      "initIncomplete": "初始化未完成"
+    },
     "insightsGroup": "洞察",
     "insights": "数据洞察",
     "audit": "审计日志",
     "evolution": "自进化",
     "learn": "了解",
-    "about": "关于平台"
-  },
-  "navMode": {
-    "label": "导航版本",
-    "compact": "聚焦视图",
-    "full": "全景视图"
+    "about": "关于平台",
+    "collapse": "收起",
+    "expand": "展开"
   },
   "banner": {
-    "explanation": "平台智能体 Chief of Staff 是项目组的智能管家：自动接单并拆解需求、调度数字员工协作交付、沉淀团队记忆，让研发流程进入自动驾驶。配置执行器并保持在线后，工单即可全自动流转。",
-    "capabilities": "平台智能体能力说明",
-    "notConfigured": "平台智能体 Chief of Staff 未配置执行器",
+    "notConfigured": "建议配置平台智能体 Chief of Staff",
     "offline": "平台智能体 Chief of Staff 执行器全部离线",
-    "details": "说明",
-    "dismiss": "关闭系统通知",
-    "configure": "去配置执行器"
+    "notConfiguredHint": "配置并启动执行器后，可自动接单、拆解需求，并调度数字员工协作交付。",
+    "offlineHint": "重新启动执行器后，自动接单与协作交付会自动恢复。"
   }
 }

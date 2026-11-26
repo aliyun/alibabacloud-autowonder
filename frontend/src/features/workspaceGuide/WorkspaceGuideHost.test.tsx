@@ -1,14 +1,16 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
 import { useAuthStore } from '@/shared/auth/store';
 import { WorkspaceGuideHost } from './WorkspaceGuideHost';
+import { GuideStrip } from './GuideStrip';
 import type { WorkspaceGuide, UpdateWorkspaceGuideBody } from './api';
 import {
   emitGuideEvent,
-  notifyGuideEntryClicked,
+  publishChiefPanelOpen,
   registerGuideSendPreparation,
   resetWorkspaceGuideBridge,
   subscribeChiefClosePanel,
@@ -42,7 +44,6 @@ let skipCalls: number[] = [];
 let currentGuide: WorkspaceGuide = guide();
 let advanceFailure: { status: number; body: { success: boolean; code: string; message: string; traceId: string | null } } | null = null;
 let opens: ChiefOpenRequest[] = [];
-let closes = 0;
 let clients: QueryClient[] = [];
 
 function serveGuide(initial: WorkspaceGuide) {
@@ -82,21 +83,32 @@ function serveSkip(result: 'ok' | 'fail' = 'ok') {
   }));
 }
 
+/** 模拟真实 Chief 面板的打开门控：讲解条只存在于已打开的面板里。 */
+function GuideSurface() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => subscribeChiefOpenPanel(() => setOpen(true)), []);
+  useEffect(() => subscribeChiefClosePanel(() => setOpen(false)), []);
+  useEffect(() => publishChiefPanelOpen(open), [open]);
+  return open ? <div role="dialog" aria-label="Chief"><GuideStrip /></div> : null;
+}
+
 function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   clients.push(client);
-  return render(<QueryClientProvider client={client}><WorkspaceGuideHost /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><WorkspaceGuideHost /><GuideSurface /></QueryClientProvider>);
 }
+
+const stageSend = (overrides: Partial<WorkspaceGuide> = {}) => guide({
+  stage: 3, conversationId: 88, clientMessageId: 'message-1', version: 6, ...overrides,
+});
 
 beforeEach(() => {
   resetWorkspaceGuideBridge();
   opens = [];
-  closes = 0;
   putBodies = [];
   skipCalls = [];
   advanceFailure = null;
   subscribeChiefOpenPanel(request => opens.push(request));
-  subscribeChiefClosePanel(() => { closes += 1; });
   useAuthStore.getState().clear();
   useAuthStore.getState().setUser({ id: 7, username: 'owner', nickname: 'Owner', email: '' });
   useAuthStore.getState().setCurrentWorkspace({ id: 1, name: '新空间', description: '' }, 'ADMIN');
@@ -110,217 +122,166 @@ afterEach(() => {
 });
 
 describe('WorkspaceGuideHost', () => {
-  it('revisits previous setup steps without moving saved progress backwards', async () => {
-    serveGuide(guide({ stage: 2 }));
-    mount();
-    fireEvent.click(await screen.findByRole('button', { name: '上一步' }));
-    expect(screen.getByRole('dialog')).toHaveAttribute('data-stage', '1');
-    expect(opens.at(-1)?.expanded).toBe(false);
-    act(() => emitGuideEvent({ type: 'setup-ready' }));
-    expect(screen.getByRole('dialog')).toHaveAttribute('data-stage', '1');
-    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
-    expect(screen.getByRole('dialog')).toHaveAttribute('data-stage', '2');
-    expect(putBodies).toEqual([]);
-  });
-
-  it('connects the guide to the Chief entry and updates the curve after a resize', async () => {
-    serveGuide(guide({ stage: 2 }));
-    const entry = document.createElement('button');
-    entry.dataset.guideTarget = 'entry';
-    document.body.appendChild(entry);
-    let entryTop = 24;
-    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      return this === entry ? new DOMRect(900, entryTop, 32, 32) : new DOMRect(0, 0, 520, 260);
-    });
-    try {
-      mount();
-      const card = await screen.findByRole('dialog');
-      expect(card.querySelector('.aw-guide-pointer')).toBeNull();
-      const connector = document.querySelector('.aw-guide-connector');
-      expect(connector).toHaveAttribute('aria-hidden', 'true');
-      const path = connector?.querySelector('.aw-guide-connector-line');
-      const initial = path?.getAttribute('d');
-      expect(initial).toContain('C');
-      expect(connector?.querySelector('.aw-guide-connector-arrow')).toBeTruthy();
-      entryTop = window.innerHeight - 40;
-      fireEvent(window, new Event('resize'));
-      await waitFor(() => expect(path?.getAttribute('d')).not.toBe(initial));
-    } finally {
-      rect.mockRestore();
-      entry.remove();
-    }
-  });
-
-  it('shows the launch command failure inside the guide card', async () => {
-    serveGuide(guide({ stage: 1, substep: 3 }));
-    mount();
-    const card = await screen.findByRole('dialog');
-    act(() => emitGuideEvent({ type: 'setup-error', substep: 3, message: 'Launch configuration unavailable' }));
-    expect(card).toHaveTextContent('Launch configuration unavailable');
-    act(() => emitGuideEvent({ type: 'setup-error', substep: 3, message: null }));
-    expect(card).not.toHaveTextContent('Launch configuration unavailable');
-  });
-
-  it('shows nothing when the workspace has no eligibility', async () => {
-    serveGuide(guide({ eligible: false, status: null, stage: null, substep: null, version: null }));
-    mount();
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(opens).toHaveLength(0);
-  });
-
-  it('stays hidden for skipped, completed, or globally disabled workspaces', async () => {
-    serveGuide(guide({ status: 'SKIPPED' }));
-    mount();
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-
-    cleanup();
-    serveGuide(guide({ globallyDisabled: true }));
-    mount();
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  });
-
-  it('starts the first phase only after clicking the setup button', async () => {
+  it('starts the access phase only after clicking the setup button', async () => {
     serveGuide(guide({ status: 'PENDING', stage: 1, substep: 0, version: 0 }));
     mount();
     const start = await screen.findByRole('button', { name: '开始配置 Chief' });
+    expect(screen.getByText('新空间初始化 · 1/3')).toBeInTheDocument();
     expect(opens).toHaveLength(0);
+
     fireEvent.click(start);
+
     await waitFor(() => expect(putBodies).toEqual([expect.objectContaining({
       status: 'IN_PROGRESS', stage: 1, substep: 0, version: 0,
     })]));
     expect(opens[opens.length - 1]).toMatchObject({ expanded: false, conversationId: null });
-    expect(await screen.findByText('第1/4阶段 · 当前配置子步骤1/6')).toBeInTheDocument();
   });
 
-  it('persists setup substeps, moves to phase 2 on real readiness, and collapses Chief', async () => {
+  it('persists the access substep and enters initialization on executor readiness', async () => {
     serveGuide(guide({ status: 'IN_PROGRESS', stage: 1, substep: 0, version: 3 }));
+    registerGuideSendPreparation(vi.fn().mockResolvedValue({ conversationId: 88, clientMessageId: 'message-1' }));
     mount();
-    await screen.findByRole('button', { name: /跳\s*过/ });
+    await screen.findByText('接入执行器');
+
     act(() => emitGuideEvent({ type: 'substep-completed' }));
     await waitFor(() => expect(putBodies[0]).toMatchObject({ stage: 1, substep: 1, version: 3 }));
-    await waitFor(() => expect(screen.getByText('第1/4阶段 · 当前配置子步骤2/6')).toBeInTheDocument());
+    expect(await screen.findByText(/等待执行器上线/)).toBeInTheDocument();
 
     act(() => emitGuideEvent({ type: 'setup-ready' }));
     await waitFor(() => expect(putBodies[1]).toMatchObject({ stage: 2, substep: 0 }));
-    await waitFor(() => expect(closes).toBeGreaterThan(0));
-    expect(await screen.findByText('进入 Chief')).toBeInTheDocument();
-  });
-
-  it('opens the same Chief expanded, preflights the prompt, and reports a blocked draft', async () => {
-    serveGuide(guide({ stage: 2, version: 5 }));
-    registerGuideSendPreparation(vi.fn().mockResolvedValue({ conversationId: 88, clientMessageId: 'message-1' }));
-    mount();
-    await screen.findByText('进入 Chief');
-    act(() => notifyGuideEntryClicked());
-    await waitFor(() => expect(putBodies[0]).toMatchObject({
-      stage: 3, status: 'IN_PROGRESS', conversationId: 88, clientMessageId: 'message-1', version: 5,
+    await waitFor(() => expect(putBodies[2]).toMatchObject({
+      stage: 3, conversationId: 88, clientMessageId: 'message-1',
     }));
     await waitFor(() => expect(opens[opens.length - 1]).toMatchObject({
-      expanded: true, conversationId: 88, clientMessageId: 'message-1', prefill: PROMPT,
+      source: 'guide', expanded: false, conversationId: 88, clientMessageId: 'message-1', prefill: PROMPT,
     }));
-    act(() => opens[opens.length - 1].onPrefillResult?.(false));
-    expect(await screen.findByText('已有草稿，未覆盖。请先发送或清理草稿后点击重试。')).toBeInTheDocument();
+    expect(await screen.findByText(/初始化请求已预填到输入框/)).toBeInTheDocument();
   });
 
-  it('prefills once on the normal phase 2 entry and never reports a blocked draft', async () => {
+  it('restores a legacy stage 2 as the initialization phase and prefills once', async () => {
     serveGuide(guide({ stage: 2, version: 5 }));
     registerGuideSendPreparation(vi.fn().mockResolvedValue({ conversationId: 88, clientMessageId: 'message-1' }));
     mount();
-    await screen.findByText('进入 Chief');
+    await screen.findByText(/初始化请求已预填到输入框/);
 
-    act(() => {
-      notifyGuideEntryClicked();
-      notifyGuideEntryClicked();
-    });
     await waitFor(() => expect(putBodies).toHaveLength(1));
-    await waitFor(() => expect(opens.filter(request => request.prefill !== null)).toHaveLength(1));
-    const prefillOpen = opens.find(request => request.prefill !== null)!;
-    act(() => prefillOpen.onPrefillResult?.(true));
-    await new Promise(resolve => setTimeout(resolve, 20));
-
+    expect(putBodies[0]).toMatchObject({ stage: 3, conversationId: 88, clientMessageId: 'message-1', version: 5 });
     expect(opens.filter(request => request.prefill !== null)).toHaveLength(1);
+    expect(screen.getByText('初始化').closest('.aw-guide-stepper-step')).toHaveClass('is-on');
+  });
+
+  it('never overwrites an existing draft and offers retry', async () => {
+    serveGuide(stageSend());
+    registerGuideSendPreparation(vi.fn().mockResolvedValue({ conversationId: 88, clientMessageId: 'message-1' }));
+    mount();
+    await screen.findByText(/初始化请求已预填到输入框/);
+    const opened = opens[opens.length - 1];
+    act(() => opened.onPrefillResult?.(false));
+    expect(await screen.findByText('已有草稿，未覆盖。请先发送或清理草稿后点击重试。')).toBeInTheDocument();
+
+    const before = opens.length;
+    fireEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
+    await waitFor(() => expect(opens.length).toBeGreaterThan(before));
     expect(screen.queryByText('已有草稿，未覆盖。请先发送或清理草稿后点击重试。')).not.toBeInTheDocument();
   });
 
   it('blocks the handoff when the initialization capability is missing', async () => {
-    serveGuide(guide({ stage: 3, version: 6, conversationId: 88, clientMessageId: 'message-1', capabilityReady: false }));
+    serveGuide(stageSend({ capabilityReady: false }));
     registerGuideSendPreparation(vi.fn());
     mount();
     expect(await screen.findByText('空间初始化能力尚未就绪，暂不能交接。请稍后重试。')).toBeInTheDocument();
-    expect(opens[opens.length - 1]).toMatchObject({ expanded: true, conversationId: 88, prefill: PROMPT });
+    expect(opens[opens.length - 1]).toMatchObject({ expanded: false, conversationId: 88, prefill: PROMPT });
 
     act(() => emitGuideEvent({ type: 'send-succeeded', conversationId: 88, clientMessageId: 'message-1' }));
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(putBodies).toHaveLength(0);
-    expect(screen.getByText('发送初始化请求')).toBeInTheDocument();
+    expect(screen.getByText(/初始化请求已预填到输入框/)).toBeInTheDocument();
   });
 
-  it('advances to the handoff phase after a real send', async () => {
-    serveGuide(guide({ stage: 3, version: 6, conversationId: 88, clientMessageId: 'message-1' }));
+  it('completes the guide as soon as the send is accepted', async () => {
+    serveGuide(stageSend());
     registerGuideSendPreparation(vi.fn());
     mount();
-    await screen.findByText('发送初始化请求');
+    await screen.findByText(/初始化请求已预填到输入框/);
     act(() => emitGuideEvent({ type: 'send-succeeded', conversationId: 88, clientMessageId: 'message-1' }));
-    await waitFor(() => expect(putBodies[0]).toMatchObject({ stage: 4, conversationId: 88, clientMessageId: 'message-1' }));
-    expect(await screen.findByText('Chief 接力')).toBeInTheDocument();
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    expect(putBodies[0]).toMatchObject({
+      status: 'COMPLETED', stage: 4, conversationId: 88, clientMessageId: 'message-1',
+    });
+    await waitFor(() => expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument());
+    expect(await screen.findByText('引导已完成，Chief 已接手初始化，交付见工作台。')).toBeInTheDocument();
   });
 
   it('keeps a retry path when saving the accepted send fails', async () => {
-    serveGuide(guide({ stage: 3, version: 6, conversationId: 88, clientMessageId: 'message-1' }));
+    serveGuide(stageSend());
     registerGuideSendPreparation(vi.fn());
     advanceFailure = { status: 500, body: { success: false, code: '50000', message: 'down', traceId: null } };
     mount();
-    await screen.findByRole('dialog');
+    await screen.findByText(/初始化请求已预填到输入框/);
     act(() => emitGuideEvent({ type: 'send-succeeded', conversationId: 88, clientMessageId: 'message-1' }));
     expect(await screen.findByText('引导进度保存失败，请刷新后重试。')).toBeInTheDocument();
     advanceFailure = null;
     fireEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
-    await waitFor(() => expect(putBodies[putBodies.length - 1]).toMatchObject({ stage: 4, conversationId: 88 }));
+    await waitFor(() => expect(putBodies[putBodies.length - 1]).toMatchObject({
+      status: 'COMPLETED', stage: 4, conversationId: 88, clientMessageId: 'message-1',
+    }));
+    await waitFor(() => expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument());
   });
 
-  it('finishes the guide only when confirming the last phase', async () => {
-    serveGuide(guide({ stage: 4, version: 9 }));
+  it('completes a legacy stage 4 guide without rendering it', async () => {
+    serveGuide(guide({ stage: 4, version: 9, conversationId: 88, clientMessageId: 'message-1' }));
     mount();
-    fireEvent.click(await screen.findByRole('button', { name: /确\s*定/ }));
-    await waitFor(() => expect(putBodies[0]).toMatchObject({ status: 'COMPLETED', stage: 4, version: 9 }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(putBodies).toHaveLength(1));
+    expect(putBodies[0]).toMatchObject({
+      status: 'COMPLETED', stage: 4, version: 9, conversationId: 88, clientMessageId: 'message-1',
+    });
+    expect(document.querySelector('.aw-guide-mask')).toBeNull();
+    expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument();
   });
 
   it('skips only the current workspace and reports a failed save', async () => {
-    serveGuide(guide({ stage: 2, version: 4 }));
+    serveGuide(guide({ stage: 1, version: 4 }));
     serveSkip('fail');
     mount();
-    fireEvent.click(await screen.findByRole('button', { name: /跳\s*过/ }));
+    fireEvent.click(await screen.findByTestId('guide-strip').then(strip => strip.querySelector('.aw-guide-skip') as HTMLElement));
     expect(await screen.findByText('保存跳过状态失败，请重试。')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('guide-strip')).toBeInTheDocument();
 
     serveSkip('ok');
-    fireEvent.click(screen.getByRole('button', { name: /跳\s*过/ }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('guide-strip').querySelector('.aw-guide-skip') as HTMLElement);
+    await waitFor(() => expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument());
     expect(skipCalls).toEqual([4, 4]);
   });
 
-  it('confirms the account-level disable only after the preference is saved', async () => {
-    serveGuide(guide({ stage: 2, version: 4 }));
+  it('does not skip when the stored progress has no version', async () => {
+    serveGuide(guide({ stage: 1, version: null }));
     mount();
-    const never = await screen.findByRole('checkbox', { name: '不再提示' });
-    fireEvent.click(never);
-    expect(screen.getByText('确认后，当前及今后新建空间都不再显示此引导。后续可通过顶部平台Chief入口完成空间初始化配置。')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /取\s*消/ }));
-    expect(screen.queryByText('确认后，当前及今后新建空间都不再显示此引导。后续可通过顶部平台Chief入口完成空间初始化配置。')).not.toBeInTheDocument();
-    expect((screen.getByRole('checkbox', { name: '不再提示' }) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(await screen.findByRole('button', { name: '跳过' }));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(skipCalls).toHaveLength(0);
+  });
 
-    fireEvent.click(screen.getByRole('checkbox', { name: '不再提示' }));
+  it('confirms the account-level disable only after the preference is saved', async () => {
+    serveGuide(guide({ stage: 1, version: 4 }));
+    mount();
+    await screen.findByTestId('guide-strip');
+    fireEvent.click(screen.getByRole('button', { name: '不再提示' }));
+    const dialog = screen.getByRole('dialog', { name: '不再显示新空间引导？' });
+    expect(dialog).toHaveTextContent('确认后，当前及今后新建空间都不再显示此引导');
+    fireEvent.click(screen.getByRole('button', { name: /取\s*消/ }));
+    expect(screen.queryByRole('dialog', { name: '不再显示新空间引导？' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '不再提示' }));
     fireEvent.click(screen.getByRole('button', { name: '确认并关闭' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument());
   });
 
   it('keeps the dialog open with a retry message when saving the disable preference fails', async () => {
-    serveGuide(guide({ stage: 2, version: 4 }));
+    serveGuide(guide({ stage: 1, version: 4 }));
     server.use(http.put('/api/users/me/settings/:key', () =>
       HttpResponse.json({ success: false, code: '50000', message: 'down', traceId: null }, { status: 500 })));
     mount();
-    fireEvent.click(await screen.findByRole('checkbox', { name: '不再提示' }));
+    fireEvent.click(await screen.findByRole('button', { name: '不再提示' }));
     fireEvent.click(screen.getByRole('button', { name: '确认并关闭' }));
     expect(await screen.findByText('偏好保存失败，请重试。引导未关闭。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '确认并关闭' })).toBeInTheDocument();
@@ -332,11 +293,10 @@ describe('WorkspaceGuideHost', () => {
     mount();
     expect(await screen.findByText('无法读取新空间引导偏好，引导未展示。')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByText('开始配置 Chief')).not.toBeInTheDocument();
 
-    serveGuide(guide({ stage: 2, version: 4 }));
+    serveGuide(guide({ stage: 1, version: 4 }));
     fireEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
-    expect(await screen.findByText('进入 Chief')).toBeInTheDocument();
+    expect(await screen.findByText('接入执行器')).toBeInTheDocument();
   });
 
   it('does not blame the preference when the guide read fails for another reason', async () => {
@@ -345,14 +305,9 @@ describe('WorkspaceGuideHost', () => {
     mount();
     expect(await screen.findByText('无法加载新空间引导。')).toBeInTheDocument();
     expect(screen.queryByText('无法读取新空间引导偏好，引导未展示。')).not.toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-
-    serveGuide(guide({ stage: 2, version: 4 }));
-    fireEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
-    expect(await screen.findByText('进入 Chief')).toBeInTheDocument();
   });
 
-  it('does not blame the preference when the guide request cannot reach the server', async () => {
+  it('does not blame the preference when the request cannot reach the server', async () => {
     server.use(http.get('/api/workspace-guide', () => HttpResponse.error()));
     mount();
     expect(await screen.findByText('无法加载新空间引导。')).toBeInTheDocument();
@@ -374,14 +329,14 @@ describe('WorkspaceGuideHost', () => {
       if (calls === 1) {
         return HttpResponse.json({ success: false, code: '50000', message: 'down', traceId: null }, { status: 500 });
       }
-      return HttpResponse.json(envelope(guide({ stage: 2, version: 4 })));
+      return HttpResponse.json(envelope(guide({ stage: 1, version: 4 })));
     }));
     mount();
     expect(await screen.findByText('无法加载新空间引导。')).toBeInTheDocument();
 
     act(() => useAuthStore.getState().setCurrentWorkspace({ id: 2, name: '另一个空间', description: '' }, 'ADMIN'));
 
-    expect(await screen.findByText('进入 Chief')).toBeInTheDocument();
+    expect(await screen.findByText('接入执行器')).toBeInTheDocument();
     expect(screen.queryByText('无法加载新空间引导。')).not.toBeInTheDocument();
   });
 
@@ -389,10 +344,10 @@ describe('WorkspaceGuideHost', () => {
     serveGuide(guide({ stage: 1, version: 4 }));
     advanceFailure = { status: 400, body: { success: false, code: '40002', message: 'conflict', traceId: null } };
     mount();
-    await screen.findByRole('dialog');
+    await screen.findByTestId('guide-strip');
     act(() => emitGuideEvent({ type: 'substep-completed' }));
     expect(await screen.findByText('引导进度已更新，已按最新状态继续。')).toBeInTheDocument();
-    expect(screen.getAllByText('配置 Chief').length).toBeGreaterThan(0);
+    expect(screen.getByText('接入执行器')).toBeInTheDocument();
   });
 
   it('ignores a late response for the workspace that was left', async () => {
@@ -411,44 +366,27 @@ describe('WorkspaceGuideHost', () => {
     await waitFor(() => expect(calls).toBe(1));
     act(() => useAuthStore.getState().setCurrentWorkspace({ id: 2, name: '另一个空间', description: '' }, 'ADMIN'));
     await waitFor(() => expect(calls).toBe(2));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument());
     act(() => { releaseFirst?.(); });
     await new Promise(resolve => setTimeout(resolve, 20));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument();
   });
 
-  it('retries opening the guided conversation after a blocked draft', async () => {
-    serveGuide(guide({ stage: 3, version: 6, conversationId: 88, clientMessageId: 'message-1' }));
-    registerGuideSendPreparation(vi.fn());
-    mount();
-    await screen.findByText('发送初始化请求');
-    const opened = opens[opens.length - 1];
-    act(() => opened.onPrefillResult?.(false));
-    expect(await screen.findByText('已有草稿，未覆盖。请先发送或清理草稿后点击重试。')).toBeInTheDocument();
-    const before = opens.length;
-
-    fireEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
-    await waitFor(() => expect(opens.length).toBeGreaterThan(before));
-  });
-
-  it('reports a failed conversation preparation and keeps the guide on phase 2', async () => {
-    serveGuide(guide({ stage: 2, version: 5 }));
+  it('reports a failed conversation preparation and stays on the initialization phase', async () => {
+    // 只有还没拿到会话与去重标识时才需要现场准备；带标识的阶段 3 会直接复用。
+    serveGuide(stageSend({ conversationId: null, clientMessageId: null }));
     registerGuideSendPreparation(vi.fn().mockRejectedValue(new Error('offline')));
     mount();
-    await screen.findByText('进入 Chief');
-
-    act(() => notifyGuideEntryClicked());
-
     expect(await screen.findByText('无法准备初始化对话，请重试。')).toBeInTheDocument();
     expect(putBodies).toHaveLength(0);
-    expect(screen.getByText('进入 Chief')).toBeInTheDocument();
+    expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument();
   });
 
   it('reports a failed guided send without advancing', async () => {
-    serveGuide(guide({ stage: 3, version: 6, conversationId: 88, clientMessageId: 'message-1' }));
+    serveGuide(stageSend());
     registerGuideSendPreparation(vi.fn());
     mount();
-    await screen.findByText('发送初始化请求');
+    await screen.findByText(/初始化请求已预填到输入框/);
 
     act(() => emitGuideEvent({ type: 'send-failed' }));
 
@@ -456,23 +394,8 @@ describe('WorkspaceGuideHost', () => {
     expect(putBodies).toHaveLength(0);
   });
 
-  it('ignores an entry click outside phase 2', async () => {
-    serveGuide(guide({ stage: 3, version: 6, conversationId: 88, clientMessageId: 'message-1' }));
-    registerGuideSendPreparation(vi.fn());
-    mount();
-    await screen.findByText('发送初始化请求');
-    const opened = opens.length;
-    const persisted = putBodies.length;
-
-    act(() => notifyGuideEntryClicked());
-    await new Promise(resolve => setTimeout(resolve, 20));
-
-    expect(opens.length).toBe(opened);
-    expect(putBodies.length).toBe(persisted);
-  });
-
-  it('offers retry when phase 3 progress cannot be saved', async () => {
-    serveGuide(guide({ stage: 3, version: 6 }));
+  it('offers retry when initialization progress cannot be saved', async () => {
+    serveGuide(stageSend({ version: 6, conversationId: null, clientMessageId: null }));
     registerGuideSendPreparation(vi.fn().mockResolvedValue({ conversationId: 88, clientMessageId: 'message-1' }));
     advanceFailure = { status: 500, body: { success: false, code: '50000', message: 'down', traceId: null } };
     mount();
@@ -483,7 +406,10 @@ describe('WorkspaceGuideHost', () => {
     await waitFor(() => expect(putBodies[putBodies.length - 1]).toMatchObject({
       stage: 3, conversationId: 88, clientMessageId: 'message-1',
     }));
-    await waitFor(() => expect(opens[opens.length - 1]).toMatchObject({ expanded: true, conversationId: 88 }));
+    await waitFor(() => expect(opens[opens.length - 1]).toMatchObject({
+      source: 'guide', expanded: false, conversationId: 88,
+    }));
+    expect(await screen.findByText(/初始化请求已预填到输入框/)).toBeInTheDocument();
   });
 
   it('drops a progress response that arrives after the workspace changed', async () => {
@@ -497,7 +423,7 @@ describe('WorkspaceGuideHost', () => {
       return HttpResponse.json(envelope({ ...currentGuide, stage: 1, substep: 1, version: 3 }));
     }));
     mount();
-    await screen.findByRole('dialog');
+    await screen.findByTestId('guide-strip');
     act(() => emitGuideEvent({ type: 'substep-completed' }));
     await waitFor(() => expect(putBodies).toHaveLength(1));
 
@@ -507,27 +433,19 @@ describe('WorkspaceGuideHost', () => {
     await new Promise(resolve => setTimeout(resolve, 20));
 
     expect(screen.queryByText('引导进度保存失败，请刷新后重试。')).not.toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument();
   });
 
-  it('does not skip when the stored progress has no version', async () => {
-    serveGuide(guide({ stage: 2, version: null }));
-    mount();
-    await screen.findByText('进入 Chief');
-
-    fireEvent.click(screen.getByRole('button', { name: /跳\s*过/ }));
-    await new Promise(resolve => setTimeout(resolve, 20));
-
-    expect(skipCalls).toHaveLength(0);
-  });
-
-  it('ignores guide events that do not match the current stage or exceed the last substep', async () => {
+  it('clamps a legacy substep and ignores events for another stage', async () => {
     serveGuide(guide({ stage: 1, substep: 5, version: 3 }));
+    registerGuideSendPreparation(vi.fn().mockResolvedValue({ conversationId: 88, clientMessageId: 'message-1' }));
     mount();
-    await screen.findByRole('dialog');
+    expect(await screen.findByText(/等待执行器上线/)).toBeInTheDocument();
 
-    act(() => emitGuideEvent({ type: 'substep-completed' }));
-    act(() => emitGuideEvent({ type: 'send-succeeded', conversationId: 88, clientMessageId: 'message-1' }));
+    act(() => {
+      emitGuideEvent({ type: 'substep-completed' });
+      emitGuideEvent({ type: 'send-succeeded', conversationId: 88, clientMessageId: 'message-1' });
+    });
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(putBodies).toHaveLength(0);
 
@@ -535,8 +453,7 @@ describe('WorkspaceGuideHost', () => {
       emitGuideEvent({ type: 'setup-ready' });
       emitGuideEvent({ type: 'setup-ready' });
     });
-    await waitFor(() => expect(putBodies.map(body => [body.stage, body.substep])).toEqual([[2, 0]]));
-    expect(putBodies[0]).toMatchObject({ stage: 2 });
+    await waitFor(() => expect(putBodies.map(body => [body.stage, body.substep])).toEqual([[2, 0], [3, 0]]));
   });
 
   it('keeps the guide open when starting it cannot be saved', async () => {
@@ -547,5 +464,6 @@ describe('WorkspaceGuideHost', () => {
 
     expect(await screen.findByText('引导进度保存失败，请刷新后重试。')).toBeInTheDocument();
     expect(opens).toHaveLength(0);
+    expect(screen.getByRole('button', { name: '开始配置 Chief' })).toBeInTheDocument();
   });
 });

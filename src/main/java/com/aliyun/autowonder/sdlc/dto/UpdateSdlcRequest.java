@@ -9,4 +9,5 @@ public class UpdateSdlcRequest {
     private String name;
     private String description;
     private String workType;
+    private Boolean stageTimingEnabled;
 }

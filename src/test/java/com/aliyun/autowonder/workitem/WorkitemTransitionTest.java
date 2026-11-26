@@ -1,6 +1,8 @@
 package com.aliyun.autowonder.workitem;
 
+import com.alibaba.fastjson.JSON;
 import com.aliyun.autowonder.common.error.BizException;
+import com.aliyun.autowonder.common.error.KeyedIllegalArgumentException;
 import com.aliyun.autowonder.statemachine.StatusNodeDO;
 import com.aliyun.autowonder.statemachine.StatusNodeDao;
 import com.aliyun.autowonder.statemachine.StatusTemplateDao;
@@ -9,6 +11,10 @@ import com.aliyun.autowonder.statemachine.StatusTransitionDao;
 import com.aliyun.autowonder.workitem.dto.WorkitemVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 
@@ -99,7 +105,114 @@ class WorkitemTransitionTest {
                         && "verifying".equals(e.getToVal())
                         && e.getDetailJson() != null
                         && e.getDetailJson().contains("\"source\":\"HUMAN\"")
+                        && !JSON.parseObject(e.getDetailJson()).containsKey("reason")
                         && !e.getDetailJson().contains("outOfTemplate")));
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "  ", "  人工验收通过 \"approved\"\n路径 C:\\work  "})
+    void checkedTransitionNormalizesOptionalReasonInSingleStatusEvent(String reason) {
+        when(workitemDao.findById(5L)).thenReturn(workitem(5L, 10L, 20L, 1));
+        when(nodeDao.findById(20L)).thenReturn(node(20L, "developing"));
+        when(nodeDao.findById(21L)).thenReturn(node(21L, "released"));
+        when(transitionDao.findByTemplateFromTo(10L, 20L, 21L)).thenReturn(new StatusTransitionDO());
+        when(workitemDao.updateStatus(5L, 100L, 21L, 1, 9L)).thenReturn(1);
+        var previousLocale = org.springframework.context.i18n.LocaleContextHolder.getLocaleContext();
+        try {
+            org.springframework.context.i18n.LocaleContextHolder.setLocale(java.util.Locale.US);
+            service.transition(5L, 21L, 100L, 9L, 20L, 1, reason);
+        } finally {
+            org.springframework.context.i18n.LocaleContextHolder.setLocaleContext(previousLocale);
+        }
+
+        var captured = ArgumentCaptor.forClass(WorkitemEventDO.class);
+        verify(eventDao).insert(captured.capture());
+        WorkitemEventDO event = captured.getValue();
+        assertEquals(100L, event.getTenantId());
+        assertEquals(5L, event.getWorkitemId());
+        assertEquals("STATUS_CHANGE", event.getEventType());
+        assertEquals("developing", event.getFromVal());
+        assertEquals("released", event.getToVal());
+        assertEquals("HUMAN", event.getActorType());
+        assertEquals(9L, event.getActorRef());
+        var detail = JSON.parseObject(event.getDetailJson());
+        String expected = reason == null || reason.trim().isEmpty() ? null : reason.trim();
+        assertEquals("HUMAN", detail.getString("source"));
+        assertEquals(expected, detail.getString("reason"));
+        assertEquals(expected != null, detail.containsKey("reason"));
+        assertFalse(detail.containsKey("outOfTemplate"));
+        verifyNoMoreInteractions(eventDao);
+        verifyNoInteractions(commentDao);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"staleSource", "staleVersion", "foreignWorkitem", "missingWorkitem",
+            "missingState", "missingTemplate", "missingTarget", "foreignTargetTenant",
+            "foreignTargetTemplate", "updateConflict"})
+    void transitionWithReasonRejectsInvalidSnapshotOrScopeWithoutLeavingEvent(String failure) {
+        WorkitemDO w = workitem(5L, 10L, 20L, 1);
+        StatusNodeDO target = node(21L, "released");
+        String expectedCode = "13004";
+        switch (failure) {
+            case "staleSource" -> { w.setStatusNodeId(22L); expectedCode = "13005"; }
+            case "staleVersion" -> { w.setVersion(2); expectedCode = "13005"; }
+            case "foreignWorkitem" -> { w.setTenantId(200L); expectedCode = "13003"; }
+            case "missingWorkitem" -> { w = null; expectedCode = "13003"; }
+            case "missingState" -> w.setStatusNodeId(null);
+            case "missingTemplate" -> w.setTemplateId(null);
+            case "missingTarget" -> target = null;
+            case "foreignTargetTenant" -> target.setTenantId(200L);
+            case "foreignTargetTemplate" -> target.setTemplateId(999L);
+            case "updateConflict" -> expectedCode = "13005";
+            default -> fail("Unknown test case: " + failure);
+        }
+        when(workitemDao.findById(5L)).thenReturn(w);
+        when(nodeDao.findById(21L)).thenReturn(target);
+        when(transitionDao.findByTemplateFromTo(10L, 20L, 21L)).thenReturn(new StatusTransitionDO());
+        Long expectedFromNodeId = "missingState".equals(failure) ? null : 20L;
+
+        BizException ex = assertThrows(BizException.class,
+                () -> service.transition(5L, 21L, 100L, 9L, expectedFromNodeId, 1, "拒绝时不能留下备注"));
+        assertEquals(expectedCode, ex.getCode());
+        verifyNoInteractions(eventDao, commentDao);
+        if ("updateConflict".equals(failure)) {
+            verify(workitemDao).updateStatus(5L, 100L, 21L, 1, 9L);
+        } else {
+            verify(workitemDao, never()).updateStatus(anyLong(), anyLong(), anyLong(), anyInt(), any());
+        }
+    }
+
+    @Test
+    void transitionWithReasonOutsideRecommendationsKeepsWarningAndRawAudit() {
+        when(workitemDao.findById(5L)).thenReturn(workitem(5L, 10L, 20L, 1));
+        when(nodeDao.findById(20L)).thenReturn(node(20L, "new"));
+        when(nodeDao.findById(99L)).thenReturn(node(99L, "released"));
+        when(workitemDao.updateStatus(5L, 100L, 99L, 1, 9L)).thenReturn(1);
+        String reason = "  选择同模板内的非推荐节点  ";
+
+        WorkitemVO vo = service.transition(5L, 99L, 100L, 9L, 20L, 1, reason);
+
+        assertEquals("OUT_OF_TEMPLATE", vo.getTransitionWarningCode());
+        var captured = ArgumentCaptor.forClass(WorkitemEventDO.class);
+        verify(eventDao).insert(captured.capture());
+        var detail = JSON.parseObject(captured.getValue().getDetailJson());
+        assertEquals("HUMAN", detail.getString("source"));
+        assertEquals(reason.trim(), detail.getString("reason"));
+        assertTrue(detail.getBooleanValue("outOfTemplate"));
+        verifyNoInteractions(commentDao);
+    }
+
+    @Test
+    void transitionRejectsOverlongReasonBeforeAnyWrite() {
+        when(workitemDao.findById(5L)).thenReturn(workitem(5L, 10L, 20L, 1));
+
+        var ex = assertThrows(KeyedIllegalArgumentException.class,
+                () -> service.transition(5L, 21L, 100L, 9L, 20L, 1, "x".repeat(501)));
+
+        assertEquals("workitem.transition.reason_too_long", ex.getMessageKey());
+        verifyNoInteractions(eventDao);
+        verify(workitemDao, never()).updateStatus(anyLong(), anyLong(), anyLong(), anyInt(), anyLong());
     }
 
     @Test
@@ -207,7 +320,9 @@ class WorkitemTransitionTest {
         when(workitemDao.updateStatus(5L, 100L, 21L, 1, 9L)).thenReturn(1);
         service.transition(5L, 21L, 100L, 9L, 20L, 1);
         verify(workitemDao).updateStatus(5L, 100L, 21L, 1, 9L);
-        verify(eventDao).insert(any(WorkitemEventDO.class));
+        verify(eventDao).insert(argThat((WorkitemEventDO e) ->
+                "HUMAN".equals(JSON.parseObject(e.getDetailJson()).getString("source"))
+                        && !JSON.parseObject(e.getDetailJson()).containsKey("reason")));
     }
 
     @Test

@@ -18,9 +18,9 @@ describe('formatElapsed', () => {
 describe('durationText', () => {
   const now = Date.parse('2026-11-12T12:00:00.000Z');
 
-  it('shows not started when no reliable start exists', () => {
+  it('shows a dash when no reliable start exists', () => {
     expect(durationText({ roundStartedAt: null, roundEndedAt: null, statusCategory: 'IN_PROGRESS' }, now, t))
-      .toBe('duration.none / duration.notStarted');
+      .toBe('duration.none');
   });
 
   it('keeps counting for a running agent round', () => {
@@ -39,16 +39,16 @@ describe('durationText', () => {
     }, now, t)).toBe('duration.hours:2');
   });
 
-  it('shows ended without a number when a terminal item lacks a reliable end', () => {
+  it('shows a dash when a terminal item lacks a reliable end', () => {
     expect(durationText({ roundStartedAt: '2026-11-12T09:00:00.000Z', roundEndedAt: null, statusCategory: 'CANCELED' }, now, t))
-      .toBe('duration.none / duration.ended');
+      .toBe('duration.none');
     expect(durationText({ roundStartedAt: null, roundEndedAt: null, statusCategory: 'DONE' }, now, t))
-      .toBe('duration.none / duration.ended');
+      .toBe('duration.none');
   });
 
   it('ignores unparseable timestamps', () => {
     expect(durationText({ roundStartedAt: 'not-a-date', roundEndedAt: null, statusCategory: 'IN_PROGRESS' }, now, t))
-      .toBe('duration.none / duration.notStarted');
+      .toBe('duration.none');
   });
 
   it('keeps counting to now when the end timestamp is unparseable', () => {

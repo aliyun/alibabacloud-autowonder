@@ -91,7 +91,8 @@ describe('RealtimeCostPanel', () => {
     const items = Array.from(card!.querySelectorAll('.cost-kpi'));
     expect(items).toHaveLength(3);
     expect(items.map((item) => item.querySelector('.cost-kpi-label')?.textContent)).toEqual(['总 Credits', '均/任务', '日均']);
-    expect(items.map((item) => item.querySelector('.cost-kpi-value')?.textContent)).toEqual(['82.61', '12.5', '2.75']);
+    // 数值和单位（credits）分属两个节点，这里只比较数值
+    expect(items.map((item) => item.querySelector('.cost-kpi-value .insight-flash')?.textContent)).toEqual(['82.61', '12.5', '2.75']);
   });
 
   it('drops the duplicate cost title and sparkline from the cost panel card', () => {
@@ -237,7 +238,7 @@ describe('RealtimeCostPanel', () => {
     const chip = screen.getByTestId('cost-composition-chip');
     expect(chip).toHaveTextContent('全部数字员工 · 近30天');
     expect(chip).not.toHaveClass('is-locked');
-    expect(chip.querySelector('.anticon-lock')).toBeNull();
+    expect(chip.querySelector('.aw-stroke-icon')).toBeNull();
   });
 
   it('locks the composition chip when a specific agent is selected while keeping the all-agent data', async () => {
@@ -247,7 +248,7 @@ describe('RealtimeCostPanel', () => {
     const chip = screen.getByTestId('cost-composition-chip');
     expect(chip).toHaveClass('is-locked');
     expect(chip).toHaveTextContent('全部数字员工口径 · 不随上方员工筛选联动');
-    expect(chip.querySelector('.anticon-lock')).not.toBeNull();
+    expect(chip.querySelector('.aw-stroke-icon')).not.toBeNull();
     // 构成条数据仍是全员口径，不随上方员工筛选变化
     expect(compositionRegion().getByRole('list', { name: 'Credits 来源图例' })).toHaveTextContent('工单执行');
 

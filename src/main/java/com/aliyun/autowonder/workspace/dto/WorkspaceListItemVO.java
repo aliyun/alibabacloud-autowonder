@@ -9,6 +9,10 @@ public class WorkspaceListItemVO {
     private Long id;
     private String name;
     private String description;
+    /** Private card details are populated only for members or callers who can manage. */
+    private String background;
+    private Long memberCount;
+    private Long workitemCount;
     private String membershipStatus;
     private String accessLevel;
     private Long pendingRequestId;

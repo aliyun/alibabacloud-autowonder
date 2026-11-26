@@ -1,4 +1,5 @@
-import { EyeOutlined, EyeInvisibleOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons';
+import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
@@ -8,9 +9,9 @@ import {
   Alert,
   Button,
   Collapse,
-  Drawer,
   Form,
   Input,
+  Modal,
   Select,
   Space,
   Typography,
@@ -30,6 +31,7 @@ import {
 import { GroupIdGuide } from '../GroupIdGuide';
 import { ImIdentityConflictAlert } from '@/shared/ui/ImIdentityConflictAlert';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+import '../../Integrations.css';
 
 const { Paragraph, Text } = Typography;
 
@@ -55,7 +57,11 @@ interface Props {
   onExistingBinding?: (binding: DingTalkBinding) => void;
 }
 
-export function DingTalkBindingDrawer({ open, mode, record, onClose, onSaved, onExistingBinding }: Props) {
+/**
+ * 钉钉绑定编辑器：按原型 26b 弹窗稿布局（Modal 560px，表单体 + 底部右对齐操作行）。
+ * 组件沿用历史文件名以保持 i18n legacy baseline 的文件路径记录。
+ */
+export function DingTalkBindingModal({ open, mode, record, onClose, onSaved, onExistingBinding }: Props) {
   const { t } = useTranslation(['integration', 'agent']);
   const [form] = Form.useForm<DrawerFormValues>();
   useLocalizedValidation(form, open);
@@ -177,16 +183,16 @@ export function DingTalkBindingDrawer({ open, mode, record, onClose, onSaved, on
   }));
 
   return (
-    <Drawer closable={{ 'aria-label': t('close') }}
+    <Modal closable={{ 'aria-label': t('close') }}
       title={mode === 'edit' ? t('editBinding') : t('newBinding')}
-      width={520}
+      width={560}
       open={open}
-      onClose={onClose}
-      destroyOnClose
-      extra={
+      onCancel={onClose}
+      destroyOnHidden
+      footer={
         <Space>
           <Button onClick={onClose}>{t('cancel')}</Button>
-          <Button type="primary" aria-label={t('save')} loading={saveMutation.isPending} onClick={handleSubmit}>{t('save')}</Button>
+          <Button type="primary" aria-label={t('save')} loading={saveMutation.isPending} onClick={handleSubmit}>{t('saveDing')}</Button>
         </Space>
       }
     >
@@ -268,7 +274,7 @@ export function DingTalkBindingDrawer({ open, mode, record, onClose, onSaved, on
                   key: 'advanced',
                   label: t('advanced'),
                   children: (
-                    <>
+                    <div className="integration-advanced-grid">
                       <Form.Item label={t('transportMode')} name="transportMode">
                         <Select
                           options={[
@@ -286,7 +292,7 @@ export function DingTalkBindingDrawer({ open, mode, record, onClose, onSaved, on
                       <Form.Item label={t('callbackToken')} name="callbackToken">
                         <Input placeholder={t('generatedPlaceholder')} />
                       </Form.Item>
-                    </>
+                    </div>
                   ),
                 },
               ]}
@@ -309,13 +315,13 @@ export function DingTalkBindingDrawer({ open, mode, record, onClose, onSaved, on
           message={t('dingCallback')}
           description={
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
-              <Paragraph copyable={{ text: callbackUrl, tooltips: [t('copyCallback'), t('copied')], icon: [<CopyOutlined aria-hidden="true" />, <CheckOutlined aria-hidden="true" />] }} style={{ marginBottom: 0 }}>
+              <Paragraph copyable={{ text: callbackUrl, tooltips: [t('copyCallback'), t('copied')], icon: [<AwStrokeIcon name="copy" size={14} />, <AwStrokeIcon name="check" size={14} />] }} style={{ marginBottom: 0 }}>
                 <Text code>{callbackUrl}</Text>
               </Paragraph>
             </Space>
           }
         />
       )}
-    </Drawer>
+    </Modal>
   );
 }

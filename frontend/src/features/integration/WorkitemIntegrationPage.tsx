@@ -3,9 +3,12 @@ import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
 import { useMemo, useState } from 'react';
-import { Alert, Button, Card, Form, Input, InputNumber, Select, Space, Tag, Tooltip, Typography, message } from 'antd';
+import { Alert, Button, Card, Form, Input, InputNumber, Select, Space, Tooltip, Typography, message } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { EyeOutlined, EyeInvisibleOutlined, ApiOutlined, CloudSyncOutlined, InfoCircleOutlined, SaveOutlined, SearchOutlined, SendOutlined } from '@ant-design/icons';
+import { SectionCard } from '@/shared/ui/SectionCard';
+import { StatusTag } from '@/shared/ui/StatusTag';
+import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -140,28 +143,28 @@ function AoneIntegrationPanel() {
 
   const bindingColumns: ColumnsType<AoneBinding> = [
     { title: t('id'), dataIndex: 'id', width: 80 },
-    { title: t('platform'), dataIndex: 'provider', width: 90, render: () => <Tag color="blue">{t('aone')}</Tag> },
+    { title: t('platform'), dataIndex: 'provider', width: 90, render: () => <StatusTag label={t('aone')} colorKey="blue" /> },
     { title: t('managedProjects'), dataIndex: 'externalProjectName', align: 'left', render: (v, r) => v || r.externalProjectId },
     { title: t('projectId'), dataIndex: 'externalProjectId', width: 120 },
     { title: t('clientName'), dataIndex: 'clientKey', width: 150 },
-    { title: t('writebackIdentity'), dataIndex: 'writebackStaffId', width: 180, render: (v) => v || '-' },
+    { title: t('writebackIdentity'), dataIndex: 'writebackStaffId', width: 170, render: (v) => v || '-' },
     {
       title: t('status'),
       dataIndex: 'enabled',
       width: 90,
-      render: (v) => v ? <Tag color="success">{t('enabled')}</Tag> : <Tag>{t('disabled')}</Tag>,
+      render: (v) => v ? <StatusTag label={t('enabled')} colorKey="green" dot /> : <StatusTag label={t('disabled')} colorKey="gray" />,
     },
     {
       title: t('lastSync'),
       dataIndex: 'lastSuccessAt',
-      width: 180,
+      width: 190,
       render: (_, record) => {
         const time = record.lastSuccessAt ? formatDateTime(record.lastSuccessAt, { dateStyle: 'medium', timeStyle: 'medium' }) : '-';
         return <Space direction="vertical" size={2}>
-          <span>{time}</span>
+          <span className="integration-time-cell">{time}</span>
           {record.lastError && (
             <Tooltip title={record.lastError}>
-              <Tag color="error">{t('lastSyncFailed')}</Tag>
+              <StatusTag label={t('lastSyncFailed')} colorKey="red" />
             </Tooltip>
           )}
         </Space>;
@@ -215,15 +218,16 @@ function AoneIntegrationPanel() {
   const selectedBindingId = bindings[0]?.id;
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Card title={<Space size={8}>{t('platformConfig')}<Tooltip trigger={['hover', 'focus']} title={t('firstImportHelp')}>
-          <Button type="text" size="small" aria-label={t('firstImport')} icon={<InfoCircleOutlined aria-hidden="true" />} />
+    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+      <div className="integration-hint">{t('workitemDescription')}</div>
+      <SectionCard className="integration-panel" title={<span className="integration-title">{t('platformConfig')}<Tooltip trigger={['hover', 'focus']} title={t('firstImportHelp')}>
+          <Button type="text" size="small" aria-label={t('firstImport')} icon={<AwStrokeIcon name="info" />} />
         </Tooltip>
-      </Space>} extra={<Space>
-          <Button aria-label={t('testConnection')} icon={<ApiOutlined aria-hidden="true" />} loading={testMutation.isPending} onClick={() =>
+      </span>} extra={<Space>
+          <Button aria-label={t('testConnection')} icon={<AwStrokeIcon name="api" />} loading={testMutation.isPending} onClick={() =>
             runAccessCommand('ADMIN', t('testCommand'), runConnectionTest)
           }>{t('testConnection')}</Button>
-          <Button type="primary" aria-label={t('saveProjects')} icon={<SaveOutlined aria-hidden="true" />} loading={createMutation.isPending} onClick={() =>
+          <Button type="primary" aria-label={t('saveProjects')} icon={<AwStrokeIcon name="check" />} loading={createMutation.isPending} onClick={() =>
             runAccessCommand('ADMIN', t('saveProjects'), () => createMutation.mutate())
           }>{t('saveProjects')}</Button>
         </Space>}>
@@ -260,7 +264,7 @@ function AoneIntegrationPanel() {
                 style={{ padding: 0, width: 16, height: 16 }} />} />
             </Form.Item>
 
-            <Form.Item label={t('regionId')} name="regionId">
+            <Form.Item label={t('regionId')} name="regionId" extra={t('regionIdHelp')}>
               <Input />
             </Form.Item>
             <Form.Item
@@ -271,25 +275,26 @@ function AoneIntegrationPanel() {
               <Input />
             </Form.Item>
             {/* ponytail: upstream step buttons hardcode English aria names; keep keyboard steps until public label props exist. */}
-            <Form.Item label={t('pollSeconds')} name="pollIntervalSeconds">
+            <Form.Item label={t('pollSeconds')} name="pollIntervalSeconds" extra={t('pollSecondsHelp')}>
               <InputNumber controls={false} min={3} max={3600} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item label={t('projectKeyword')} htmlFor="projectQuery">
-              <Space.Compact style={{ width: '100%' }}>
+              <div className="integration-search-row">
                 <Form.Item name="projectQuery" noStyle>
                   <Input placeholder={t('projectQuery')} />
                 </Form.Item>
-                <Button icon={<SearchOutlined aria-hidden="true" />} aria-label={t('searchProjects')} loading={searchMutation.isPending} onClick={() =>
+                <Button icon={<AwStrokeIcon name="search" />} aria-label={t('searchProjects')} loading={searchMutation.isPending} onClick={() =>
                   runAccessCommand('ADMIN', t('searchProjects'), () => searchMutation.mutate())
                 }>{t('search')}</Button>
-              </Space.Compact>
+              </div>
             </Form.Item>
           </div>
           <Form.Item
             label={t('managedProjects')}
             name="selectedProjectIds"
             rules={[{ required: true, message: t('requiredProjects') }]}
-            style={{ marginBottom: 0 }}
+            extra={t('managedProjectsHelp')}
+            style={{ marginTop: 12, marginBottom: 0 }}
           >
             <Select mode="multiple" options={projectOptions} placeholder={t('projectPlaceholder')} />
           </Form.Item>
@@ -302,51 +307,53 @@ function AoneIntegrationPanel() {
             description={testResult.checks?.join(' / ') || null}
           />
         )}
-      </Card>
+        <div className="integration-help integration-test-hint">{t('connectionTestHint')}</div>
+      </SectionCard>
 
-      <Card title={t('manualSync')}>
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <div className="integration-sync-toolbar">
-            <Input
-              value={issueIdsText}
-              aria-label={t('externalWorkitemIds')}
-              placeholder={t('issueIdsHint')}
-              onChange={(event) => setIssueIdsText(event.target.value)}
-            />
-            <Space>
-              <Button
-                aria-label={t('syncIds')}
-                icon={<CloudSyncOutlined aria-hidden="true" />}
-                disabled={!selectedBindingId}
-                loading={syncMutation.isPending}
-                onClick={() => {
-                  runAccessCommand('ADMIN', t('syncCommand'), () => {
-                    const issueIds = issueIdsText
-                      .split(',')
-                      .map((v: string) => v.trim())
-                      .filter(Boolean);
-                    syncMutation.mutate({ bindingId: selectedBindingId, issueIds });
-                  });
-                }}
-              >{t('syncIds')}</Button>
-              <Button aria-label={t('outbox')} icon={<SendOutlined aria-hidden="true" />} loading={dispatchMutation.isPending} onClick={() =>
-                runAccessCommand('ADMIN', t('outboxCommand'), () => dispatchMutation.mutate())
-              }>{t('outbox')}</Button>
-            </Space>
-          </div>
-          {syncResult && (
-            <Alert
-              type="success"
-              message={t('syncResults', { ...syncResult, count: syncResult.commentsImported })}
-              description={<Text>{t('localIds')}{syncResult.workitemIds.join(', ') || '-'}</Text>}
-            />
-          )}
-        </Space>
-      </Card>
+      <SectionCard className="integration-panel" title={t('manualSync')}>
+        <div className="integration-field-label">{t('externalWorkitemIds')}</div>
+        <div className="integration-sync-toolbar">
+          <Input
+            value={issueIdsText}
+            aria-label={t('externalWorkitemIds')}
+            placeholder={t('issueIdsPlaceholder')}
+            onChange={(event) => setIssueIdsText(event.target.value)}
+          />
+          <Space>
+            <Button
+              type="primary"
+              aria-label={t('syncIds')}
+              disabled={!selectedBindingId}
+              loading={syncMutation.isPending}
+              onClick={() => {
+                runAccessCommand('ADMIN', t('syncCommand'), () => {
+                  const issueIds = issueIdsText
+                    .split(',')
+                    .map((v: string) => v.trim())
+                    .filter(Boolean);
+                  syncMutation.mutate({ bindingId: selectedBindingId, issueIds });
+                });
+              }}
+            >{t('syncIds')}</Button>
+            <Button aria-label={t('outbox')} icon={<AwStrokeIcon name="send" />} loading={dispatchMutation.isPending} onClick={() =>
+              runAccessCommand('ADMIN', t('outboxCommand'), () => dispatchMutation.mutate())
+            }>{t('outbox')}</Button>
+          </Space>
+        </div>
+        <div className="integration-help">{t('issueIdsHelp')}</div>
+        {syncResult && (
+          <Alert
+            style={{ marginTop: 12 }}
+            type="success"
+            message={t('syncResults', { ...syncResult, count: syncResult.commentsImported })}
+            description={<Text>{t('localIds')}{syncResult.workitemIds.join(', ') || '-'}</Text>}
+          />
+        )}
+      </SectionCard>
 
-      <Card title={t('existingProjects')}>
+      <SectionCard className="integration-panel" title={t('existingProjects')}>
         <Table scroll={{ x: 1100 }} rowKey="id" columns={bindingColumns} dataSource={bindings} loading={bindingsLoading} pagination={false} />
-      </Card>
+      </SectionCard>
     </Space>
   );
 }

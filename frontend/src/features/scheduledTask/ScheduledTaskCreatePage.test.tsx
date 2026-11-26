@@ -15,6 +15,12 @@ import { useAuthStore } from '@/shared/auth/store';
 import { ApiError } from '@/shared/types/common';
 import { backendErrorMessage, initialStatusForCreate, ScheduledTaskCreatePage } from './ScheduledTaskCreatePage';
 
+function fireTimeText(instant: string, locale: string) {
+  const date = new Date(instant);
+  const part = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale, options).format(date);
+  return `${part({ year: 'numeric', month: '2-digit', day: '2-digit' })} ${part({ weekday: 'short' })} ${part({ hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })}`;
+}
+
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -127,9 +133,8 @@ describe('ScheduledTaskCreatePage', () => {
       }),
     );
     renderPage();
-    // ScheduleEditor 把服务端下发的未来执行时间按本地时区展示（zh-CN 格式化），不再直接渲染 ISO 串
-    expect(await screen.findByText(new Date('2026-08-12T18:00:00Z').toLocaleString('zh-CN'))).toBeInTheDocument();
-    expect(screen.getByText(new Date('2026-08-13T18:00:00Z').toLocaleString('zh-CN'))).toBeInTheDocument();
+    expect(await screen.findByText(fireTimeText('2026-08-12T18:00:00Z', 'zh-CN'))).toBeInTheDocument();
+    expect(screen.getByText(fireTimeText('2026-08-13T18:00:00Z', 'zh-CN'))).toBeInTheDocument();
   });
 
   it('surfaces the backend reason when document upload fails', async () => {
@@ -497,12 +502,12 @@ it('updates cached create route errors while preserving drafts, files and select
   expect(screen.getByLabelText('Task name')).toBe(originalInput);
   expect(originalInput).toHaveValue('<b>自定义任务</b>');
   expect(screen.getByLabelText('Task instruction')).toHaveValue('');
-  expect(screen.getByText(new Date('2026-08-12T18:00:00Z').toLocaleString('en-US'))).toBeInTheDocument();
+  expect(screen.getByText(fireTimeText('2026-08-12T18:00:00Z', 'en-US'))).toBeInTheDocument();
   expect(screen.getByText('原文.md')).toBeInTheDocument();
   expect(screen.getAllByText('回归工程师').length).toBeGreaterThan(0);
   expect(screen.queryByText('Select a squad')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Requirement document upload area (click, drag or paste)')).toBeInTheDocument();
-  await user.click(screen.getByText('Run policy and continuous session settings'));
+  await user.click(screen.getByText('Run policy'));
   expect(screen.getByText('Isolated session (recommended)')).toBeInTheDocument();
   await act(() => i18n.changeLanguage('zh-CN'));
 });

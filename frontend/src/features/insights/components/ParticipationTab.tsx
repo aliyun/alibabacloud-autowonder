@@ -1,20 +1,21 @@
 import { Trans, useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
-import { formatDateTime } from '@/shared/i18n/format';
-import { Suspense, type ReactNode } from 'react';
-import { DatePicker, Spin, Empty, Card, Statistic, Tag, Button, Modal, Tooltip, message, Select } from 'antd';
-import { ReloadOutlined, InfoCircleOutlined, ExclamationCircleFilled } from '@ant-design/icons';
+import { formatDateTime, formatNumber } from '@/shared/i18n/format';
+import type { ReactNode } from 'react';
+import { Spin, Empty, Card, Statistic, Button, Modal, Tooltip, message, Select } from 'antd';
+import { ExclamationCircleFilled } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { TimeRangePicker } from '@/shared/ui/TimeRangePicker';
 import { useHumanAgentParticipation, useForceRefreshParticipation } from '../hooks';
-import { lazyWithChunkReload } from '@/shared/lib/chunkLoadRecovery';
 import { formatDuration } from '@/shared/lib/duration';
-const ParticipationChart = lazyWithChunkReload(() => import('./ParticipationChart'));
+import { ParticipationDailyChart, ParticipationDistribution, ParticipationRatioTrend, cumulativeDurations } from './ParticipationPanels';
 import { SlowTailTable } from './SlowTailTable';
+import { StatValue } from './StatValue';
 import { useInsightDateRange, useInsightWorkType, type InsightWorkType } from '../useInsightPreference';
 import { ErrorCodes } from '@/shared/types/common';
 
-const { RangePicker } = DatePicker;
 
 function errorCode(err: unknown): string | undefined {
   return typeof err === 'object' && err !== null && 'code' in err
@@ -44,6 +45,16 @@ export function ParticipationTab() {
   ];
   const forceRefresh = useForceRefreshParticipation();
   const hasSamples = !!data?.sampleSize;
+  const trend = data?.trend ?? [];
+  const cumulative = cumulativeDurations(trend);
+  const agentDurationShare = cumulative.total > 0 ? cumulative.agent / cumulative.total : null;
+  const participationShare = data?.agentWorkitemCount != null && data.sampleSize
+    ? data.agentWorkitemCount / data.sampleSize * 100
+    : null;
+  const meanMedianRatio = data?.average && data.medianTotalSeconds
+    ? data.average.totalDurationSeconds / data.medianTotalSeconds
+    : null;
+  const trendHasSamples = trend.some(row => (row.sampleSize ?? (row.averageTotalSeconds > 0 ? 1 : 0)) > 0);
   const scopeTip = <>
     <p>{t('participation.scopeLifecycle')}</p>
     <p>{t('participation.scopeWeight')}</p>
@@ -83,23 +94,11 @@ export function ParticipationTab() {
     <div className="participation-page">
       {/* Controls stay available during empty, loading and error states. */}
       <div className="participation-controls">
-        <RangePicker
-          aria-label={t('participation.range')}
-          allowClear={false}
-          presets={[7, 30, 90, 180].map(days => {
-            const end = data?.dataThrough ? dayjs(data?.dataThrough) : dayjs().subtract(1, 'day');
-            return { label: t('participation.lastDays', { count: days }), value: [end.subtract(days - 1, 'day'), end] as [Dayjs, Dayjs] };
-          })}
+        <TimeRangePicker
+          ariaLabel={t('participation.range')}
+          end={data?.dataThrough ? dayjs(data?.dataThrough) : dayjs().subtract(1, 'day')}
           value={dateRange}
-          onChange={(dates) => {
-            if (dates && dates[0] && dates[1]) {
-              setDateRange([dates[0], dates[1]]);
-            }
-          }}
-          disabledDate={(current) => {
-            const upperBound = dayjs().endOf('day');
-            return current && (current > upperBound || current < dayjs(data?.dataThrough || dayjs().subtract(1, 'day')).subtract(180, 'day'));
-          }}
+          onChange={setDateRange}
         />
         <Select<InsightWorkType>
           aria-label={t('participation.workTypeFilter')}
@@ -110,7 +109,7 @@ export function ParticipationTab() {
         />
         <Button
           style={{ marginLeft: 'auto' }}
-          icon={<ReloadOutlined aria-hidden="true" />}
+          icon={<AwStrokeIcon name="refresh" />}
           loading={forceRefresh.isPending}
           onClick={handleForceRefresh}
         >
@@ -120,7 +119,7 @@ export function ParticipationTab() {
 
       <div className="participation-scope">
         <span className="participation-scope-summary"><span>{data?.sampleSize != null ? <Trans ns="insights" i18nKey="participation.scopeSummary" count={data.sampleSize} components={{ date: <span>{data.dataThrough || '—'}</span>, samples: <strong>{data.sampleSize}</strong> }} /> : t('participation.scopeUnavailable', { date: data?.dataThrough || '—' })}</span>
-          <Tooltip title={scopeTip}><button type="button" className="participation-help" aria-label={t('participation.scopeAria')}><InfoCircleOutlined aria-hidden="true" /> {t('participation.scopeMethod')}</button></Tooltip>
+          <Tooltip title={scopeTip}><button type="button" className="participation-help" aria-label={t('participation.scopeAria')}><AwStrokeIcon name="info" /> {t('participation.scopeMethod')}</button></Tooltip>
         </span>
         <span>{isFetching ? t('participation.updating') : data?.generatedAt ? t('participation.updatedAt', { time: formatDateTime(data.generatedAt, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) }) : t('participation.offline')}</span>
       </div>
@@ -133,43 +132,60 @@ export function ParticipationTab() {
       <Spin spinning={isFetching}>
       {data.average && (
         <div className="participation-stats">
-          <StatCard label={t('participation.average')} value={hasSamples ? formatDuration(data.average.totalDurationSeconds) : '—'}
+          <StatCard label={t('participation.average')} value={hasSamples ? formatDuration(data.average.totalDurationSeconds) : '—'} splitStat
             detail={hasSamples ? <Trans ns="insights" i18nKey="participation.responsibilityDetail" components={{ human: <span className="is-human">{t('series.human')} {formatDuration(data.average.humanDurationSeconds)}</span>, agent: <span className="is-agent">{t('series.agent')} {formatDuration(data.average.agentDurationSeconds)}</span> }} /> : t('participation.noSamples')} />
-          <StatCard label={t('participation.median')} value={hasSamples && data.medianTotalSeconds != null ? formatDuration(data.medianTotalSeconds) : '—'}
-            detail={t('participation.p90Detail', { duration: data.p90 ? formatDuration(data.p90.totalDurationSeconds) : '—' })}
+          <StatCard label={t('participation.median')} value={hasSamples && data.medianTotalSeconds != null ? formatDuration(data.medianTotalSeconds) : '—'} splitStat
+            detail={meanMedianRatio != null
+              ? t('participation.medianDetail', { p90: data.p90 ? formatDuration(data.p90.totalDurationSeconds) : '—', ratio: meanMedianRatio.toFixed(1) })
+              : t('participation.p90Detail', { duration: data.p90 ? formatDuration(data.p90.totalDurationSeconds) : '—' })}
             tip={t('participation.medianTip')} />
-          <StatCard tone="agent" label={t('participation.agentShare')} value={hasSamples && data.agentWorkitemCount != null ? `${(data.agentWorkitemCount / data.sampleSize * 100).toFixed(1)}%` : '—'}
+          <StatCard tone="agent" label={t('participation.agentShare')} value={participationShare != null ? t('participation.percentValue', { value: participationShare.toFixed(1) }) : '—'}
             detail={t('participation.sampleFraction', { participating: data.agentWorkitemCount ?? '—', count: data.sampleSize })}
             tip={t('participation.agentShareTip')} />
+          <StatCard label={t('participation.agentDurationShare')} value={agentDurationShare != null ? t('participation.percentValue', { value: (agentDurationShare * 100).toFixed(1) }) : '—'}
+            detail={agentDurationShare != null
+              ? <Trans ns="insights" i18nKey="participation.agentDurationDetail"
+                values={{ humanHours: formatNumber(Math.round(cumulative.human / 3600)), agentHours: formatNumber(Math.round(cumulative.agent / 3600)) }}
+                components={{ human: <span className="is-human">{t('participation.percentValue', { value: ((1 - agentDurationShare) * 100).toFixed(1) })}</span> }} />
+              : '—'} />
         </div>
       )}
 
-      <Suspense fallback={<div className="participation-state"><Spin tip={t('participation.loadingCharts')} /></div>}>
-        <div className="participation-chart-grid" key={`${startDate}-${endDate}-${workType}`}>
-          <ParticipationChart kind="distribution" data={data.trend} average={data.average} sampleSize={data.sampleSize} />
-          <ParticipationChart kind="ratio" data={data.trend} average={data.average} sampleSize={data.sampleSize} />
-          <ParticipationChart kind="duration" data={data.trend} average={data.average} sampleSize={data.sampleSize} />
+      {hasSamples && cumulative.total > 0 && participationShare != null && agentDurationShare != null && (
+        <div className="participation-insight">
+          <span className="participation-insight-icon" aria-hidden="true"><AwStrokeIcon name="info" size={14} /></span>
+          <span className="participation-insight-text">
+            <Trans ns="insights" i18nKey="participation.insightBody"
+              values={{ participating: data.agentWorkitemCount ?? '—', sample: data.sampleSize, participationShare: participationShare.toFixed(1), agentShare: (agentDurationShare * 100).toFixed(1), humanShare: ((1 - agentDurationShare) * 100).toFixed(1) }}
+              components={{ strong: <b /> }} />
+            {meanMedianRatio != null && <span className="participation-insight-tail">
+              <Trans ns="insights" i18nKey="participation.insightRatio"
+                values={{ average: data.average ? formatDuration(data.average.totalDurationSeconds) : '—', median: data.medianTotalSeconds != null ? formatDuration(data.medianTotalSeconds) : '—', ratio: meanMedianRatio.toFixed(1) }}
+                components={{ strong: <b /> }} />
+            </span>}
+          </span>
         </div>
-      </Suspense>
+      )}
+
+      {(trendHasSamples || data.average) && <div className="participation-panels">
+        <ParticipationDistribution average={data.average ?? null} />
+        {trendHasSamples && <ParticipationRatioTrend trend={trend} startDate={startDate} endDate={endDate} />}
+        {trendHasSamples && <ParticipationDailyChart trend={trend} startDate={startDate} endDate={endDate} span />}
+      </div>}
       </Spin>
 
-      {/* Slow tail table */}
-      <Card
-        title={<span className="participation-slow-tail-title"><span>{t('participation.slowTail')}</span><Tag color="orange">{t('participation.topTen')}</Tag></span>}
-        styles={{ body: { padding: 0 } }}
-      >
-        <SlowTailTable key={`${startDate}-${endDate}-${workType}`} startDate={startDate} endDate={endDate} workType={workType} />
-      </Card>
+      <SlowTailTable key={`${startDate}-${endDate}-${workType}`} startDate={startDate} endDate={endDate} workType={workType} cumulativeSeconds={cumulative.total} />
       </>}
     </div>
   );
 }
 
-function StatCard({ label, value, tone, detail, tip }: { label: string; value: string; tone?: string; detail?: ReactNode; tip?: ReactNode }) {
+function StatCard({ label, value, tone, detail, tip, splitStat }: { label: string; value: string; tone?: string; detail?: ReactNode; tip?: ReactNode; splitStat?: boolean }) {
   const { t } = useTranslation('insights');
   return (
     <Card className={`participation-stat ${tone ? `is-${tone}` : ''}`}>
-      <Statistic title={<>{label}{tip && <Tooltip title={tip}><button type="button" className="participation-help" aria-label={t('participation.explanationAria', { label })}><InfoCircleOutlined aria-hidden="true" /></button></Tooltip>}</>} value={value} />
+      <Statistic title={<>{label}{tip && <Tooltip title={tip}><button type="button" className="participation-help" aria-label={t('participation.explanationAria', { label })}><AwStrokeIcon name="info" /></button></Tooltip>}</>} value={value}
+        formatter={splitStat ? v => <StatValue value={String(v)} /> : undefined} />
       <div className="participation-stat-detail">{detail}</div>
     </Card>
   );

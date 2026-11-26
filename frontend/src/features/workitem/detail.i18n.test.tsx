@@ -71,8 +71,20 @@ it('updates transition choices and submits unchanged authored status-node identi
   let payload: unknown;
   server.use(http.post('/api/workitems/42/transition', async ({ request }) => { payload = await request.json(); return ok(item); }));
   mount(<WorkitemDetailPage />); await screen.findByRole('heading', { name }); fireEvent.click(screen.getByRole('button', { name: /流转状态/ }));
-  await screen.findByRole('button', { name: `流转到${name}` }); expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument(); await language('en-US'); expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument(); expect(screen.getByText('Recommended transition')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: `Transition to ${name}` })); await waitFor(() => expect(payload).toMatchObject({ toNodeId: 2 }));
+  const target = await screen.findByRole('radio', { name });
+  const reason = screen.getByRole('textbox', { name: '流转备注' });
+  expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
+  await userEvent.click(target);
+  fireEvent.change(reason, { target: { value: '  备注 <strong>Alice</strong>  ' } });
+  expect(payload).toBeUndefined();
+  await language('en-US');
+  expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  expect(screen.getByText('Recommended transition')).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name })).toBeChecked();
+  expect(screen.getByRole('textbox', { name: 'Transition note' })).toBe(reason);
+  expect(reason).toHaveValue('  备注 <strong>Alice</strong>  ');
+  await userEvent.click(screen.getByRole('button', { name: 'Confirm transition' }));
+  await waitFor(() => expect(payload).toEqual({ toNodeId: 2, fromNodeId: 1, expectedVersion: 1, reason: '  备注 <strong>Alice</strong>  ' }));
 });
 it('refreshes displayed assignment validation in place and preserves HUMAN assignment payload and names', async () => {
   let payload: unknown;
@@ -109,7 +121,7 @@ it('uses completion-time language for comment success without changing authored 
   server.use(http.post('/api/workitems/42/comments', async ({ request }) => { payload = await request.json(); started = true; await pending; return ok({ id: 55 }); }));
   const success = vi.spyOn(message, 'success'); mount(<WorkitemDetailPage />);
   const input = await screen.findByPlaceholderText('输入评论，键入 @ 选择成员...'); fireEvent.change(input, { target: { value: name } });
-  fireEvent.click(screen.getByRole('button', { name: /发送/ })); await waitFor(() => expect(started).toBe(true)); await language('en-US'); finish();
+  fireEvent.click(screen.getByRole('button', { name: /^发\s?送$/ })); await waitFor(() => expect(started).toBe(true)); await language('en-US'); finish();
   await waitFor(() => expect(success).toHaveBeenCalledWith('Comment sent.')); expect(payload).toMatchObject({ contentMd: name, targetAgentIds: [] });
 });
 
@@ -155,19 +167,20 @@ it('updates cached mention choices and human/agent tabs while keeping the commen
   const input = screen.getByPlaceholderText('输入评论，键入 @ 选择成员...'); fireEvent.change(input, { target: { value: '@' } });
   await language('en-US');
   expect(within(screen.getByRole('menu')).getByText('Agent')).toBeInTheDocument(); expect(within(screen.getByRole('menu')).getByText('Person')).toBeInTheDocument();
-  expect(screen.getByText('Running')).toBeInTheDocument(); expect(screen.getByText('ID: A8 · Squad member')).toBeInTheDocument();
-  expect(screen.getByText('ID: C9 · 自定义角色 <em>role</em>')).toBeInTheDocument();
-  expect(screen.getByText('自定义 <Alice>')).toBeInTheDocument(); expect(screen.getByText('机器人 <Alice>')).toBeInTheDocument();
+  expect(screen.getByText('Running')).toBeInTheDocument(); expect(screen.getByText('A8 · Squad member')).toBeInTheDocument();
+  expect(screen.getByText('C9 · 自定义角色 <em>role</em>')).toBeInTheDocument();
+  const squad = within(screen.getByRole('tabpanel'));
+  expect(squad.getByText('自定义 <Alice>')).toBeInTheDocument(); expect(squad.getByText('机器人 <Alice>')).toBeInTheDocument();
   expect(input).toHaveValue('@'); expect(screen.getByPlaceholderText('Write a comment; type @ to choose a member…')).toBe(input);
-  await userEvent.click(screen.getByRole('tab', { name: 'Human participants' })); expect(screen.getByLabelText('Human participant avatar')).toBeInTheDocument();
-  expect(screen.getByText('ID: H7 · Human')).toBeInTheDocument();
-  expect(screen.getByText(name)).toBeInTheDocument(); await language('zh-CN'); expect(screen.getByRole('tab', { name: /真人参与者/ })).toHaveAttribute('aria-selected', 'true');
-  expect(screen.getByText('工号: H7 · 真人')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('tab', { name: 'Humans' })); expect(screen.getByLabelText('Human participant avatar')).toBeInTheDocument();
+  expect(screen.getByText('H7 · Human')).toBeInTheDocument();
+  expect(squad.getByText(name)).toBeInTheDocument(); await language('zh-CN'); expect(screen.getByRole('tab', { name: '真人' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByText('H7 · 真人')).toBeInTheDocument();
   expect(input).toHaveValue('@'); expect(screen.getByPlaceholderText('输入评论，键入 @ 选择成员...')).toBe(input);
-  expect(within(screen.getByRole('menu')).getByText('@机器人 <Alice>')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('tab', { name: /数字员工成员/ }));
-  expect(screen.getByText('工号: A8 · 开发小队成员')).toBeInTheDocument();
-  expect(screen.getByText('工号: C9 · 自定义角色 <em>role</em>')).toBeInTheDocument();
+  expect(within(screen.getByRole('menu')).getByText('机器人 <Alice>')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('tab', { name: '数字员工' }));
+  expect(screen.getByText('A8 · 开发小队成员')).toBeInTheDocument();
+  expect(screen.getByText('C9 · 自定义角色 <em>role</em>')).toBeInTheDocument();
   expect(screen.getByText('自定义 <Alice>').querySelector('em')).toBeNull();
 });
 
@@ -238,7 +251,7 @@ it('uploads a comment attachment before submitting and resolves the saved timeli
   );
   mount(<WorkitemDetailPage />); await screen.findByRole('heading', { name });
   fireEvent.change(screen.getByTestId('comment-file-input'), { target: { files: [new File(['notes'], fileName, { type: 'text/plain' })] } });
-  fireEvent.click(screen.getByRole('button', { name: /发送/ }));
+  fireEvent.click(screen.getByRole('button', { name: /^发\s?送$/ }));
   expect(screen.getByRole('button', { name: `移除附件 ${fileName}` })).toBeInTheDocument();
   await waitFor(() => expect(uploaded).toBe(true), { timeout: 2000 });
   await waitFor(() => expect(comment).toBe('` requirements/comment.txt `'), { timeout: 5000 });

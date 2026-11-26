@@ -1,10 +1,10 @@
-import { EditOutlined } from '@ant-design/icons';
 import { Button, Popover } from 'antd';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { allows } from '@/shared/auth/access';
 import { useAuthStore } from '@/shared/auth/store';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useUpdateWorkitemTags, useWorkitemTagOptions } from '../hooks';
 import { WorkitemTagList } from './WorkitemTagList';
 import { WorkitemTagsEditor } from './WorkitemTagsEditor';
@@ -81,7 +81,7 @@ export function WorkitemTagsCell({ workitem, maxVisible = 2 }: WorkitemTagsCellP
               size="small"
               aria-label={t('tags.editAria')}
               title={t('tags.edit')}
-              icon={<EditOutlined aria-hidden="true" />}
+              icon={<AwStrokeIcon name="edit" />}
             />
           ) : null}
         </span>

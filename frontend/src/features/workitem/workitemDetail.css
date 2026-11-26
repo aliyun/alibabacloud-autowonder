@@ -1,0 +1,287 @@
+/* 工单详情页级样式（页面级文件，只用 crystal.css 真实令牌）。 */
+
+/* ===== 主内容区头部（原型 05 page-head / op-bar 契约；返回钮保留全局 PageBackButton） ===== */
+
+/* 标题行间距（原型 05 首行 gap:10）：返回钮 / 标题 / 分享 */
+.aw-workitem-header .aw-detail-title { gap: 10px; }
+
+/* 分享钮字号对齐 .btn.sm 12px（26px 高与透明底已达标） */
+html .aw-workitem-header-tools .ant-btn { font-size: 12px; }
+
+/* meta 行 → op-bar 间距（原型 .aw-page-head margin-bottom:16px） */
+.aw-workitem-meta + .aw-workitem-actions { margin-top: 16px; }
+
+/* meta 行工单标签（原型 .tag.outline）：透明底、border 色描边、text-2、22px 高 */
+html .aw-workitem-meta .ant-tag {
+  background: transparent;
+  border-color: var(--aw-border);
+  color: var(--aw-text-2);
+  line-height: 20px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+/* 标签编辑微钮（原型 .meta-tag-edit）：20×20 无边框、text-3、icon 12、hover 灰底转主色；无标签时带「添加标签」文字 */
+html .aw-meta-tag-edit.ant-btn {
+  height: 20px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  color: var(--aw-text-3);
+  background: transparent;
+  box-shadow: none;
+}
+html .aw-meta-tag-edit.ant-btn.ant-btn-icon-only { width: 20px; min-width: 20px; padding: 0; }
+html .aw-meta-tag-edit.ant-btn:not(:disabled):hover,
+html .aw-meta-tag-edit.ant-btn:not(:disabled):active {
+  background: var(--aw-gray-bg);
+  color: var(--aw-primary);
+}
+html .aw-meta-tag-edit.ant-btn .aw-stroke-icon { width: 12px; height: 12px; }
+
+/* op-bar 紧凑钮（原型 .btn.sm.ghost）：关注/添加评论 26px ghost；已关注态（primary ghost）保主色描边。
+   类名避开共享 .aw-op-btn（crystal.css 的 24×24 图标钮契约，特异性压过本页规则）。 */
+html .aw-op-ghost.ant-btn {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+html .aw-op-ghost.ant-btn:not(.ant-btn-primary) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--aw-text-2);
+  box-shadow: none;
+}
+html .aw-op-ghost.ant-btn:not(.ant-btn-primary):not(:disabled):hover,
+html .aw-op-ghost.ant-btn:not(.ant-btn-primary):not(:disabled):active {
+  background: var(--aw-gray-bg);
+  border-color: transparent;
+  color: var(--aw-text);
+}
+html .aw-op-ghost.ant-btn .aw-stroke-icon { width: 14px; height: 14px; }
+
+/* op-bar 实心钮（原型 .btn 32px 的 padding 0 12px）：主按钮/流转，antd 默认 0 15px */
+html .aw-op-solid.ant-btn { padding: 0 12px; }
+
+/* 更多操作钮（原型 .more-btn）：26×26 无边框透明、hover 灰底文字加深、icon 14 */
+html .aw-op-more.ant-btn.ant-btn {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--aw-text-2);
+  box-shadow: none;
+}
+html .aw-op-more.ant-btn:not(:disabled):hover,
+html .aw-op-more.ant-btn:not(:disabled):active {
+  background: var(--aw-gray-bg);
+  color: var(--aw-text);
+}
+html .aw-op-more.ant-btn .aw-stroke-icon { width: 14px; height: 14px; }
+
+/* ===== 主栏画布（原型 05c：灰底画布上头部 / 需求与设计 / 评论&时间线三张并列白卡，卡间 12px；
+   画布与头卡样式已提为 crystal.css 共享的 .aw-detail-canvas / .aw-detail-head-card） ===== */
+/* 回顶/到底按钮中线压在卡片右边框上，半个按钮伸进栏间 gap，主栏不能裁切 */
+html .aw-wi-main { overflow: visible; }
+
+html .aw-detail-head-card .aw-workitem-actions { padding-bottom: 0; margin-bottom: 0; border-bottom: none; }
+
+/* 交付轮次状态行已并入各数字人行的重启轮次台账（原型 55），旧样式移除 */
+.aw-schedule-sep::before { content: '·'; }
+
+/* 计划执行条（原型 52C）：30px 灰底条，信息在左、动作在右；过期转琥珀 */
+.aw-schedule-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  min-height: 30px; margin-top: 8px; padding: 0 10px;
+  border-radius: 6px; background: var(--aw-gray-bg);
+  font-size: 12px; line-height: 20px; color: var(--aw-text-2);
+}
+.aw-schedule-bar b { font-weight: 600; color: var(--aw-text); }
+.aw-schedule-bar-icon { width: 13px; height: 13px; color: var(--aw-text-3); flex-shrink: 0; }
+.aw-schedule-sep { color: var(--aw-text-disabled); }
+.aw-schedule-spacer { flex: 1; }
+.aw-schedule-bar.is-overdue { background: var(--aw-warning-bg); color: var(--aw-warning-deep); }
+.aw-schedule-bar.is-overdue b, .aw-schedule-bar.is-overdue .aw-schedule-bar-icon { color: var(--aw-warning-deep); }
+.aw-schedule-bar .aw-schedule-action.ant-btn { height: 22px; padding: 0 6px; border-radius: 4px; font-size: 12px; color: var(--aw-text-2); }
+.aw-schedule-bar .aw-schedule-action.ant-btn:not(:disabled):hover { background: rgba(0, 0, 0, .04); color: var(--aw-text); }
+.aw-schedule-bar .aw-schedule-action.is-primary { color: var(--aw-link); font-weight: 500; }
+.aw-schedule-bar .aw-schedule-action.is-danger { color: var(--aw-error-deep); }
+.aw-schedule-bar + .aw-workitem-actions { margin-top: 16px; }
+
+/* ===== 需求与设计卡内附件：不画分隔线，靠 20px 留白与正文段距（≈12px）拉开层级 ===== */
+.aw-req-context { margin-top: 20px; }
+.aw-req-context-head { display: flex; align-items: center; gap: 8px; min-height: 26px; margin-bottom: 8px; }
+.aw-req-context-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--aw-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.aw-req-context-head h3 .aw-stroke-icon { width: 14px; height: 14px; }
+.aw-req-context-count { color: var(--aw-text-3); font-weight: 400; }
+html .aw-req-context-upload.ant-btn { margin-left: auto; }
+
+.aw-req-dropzone {
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.aw-req-dropzone[data-drag-active="true"] {
+  border-color: var(--aw-accent-text);
+  background: rgba(var(--aw-accent-rgb), .08);
+}
+.aw-req-empty { margin: 0; padding: 8px 0 0; color: var(--aw-text-3); font-size: 12px; line-height: 20px; }
+
+.aw-doc-item { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-radius: 6px; min-width: 0; }
+.aw-doc-item:hover { background: var(--aw-gray-bg); }
+.aw-doc-ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--aw-text-2);
+}
+.aw-doc-ic svg, .aw-doc-ic .aw-stroke-icon { width: 16px; height: 16px; }
+.aw-doc-info { flex: 1; min-width: 0; }
+.aw-doc-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--aw-text); }
+.aw-doc-meta { display: block; margin: 0; color: var(--aw-text-3); font-size: 11px; line-height: 16px; }
+.aw-doc-ops { display: flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; }
+html .aw-doc-op.ant-btn {
+  height: 26px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--aw-text-2);
+  font-size: 12px;
+  box-shadow: none;
+}
+html .aw-doc-op.ant-btn.ant-btn-icon-only { width: 26px; min-width: 26px; padding: 0; }
+html .aw-doc-op.ant-btn:not(:disabled):hover,
+html .aw-doc-op.ant-btn:not(:disabled):active { background: var(--aw-gray-bg); color: var(--aw-primary); }
+html .aw-doc-op.ant-btn .aw-stroke-icon { width: 14px; height: 14px; }
+html .aw-doc-op-preview.ant-btn { color: var(--aw-text-3); }
+html .aw-doc-op-danger.ant-btn:not(:disabled):hover { color: var(--aw-error-deep); }
+
+/* ===== 卡片头按钮（原型 05 .btn.sm.ghost，同操作条「关注/添加评论」契约） ===== */
+html .aw-card-head-btn.ant-btn {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--aw-text-2);
+  box-shadow: none;
+}
+html .aw-card-head-btn.ant-btn:not(:disabled):hover,
+html .aw-card-head-btn.ant-btn:not(:disabled):active {
+  background: var(--aw-gray-bg);
+  border-color: transparent;
+  color: var(--aw-text);
+}
+html .aw-card-head-btn.ant-btn:disabled {
+  color: var(--aw-text-disabled);
+}
+html .aw-card-head-btn.ant-btn .aw-stroke-icon { width: 14px; height: 14px; }
+
+/* 卡片头主按钮（原型 05 .btn.sm.primary）：与 ghost 同为 26px 紧凑，保留 antd primary 填充底/白字。 */
+html .aw-card-head-btn-primary.ant-btn {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+html .aw-card-head-btn-primary.ant-btn .aw-stroke-icon { width: 14px; height: 14px; }
+
+/* ===== 右栏折叠卡（原型 05c .section-head + .chev）：与主栏统一，chev 跟在标题后 6px、text-3、折叠时 -90°，头部 hover 灰底 ===== */
+html .aw-rail-collapse .ant-collapse-header .aw-rail-chev.ant-collapse-arrow { display: inline-flex; color: var(--aw-text-3); }
+html .aw-detail-page .aw-rail-collapse > .ant-collapse-item > .ant-collapse-header > .ant-collapse-header-text { flex: 0 1 auto; min-width: 0; margin-inline-end: 0; }
+html .aw-detail-page .aw-rail-collapse > .ant-collapse-item > .ant-collapse-header > .ant-collapse-expand-icon { margin-inline-start: 0; padding-inline-start: 6px; padding-inline-end: 0; }
+.aw-rail-chev .aw-stroke-icon { width: 14px; height: 14px; }
+html .aw-detail-page .aw-rail-collapse .ant-collapse-header:hover { background: var(--aw-gray-bg); }
+html .aw-detail-page .aw-rail-collapse > .ant-collapse-item > .ant-collapse-header { box-sizing: border-box; min-height: 44px; align-items: center; padding: 8px 16px; line-height: 20px; border-radius: 7px; }
+/* 展开态分隔线由 antd .ant-collapse-content 的 border-top 提供，头部不再叠一条 */
+html .aw-detail-page .aw-rail-collapse > .ant-collapse-item-active > .ant-collapse-header { border-radius: 7px 7px 0 0; }
+html .aw-detail-page .aw-rail-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box { padding: 14px 16px; }
+
+/* ===== 任务信息（原型 05c .task-group/.task-tabs/.task-list）：无内层卡片，分组 20px 间距 ===== */
+.aw-task-info { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.aw-task-group { min-width: 0; }
+.aw-task-group-title { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--aw-text); font-size: 13px; font-weight: 600; line-height: 20px; }
+.aw-task-tabs { display: flex; gap: 12px; }
+.aw-task-tabs > button {
+  padding: 4px 0 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--aw-text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  cursor: pointer;
+}
+.aw-task-tabs > button:hover { color: var(--aw-primary); }
+.aw-task-tabs > button[aria-selected="true"] { border-bottom-color: var(--aw-primary); color: var(--aw-primary); font-weight: 600; }
+.aw-task-list { margin: 0; padding: 0; list-style: none; }
+.aw-task-list > li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 0; }
+.aw-task-list > li > :nth-child(2) { min-width: 0; }
+.aw-task-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  font-size: 11px;
+}
+.aw-task-avatar.ai { background: var(--aw-ai-bg); color: var(--aw-ai); }
+.aw-task-avatar svg { width: 16px; height: 16px; }
+.aw-task-name { color: var(--aw-text); font-size: 13px; line-height: 18px; overflow-wrap: anywhere; }
+.aw-task-secondary { color: var(--aw-text-3); font-size: 11px; line-height: 16px; }
+.aw-task-status { display: inline-flex; align-items: center; gap: 4px; color: var(--aw-text-3); font-size: 11px; line-height: 18px; }
+.aw-task-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.aw-task-status.success { color: var(--aw-success-deep); }
+.aw-task-status.failed { color: var(--aw-error-deep); }
+.aw-task-status.active { color: var(--aw-primary); }
+.aw-task-empty { margin: 0; padding: 8px 0; color: var(--aw-text-3); font-size: 13px; line-height: 20px; text-align: left; }
+/* 外部协作 / 执行计划仍为 antd Card：在任务信息内拍平为分组（去框、标题同 .aw-task-group-title） */
+html .aw-task-info > .ant-card { border: none; border-radius: 0; background: transparent; box-shadow: none; }
+html .aw-task-info > .ant-card > .ant-card-head { min-height: 0; margin-bottom: 8px; padding: 0; border: none; font-size: 13px; font-weight: 600; line-height: 20px; }
+html .aw-task-info > .ant-card > .ant-card-head .ant-card-head-title { padding: 0; }
+html .aw-task-info > .ant-card > .ant-card-body,
+html .aw-task-info > .ant-card.ant-card-small > .ant-card-body { padding: 0; }
+
+/* 评论输入框（原型 .comment-input + 05b focus 标本）：外框承载边框/聚焦环，内部 textarea 无边框 */
+.aw-cm-input {
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--aw-panel);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.aw-cm-input:focus-within {
+  border-color: var(--aw-primary);
+  box-shadow: 0 0 0 2px rgba(0, 100, 200, 0.12);
+}
+html .aw-cm-input .workitem-comment-mentions.ant-input,
+html .aw-cm-input .workitem-comment-mentions.ant-input:focus { box-shadow: none; background: transparent; }
+html .aw-cm-input .workitem-comment-mentions.ant-input::placeholder { color: var(--aw-text-disabled); }
+.aw-cm-input-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.aw-cm-input-hint { font-size: 11px; color: var(--aw-text-3); min-width: 0; }
+html .aw-cm-input-send.ant-btn { margin-left: auto; }

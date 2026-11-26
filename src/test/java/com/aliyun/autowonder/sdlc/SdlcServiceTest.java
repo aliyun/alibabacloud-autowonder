@@ -138,7 +138,7 @@ class SdlcServiceTest {
         SdlcDO updated = sdlc(9L, "ENABLED");
         updated.setName("new");
         when(sdlcDao.findById(9L)).thenReturn(s).thenReturn(updated);
-        when(sdlcDao.update(eq(9L), eq(100L), eq("new"), any(), any(), eq(0), eq(7L))).thenReturn(1);
+        when(sdlcDao.update(eq(9L), eq(100L), eq("new"), any(), any(), isNull(), eq(0), eq(7L))).thenReturn(1);
         UpdateSdlcRequest req = new UpdateSdlcRequest();
         req.setName("new");
 
@@ -148,10 +148,33 @@ class SdlcServiceTest {
     }
 
     @Test
+    void active_flow_allows_timing_toggle_and_keeps_metadata_restrictions() {
+        SdlcDO active = sdlc(9L, "ACTIVE");
+        active.setDescription("Delivery");
+        active.setWorkType("TASK");
+        when(sdlcDao.findById(9L)).thenReturn(active);
+        when(sdlcDao.update(9L, 100L, "flow", "Delivery", "TASK", true, 0, 7L)).thenAnswer(invocation -> {
+            active.setStageTimingEnabled(true);
+            return 1;
+        });
+        UpdateSdlcRequest req = new UpdateSdlcRequest();
+        req.setStageTimingEnabled(true);
+        assertTrue(service.update(9L, req, 100L, 7L).isStageTimingEnabled());
+
+        req.setName("flow");
+        req.setDescription("Delivery");
+        req.setWorkType("TASK");
+        assertDoesNotThrow(() -> service.update(9L, req, 100L, 7L));
+
+        req.setName("new");
+        assertThrows(BizException.class, () -> service.update(9L, req, 100L, 7L));
+    }
+
+    @Test
     void disabled_flow_allows_metadata_and_step_edits() {
         SdlcDO disabled = sdlc(9L, "DISABLED");
         when(sdlcDao.findById(9L)).thenReturn(disabled);
-        when(sdlcDao.update(eq(9L), eq(100L), eq("renamed"), any(), any(), eq(0), eq(7L)))
+        when(sdlcDao.update(eq(9L), eq(100L), eq("renamed"), any(), any(), isNull(), eq(0), eq(7L)))
                 .thenReturn(1);
 
         SdlcStepDO step = new SdlcStepDO();

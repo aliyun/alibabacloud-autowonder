@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Form, message } from 'antd';
@@ -139,6 +140,28 @@ describe('WorkspaceEditModal', () => {
     expect(screen.getByPlaceholderText(BACKGROUND_PLACEHOLDER)).toHaveValue('');
   });
 
+  it('echoes the stored fields under React StrictMode (dev double-invoked effects)', async () => {
+    // main.tsx mounts the app in StrictMode; dev-server users edit through the same code path as
+    // production but with every newly mounted effect double-invoked (setup→cleanup→setup).
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const onClose = vi.fn();
+    const harness = (workspace: WorkspaceInfo | null) => (
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <WorkspaceEditModal workspace={workspace} onClose={onClose} />
+        </QueryClientProvider>
+      </StrictMode>
+    );
+    const view = render(harness(null));
+    view.rerender(harness(WORKSPACE));
+
+    expect(await screen.findByPlaceholderText(NAME_PLACEHOLDER)).toHaveValue('星云工坊');
+    expect(screen.getByPlaceholderText(DESCRIPTION_PLACEHOLDER)).toHaveValue('多 Agent 研发协作空间');
+    expect(screen.getByPlaceholderText(BACKGROUND_PLACEHOLDER)).toHaveValue('云原生研发');
+  });
+
   it('keeps an in-progress edit when a refetch hands back a new object for the same row', async () => {
     const user = userEvent.setup();
     const { setWorkspace } = renderModal(WORKSPACE);
@@ -159,6 +182,51 @@ describe('WorkspaceEditModal', () => {
     await waitFor(() => expect(nameInput).toHaveValue('另一个空间'));
     expect(screen.getByPlaceholderText(DESCRIPTION_PLACEHOLDER)).toHaveValue('另一个描述');
     expect(screen.getByText('编辑「另一个空间」')).toBeInTheDocument();
+  });
+
+  it('reopens the shared modal with server values instead of a cancelled draft', async () => {
+    const user = userEvent.setup();
+    const { setWorkspace } = renderModal(WORKSPACE);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.closest('.ws-modal')).not.toBeNull();
+    expect(dialog.querySelector('form')).toHaveClass('ws-workspace-form');
+    expect(screen.getByPlaceholderText(BACKGROUND_PLACEHOLDER)).toHaveAttribute('rows', '4');
+    const name = screen.getByPlaceholderText(NAME_PLACEHOLDER);
+    await user.clear(name);
+    await user.type(name, '取消的草稿');
+    setWorkspace(null);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    setWorkspace({ ...WORKSPACE, name: '最新服务端名称', version: 8 });
+    expect(await screen.findByPlaceholderText(NAME_PLACEHOLDER)).toHaveValue('最新服务端名称');
+    expect(screen.getByPlaceholderText(BACKGROUND_PLACEHOLDER)).toHaveValue(WORKSPACE.background);
+  });
+
+  it('submits once during validation and prevents closing an in-flight save', async () => {
+    spySuccess();
+    const bodies: unknown[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    server.use(http.put('/api/workspaces/31', async ({ request }) => {
+      bodies.push(await request.json());
+      await gate;
+      return ok({});
+    }));
+    const { onClose } = renderModal(WORKSPACE);
+    await screen.findByPlaceholderText(NAME_PLACEHOLDER);
+    const save = screen.getByRole('button', { name: buttonName('保存') });
+    try {
+      await act(async () => { fireEvent.click(save); fireEvent.click(save); });
+      await waitFor(() => expect(bodies).toHaveLength(1));
+      const cancel = screen.getByRole('button', { name: buttonName('取消') });
+      expect(cancel).toBeDisabled();
+      fireEvent.click(cancel);
+      expect(onClose).not.toHaveBeenCalled();
+      expect(bodies[0]).toMatchObject({ version: 7, background: '云原生研发' });
+    } finally {
+      release();
+    }
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(bodies).toHaveLength(1);
   });
 
   it('sends the stored version so the server can enforce the optimistic lock', async () => {

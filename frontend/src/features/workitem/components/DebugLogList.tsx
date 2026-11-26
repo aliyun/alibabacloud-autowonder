@@ -1,7 +1,7 @@
 import { runtimeStatusLabel } from '../runtimeLabels';
 import { useTranslation } from 'react-i18next';
 import { Button, Card, List, Space, Tag, Typography, Spin } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useQuery } from '@tanstack/react-query';
 import { listDebugLogs } from '../api';
 import type { DebugLogEntry } from '../api';
@@ -57,7 +57,7 @@ export function DebugLogList({ workitemId }: DebugLogListProps) {
                   key="download"
                   type="link"
                   size="small"
-                  icon={<DownloadOutlined />}
+                  icon={<AwStrokeIcon name="dl" />}
                   href={log.downloadUrl}
                   target="_blank"
                   rel="noreferrer"

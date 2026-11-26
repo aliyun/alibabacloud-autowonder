@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { getSquadMembers, listSquads } from '@/features/squad/api';
 import type { SquadMember } from '@/features/squad/api';
+import './createFields.css';
 
 interface DeliveryTargetFieldsProps {
   form: FormInstance;
@@ -27,38 +28,45 @@ export function DeliveryTargetFields({ form, required }: DeliveryTargetFieldsPro
 
   return (
     <>
-      <Form.Item
-        name="squadId"
-        label={t('start.squad')}
-        rules={required ? [{ required: true, message: t('start.squadRequired') }] : undefined}
-      >
-        <Select
-          placeholder={t('start.squadPlaceholder')}
-          allowClear={!required}
-          options={(squads?.list || []).map((s) => ({ value: s.id, label: s.name }))}
-          onChange={() => form.setFieldValue('agentId', undefined)}
-        />
-      </Form.Item>
-      <Form.Item
-        name="agentId"
-        label={t('start.agent')}
-        rules={required ? [{ required: true, message: t('start.agentRequired') }] : undefined}
-      >
-        <Select
-          placeholder={squadId ? t('start.memberPlaceholder') : t('start.chooseSquadFirst')}
-          disabled={!squadId}
-          allowClear={!required}
-          loading={membersLoading}
-          options={members
-            .filter((member: SquadMember) => member.agentKind !== 'PLATFORM')
-            .map((member: SquadMember) => ({
-              value: member.agentId,
-              label: member.roleCode
-                ? t('start.memberLabel', { name: member.agentName, role: member.roleCode })
-                : member.agentName,
-            }))}
-        />
-      </Form.Item>
+      <div className={required ? undefined : 'aw-delivery-row'}>
+        <Form.Item
+          name="squadId"
+          label={required ? t('start.squad') : (
+            <>{t('create.deliverySquad')}<span className="aw-optional-tag">{t('create.optional')}</span></>
+          )}
+          rules={required ? [{ required: true, message: t('start.squadRequired') }] : undefined}
+        >
+          <Select
+            placeholder={t('start.squadPlaceholder')}
+            allowClear={!required}
+            options={(squads?.list || []).map((s) => ({ value: s.id, label: s.name }))}
+            onChange={() => form.setFieldValue('agentId', undefined)}
+          />
+        </Form.Item>
+        <Form.Item
+          name="agentId"
+          label={required ? t('start.agent') : (
+            <>{t('create.deliveryAgent')}<span className="aw-optional-tag">{t('create.optional')}</span></>
+          )}
+          rules={required ? [{ required: true, message: t('start.agentRequired') }] : undefined}
+        >
+          <Select
+            placeholder={squadId ? t('start.memberPlaceholder') : t('start.chooseSquadFirst')}
+            disabled={!squadId}
+            allowClear={!required}
+            loading={membersLoading}
+            options={members
+              .filter((member: SquadMember) => member.agentKind !== 'PLATFORM')
+              .map((member: SquadMember) => ({
+                value: member.agentId,
+                label: member.roleCode
+                  ? t('start.memberLabel', { name: member.agentName, role: member.roleCode })
+                  : member.agentName,
+              }))}
+          />
+        </Form.Item>
+      </div>
+      {!required && <div className="aw-delivery-hint">{t('create.deliveryOptionalHint')}</div>}
     </>
   );
 }

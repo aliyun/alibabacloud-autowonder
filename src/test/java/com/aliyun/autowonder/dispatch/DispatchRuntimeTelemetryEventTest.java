@@ -197,7 +197,7 @@ class DispatchRuntimeTelemetryEventTest {
         for (String eventType : new String[]{
                 "workspace.created", "bootstrap.generated", "repo.prepared", "upload.completed",
                 "plugin.loaded", "subagent.completed", "session.resumed", "turn.started", "llm.usage",
-                "mcp.call", "cli.call", "bash.result"
+                "mcp.call", "cli.call", "bash.result", "step.timing", "operation.timing", "runtime.wait_started", "runtime.wait_finished"
         }) {
             org.junit.jupiter.api.Assertions.assertTrue(DispatchService.isRuntimeEventType(eventType), eventType);
         }

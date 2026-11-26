@@ -100,29 +100,9 @@ public class WorkitemClarificationConversationService {
         // 降级成空 turns 会把「读取失败」伪装成「没有历史」（工单 55411 缺陷一形态）。
         AgentConversationTurnDO processing = turnDao.findActiveHistoryTurn(tenantId, conversationId);
         var page = turnPage(tenantId, workitemId, conversationId, null, 50);
-        // The history read may observe a later status than the active-turn query.
-        // Use that visible status, while retaining active turns outside this page.
-        if (processing != null) {
-            for (var visible : page.items()) {
-                if (processing.getId().equals(visible.getId())) {
-                    if ("PROCESSING".equals(visible.getStatus()) || "QUEUED".equals(visible.getStatus())) {
-                        processing.setStatus(visible.getStatus());
-                    } else {
-                        processing = null;
-                    }
-                    break;
-                }
-            }
-        }
-        if (processing == null) {
-            var visibleActive = page.items().stream().filter(t -> "IN".equals(t.getDirection())
-                    && ("PROCESSING".equals(t.getStatus()) || "QUEUED".equals(t.getStatus())))
-                    .min(java.util.Comparator.comparingInt((ClarificationTurnVO t) -> "PROCESSING".equals(t.getStatus()) ? 0 : 1)
-                            .thenComparing(ClarificationTurnVO::getId)).orElse(null);
-            if (visibleActive != null) {
-                processing = new AgentConversationTurnDO(); processing.setId(visibleActive.getId()); processing.setStatus(visibleActive.getStatus());
-            }
-        }
+        processing = ConversationTurnSnapshot.activeInbound(processing, page.items(),
+                ClarificationTurnVO::getId, ClarificationTurnVO::getDirection, ClarificationTurnVO::getStatus, ClarificationTurnVO::getGmtCreate,
+                () -> turnDao.findActiveHistoryTurn(tenantId, conversationId));
         var vo = toVO(conv, page.items(), processing,
                 pendingElicitationsQuietly(tenantId, conversationId),
                 commandsSnapshotQuietly(tenantId, conversationId));

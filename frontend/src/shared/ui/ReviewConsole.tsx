@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { List, Button, Space, Tag, Typography } from 'antd';
-import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 
 const { Text } = Typography;
 
@@ -30,8 +30,8 @@ export function ReviewConsole({ items, loading, onApprove, onReject, renderDetai
           actions={
             item.status === 'PENDING'
               ? [
-                  <Button key="approve" type="primary" size="small" icon={<CheckOutlined />} onClick={() => onApprove(item.id)}>{t('review.approve')}</Button>,
-                  <Button key="reject" size="small" danger icon={<CloseOutlined />} onClick={() => onReject(item.id)}>{t('review.reject')}</Button>,
+                  <Button key="approve" type="primary" size="small" icon={<AwStrokeIcon name="check" />} onClick={() => onApprove(item.id)}>{t('review.approve')}</Button>,
+                  <Button key="reject" size="small" danger icon={<AwStrokeIcon name="x" />} onClick={() => onReject(item.id)}>{t('review.reject')}</Button>,
                 ]
               : [<Tag key="status" color={item.status === 'APPROVED' ? 'success' : 'error'}>{item.status === 'APPROVED' ? t('review.approved') : t('review.rejected')}</Tag>]
           }

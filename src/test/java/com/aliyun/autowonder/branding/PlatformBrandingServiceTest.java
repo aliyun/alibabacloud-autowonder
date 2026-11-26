@@ -95,6 +95,7 @@ class PlatformBrandingServiceTest {
 
         assertEquals("AutoWonder", config.getPlatformName());
         assertEquals("/logo.svg", config.getLogoUrl());
+        assertEquals("aliyun-orange", config.getThemeKey());
         assertEquals("#f97316", config.getPrimaryColor());
         assertNull(config.getDomain());
         assertEquals("https://daily.auto-wonder.example.com/api/mcp", config.getMcpBaseUrl());

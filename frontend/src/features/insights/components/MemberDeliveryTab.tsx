@@ -1,13 +1,15 @@
 import { formatNumber } from '@/shared/i18n/format';
 import { useTranslation } from 'react-i18next';
 import { useInsightPreference, useInsightDateRange, useInsightDeliveryWorkType, INSIGHT_WORK_TYPES, type InsightWorkType } from '../useInsightPreference';
-import { Alert, Button, Card, DatePicker, Input, Segmented, Space, Statistic, Tooltip, Typography, type TableProps } from 'antd';
-import { CloseCircleFilled, InfoCircleOutlined, LoadingOutlined, SearchOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Input, Segmented, Space, Statistic, Tooltip, Typography, type TableProps } from 'antd';
+import { CloseCircleFilled, LoadingOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { Table } from '@/shared/theme/ThemedTable';
-import dayjs, { type Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/shared/auth/store';
 import { EllipsisText } from '@/shared/ui/EllipsisText';
+import { TimeRangePicker } from '@/shared/ui/TimeRangePicker';
 import { getMemberDelivery } from '../api';
 import type { MemberDeliveryMember } from '../types';
 import FlashValue from '../realtime/FlashValue';
@@ -15,6 +17,7 @@ import FlashValue from '../realtime/FlashValue';
 type Member = MemberDeliveryMember;
 const SUMMARY_KEYS = ['created', 'completed', 'inProgress', 'total'] as const;
 const SORTABLE_KEYS = ['completed', 'inProgress', 'notStarted', 'pendingDecision', 'total', 'requirements'] as const;
+const COLUMN_WIDTH: Record<typeof SORTABLE_KEYS[number], number> = { completed: 230, inProgress: 90, notStarted: 90, pendingDecision: 110, total: 100, requirements: 100 };
 const WORK_TYPE_LABEL_KEYS = { ALL: 'members.workTypeAll', REQ: 'members.workTypeReq', BUG: 'members.workTypeBug', TASK: 'members.workTypeTask' } as const;
 function today() { return dayjs(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())); }
 
@@ -43,24 +46,22 @@ export function MemberDeliveryTab() {
     : member.memberName;
   const rows = (data?.members ?? []).filter(m => memberName(m).includes(search));
   const maxCompleted = Math.max(0, ...rows.map(m => m.completed));
-  const presets = [7, 30, 90, 180].map(days => ({ label: t('members.lastDays', { count: days }), value: [end.subtract(days - 1, 'day'), end] as [Dayjs, Dayjs] }));
   const columns: TableProps<Member>['columns'] = [
-    { title: t('members.member'), dataIndex: 'memberName', align: 'left', ellipsis: { showTitle: false }, width: 170, render: (_: string, member: Member) => <EllipsisText>{memberName(member)}</EllipsisText> },
-    { title: t('members.metricTasks', { metric: labels.completed }), width: 230, defaultSortOrder: 'descend', sorter: (a: Member, b: Member) => a.completed - b.completed,
+    { title: t('members.member'), dataIndex: 'memberName', align: 'left', ellipsis: { showTitle: false }, width: 170, render: (_: string, member: Member) => <EllipsisText style={{ fontWeight: 500 }}>{memberName(member)}</EllipsisText> },
+    { title: t('members.metricTasks', { metric: labels.completed }), width: COLUMN_WIDTH.completed, defaultSortOrder: 'descend', sorter: (a: Member, b: Member) => a.completed - b.completed,
       render: (_: unknown, member: Member) => <div className="insight-member-bar"><strong>{formatNumber(member.completed)}</strong><span role="img" aria-label={t('members.barAria', { metric: labels.completed, value: t('members.taskCount', { count: member.completed, value: formatNumber(member.completed) }), max: t('members.taskCount', { count: maxCompleted, value: formatNumber(maxCompleted) }) })}><i style={{ width: `${member.completed / Math.max(maxCompleted, 1) * 100}%` }} /></span></div> },
     ...SORTABLE_KEYS.filter(key => key !== 'completed').map(key => ({
-      title: labels[key], dataIndex: key, width: 120, sorter: (a: Member, b: Member) => a[key] - b[key],
+      title: labels[key], dataIndex: key, width: COLUMN_WIDTH[key], className: 'insight-member-num', sorter: (a: Member, b: Member) => a[key] - b[key],
     })),
   ];
   return <div className="insight-member-page">
     <div className="insight-toolbar">
       <Typography.Text strong>{t('members.range')}</Typography.Text>
-      <DatePicker.RangePicker aria-label={t('members.rangeAria')} allowClear={false} value={range} onChange={values => { if (values?.[0] && values[1]) setRange([values[0], values[1]]); }}
-        disabledDate={date => date.isAfter(end, 'day') || date.isBefore(end.subtract(180, 'day'), 'day')}
-        presets={presets} />
+      <TimeRangePicker ariaLabel={t('members.rangeAria')} value={range} onChange={setRange} end={end}
+        presetLabel={days => t('members.lastDays', { count: days })} />
       <Button aria-label={t('members.refresh')} onClick={() => { void query.refetch(); }} loading={query.isFetching ? { icon: <LoadingOutlined aria-hidden="true" /> } : false}>{t('members.refresh')}</Button>
       <Typography.Text type="secondary">{t('members.timezone')}</Typography.Text>
-      <span className="insight-scope-chip is-global">{t('members.periodScopeChip')}</span>
+      <span className="insight-scope-chip is-global" style={{ marginLeft: 'auto' }}>{t('members.periodScopeChip')}</span>
     </div>
     {query.isError && <Alert type="error" icon={<CloseCircleFilled aria-hidden="true" />} showIcon message={t('members.loadFailure')} action={<Button size="small" onClick={() => { void query.refetch(); }}>{t('members.retry')}</Button>} />}
     <Card className="insight-stat-area">
@@ -82,13 +83,14 @@ export function MemberDeliveryTab() {
         <span>{t('members.footCancelled')}</span>
       </p>
     </Card>
-    <Card title={<Space size={6}>{t('members.title')}<Tooltip title={t('members.method')} trigger={['hover', 'focus']} styles={{ root: { maxWidth: 420 } }}><Button type="text" size="small" aria-label={t('members.methodAria')} icon={<InfoCircleOutlined aria-hidden="true" />} style={{ color: 'var(--aw-muted)' }} /></Tooltip></Space>}>
-      <Space wrap style={{ marginBottom: 16 }}>
-        <Input.Search enterButton={<Button aria-label={t('members.search')} icon={<SearchOutlined aria-hidden="true" />} />} aria-label={t('members.search')} placeholder={t('members.search')} allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('members.clearSearch')} /> }} value={search} onChange={e => setSearch(e.target.value)} />
-      </Space>
+    <Card
+      className="insight-member-table"
+      title={<Space size={6}>{t('members.title')}<Tooltip title={t('members.method')} trigger={['hover', 'focus']} styles={{ root: { maxWidth: 420 } }}><Button type="text" size="small" aria-label={t('members.methodAria')} icon={<AwStrokeIcon name="info" />} style={{ color: 'var(--aw-muted)' }} /></Tooltip></Space>}
+      extra={<Input aria-label={t('members.search')} placeholder={t('members.search')} prefix={<AwStrokeIcon name="search" />} allowClear={{ clearIcon: <CloseCircleFilled aria-label={t('members.clearSearch')} /> }} value={search} onChange={e => setSearch(e.target.value)} style={{ width: 200, maxWidth: '100%' }} />}
+    >
       <p className="insight-caption">{t('members.caption')}</p>
       <Table<Member> key={`${start}-${endDate}-${search}`} rowKey={member => String(member.memberId ?? 'unassigned')} dataSource={rows} loading={query.isLoading} pagination={{ pageSize, showSizeChanger: true, onShowSizeChange: (_, size) => setPageSize(size), showTotal: total => t('members.count', { count: total }) }}
-        locale={{ emptyText: query.isLoading ? t('members.loading') : query.isError ? t('members.unavailable') : search ? t('members.noMatch') : t('members.empty') }} scroll={{ x: 960 }} columns={columns} />
+        locale={{ emptyText: query.isLoading ? t('members.loading') : query.isError ? t('members.unavailable') : search ? t('members.noMatch') : t('members.empty') }} scroll={{ x: 890 }} columns={columns} />
     </Card>
 
   </div>;

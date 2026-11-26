@@ -29,6 +29,29 @@ class ConversationTurnSnapshotTest {
                 turn(1L, "IN", "SUCCESS", 0), turn(2L, "OUT", "QUEUED", 1))));
     }
 
+    @Test
+    void pagedSnapshotUsesCreationTimeForVisibleAndOffPageQueuedTurns() {
+        var newestId = turn(9L, "IN", "QUEUED", 1);
+        var olderId = turn(2L, "IN", "QUEUED", 20);
+        for (var earlier : List.of(newestId, olderId)) {
+            var chosen = ConversationTurnSnapshot.activeInbound(earlier, List.of(olderId, newestId),
+                    AgentConversationTurnDO::getId, AgentConversationTurnDO::getDirection,
+                    AgentConversationTurnDO::getStatus, AgentConversationTurnDO::getGmtCreate, () -> null);
+            assertEquals(9L, chosen.getId());
+        }
+        var chosen = ConversationTurnSnapshot.activeInbound(olderId, List.of(newestId),
+                AgentConversationTurnDO::getId, AgentConversationTurnDO::getDirection,
+                AgentConversationTurnDO::getStatus, AgentConversationTurnDO::getGmtCreate, () -> null);
+        assertEquals(9L, chosen.getId());
+        var cancelled = turn(2L, "IN", "CANCELLED", 20);
+        assertNull(ConversationTurnSnapshot.activeInbound(olderId, List.of(cancelled),
+                AgentConversationTurnDO::getId, AgentConversationTurnDO::getDirection,
+                AgentConversationTurnDO::getStatus, AgentConversationTurnDO::getGmtCreate, () -> null));
+        assertSame(newestId, ConversationTurnSnapshot.activeInbound(olderId, List.of(cancelled),
+                AgentConversationTurnDO::getId, AgentConversationTurnDO::getDirection,
+                AgentConversationTurnDO::getStatus, AgentConversationTurnDO::getGmtCreate, () -> newestId));
+    }
+
     private static AgentConversationTurnDO turn(long id, String direction, String status, long created) {
         var turn = new AgentConversationTurnDO();
         turn.setId(id);

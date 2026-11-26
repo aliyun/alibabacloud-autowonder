@@ -1,0 +1,45 @@
+.aw-agent-sec + .aw-agent-sec { margin-top: 24px; }
+.aw-agent-sec-title { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; font-size: 14px; font-weight: 600; line-height: 22px; color: var(--aw-text); }
+.aw-agent-opt { font-size: 12px; font-weight: 400; color: var(--aw-text-disabled); }
+.aw-agent-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; }
+html .aw-agent-code.ant-select .ant-select-selector .ant-select-selection-search-input { font-family: var(--aw-font-mono); font-size: 12px; }
+html .aw-agent-warn.ant-alert { align-items: flex-start; gap: 8px; margin: -8px 0 16px; padding: 8px 12px; border: none; border-radius: 6px; background: var(--aw-warning-bg); color: var(--aw-warning-deep); font-size: 12px; line-height: 18px; }
+html .aw-agent-warn.ant-alert .ant-alert-icon { margin: 2px 0 0; font-size: 13px; color: var(--aw-warning-deep); }
+html .aw-agent-warn.ant-alert .ant-alert-message { color: inherit; font-size: inherit; line-height: inherit; }
+/* 编辑页关系分区（原型 32）：表单仍 600 列，关系分区放宽到 880 列（左边缘对齐，仓库四列不挤）；Form 末项 16px 下边距与本列上边距折叠，取 24px 分区间距 */
+.aw-agent-rel { margin-top: 24px; }
+.aw-agent-rel.aw-create-form { max-width: 880px; }
+/* 操作按钮放页面底部（原型 32 编辑页）：分割线通到内容区右缘，按钮仍与字段列左对齐；上下间距都取 16 */
+.aw-agent-foot { margin-top: 16px; }
+/* 自进化模式只有 3 个选项，直接铺成单选卡（原型 32 .evo-opt） */
+.aw-agent-evo { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+html .aw-agent-evo .ant-radio-wrapper { display: flex; align-items: flex-start; margin: 0; padding: 8px 10px; border: 1px solid var(--aw-border); border-radius: 6px; background: var(--aw-panel); }
+html .aw-agent-evo .ant-radio-wrapper:hover { background: var(--aw-primary-faint); }
+html .aw-agent-evo .ant-radio-wrapper-checked { border-color: var(--aw-primary); background: var(--aw-primary-faint); }
+html .aw-agent-evo .ant-radio-wrapper .ant-radio { margin-top: 3px; }
+html .aw-agent-evo .ant-radio-wrapper > span:last-child { display: flex; flex-direction: column; gap: 0; padding-inline-end: 0; }
+.aw-agent-evo-name { font-size: 13px; line-height: 20px; color: var(--aw-text); }
+.aw-agent-evo-desc { font-size: 12px; line-height: 18px; color: var(--aw-text-3); }
+.aw-agent-sec-acts { margin-left: auto; display: inline-flex; gap: 8px; font-weight: 400; }
+.aw-agent-sec-desc { margin: -6px 0 10px; font-size: 12px; line-height: 18px; color: var(--aw-text-3); }
+.aw-agent-sec-desc b { margin-right: 6px; font-weight: 500; color: var(--aw-text-2); }
+.aw-agent-rel-table { border: 1px solid var(--aw-border); border-radius: 6px; overflow: hidden; }
+html .aw-agent-rel-table .ant-table-wrapper .ant-table { border-radius: 0; }
+html .aw-agent-rel-table .ant-table-wrapper .ant-table-container { border-radius: 0; }
+html .aw-agent-rel-table .ant-table-wrapper .ant-table.ant-table-small .ant-table-thead > tr > th,
+html .aw-agent-rel-table .ant-table-wrapper .ant-table.ant-table-small .ant-table-tbody > tr > td { padding: 8px 12px; font-size: 12px; line-height: 18px; }
+html .aw-agent-rel-table .ant-table-wrapper .ant-table-thead > tr > th:first-child,
+html .aw-agent-rel-table .ant-table-wrapper .ant-table-thead > tr > th:last-child { border-radius: 0; }
+html .aw-agent-rel-table .ant-table-wrapper .ant-table-tbody > tr:last-child > td { border-bottom: none; }
+.aw-agent-branches { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.aw-agent-mono { font-family: var(--aw-font-mono); font-size: 12px; }
+.aw-agent-ops { display: inline-flex; align-items: center; gap: 6px; }
+.aw-agent-rel-loading { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; color: var(--aw-text-3); }
+html .aw-agent-rel-alert.ant-alert { margin: 0 0 10px; padding: 8px 12px; border: none; border-radius: 6px; font-size: 12px; line-height: 18px; }
+html .aw-agent-rel-alert.ant-alert-error { background: var(--aw-error-bg); color: var(--aw-error-deep); }
+html .aw-agent-rel-alert.ant-alert .ant-alert-message { color: inherit; font-size: inherit; line-height: inherit; font-weight: 500; }
+html .aw-agent-rel-alert.ant-alert .ant-alert-description { margin-top: 2px; font-size: 12px; line-height: 18px; color: var(--aw-text-2); }
+html .aw-agent-rel-alert.ant-alert .ant-alert-icon { margin: 2px 0 0; font-size: 13px; }
+/* 多字段弹窗：控件上方 12px 标签、字段间 12px（单字段弹窗不加标签） */
+.aw-agent-modal-field + .aw-agent-modal-field { margin-top: 12px; }
+.aw-agent-modal-label { margin-bottom: 6px; font-size: 12px; line-height: 20px; color: var(--aw-text-2); }

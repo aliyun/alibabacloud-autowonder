@@ -7,13 +7,16 @@ export function PlatformBrand({ to, collapsed = false }: { to: string; collapsed
   const { t } = useTranslation('shared');
   const { data: branding } = useQuery({ queryKey: BRANDING_QUERY_KEY, queryFn: getPublicBranding });
   if (!branding) {
-    return <span aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-      <span style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 6, background: 'var(--aw-raised)' }} />
+    return <span aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 6, background: 'var(--aw-raised)' }} />
       {!collapsed && <span style={{ width: 96, height: 14, borderRadius: 4, background: 'var(--aw-raised)' }} />}
     </span>;
   }
-  return <Link to={to} aria-label={t(to === '/workspaces' ? 'brand.workspaces' : 'brand.workitems', { name: branding.platformName })} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, color: 'var(--aw-text)', textDecoration: 'none' }}>
-    <img src={branding.logoUrl || '/logo.svg'} alt="" width={28} height={28} style={{ flexShrink: 0, borderRadius: 6, objectFit: 'contain' }} onError={(event) => {
+  const brandLabelKey = to === '/workspaces'
+    ? 'brand.workspaces'
+    : to === '/workbench' ? 'brand.workbench' : 'brand.workitems';
+  return <Link to={to} aria-label={t(brandLabelKey, { name: branding.platformName })} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, color: 'var(--aw-text)', textDecoration: 'none' }}>
+    <img src={branding.logoUrl || '/logo.svg'} alt="" width={26} height={26} style={{ flexShrink: 0, borderRadius: 6, objectFit: 'contain' }} onError={(event) => {
       const image = event.currentTarget;
       if (!image.dataset.fallback) { image.dataset.fallback = '1'; image.src = '/logo.svg'; }
     }} />

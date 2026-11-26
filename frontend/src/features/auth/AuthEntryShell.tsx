@@ -1,63 +1,63 @@
 import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
-import { useId, type ReactNode } from 'react';
-import { AuditOutlined, CheckCircleOutlined, CodeOutlined, CloudUploadOutlined, ExperimentOutlined, FileTextOutlined, PlayCircleOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
-import { PageHeader } from '@/shared/ui/PageHeader';
-import { AppearanceSwitch } from '@/shared/theme/AppearanceProvider';
+import type { ReactNode } from 'react';
+import { PlatformBrand } from '@/shared/ui/PlatformBrand';
 import { HelpCenterLink } from '@/shared/ui/HelpCenterLink';
 import { LanguageSwitch } from '@/shared/i18n/LanguageSwitch';
+import { AppearanceSwitch } from '@/shared/theme/AppearanceProvider';
 import './AuthEntryShell.css';
 
-const returnPath = 'M600 80H624Q640 80 640 96V160Q640 180 620 180H20Q0 180 0 160V96Q0 80 16 80H40';
-
-const deliverySteps = [
-  { get label() { return i18n.t('auth:intro.clarification'); }, icon: <FileTextOutlined /> },
-  { get label() { return i18n.t('auth:intro.start'); }, icon: <PlayCircleOutlined /> },
-  { get label() { return i18n.t('auth:intro.develop'); }, icon: <CodeOutlined />, accent: true },
-  { get label() { return i18n.t('auth:intro.verify'); }, icon: <SafetyCertificateOutlined />, accent: true },
-  { get label() { return i18n.t('auth:intro.review'); }, icon: <AuditOutlined />, accent: true },
-  { get label() { return i18n.t('auth:intro.deploy'); }, icon: <CloudUploadOutlined />, accent: true },
-  { get label() { return i18n.t('auth:intro.test'); }, icon: <ExperimentOutlined />, accent: true },
-  { get label() { return i18n.t('auth:intro.deliver'); }, icon: <CheckCircleOutlined />, accent: true },
+const flowSteps = [
+  { get label() { return i18n.t('auth:intro.clarification'); } },
+  { get label() { return i18n.t('auth:intro.start'); } },
+  { get label() { return i18n.t('auth:intro.develop'); } },
+  { get label() { return i18n.t('auth:intro.verify'); } },
+  { get label() { return i18n.t('auth:intro.review'); } },
+  { get label() { return i18n.t('auth:intro.deploy'); } },
+  { get label() { return i18n.t('auth:intro.test'); } },
+  { get label() { return i18n.t('auth:intro.deliver'); } },
 ];
 
 export function AuthEntryShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation('auth');
-  const gridId = useId();
   return (
     <>
-      <PageHeader actions={<><HelpCenterLink /><LanguageSwitch /><AppearanceSwitch /></>} />
-      <main className="auth-entry-page">
-        <section className="auth-entry-story" aria-label={t('intro.label')}>
-          <div className="auth-entry-intro">
-            <p className="auth-entry-eyebrow">{t('intro.eyebrow')}</p>
-            <h1>{t('intro.title')}</h1>
-          </div>
-          <figure className="auth-delivery" aria-label={t('intro.diagram')}>
-            <svg className="auth-delivery-lines" viewBox="0 0 640 240" fill="none" aria-hidden="true">
-              <defs>
-                <pattern id={gridId} width="20" height="20" patternUnits="userSpaceOnUse">
-                  <circle cx="10" cy="10" r=".7" fill="var(--aw-border)" />
-                </pattern>
-              </defs>
-              <rect x="-20" y="0" width="680" height="240" fill={`url(#${gridId})`} />
-              <path className="auth-delivery-track" d="M40 80H600" />
-              <path className="auth-delivery-return" d={returnPath} />
-              <path className="auth-delivery-flow" pathLength="100" d="M40 80H600" />
-              <path className="auth-delivery-flow auth-delivery-flow--return" pathLength="100" d={returnPath} />
+      <header className="login-topbar">
+        <PlatformBrand to="/workspaces" />
+        <div className="login-topbar-right">
+          <HelpCenterLink />
+          <LanguageSwitch />
+          <AppearanceSwitch />
+        </div>
+      </header>
+      <main className="login-hero">
+        <section className="login-story" aria-label={t('intro.label')}>
+          <p className="login-story-eyebrow">{t('intro.eyebrow')}</p>
+          <h1>{t('intro.title')}</h1>
+          <p className="login-story-sub">{t('intro.sub')}</p>
+          <figure className="login-flow" aria-label={t('intro.diagram')}>
+            <svg className="flow-track" viewBox="0 0 432 204" preserveAspectRatio="none" aria-hidden="true">
+              <path className="flow-track-base" d="M54 22 H392 Q414 22 414 44 V140 Q414 162 392 162 H40 Q18 162 18 140 V44 Q18 22 40 22 Z" />
+              <path className="flow-track-current" pathLength="100" d="M54 22 H392 Q414 22 414 44 V140 Q414 162 392 162 H40 Q18 162 18 140 V44 Q18 22 40 22 Z" />
             </svg>
-            <ol className="auth-delivery-steps">
-              {deliverySteps.map(({ label, icon, accent }) => (
-                <li key={label}>
-                  <span className="auth-delivery-node" aria-hidden="true">{icon}</span>
-                  <span className={accent ? 'auth-delivery-label auth-delivery-label--accent' : 'auth-delivery-label'}>{label}</span>
+            <ol className="flow-nodes">
+              {flowSteps.map((step, index) => (
+                <li key={step.label} className={index >= 2 && index <= 6 ? 'flow-node flow-node--hot' : 'flow-node'}
+                  style={{ gridColumn: index < 4 ? index + 1 : 8 - index, gridRow: index < 4 ? 1 : 2 }}>
+                  <span className="flow-step">
+                    <span className="flow-dot" aria-hidden="true">{index + 1}</span>
+                    <span className="flow-label" title={step.label}>{step.label}</span>
+                  </span>
                 </li>
               ))}
             </ol>
-            <figcaption>{t('intro.iterate')}</figcaption>
+            <figcaption className="flow-loop">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>
+              {t('intro.iterate')}
+            </figcaption>
           </figure>
         </section>
-        <section className="auth-entry-form-panel" aria-label={t('intro.account')}>{children}</section>
+        <section className="login-entry-form" aria-label={t('intro.account')}>{children}</section>
       </main>
     </>
   );

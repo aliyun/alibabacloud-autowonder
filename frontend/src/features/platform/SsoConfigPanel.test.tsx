@@ -126,7 +126,7 @@ describe('SsoConfigPanel', () => {
     expect(screen.getAllByText('SAML 2.0')).toHaveLength(3);
     expect(screen.getByText('OIDC')).toBeInTheDocument();
 
-    const previewButtons = await screen.findAllByRole('button', { name: /使用 .* 登录/ });
+    const previewButtons = await screen.findAllByRole('button', { name: /使用.*登录/ });
     expect(previewButtons.map((button) => button.textContent)).toEqual([
       '使用 员工 SSO 登录',
       '使用 访客 SSO 登录',
@@ -157,16 +157,16 @@ describe('SsoConfigPanel', () => {
 
     renderPanel();
 
-    await userEvent.click(await screen.findByRole('button', { name: '新增连接' }));
+    await userEvent.click(await screen.findByRole('button', { name: '添加登录连接' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByRole('combobox', { name: '所属 IdP' })).not.toBeDisabled();
-    expect(within(dialog).getByRole('switch', { name: '启用该登录方式' })).not.toBeChecked();
+    expect(within(dialog).getByRole('combobox', { name: '身份提供方' })).not.toBeDisabled();
+    expect(within(dialog).getByRole('switch', { name: '启用此连接' })).not.toBeChecked();
 
     await userEvent.type(within(dialog).getByLabelText('连接名称'), '  新建 SSO  ');
     await userEvent.type(within(dialog).getByLabelText('Issuer'), ' https://idp.example.com ');
-    await userEvent.type(within(dialog).getByLabelText('SAML SSO 地址'), ' https://idp.example.com/sso ');
+    await userEvent.type(within(dialog).getByLabelText('SSO 登录地址'), ' https://idp.example.com/sso ');
     await userEvent.type(within(dialog).getByLabelText('签名证书'), 'CERT');
-    await userEvent.type(within(dialog).getByLabelText('用户标识声明'), 'sub');
+    await userEvent.type(within(dialog).getByLabelText('主体标识'), 'sub');
     await userEvent.click(within(dialog).getByRole('button', { name: '保存连接' }));
 
     await waitFor(() => expect(createdBody).not.toBeNull());
@@ -206,15 +206,15 @@ describe('SsoConfigPanel', () => {
     );
 
     renderPanel();
-    await userEvent.click(await screen.findByRole('button', { name: '新增连接' }));
+    await userEvent.click(await screen.findByRole('button', { name: '添加登录连接' }));
     const dialog = await screen.findByRole('dialog');
 
     await chooseOption('协议', 'OIDC');
     await userEvent.type(within(dialog).getByLabelText('连接名称'), 'OIDC SSO');
     await userEvent.type(within(dialog).getByLabelText('Issuer'), 'https://idp.example.com');
-    await userEvent.type(within(dialog).getByLabelText('授权端点'), 'https://idp.example.com/authorize');
-    await userEvent.type(within(dialog).getByLabelText('令牌端点'), 'https://idp.example.com/token');
-    await userEvent.type(within(dialog).getByLabelText('JWKS 端点'), 'https://idp.example.com/jwks');
+    await userEvent.type(within(dialog).getByLabelText('Authorize URL'), 'https://idp.example.com/authorize');
+    await userEvent.type(within(dialog).getByLabelText('Token URL'), 'https://idp.example.com/token');
+    await userEvent.type(within(dialog).getByLabelText('JWKS URL'), 'https://idp.example.com/jwks');
     await userEvent.type(within(dialog).getByLabelText('Client ID'), 'client-1');
     await userEvent.click(within(dialog).getByRole('button', { name: '保存连接' }));
 
@@ -268,10 +268,10 @@ describe('SsoConfigPanel', () => {
     await userEvent.click(await screen.findByRole('button', { name: /配\s*置/ }));
     const dialog = await screen.findByRole('dialog');
 
-    expect(within(dialog).getByRole('combobox', { name: '所属 IdP' })).toBeDisabled();
+    expect(within(dialog).getByRole('combobox', { name: '身份提供方' })).toBeDisabled();
     expect(within(dialog).getByRole('combobox', { name: '协议' })).toBeDisabled();
     expect(within(dialog).getByLabelText('Client Secret')).toHaveValue('');
-    expect(within(dialog).getByText('已配置密钥；留空保存将沿用现有密钥。')).toBeInTheDocument();
+    expect(within(dialog).getByText('仅展示「已配置」标记，不回显已保存密钥。')).toBeInTheDocument();
 
     const nameInput = within(dialog).getByLabelText('连接名称');
     await userEvent.clear(nameInput);
@@ -358,8 +358,8 @@ describe('SsoConfigPanel', () => {
     renderPanel();
     await userEvent.click(await screen.findByRole('switch', { name: '切换 集团 AD FS 的启用状态' }));
 
-    const title = await screen.findByText('停用 集团 AD FS？');
-    expect(screen.getByText('该 IdP 下的 2 个登录连接将同时从登录页隐藏，已配置的内容不会被删除。'))
+    const title = await screen.findByText('停用「集团 AD FS」？');
+    expect(screen.getByText('该身份提供方下 2 个登录连接将同时停止可用，登录页会移除对应入口。'))
       .toBeInTheDocument();
     const popup = title.closest('.ant-popconfirm');
     expect(popup).not.toBeNull();
@@ -390,11 +390,11 @@ describe('SsoConfigPanel', () => {
     );
 
     renderPanel();
-    await userEvent.click(await screen.findByRole('button', { name: '新增连接' }));
+    await userEvent.click(await screen.findByRole('button', { name: '添加登录连接' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('连接名称'), '读回失败 SSO');
     await userEvent.type(within(dialog).getByLabelText('Issuer'), 'https://idp.example.com');
-    await userEvent.type(within(dialog).getByLabelText('SAML SSO 地址'), 'https://idp.example.com/sso');
+    await userEvent.type(within(dialog).getByLabelText('SSO 登录地址'), 'https://idp.example.com/sso');
     await userEvent.type(within(dialog).getByLabelText('签名证书'), 'CERT');
     await userEvent.click(within(dialog).getByRole('button', { name: '保存连接' }));
 
@@ -417,7 +417,7 @@ describe('SsoConfigPanel', () => {
 
     renderPanel();
 
-    expect(await screen.findByText('企业 SSO 配置加载失败')).toBeInTheDocument();
+    expect(await screen.findByText('加载企业 SSO 配置失败')).toBeInTheDocument();
     expect(screen.getByText('加载失败')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
@@ -430,10 +430,10 @@ describe('SsoConfigPanel', () => {
 
     renderPanel();
 
-    expect(await screen.findByText('尚未配置身份提供方')).toBeInTheDocument();
-    expect(screen.getByText('尚未配置登录连接')).toBeInTheDocument();
-    expect(screen.getByText('没有可展示的登录方式：请启用连接及其所属 IdP。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '新增连接' })).toBeDisabled();
+    expect(await screen.findByText('还没有身份提供方')).toBeInTheDocument();
+    expect(screen.getByText('还没有登录连接')).toBeInTheDocument();
+    expect(screen.getByText('未配置启用连接时，登录页只展示 AutoWonder 账号登录。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '添加登录连接' })).toBeDisabled();
   });
 
   it('derives the SAML callback address from the configured deployment domain', async () => {
@@ -443,15 +443,15 @@ describe('SsoConfigPanel', () => {
       domain: 'https://sso.example.com',
       mcpBaseUrl: 'https://internal.example.com/api/mcp',
     }));
-    await userEvent.click(await screen.findByRole('button', { name: '回调信息' }));
+    await userEvent.click(await screen.findByRole('button', { name: '回调地址' }));
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('https://sso.example.com/api/auth/sso/11/acs')).toBeInTheDocument();
     expect(within(dialog).getByText(
-      '请将该 ACS 地址配置为 IdP 的断言消费服务（ACS）地址，并在 IdP 侧将 RelayState 原样回传。',
+      'SAML 2.0：把该地址填入 IdP 的 ACS / 回复 URL，并确保断言受众与 Issuer 一致。',
     )).toBeInTheDocument();
     expect(within(dialog).getByText(
-      '地址按部署域名生成；未配置部署域名时使用平台公网地址或当前访问域名。更换域名后请同步更新 IdP 侧配置。',
+      '地址以平台部署公网地址为基准，不使用当前浏览器地址；变更域名后需同步更新。',
     )).toBeInTheDocument();
   });
 
@@ -459,22 +459,27 @@ describe('SsoConfigPanel', () => {
     serveLists([makeIdp()], [makeConnection({ id: 12, protocol: 'OIDC', name: 'OIDC SSO' })]);
 
     renderPanel(branding({ domain: null, mcpBaseUrl: '' }));
-    await userEvent.click(await screen.findByRole('button', { name: '回调信息' }));
+    await userEvent.click(await screen.findByRole('button', { name: '回调地址' }));
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(`${window.location.origin}/api/auth/sso/12/callback`)).toBeInTheDocument();
     expect(within(dialog).getByText(
-      '请将该地址配置为 OIDC 应用的回调（Redirect URI）地址。',
+      'OIDC：把该地址填入应用的 Redirect URI。',
     )).toBeInTheDocument();
   });
 
-  it('previews the login button without starting a login', async () => {
+  it('renders a non-interactive login preview and never starts a login', async () => {
     serveLists([makeIdp()], [makeConnection()]);
 
     renderPanel();
-    await userEvent.click(await screen.findByRole('button', { name: '使用 员工 SSO 登录' }));
+    const previewButton = await screen.findByRole('button', { name: '使用 员工 SSO 登录' });
+    expect(previewButton).toBeDisabled();
+    expect(screen.getByText('登录 AutoWonder')).toBeInTheDocument();
+    expect(screen.getByText('选择公司的身份系统登录 AutoWonder')).toBeInTheDocument();
 
-    expect(message.info).toHaveBeenCalledWith('预览仅为展示效果，请从登录页发起登录。');
+    await userEvent.click(previewButton);
+
+    expect(message.info).not.toHaveBeenCalled();
   });
 
   it('creates and renames an idp', async () => {
@@ -495,25 +500,27 @@ describe('SsoConfigPanel', () => {
 
     renderPanel();
 
-    await userEvent.click(await screen.findByRole('button', { name: '新增 IdP' }));
+    // 列表加载完成后卡片头部的按钮才出现；空态里的同名按钮会被表格重渲染替换掉。
+    await screen.findByText('集团 AD FS');
+    await userEvent.click(screen.getByRole('button', { name: '添加身份提供方' }));
     let dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('名称'), '  新 IdP  ');
     await userEvent.type(within(dialog).getByLabelText('描述'), '第二 IdP');
-    await userEvent.click(within(dialog).getByRole('button', { name: '保存 IdP' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /^保\s*存$/ }));
 
     await waitFor(() => expect(createdBody).toEqual({ name: '新 IdP', description: '第二 IdP' }));
-    await waitFor(() => expect(message.success).toHaveBeenCalledWith('IdP 已创建'));
+    await waitFor(() => expect(message.success).toHaveBeenCalledWith('身份提供方已创建'));
 
-    await userEvent.click((await screen.findAllByRole('button', { name: '编辑 IdP' }))[0]);
+    await userEvent.click((await screen.findAllByRole('button', { name: /编\s*辑/ }))[0]);
     dialog = await screen.findByRole('dialog');
     const nameInput = within(dialog).getByLabelText('名称');
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, '集团 AD FS 更新');
     await userEvent.clear(within(dialog).getByLabelText('描述'));
-    await userEvent.click(within(dialog).getByRole('button', { name: '保存 IdP' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /^保\s*存$/ }));
 
     await waitFor(() => expect(updatedBody).toEqual({ name: '集团 AD FS 更新', description: null }));
-    await waitFor(() => expect(message.success).toHaveBeenCalledWith('IdP 已更新'));
+    await waitFor(() => expect(message.success).toHaveBeenCalledWith('身份提供方已更新'));
   });
 
   it('falls back to the localized save error when an idp update returns no message', async () => {
@@ -524,14 +531,14 @@ describe('SsoConfigPanel', () => {
     );
 
     renderPanel();
-    await userEvent.click(await screen.findByRole('button', { name: '编辑 IdP' }));
+    await userEvent.click(await screen.findByRole('button', { name: /编\s*辑/ }));
     const dialog = await screen.findByRole('dialog');
     const nameInput = within(dialog).getByLabelText('名称');
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, '改名 IdP');
-    await userEvent.click(within(dialog).getByRole('button', { name: '保存 IdP' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /^保\s*存$/ }));
 
-    await waitFor(() => expect(message.error).toHaveBeenCalledWith('IdP 保存失败'));
+    await waitFor(() => expect(message.error).toHaveBeenCalledWith('身份提供方保存失败'));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 
@@ -543,11 +550,11 @@ describe('SsoConfigPanel', () => {
     );
 
     renderPanel();
-    await userEvent.click(await screen.findByRole('button', { name: '新增连接' }));
+    await userEvent.click(await screen.findByRole('button', { name: '添加登录连接' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('连接名称'), '员工 SSO');
     await userEvent.type(within(dialog).getByLabelText('Issuer'), 'https://idp.example.com');
-    await userEvent.type(within(dialog).getByLabelText('SAML SSO 地址'), 'https://idp.example.com/sso');
+    await userEvent.type(within(dialog).getByLabelText('SSO 登录地址'), 'https://idp.example.com/sso');
     await userEvent.type(within(dialog).getByLabelText('签名证书'), 'CERT');
     await userEvent.click(within(dialog).getByRole('button', { name: '保存连接' }));
 
@@ -695,7 +702,7 @@ describe('SsoConfigPanel', () => {
     );
 
     renderPanel();
-    await userEvent.click(await screen.findByRole('button', { name: '新增连接' }));
+    await userEvent.click(await screen.findByRole('button', { name: '添加登录连接' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/默认跟随用户标识声明/)).toBeInTheDocument();
     const bind = within(dialog).getByRole('switch', { name: '同名账号自动绑定' });
@@ -704,9 +711,9 @@ describe('SsoConfigPanel', () => {
 
     await userEvent.type(within(dialog).getByLabelText('连接名称'), '默认用户名连接');
     await userEvent.type(within(dialog).getByLabelText('Issuer'), 'https://idp.example.com');
-    await userEvent.type(within(dialog).getByLabelText('SAML SSO 地址'), 'https://idp.example.com/sso');
+    await userEvent.type(within(dialog).getByLabelText('SSO 登录地址'), 'https://idp.example.com/sso');
     await userEvent.type(within(dialog).getByLabelText('签名证书'), 'CERT');
-    await userEvent.type(within(dialog).getByLabelText('用户标识声明'), 'nameid');
+    await userEvent.type(within(dialog).getByLabelText('主体标识'), 'nameid');
     await userEvent.click(within(dialog).getByRole('button', { name: '保存连接' }));
 
     await waitFor(() => expect(createdBody).not.toBeNull());

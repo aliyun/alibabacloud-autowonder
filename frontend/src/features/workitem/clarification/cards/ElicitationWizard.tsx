@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button, Modal } from 'antd';
-import { DownOutlined, QuestionCircleOutlined } from '@ant-design/icons';
-import { CLARIFICATION_THEME } from '../theme';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { elicitationMessage, parseElicitationSchema } from './schemaForm';
 import { ElicitationField } from './ElicitationField';
 import type { ElicitationReply } from './ElicitationCard';
@@ -15,8 +14,9 @@ import {
   type AnswerValues,
   type OtherText,
 } from './elicitationAnswer';
+// 首席助理、派发请求确认也复用向导，不能依赖澄清面板先加载样式。
+import '../clarification.css';
 
-const PRIMARY = 'var(--aw-accent-text)';
 const AUTO_ADVANCE_MS = 300;
 /** 跨进最后一题后主按钮的静默期：挡住把「下一题」连点/回车落到刚变成的「提交」上。 */
 const SUBMIT_ARM_MS = 400;
@@ -32,10 +32,10 @@ interface ElicitationWizardProps {
   message?: string;
   schema: unknown;
   submitting?: boolean;
-  /** 全屏时面板左右留白变为 24px，卡片随之对齐，保持与消息/输入框一致的视觉边距。 */
+  /** 保留入参：全屏左右留白现由面板 .is-fullscreen 样式承担。 */
   fullscreen?: boolean;
-  /** 由澄清面板显式开启：标题行提供收起/展开入口，卡片带出现/消失动效。
-   *  默认关闭，首席助理与派发请求确认两处复用保持现状（无收起入口、无动效）。 */
+  /** 由澄清面板显式开启：标题行提供收起/展开入口。
+   *  默认关闭，首席助理与派发请求确认两处复用无收起入口。 */
   collapsible?: boolean;
   /** 答完/跳过后父级在卸载前标记：卡片淡出且不可交互，随后由父级移除。 */
   dismissing?: boolean;
@@ -43,7 +43,7 @@ interface ElicitationWizardProps {
 }
 
 export function ElicitationWizard({
-  requestId, message, schema, submitting = false, fullscreen = false,
+  requestId, message, schema, submitting = false,
   collapsible = false, dismissing = false, onReply,
 }: ElicitationWizardProps) {
   const { t } = useTranslation('workitem');
@@ -196,182 +196,129 @@ export function ElicitationWizard({
   const isLast = stepIndex === total - 1;
   const isCollapsed = collapsible && collapsed;
   const toggleLabel = isCollapsed ? t('clarification.expandCard') : t('clarification.collapseCard');
-  // 收起态仍可点击（含提交/跳过在途），不阻塞原有流程，因此不加 disabled。
-  const toggleButton = collapsible ? (
-    <Button
-      type="text"
-      size="small"
-      className="aw-elicitation-toggle"
-      aria-expanded={!isCollapsed}
-      aria-label={toggleLabel}
-      title={toggleLabel}
-      data-testid={`elicitation-toggle-${requestId}`}
-      onClick={toggleCollapsed}
-      icon={<DownOutlined className="aw-elicitation-chevron" />}
-      style={{ fontSize: 12, color: CLARIFICATION_THEME.textMuted, flexShrink: 0 }}
-    />
-  ) : null;
+  const rootClass = `aw-cl-wizard${isCollapsed ? ' collapsed' : ''}${collapsible && dismissing ? ' is-dismissing' : ''}`;
 
   return (
     <div
       ref={rootRef}
       data-testid={`elicitation-wizard-${requestId}`}
       aria-label={heading}
-      className={collapsible ? `aw-elicitation-card${dismissing ? ' is-dismissing' : ''}` : undefined}
-      style={{
-        margin: fullscreen ? '12px 24px' : '8px 12px',
-        maxHeight: fullscreen ? 'min(60%, 480px)' : 'min(56%, 360px)',
-        display: 'flex', flexDirection: 'column', flexShrink: 0,
-        backgroundColor: CLARIFICATION_THEME.surface,
-        border: `1px solid ${CLARIFICATION_THEME.controlBorder}`,
-        borderRadius: CLARIFICATION_THEME.radiusControl,
-        boxShadow: 'none',
-        overflow: 'hidden',
-      }}
+      className={rootClass}
     >
-      {isCollapsed ? (
-      <div
-        data-testid={`elicitation-collapsed-${requestId}`}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px' }}
-      >
-        <span style={{
-          fontSize: 16, fontWeight: 600, flex: 1, minWidth: 0,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {heading}
-        </span>
-        <span
-          data-testid={`elicitation-count-${requestId}`}
-          style={{ fontSize: 14, color: CLARIFICATION_THEME.textSecondary, whiteSpace: 'nowrap', flexShrink: 0 }}
-        >
+      <div className="aw-cl-wz-head" data-testid={isCollapsed ? `elicitation-collapsed-${requestId}` : undefined}>
+        <span className="ic"><AwStrokeIcon name="help" size={14} /></span>
+        <strong>{heading}</strong>
+        <span className="cnt" data-testid={`elicitation-count-${requestId}`}>
           {t('clarification.questionCount', { current: stepIndex + 1, total })}
         </span>
-        {toggleButton}
-      </div>
-      ) : (
-      <>
-      <div style={{ borderBottom: `1px solid ${CLARIFICATION_THEME.hairline}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 8px' }}>
-          <span style={{
-            fontSize: 16, fontWeight: 600, flex: 1, minWidth: 0,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {heading}
-          </span>
-          <Button
-            type="text"
-            size="small"
-            disabled={submitting}
-            data-testid={`elicitation-skip-${requestId}`}
-            onClick={() => onReply({ action: 'decline' })}
-            style={{ fontSize: 14, color: CLARIFICATION_THEME.textMuted }}
-          >
-            {t('clarification.skip')}
-          </Button>
-          {toggleButton}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px 12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {fields.map((f, i) => {
-              const current = i === stepIndex;
-              const answered = isFieldAnswered(f, values, otherText);
-              return (
-                <button
-                  key={f.name}
-                  type="button"
-                  data-testid={`elicitation-step-${requestId}-${i}`}
-                  title={t('clarification.questionTitle', { number: i + 1, label: f.label })}
-                  onClick={() => gotoStep(i)}
-                  style={{
-                    width: 28, height: 28, padding: 0, borderRadius: '50%', cursor: 'pointer',
-                    fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    border: `1px solid ${current || answered ? PRIMARY : CLARIFICATION_THEME.controlBorder}`,
-                    backgroundColor: current ? 'var(--aw-primary)' : (answered ? 'rgba(var(--aw-accent-rgb),.10)' : CLARIFICATION_THEME.surface),
-                    color: current ? 'var(--aw-primary-ink)' : (answered ? PRIMARY : CLARIFICATION_THEME.textSecondary),
-                    fontWeight: current ? 600 : 400,
-                  }}
-                >
-                  {i + 1}
-                </button>
-              );
-            })}
-          </div>
-          <span
-            data-testid={`elicitation-count-${requestId}`}
-            style={{ fontSize: 14, color: CLARIFICATION_THEME.textSecondary }}
-          >
-            {t('clarification.questionCount', { current: stepIndex + 1, total })}
-          </span>
+        <div className="acts">
+          {isCollapsed ? null : (
+            <Button
+              type="text"
+              size="small"
+              className="aw-cl-ghost"
+              disabled={submitting}
+              data-testid={`elicitation-skip-${requestId}`}
+              onClick={() => onReply({ action: 'decline' })}
+            >
+              {t('clarification.skip')}
+            </Button>
+          )}
+          {/* 收起态仍可点击（含提交/跳过在途），不阻塞原有流程，因此不加 disabled。 */}
+          {collapsible ? (
+            <Button
+              type="text"
+              size="small"
+              className="aw-cl-icon-btn aw-cl-wz-toggle"
+              aria-expanded={!isCollapsed}
+              aria-label={toggleLabel}
+              title={toggleLabel}
+              data-testid={`elicitation-toggle-${requestId}`}
+              onClick={toggleCollapsed}
+              icon={<span className="chev"><AwStrokeIcon name="chev-d" size={14} /></span>}
+            />
+          ) : null}
         </div>
       </div>
 
-      <div
-        className={collapsible ? 'aw-elicitation-body' : undefined}
-        style={{ padding: 16, lineHeight: 1.7, overflow: 'auto', flex: 1, minHeight: 0 }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <QuestionCircleOutlined style={{ color: PRIMARY }} />
-          <span style={{ fontSize: 16, fontWeight: 600 }}>{field.label}</span>
-          {field.required ? <span style={{ color: 'var(--aw-error)' }}> *</span> : null}
-        </div>
-        {field.description ? (
-          <div style={{
-            fontSize: 14, color: CLARIFICATION_THEME.textSecondary,
-            whiteSpace: 'pre-wrap', margin: '4px 0 8px',
-          }}>
-            {field.description}
-          </div>
-        ) : null}
-        <ElicitationField
-          field={field}
-          value={values[field.name]}
-          otherText={otherText[field.name] ?? ''}
-          error={fieldErrors[field.name] ? validateElicitation([field], values, otherText).errors[field.name] : undefined}
-          disabled={submitting}
-          onValueChange={(value) => handleValueChange(field.name, field.control, value)}
-          onOtherTextChange={(text) => handleOtherTextChange(field.name, text)}
-          onPickOption={field.control === 'select' ? () => handlePickOption(stepIndex) : undefined}
-        />
-      </div>
+      {isCollapsed ? null : (
+        <>
+          {total > 1 ? (
+            <div className="aw-cl-wz-dots">
+              {fields.map((f, i) => {
+                const current = i === stepIndex;
+                const answered = isFieldAnswered(f, values, otherText);
+                const dotLabel = t('clarification.questionTitle', { number: i + 1, label: f.label });
+                return (
+                  <button
+                    key={f.name}
+                    type="button"
+                    className={current ? 'cur' : (answered ? 'done' : undefined)}
+                    data-testid={`elicitation-step-${requestId}-${i}`}
+                    title={dotLabel}
+                    aria-label={dotLabel}
+                    aria-current={current ? 'step' : undefined}
+                    onClick={() => gotoStep(i)}
+                  />
+                );
+              })}
+            </div>
+          ) : null}
 
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-        borderTop: `1px solid ${CLARIFICATION_THEME.hairline}`,
-        backgroundColor: CLARIFICATION_THEME.codeSurface, flexShrink: 0,
-      }}>
-        <Button
-          size="small"
-          disabled={submitting || stepIndex === 0}
-          data-testid={`elicitation-prev-${requestId}`}
-          onClick={() => gotoStep(stepIndex - 1)}
-        >
-          {t('clarification.previousQuestion')}
-        </Button>
-        {isLast ? (
-          <Button
-            type="primary"
-            size="small"
-            disabled={submitting || !submitArmed}
-            data-testid={`elicitation-submit-${requestId}`}
-            onClick={submit}
-            style={{ marginLeft: 'auto' }}
-          >
-            {t('clarification.submit')}
-          </Button>
-        ) : (
-          <Button
-            type="primary"
-            size="small"
-            disabled={submitting}
-            data-testid={`elicitation-next-${requestId}`}
-            onClick={goNext}
-            style={{ marginLeft: 'auto' }}
-          >
-            {t('clarification.nextQuestion')}
-          </Button>
-        )}
-      </div>
-      </>
+          <div className="aw-cl-wz-body">
+            <div className="aw-cl-q-label">
+              {field.label}
+              {field.required ? <span className="req">*</span> : null}
+            </div>
+            {field.description ? (
+              <div className="aw-cl-q-desc" style={{ whiteSpace: 'pre-wrap' }}>{field.description}</div>
+            ) : null}
+            <ElicitationField
+              field={field}
+              value={values[field.name]}
+              otherText={otherText[field.name] ?? ''}
+              error={fieldErrors[field.name] ? validateElicitation([field], values, otherText).errors[field.name] : undefined}
+              disabled={submitting}
+              onValueChange={(value) => handleValueChange(field.name, field.control, value)}
+              onOtherTextChange={(text) => handleOtherTextChange(field.name, text)}
+              onPickOption={field.control === 'select' ? () => handlePickOption(stepIndex) : undefined}
+            />
+          </div>
+
+          <div className="aw-cl-wz-foot">
+            <Button
+              size="small"
+              disabled={submitting || stepIndex === 0}
+              data-testid={`elicitation-prev-${requestId}`}
+              onClick={() => gotoStep(stepIndex - 1)}
+            >
+              {t('clarification.previousQuestion')}
+            </Button>
+            {isLast ? (
+              <Button
+                type="primary"
+                size="small"
+                className="aw-cl-wz-primary"
+                disabled={submitting || !submitArmed}
+                data-testid={`elicitation-submit-${requestId}`}
+                onClick={submit}
+              >
+                {t('clarification.submit')}
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                size="small"
+                className="aw-cl-wz-primary"
+                disabled={submitting}
+                data-testid={`elicitation-next-${requestId}`}
+                onClick={goNext}
+              >
+                {t('clarification.nextQuestion')}
+              </Button>
+            )}
+          </div>
+        </>
       )}
 
       <Modal

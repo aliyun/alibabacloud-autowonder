@@ -21,7 +21,7 @@ function renderControl(props: {
       <ScheduledStartControl
         workitemId={props.workitemId ?? 10000}
         assigneeType={props.assigneeType ?? 'AGENT'}
-        scheduledStartAt={props.scheduledStartAt === undefined ? '2026-09-01T02:00:00Z' : props.scheduledStartAt}
+        scheduledStartAt={props.scheduledStartAt === undefined ? '2030-09-01T02:00:00Z' : props.scheduledStartAt}
       />
     </QueryClientProvider>,
   );
@@ -31,10 +31,20 @@ describe('ScheduledStartControl', () => {
   it('shows the planned time with modify/execute-now/cancel actions for scheduled agent workitems', () => {
     renderControl({});
 
-    expect(screen.getByText(/计划执行:/)).toBeInTheDocument();
+    expect(screen.getByText('计划执行')).toBeInTheDocument();
+    expect(screen.getByText('到点自动开始')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-start-control')).not.toHaveClass('is-overdue');
     expect(screen.getByRole('button', { name: /修\s*改/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '立即执行' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '取消定时' })).toBeInTheDocument();
+  });
+
+  it('flags a schedule whose time has already passed as overdue and not started', () => {
+    renderControl({ scheduledStartAt: '2020-09-01T02:00:00Z' });
+
+    expect(screen.getByText('计划执行已到时间')).toBeInTheDocument();
+    expect(screen.getByText('尚未开始')).toBeInTheDocument();
+    expect(screen.getByTestId('schedule-start-control')).toHaveClass('is-overdue');
   });
 
   it('renders nothing for human-assigned or unscheduled workitems', () => {

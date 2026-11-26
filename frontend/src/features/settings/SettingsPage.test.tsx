@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -15,11 +15,14 @@ function apiOk<T>(data: T) {
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter><SettingsPage /></MemoryRouter>
-    </QueryClientProvider>,
-  );
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter><SettingsPage /></MemoryRouter>
+      </QueryClientProvider>,
+    ),
+    queryClient,
+  };
 }
 
 function useCommonSettingsHandlers(overrides: Parameters<typeof server.use>) {
@@ -67,12 +70,56 @@ describe('SettingsPage', () => {
     useCommonSettingsHandlers([]);
 
     renderPage();
-
-    expect(await screen.findByDisplayValue('20000', {}, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.getByDisplayValue('10000000')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('qwen-max')).toBeInTheDocument();
+    const calls = await screen.findByLabelText('月调用次数');
+    await waitFor(() => {
+      expect(calls).toHaveValue('20000');
+      expect(screen.getByLabelText('月 Token 上限')).toHaveValue('10000000');
+      expect(screen.getByLabelText('默认模型')).toHaveValue('qwen-max');
+    });
     expect(screen.getByText('仓库扫描')).toBeInTheDocument();
     expect(screen.getByText('15')).toBeInTheDocument();
+  });
+
+  it.each(['quota', 'usage', 'settings'] as const)('initializes both AI forms when %s resolves before the other queries', async first => {
+    const gates = Object.fromEntries(['quota', 'usage', 'settings'].map(key => {
+      let resolve!: () => void;
+      const promise = new Promise<void>(done => { resolve = done; });
+      return [key, { promise, resolve }];
+    })) as Record<'quota' | 'usage' | 'settings', { promise: Promise<void>; resolve: () => void }>;
+    const keys = { quota: ['ai-quota'], usage: ['ai-usage'], settings: ['settings', 'AI'] };
+    useCommonSettingsHandlers([
+      http.get('/api/ai-usage/quota', async () => {
+        await gates.quota.promise;
+        return HttpResponse.json(apiOk({ periodType: 'MONTH', maxCalls: 20000, maxTokens: 10000000, concurrencyLimit: 8 }));
+      }),
+      http.get('/api/ai-usage', async () => {
+        await gates.usage.promise;
+        return HttpResponse.json(apiOk([{ period: '2026-07', scene: '仓库扫描', callCount: 15, inputTokens: 1000, outputTokens: 500 }]));
+      }),
+      http.get('/api/settings/AI', async () => {
+        await gates.settings.promise;
+        return HttpResponse.json(apiOk([{ key: 'default_model', valueJson: 'qwen-max', secret: false }]));
+      }),
+    ]);
+    const { queryClient, unmount } = renderPage();
+    try {
+      await act(async () => { gates[first].resolve(); });
+      await waitFor(() => expect(queryClient.getQueryState(keys[first])?.status).toBe('success'));
+      expect(screen.queryByLabelText('月调用次数')).not.toBeInTheDocument();
+      await act(async () => { Object.values(gates).forEach(gate => gate.resolve()); });
+      await waitFor(() => {
+        expect(screen.getByLabelText('月调用次数')).toHaveValue('20000');
+        expect(screen.getByLabelText('月 Token 上限')).toHaveValue('10000000');
+        expect(screen.getByLabelText('并发限制')).toHaveValue('8');
+        expect(screen.getByLabelText('默认模型')).toHaveValue('qwen-max');
+      });
+      expect(screen.getByText('仓库扫描')).toBeInTheDocument();
+    } finally {
+      await act(async () => { Object.values(gates).forEach(gate => gate.resolve()); });
+      unmount();
+      await queryClient.cancelQueries();
+      queryClient.clear();
+    }
   });
 
   it('saves AI quota and model defaults', async () => {

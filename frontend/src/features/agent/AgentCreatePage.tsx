@@ -1,22 +1,20 @@
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
-import { PageHeading } from '@/shared/ui/PageHeading';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
 import { type FocusEvent, useRef, type KeyboardEvent, useState } from 'react';
-import { Alert, AutoComplete, Button, Card, Form, Input, Select, Space, Typography, message } from 'antd';
-import { SaveOutlined } from '@ant-design/icons';
+import { Alert, AutoComplete, Button, Form, Input, Select, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import type { TextAreaRef } from 'antd/es/input/TextArea';
 import { AiSessionPanel } from '@/shared/ui/AiSessionPanel';
 import type { AgentConfigGenResult } from '@/shared/types/ai';
 import { useAgentSdlcOptions, useCreateAgent } from './hooks';
 import type { CreateAgentRequest } from './api';
-import { getAgentRoleCodeOptions, getAgentRoleNameOptions, getRoleCodeByName, getRoleNameByCode } from './constants';
+import { getAgentRoleCodeOptions, getAgentRoleNameOptions, getRoleCodeByName, getRoleNameByCode, withCustomRoleOption } from './constants';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+import './AgentForm.css';
 
 const { TextArea } = Input;
-const { Text } = Typography;
 
 function normalizeGeneratedRoleCode(value: string) {
   return value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -29,6 +27,8 @@ export function AgentCreatePage() {
   useLocalizedValidation(form);
   const [mode, setMode] = useState<'natural' | 'advanced'>('advanced');
   const [naturalSessionKey] = useState(0);
+  const [roleNameQuery, setRoleNameQuery] = useState('');
+  const [roleCodeQuery, setRoleCodeQuery] = useState('');
   const businessBackgroundRef = useRef<TextAreaRef>(null);
   const createAgent = useCreateAgent();
   const sdlcOptions = useAgentSdlcOptions();
@@ -112,20 +112,12 @@ export function AgentCreatePage() {
   };
 
   return (
-    <div>
-
-      <Card
-        className="aw-content-card" title={<PageHeading title={<span className="aw-detail-title"><PageBackButton to="/agents" label={t('actions.backList')} /><span>{t('create.title')}</span></span>} />}
-        extra={
-          <Space wrap>
-            <Button onClick={() => navigate('/agents')}>{t('actions.cancel')}</Button>
-            <Button type="primary" icon={<SaveOutlined aria-hidden="true" />} onClick={() => form.submit()} loading={createAgent.isPending}>
-              {t('actions.createButton')}
-            </Button>
-          </Space>
-        }
-      >
-        {mode === 'natural' ? (
+    <>
+      <div className="aw-form-head">
+        <PageBackButton to="/agents" label={t('actions.backList')} />
+        <span className="aw-form-title">{t('create.title')}</span>
+      </div>
+      {mode === 'natural' ? (
           <div style={{ height: '72vh', minHeight: 520 }}>
             <Alert
               type="info"
@@ -144,82 +136,103 @@ export function AgentCreatePage() {
               />
             </div>
           </div>
-        ) : (
-          <>
-            <Alert
-              type="info"
-              showIcon
-              style={{ marginBottom: 16 }}
-              message={t('create.advanced')}
-              description={<Text type="secondary">{t('create.requiredHint')}</Text>}
-            />
-            <Form form={form} layout="vertical" onFinish={handleSubmit}>
-              <Form.Item label={t('fields.name')} name="name" rules={[{ required: true, message: t('validation.name') }]}>
-                <Input placeholder={t('placeholders.name')} maxLength={128} />
-              </Form.Item>
-              <Form.Item label={t('fields.avatar')} name="avatarUrl">
-                <Input placeholder={t('placeholders.optional')} maxLength={512} />
-              </Form.Item>
+      ) : (
+        <Form form={form} className="aw-create-form" layout="vertical" onFinish={handleSubmit}>
+          <div className="aw-agent-sec">
+            <div className="aw-agent-sec-title">{t('form.sections.basic')}</div>
+            <Form.Item label={t('fields.name')} name="name" rules={[{ required: true, message: t('validation.name') }]}>
+              <Input placeholder={t('placeholders.name')} maxLength={128} showCount />
+            </Form.Item>
+            <Form.Item label={t('fields.avatar')} name="avatarUrl">
+              <Input placeholder={t('placeholders.optional')} maxLength={512} />
+            </Form.Item>
+            <div className="aw-agent-grid">
               <Form.Item label={t('fields.roleName')} name="roleName" rules={[{ required: true, message: t('validation.roleName') }]}>
                 <AutoComplete
-                  options={getAgentRoleNameOptions()}
+                  options={withCustomRoleOption(
+                    getAgentRoleNameOptions(),
+                    roleNameQuery,
+                    value => t('roleCustomOption.name', { value }),
+                  )}
                   allowClear
                   placeholder={t('placeholders.roleName')}
                   maxLength={128}
+                  onSearch={setRoleNameQuery}
                   onSelect={handleRoleNameSelect}
                   onChange={handleRoleNameChange}
+                  onDropdownVisibleChange={open => { if (!open) setRoleNameQuery(''); }}
                 />
               </Form.Item>
-              <Form.Item label={t('fields.roleCode')} name="roleCode" rules={[{ required: true, message: t('validation.roleCode') }]}>
+              <Form.Item label={t('fields.roleCode')} name="roleCode" extra={t('form.roleCodeHelp')} rules={[{ required: true, message: t('validation.roleCode') }]}>
                 <AutoComplete
-                  options={getAgentRoleCodeOptions()}
+                  className="aw-agent-code"
+                  options={withCustomRoleOption(
+                    getAgentRoleCodeOptions(),
+                    roleCodeQuery,
+                    value => t('roleCustomOption.code', { value }),
+                    value => value.toUpperCase(),
+                  )}
                   allowClear
                   placeholder={t('placeholders.roleCode')}
                   maxLength={64}
+                  onSearch={setRoleCodeQuery}
                   onSelect={handleRoleCodeSelect}
                   onChange={handleRoleCodeChange}
                   onBlur={handleRoleCodeBlur}
                   onKeyDown={handleRoleCodeKeyDown}
+                  onDropdownVisibleChange={open => { if (!open) setRoleCodeQuery(''); }}
                 />
               </Form.Item>
-              <Form.Item label={t('fields.sdlc')} name="sdlcId">
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder={t('placeholders.sdlc')}
-                  loading={sdlcOptions.isLoading}
-                  options={sdlcOptions.options}
-                  aria-label={t('fields.sdlc')}
-                />
-              </Form.Item>
-              {sdlcOptions.isError && (
-                <Alert
-                  type="warning"
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                  message={t('create.sdlcLoadFailed')}
-                  action={
-                    <Button size="small" onClick={() => { void sdlcOptions.refetch(); }}>
-                      {t('actions.retry')}
-                    </Button>
-                  }
-                />
-              )}
-              <Form.Item label="SOUL.md" name="businessBackground">
-                <TextArea
-                  ref={businessBackgroundRef}
-                  rows={4}
-                  placeholder={t('placeholders.background')}
-                />
-              </Form.Item>
-              <Form.Item label="AGENT.md" name="responsibilities">
-                <TextArea rows={4} placeholder={t('placeholders.responsibilities')} />
-              </Form.Item>
-            </Form>
-          </>
-        )}
-      </Card>
-    </div>
+            </div>
+          </div>
+          <div className="aw-agent-sec">
+            <div className="aw-agent-sec-title">{t('form.sections.workflow')}<span className="aw-agent-opt">{t('placeholders.optional')}</span></div>
+            <Form.Item label={t('fields.sdlc')} name="sdlcId" extra={t('form.sdlcHelp')}>
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder={t('placeholders.sdlc')}
+                loading={sdlcOptions.isLoading}
+                options={sdlcOptions.options}
+                aria-label={t('fields.sdlc')}
+              />
+            </Form.Item>
+            {sdlcOptions.isError && (
+              <Alert
+                className="aw-agent-warn"
+                type="warning"
+                showIcon
+                message={t('create.sdlcLoadFailed')}
+                action={
+                  <Button size="small" onClick={() => { void sdlcOptions.refetch(); }}>
+                    {t('actions.retry')}
+                  </Button>
+                }
+              />
+            )}
+          </div>
+          <div className="aw-agent-sec">
+            <div className="aw-agent-sec-title">{t('form.sections.role')}<span className="aw-agent-opt">{t('placeholders.optional')}</span></div>
+            <Form.Item label="SOUL.md" name="businessBackground">
+              <TextArea
+                ref={businessBackgroundRef}
+                rows={6}
+                placeholder={t('placeholders.background')}
+              />
+            </Form.Item>
+            <Form.Item label="AGENT.md" name="responsibilities">
+              <TextArea rows={6} placeholder={t('placeholders.responsibilities')} />
+            </Form.Item>
+          </div>
+        </Form>
+      )}
+      <div className="aw-form-foot">
+        <Button type="primary" onClick={() => form.submit()} loading={createAgent.isPending}>
+          {t('actions.createButton')}
+        </Button>
+        <Button onClick={() => navigate('/agents')}>{t('actions.cancel')}</Button>
+      </div>
+    </>
   );
 }

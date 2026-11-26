@@ -1,10 +1,17 @@
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Form, Input, List, Modal, Popconfirm, Select, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Form, Input, List, Modal, Popconfirm, Select, Tag, Typography } from 'antd';
 import { useState } from 'react';
 import type { MemoryAcl } from './api';
 import { useMemoryAclMutation, useMemoryAcls } from './hooks';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+
+const PERMISSION_TAG_COLOR: Record<string, string | undefined> = { READ: undefined, WRITE: 'green', ADMIN: 'blue' };
+const SUBJECT_TAG_COLOR: Record<string, string | undefined> = { AGENT: 'purple' };
+const ROLE_SUBJECT = 'ROLE';
+const ALL_AGENTS_REF = 'ALL_AGENTS';
+const AGGREGATE_IDENTITY = new Set(['AGENT', 'SQUAD']);
+
 export function MemoryAclPanel({ storeId, administrator }: { storeId?: number; administrator: boolean }) {
   const { t } = useTranslation('memory');
   const subjectLabels = { USER: t('acl.subjects.USER'), AGENT: t('acl.subjects.AGENT'), SQUAD: t('acl.subjects.SQUAD'), ROLE: t('acl.subjects.ROLE') } as const;
@@ -27,16 +34,26 @@ export function MemoryAclPanel({ storeId, administrator }: { storeId?: number; a
       }
     });
   };
-  return <Space direction="vertical" style={{ width: '100%' }}>
-    <Alert type="info" showIcon message={t('acl.hint')} description={t('acl.help')} />
-    <Button type="primary" onClick={() => setOpen(true)}>{t('acl.add')}</Button>
-    <List dataSource={data} locale={{ emptyText: t('acl.empty') }} renderItem={(acl) => <List.Item actions={acl.id ? [<Popconfirm okText={t('actions.delete')} cancelText={t('actions.cancel')} key="delete" title={t('acl.deleteConfirm')} onConfirm={() => runWithAccess('ADMIN', t('acl.removeCommand'), () => remove.mutate(acl.id!))}><Button danger type="link">{t('actions.delete')}</Button></Popconfirm>] : []}><Typography.Text>{Object.prototype.hasOwnProperty.call(subjectLabels, acl.subjectType) ? subjectLabels[acl.subjectType] : acl.subjectType} · {acl.subjectRef}</Typography.Text><Tag>{Object.prototype.hasOwnProperty.call(permissionLabels, acl.permission) ? permissionLabels[acl.permission] : acl.permission}</Tag></List.Item>} />
-    <Modal closable={{ 'aria-label': t('actions.close') }} title={t('acl.create')} open={open} onCancel={() => setOpen(false)} onOk={submit} confirmLoading={put.isPending} okText={t('actions.save')} cancelText={t('actions.cancel')}>
+  const subjectRefLabel = (acl: MemoryAcl) => acl.subjectType === ROLE_SUBJECT && acl.subjectRef === ALL_AGENTS_REF ? t('acl.allAgents')
+    : AGGREGATE_IDENTITY.has(acl.subjectType) && !acl.subjectRef.startsWith('#') ? `#${acl.subjectRef}` : acl.subjectRef;
+  const subjectLabel = (type: string) => Object.prototype.hasOwnProperty.call(subjectLabels, type) ? subjectLabels[type as keyof typeof subjectLabels] : type;
+  const permissionLabel = (permission: string) => Object.prototype.hasOwnProperty.call(permissionLabels, permission) ? permissionLabels[permission as keyof typeof permissionLabels] : permission;
+  return <div className="mem-acl-panel">
+    <div className="mem-panel-intro">
+      <Typography.Text type="secondary" className="mem-panel-hint">{t('acl.hint')}</Typography.Text>
+      <Button type="primary" onClick={() => setOpen(true)}>{t('acl.add')}</Button>
+    </div>
+    <List dataSource={data} locale={{ emptyText: t('acl.empty') }} renderItem={(acl) => <List.Item className="mem-acl-item" actions={acl.id ? [<Popconfirm okText={t('actions.delete')} cancelText={t('actions.cancel')} key="delete" title={t('acl.deleteConfirm')} onConfirm={() => runWithAccess('ADMIN', t('acl.removeCommand'), () => remove.mutate(acl.id!))}><Button danger type="link" className="mem-op-link">{t('actions.delete')}</Button></Popconfirm>] : []}>
+      <Tag className="mem-acl-type" color={SUBJECT_TAG_COLOR[acl.subjectType]}>{subjectLabel(acl.subjectType)}</Tag>
+      <span className="mem-acl-subject">{subjectRefLabel(acl)}</span>
+      <Tag color={PERMISSION_TAG_COLOR[acl.permission]}>{permissionLabel(acl.permission)}</Tag>
+    </List.Item>} />
+    <Modal width={480} closable={{ 'aria-label': t('actions.close') }} title={t('acl.create')} open={open} onCancel={() => setOpen(false)} onOk={submit} confirmLoading={put.isPending} okText={t('actions.save')} cancelText={t('actions.cancel')}>
       <Form form={form} layout="vertical" initialValues={{ subjectType: 'AGENT', permission: 'READ' }}>
         <Form.Item name="subjectType" label={t('acl.subjectType')} rules={[{ required: true, message: t('validation.subjectType') }]}><Select options={Object.entries(subjectLabels).map(([value, label]) => ({ value, label }))} /></Form.Item>
         <Form.Item name="subjectRef" label={t('acl.subjectRef')} extra={t('acl.subjectHelp')} rules={[{ required: true, message: t('validation.subjectRef') }]}><Input placeholder={t('acl.subjectPlaceholder')} /></Form.Item>
         <Form.Item name="permission" label={t('acl.permission')} extra={t('acl.permissionHelp')} rules={[{ required: true, message: t('validation.permission') }]}><Select options={Object.entries(permissionLabels).map(([value, label]) => ({ value, label }))} /></Form.Item>
       </Form>
     </Modal>
-  </Space>;
+  </div>;
 }

@@ -2,11 +2,15 @@ import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { formatNumber } from '@/shared/i18n/format';
 import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
-import { PageHeading } from '@/shared/ui/PageHeading';
 import { useEffect, useMemo, useState } from 'react';
-import { Card, Tag, Button, Space, Popconfirm, message, Modal, Form, Input, Select, Tabs, Spin, Empty, Alert } from 'antd';
+import { Button, Space, Popconfirm, Tooltip, Select, message, Modal, Form, Input, Switch, Tabs, Spin, Empty, Alert } from 'antd';
+import { PageHead } from '@/shared/ui/PageHead';
+import { Toolbar } from '@/shared/ui/Toolbar';
+import { TableCard, TableFooter } from '@/shared/ui/TableCard';
 import { Table } from '@/shared/theme/ThemedTable';
-import { PlusOutlined, DeleteOutlined, DownOutlined, RightOutlined } from '@ant-design/icons';
+import { StatusTag } from '@/shared/ui/StatusTag';
+import type { StatusColorKey } from '@/shared/ui/StatusTag';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listSdlcTemplatesPage, listAllSdlcTemplates, createSdlcTemplate, deleteSdlcTemplate, enableSdlcTemplate, disableSdlcTemplate } from './api';
@@ -17,6 +21,7 @@ import { SDLC_AI_ENABLED } from './featureFlags';
 import { SquadFilterBar, useSquadOptions } from '@/features/squad/SquadFilterBar';
 import { SquadTags } from '@/features/squad/SquadTags';
 import { buildSdlcGroupViews } from './squadView';
+import './SdlcListPage.css';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 import { readViewPreference, writeViewPreference } from '@/shared/lib/viewPreference';
 import { usePageSizePreference } from '@/shared/lib/usePageSizePreference';
@@ -28,10 +33,18 @@ const SDLCS_PAGE_SIZE_STORAGE_KEY = 'autowonder.sdlcs.pageSize';
 
 const squadGroupBodyId = (key: string) => `sdlc-group-body-${key}`;
 
-const statusMap: Record<string, { color: string; key: 'status.draft' | 'status.enabled' | 'status.disabled' }> = {
-  DRAFT: { color: 'default', key: 'status.draft' as const },
-  ENABLED: { color: 'success', key: 'status.enabled' as const },
-  DISABLED: { color: 'warning', key: 'status.disabled' as const },
+const statusMeta: Record<string, { colorKey: StatusColorKey; key: 'status.draft' | 'status.enabled' | 'status.disabled' }> = {
+  DRAFT: { colorKey: 'gray', key: 'status.draft' as const },
+  ENABLED: { colorKey: 'green', key: 'status.enabled' as const },
+  DISABLED: { colorKey: 'amber', key: 'status.disabled' as const },
+};
+
+// 原型 24 模版列表工单类型列：需求/任务蓝、Bug 红、未绑定通用为 outline 中性。
+const workTypeColors: Record<string, StatusColorKey> = {
+  REQUIREMENT: 'blue',
+  REQ: 'blue',
+  TASK: 'blue',
+  BUG: 'red',
 };
 
 export function SdlcListPage() {
@@ -117,6 +130,7 @@ export function SdlcListPage() {
       message.success(i18n.t('sdlc:messages.created'));
       navigate(`/sdlcs/${newSdlc.id}`);
     },
+    onError: (error: Error) => { message.error(error.message || i18n.t('sdlc:messages.saveFailed')); },
   });
 
   const deleteMut = useMutation({
@@ -136,38 +150,70 @@ export function SdlcListPage() {
   });
 
   const columns: ColumnsType<SdlcTemplate> = [
-    { title: t('fields.id'), dataIndex: 'id', width: 70 },
+    {
+      title: t('fields.id'), dataIndex: 'id', width: 70,
+      render: (v: number | string) => <span className="sdlc-id-cell">{v}</span>,
+    },
     {
       title: t('fields.name'), dataIndex: 'name', align: 'left', ellipsis: { showTitle: false },
       render: (name: string, record) => (
         <EllipsisText tooltip={name}>
-          <a onClick={() => navigate(`/sdlcs/${record.id}`)}>{name}</a>
+          <a className="sdlc-name-link" onClick={() => navigate(`/sdlcs/${record.id}`)}>{name}</a>
         </EllipsisText>
       ),
     },
-    { title: t('fields.description'), dataIndex: 'description', align: 'left', ellipsis: { showTitle: false }, render: (v: string) => <EllipsisText tooltip={v}>{v}</EllipsisText> },
-    { title: t('fields.workType'), dataIndex: 'workType', width: 90, render: (v: string | null) => v ? workTypes.get(v) ?? v : t('workType.general') },
+    {
+      title: t('fields.description'), dataIndex: 'description', align: 'left', ellipsis: { showTitle: false },
+      render: (v: string) => <EllipsisText tooltip={v} style={{ color: 'var(--aw-text-3)' }}>{v}</EllipsisText>,
+    },
+    {
+      title: t('fields.workType'), dataIndex: 'workType', width: 90,
+      render: (v: string | null) => (
+        <StatusTag
+          size="sm"
+          colorKey={Object.prototype.hasOwnProperty.call(workTypeColors, v ?? '') ? workTypeColors[v as string] : 'outline'}
+          label={v != null ? workTypes.get(v) ?? v : t('workType.general')}
+        />
+      ),
+    },
     { title: t('fields.stepCount'), width: 80, render: (_, record) => formatNumber(record.stepCount ?? record.steps?.length ?? 0) },
     {
-      title: t('fields.squad'), width: 180,
-      render: (_, record) => <SquadTags squadIds={record.squadIds} squadNames={record.squadNames} />,
+      title: t('fields.squad'), width: 150, ellipsis: true,
+      render: (_, record) => <span className="sdlc-squad-cell"><SquadTags squadIds={record.squadIds} squadNames={record.squadNames} /></span>,
     },
     {
       title: t('fields.status'), dataIndex: 'status', width: 100,
-      render: (s: string) => <Tag color={Object.prototype.hasOwnProperty.call(statusMap, s) ? statusMap[s].color : undefined}>{Object.prototype.hasOwnProperty.call(statusMap, s) ? t(statusMap[s].key) : s}</Tag>,
+      render: (s: string) => (
+        <StatusTag
+          dot
+          label={Object.prototype.hasOwnProperty.call(statusMeta, s) ? t(statusMeta[s].key) : s}
+          colorKey={Object.prototype.hasOwnProperty.call(statusMeta, s) ? statusMeta[s].colorKey : 'gray'}
+        />
+      ),
     },
     {
-      title: t('fields.actions'), width: 180,
+      title: t('fields.actions'), width: 118,
       render: (_, record) => (
-        <Space>
-          <Button type="link" size="small" onClick={() => navigate(`/sdlcs/${record.id}`)}>{t('actions.details')}</Button>
+        <Space size={4}>
+          <Tooltip title={t('actions.details')}>
+            <Button
+              type="text"
+              size="small"
+              className="aw-op-btn"
+              icon={<AwStrokeIcon name="eye" />}
+              aria-label={t('actions.details')}
+              onClick={() => navigate(`/sdlcs/${record.id}`)}
+            />
+          </Tooltip>
           {record.status === 'DRAFT' || record.status === 'DISABLED' ? (
-            <Popconfirm title={t('confirm.enable')} onConfirm={() => accessCommand(
+            <Popconfirm title={t('confirm.enable')} description={t('confirm.enableLockHint')} onConfirm={() => accessCommand(
               'READ_WRITE',
               t('commands.enable'),
               () => enableMut.mutate(record.id),
             )}>
-              <Button type="link" size="small">{t('actions.enable')}</Button>
+              <Tooltip title={t('actions.enable')}>
+                <Button type="text" size="small" className="aw-op-btn" icon={<AwStrokeIcon name="play" />} aria-label={t('actions.enable')} />
+              </Tooltip>
             </Popconfirm>
           ) : (
             <Popconfirm title={t('confirm.disable')} onConfirm={() => accessCommand(
@@ -175,7 +221,9 @@ export function SdlcListPage() {
               t('commands.disable'),
               () => disableMut.mutate(record.id),
             )}>
-              <Button type="link" size="small" danger>{t('actions.disable')}</Button>
+              <Tooltip title={t('actions.disable')}>
+                <Button type="text" size="small" className="aw-op-btn" icon={<AwStrokeIcon name="pause" />} aria-label={t('actions.disable')} />
+              </Tooltip>
             </Popconfirm>
           )}
           {record.status !== 'ENABLED' && (
@@ -184,7 +232,9 @@ export function SdlcListPage() {
               t('commands.delete'),
               () => deleteMut.mutate(record.id),
             )}>
-              <Button type="link" size="small" danger aria-label={t('commands.delete')} icon={<DeleteOutlined aria-hidden="true" />} />
+              <Tooltip title={t('commands.delete')}>
+                <Button type="text" size="small" className="aw-op-btn aw-op-btn--del" icon={<AwStrokeIcon name="trash" />} aria-label={t('commands.delete')} />
+              </Tooltip>
             </Popconfirm>
           )}
         </Space>
@@ -193,27 +243,13 @@ export function SdlcListPage() {
   ];
 
   return (
-    <div>
-      <PageHeading
+    <>
+      <PageHead
         title={t('list.title')}
-        extra={activeTab === 'templates' && (
-          <Space>
-            {SDLC_AI_ENABLED && (
-              <Button onClick={() => accessCommand(
-                'READ_WRITE',
-                t('commands.aiGenerate'),
-                () => navigate('/sdlcs/generate'),
-              )}>{t('actions.aiGenerate')}</Button>
-            )}
-            <Button type="primary" icon={<PlusOutlined aria-hidden="true" />} onClick={() => accessCommand(
-              'READ_WRITE',
-              t('commands.create'),
-              () => setCreateOpen(true),
-            )}>{t('actions.new')}</Button>
-          </Space>
-        )}
+        description={t('list.description')}
       />
     <Tabs
+      className="aw-list-tabs sdlc-list-tabs"
       activeKey={activeTab}
       onChange={setActiveTab}
       items={[
@@ -222,8 +258,8 @@ export function SdlcListPage() {
           label: t('list.templates'),
           children: (
             <>
-              <div style={{ marginBottom: 12 }}>
-                <SquadFilterBar
+              <Toolbar
+                left={<SquadFilterBar
                   options={squadOptions}
                   value={squadFilter}
                   onChange={setSquadFilter}
@@ -233,89 +269,121 @@ export function SdlcListPage() {
                     writeViewPreference(SDLCS_VIEW_STORAGE_KEY, next ? 'grouped' : 'list');
                   }}
                   loading={squadsLoading}
-                />
-              </div>
-              <Card className="aw-content-card">
-                {grouped ? (
-                  allQuery.isError ? (
+                  groupLabel={squadT('groupBySquad')}
+                />}
+                right={<Space>
+                  {SDLC_AI_ENABLED && (
+                    <Button onClick={() => accessCommand(
+                      'READ_WRITE',
+                      t('commands.aiGenerate'),
+                      () => navigate('/sdlcs/generate'),
+                    )}>{t('actions.aiGenerate')}</Button>
+                  )}
+                  <Button type="primary" icon={<AwStrokeIcon name="plus" />} onClick={() => accessCommand(
+                    'READ_WRITE',
+                    t('commands.create'),
+                    () => setCreateOpen(true),
+                  )}>{t('actions.new')}</Button>
+                </Space>}
+              />
+              {grouped ? (
+                allQuery.isError ? (
+                  <TableCard flush>
                     <Alert
                       type="error"
                       showIcon
                       message={t('messages.loadFailed')}
                       action={<Button size="small" onClick={() => { void allQuery.refetch(); }}>{t('messages.retry')}</Button>}
                     />
-                  ) : allQuery.isLoading ? (
+                  </TableCard>
+                ) : allQuery.isLoading ? (
+                  <TableCard flush>
                     <div style={{ padding: 24, textAlign: 'center' }}><Spin /></div>
-                  ) : (
-                    <>
-                      {squadGroups.length === 0 ? (
-                        <Empty description={t('list.empty')} />
-                      ) : squadGroups.map((group) => {
-                        const bodyId = squadGroupBodyId(group.key);
-                        const expanded = !collapsedGroups.has(group.key);
-                        return (
-                          <section key={group.key} className="sdlc-squad-group" style={{ marginBottom: 20 }}>
-                            <div
-                              className="sdlc-squad-group-header"
-                              style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-                              onClick={(event) => {
-                                if ((event.target as HTMLElement).closest('a')) return;
-                                toggleGroup(group.key);
-                              }}
-                            >
-                              <Button
-                                type="text"
-                                size="small"
-                                aria-expanded={expanded}
-                                aria-controls={bodyId}
-                                aria-label={expanded ? t('list.collapseGroup') : t('list.expandGroup')}
-                                icon={expanded ? <DownOutlined aria-hidden="true" /> : <RightOutlined aria-hidden="true" />}
-                                onClick={(event) => { event.stopPropagation(); toggleGroup(group.key); }}
-                              />
-                              <strong>
-                                {group.squadId == null ? (
-                                  group.label
-                                ) : (
-                                  <Link to={`/agents?tab=squads&squadId=${group.squadId}`}>{group.label}</Link>
-                                )}
-                              </strong>
-                              <span style={{ color: 'var(--aw-muted)', fontSize: 12 }}>{t('list.groupCount', { count: group.items.length })}</span>
-                            </div>
-                            <div id={bodyId}>
-                              {expanded && (
-                                <Table
-                                  rowKey="id"
-                                  columns={columns}
-                                  dataSource={group.items}
-                                  pagination={false}
-                                  locale={{ emptyText: t('list.empty') }}
-                                />
-                              )}
-                            </div>
-                          </section>
-                        );
-                      })}
-                      <div style={{ marginTop: 8, textAlign: 'right' }}>{t('list.total', { count: allTotal })}</div>
-                    </>
-                  )
+                  </TableCard>
                 ) : (
+                  <TableCard
+                    flush
+                    footer={<div className="aw-table-footer"><span>{t('list.total', { count: allTotal })}</span></div>}
+                  >
+                    {squadGroups.length === 0 ? (
+                      <Empty description={t('list.empty')} />
+                    ) : squadGroups.map((group) => {
+                      const bodyId = squadGroupBodyId(group.key);
+                      const expanded = !collapsedGroups.has(group.key);
+                      return (
+                        <section
+                          key={group.key}
+                          className="sdlc-squad-group"
+                        >
+                          <div
+                            className="sdlc-squad-group-header"
+                            onClick={(event) => {
+                              if ((event.target as HTMLElement).closest('a')) return;
+                              toggleGroup(group.key);
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="sdlc-squad-group-caret"
+                              aria-expanded={expanded}
+                              aria-controls={bodyId}
+                              aria-label={expanded ? t('list.collapseGroup') : t('list.expandGroup')}
+                              onClick={(event) => { event.stopPropagation(); toggleGroup(group.key); }}
+                            >
+                              <AwStrokeIcon name={expanded ? 'chev-d' : 'chev-r'} size={14} />
+                            </button>
+                            <strong>
+                              {group.squadId == null ? (
+                                group.label
+                              ) : (
+                                <Link to={`/squads?squadId=${group.squadId}`}>{group.label}</Link>
+                              )}
+                            </strong>
+                            <span className="sdlc-squad-group-count">{t('list.groupCount', { count: group.items.length })}</span>
+                          </div>
+                          <div id={bodyId} className="sdlc-squad-group-body">
+                            {expanded && (
+                              <Table
+                                rowKey="id"
+                                columns={columns}
+                                dataSource={group.items}
+                                pagination={false}
+                                locale={{ emptyText: t('list.empty') }}
+                              />
+                            )}
+                          </div>
+                        </section>
+                      );
+                    })}
+                  </TableCard>
+                )
+              ) : (
+                <TableCard
+                  flush
+                  footer={(
+                    <TableFooter
+                      total={total}
+                      page={page}
+                      pageSize={size}
+                      totalText={t('list.total', { count: total })}
+                      onPageChange={(p, ps) => { setPage(ps !== size ? 1 : p); setSize(ps); }}
+                      onPageSizeChange={setSize}
+                    />
+                  )}
+                >
                   <Table
                     rowKey="id"
                     columns={columns}
                     dataSource={data}
                     loading={pageLoading}
-                    pagination={{
-                      current: page, pageSize: size, total,
-                      onChange: (p, ps) => { setPage(ps !== size ? 1 : p); setSize(ps); },
-                      showSizeChanger: true,
-                      showTotal: (count) => t('list.total', { count }),
-                    }}
+                    pagination={false}
                   />
-                )}
-              </Card>
+                </TableCard>
+              )}
 
               <Modal
                 title={t('commands.create')}
+                width={480}
                 open={createOpen}
                 closable={{ 'aria-label': t('gallery.close') }}
                 onOk={() => form.validateFields().then(v => accessCommand(
@@ -323,7 +391,10 @@ export function SdlcListPage() {
                   t('commands.create'),
                   () => createMut.mutate(v),
                 ), () => {})}
-                onCancel={() => setCreateOpen(false)}
+                onCancel={() => {
+                  form.resetFields(['stageTimingEnabled']);
+                  setCreateOpen(false);
+                }}
                 confirmLoading={createMut.isPending}
               >
                 <Form form={form} layout="vertical">
@@ -341,6 +412,9 @@ export function SdlcListPage() {
                         { value: 'BUG', label: t('workType.bug') },
                       ]} />
                   </Form.Item>
+                  <Form.Item name="stageTimingEnabled" label={t('fields.stageTiming')} valuePropName="checked">
+                    <Switch />
+                  </Form.Item>
                 </Form>
               </Modal>
             </>
@@ -353,6 +427,6 @@ export function SdlcListPage() {
         },
       ]}
     />
-    </div>
+    </>
   );
 }

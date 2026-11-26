@@ -74,8 +74,8 @@ describe('DingTalkBindingPanel', () => {
     renderPanel();
     expect(await screen.findByText('dingkey')).toBeInTheDocument();
     expect(await screen.findByText('Alpha（评审工程师）')).toBeInTheDocument();
-    // Technical health lives in the read-only detail drawer, not the list.
-    expect(screen.queryByText('正常')).not.toBeInTheDocument();
+    // 列表直接展示健康状态，详情抽屉里再给出完整的诊断信息
+    expect(screen.getByText('正常')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '详情' }));
     const drawer = within(await screen.findByRole('dialog'));
     expect(await drawer.findByText(/健康: 正常/)).toBeInTheDocument();

@@ -1,61 +1,90 @@
+/* 审计日志 V2 · 对齐原型 29-audit-logs.html；设计令牌一律走 crystal.css var(--aw-*)。 */
 .audit-page {
   display: flex;
   flex-direction: column;
-  gap: 14px;
 }
 
-.audit-page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
+/* 原型 .count-chip */
 .audit-count-chip {
   font-size: 12px;
-  color: var(--aw-muted, #4e5964);
-  background: var(--aw-surface, #fff);
-  border: 1px solid var(--aw-border, #dfe5eb);
+  color: var(--aw-text-2);
+  background: var(--aw-panel);
+  border: 1px solid var(--aw-border);
   border-radius: 999px;
   padding: 4px 12px;
   white-space: nowrap;
 }
 
-/* 筛选栏与列表卡都带入场动画时各自形成 stacking context，弹层需要筛选栏在上。 */
+/* 筛选区独立成白卡：原型无外框时控件散落在页头与表格之间，与条数徽标一起收进卡内。 */
 .audit-filter-card {
-  position: relative;
-  z-index: 2;
-  animation: audit-rise 0.35s both;
-}
-
-.audit-table-card {
-  position: relative;
-  z-index: 1;
-  animation: audit-rise 0.35s 0.06s both;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: var(--aw-panel);
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
 }
 
 .audit-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 首行：关键词 + 时间范围 + 条数/重置；次行：维度筛选等宽排列。 */
+.audit-filter-primary,
+.audit-filter-secondary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
+.audit-filter-primary .audit-filter-kw {
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 320px;
+}
+
+.audit-filter-primary .ant-picker {
+  flex: 0 1 250px;
+  min-width: 220px;
+}
+
+.audit-filter-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.audit-filter-secondary .ant-select {
+  flex: 1 1 124px;
+  min-width: 112px;
+  max-width: 170px;
+}
+
+/* 原型 .select.on / .range-box.on：激活 = 主色描边 + 5% 主色底。 */
 .audit-filter.is-active .ant-select-selector,
 .audit-filter.is-active.ant-select .ant-select-selector,
 .audit-filter.is-active.ant-picker,
 .audit-filter.is-active.ant-input-affix-wrapper {
-  border-color: var(--aw-accent, #f97316) !important;
-  background-color: var(--aw-accent-soft, #fff3e8) !important;
+  border-color: var(--aw-primary) !important;
+  background-color: rgba(var(--aw-accent-rgb), 0.05) !important;
 }
 
-.audit-filter-reset {
-  margin-left: auto;
+/* 原型关键词框：无描边灰底；激活时仅 5% 主色底、仍无描边。 */
+.audit-filter-bar .audit-filter-kw.ant-input-affix-wrapper {
+  border-color: transparent !important;
+  background-color: var(--aw-gray-bg) !important;
+}
+
+.audit-filter-bar .audit-filter-kw.is-active.ant-input-affix-wrapper {
+  border-color: transparent !important;
+  background-color: rgba(var(--aw-accent-rgb), 0.05) !important;
 }
 
 .audit-error {
-  margin-bottom: 0;
+  margin: 12px 0;
 }
 
 .audit-table-card tbody tr {
@@ -106,6 +135,23 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 固定列宽后动作/目标/触发事件可能超出列宽：单行截断，完整值走 title。 */
+.audit-module-action .audit-mono,
+.audit-target,
+.audit-trigger-event .audit-trigger,
+.audit-trigger-event .audit-mono {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-target {
+  display: block;
 }
 
 .audit-module-tag {
@@ -166,11 +212,13 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+  width: 100%;
+  min-width: 0;
 }
 
 .audit-trigger {
   font-size: 11px;
-  color: var(--aw-muted, #8a94a0);
+  color: var(--aw-text-3);
 }
 
 .audit-detail {
@@ -181,18 +229,91 @@
   white-space: nowrap;
 }
 
-
-.audit-table-skeleton {
-  padding: 20px;
+.audit-detail-link {
+  color: #c2570c;
+  font-weight: 600;
 }
 
-@keyframes audit-rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+/* 03b ④ 加载态：表头常驻，正文区居中旋转图标 + 文案，不用 Skeleton。 */
+.audit-loading-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 0;
+  color: var(--aw-text-3);
+  font-size: 12px;
 }
+
+/* 原型 .empty-box */
+.audit-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 0;
+}
+
+.audit-empty-icon {
+  color: var(--aw-text-3);
+}
+
+.audit-empty-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--aw-text-3);
+}
+
+/* 原型 .json-sec / .json-head / .json-box / .jk .js .jn（详情抽屉 JSON 块）。 */
+.audit-json-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 20px 0 8px;
+}
+
+.audit-json-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--aw-text);
+}
+
+.audit-json-box {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  background: var(--aw-raised);
+  color: var(--aw-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: var(--aw-font-mono);
+}
+
+.audit-jk {
+  color: var(--aw-info);
+}
+
+.audit-js {
+  color: var(--aw-success);
+}
+
+.audit-jn {
+  color: var(--aw-warning);
+}
+
+.audit-jb {
+  color: var(--aw-accent-text);
+}
+
+/* 深色：标签与风险胶囊保留各自的语义色，只把浅色底换成主题令牌，避免深底上的亮色块 */
+html[data-appearance=dark] .audit-actor-tag.human { background: var(--aw-primary-weak); color: var(--aw-accent-text); }
+html[data-appearance=dark] .audit-actor-tag.agent { background: var(--aw-warning-bg); color: var(--aw-warning-deep); }
+html[data-appearance=dark] .audit-actor-tag.system { background: var(--aw-success-bg); color: var(--aw-success-deep); }
+html[data-appearance=dark] .audit-module-tag { background: var(--aw-gray-bg); color: var(--aw-text-2); }
+html[data-appearance=dark] .audit-risk-help { border-color: var(--aw-border); color: var(--aw-text-3); }
+html[data-appearance=dark] .audit-risk-pill.high { background: var(--aw-error-bg); color: var(--aw-error-deep); }
+html[data-appearance=dark] .audit-risk-pill.medium { background: var(--aw-warning-bg); color: var(--aw-warning-deep); }
+html[data-appearance=dark] .audit-risk-pill.low { background: var(--aw-gray-bg); color: var(--aw-text-2); }
+html[data-appearance=dark] .audit-detail-link { color: var(--aw-warning-deep); }

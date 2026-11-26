@@ -186,6 +186,168 @@ class AccessRequestServiceTest {
         assertThat(result.getList().get(0).getMembershipStatus()).isEqualTo("NOT_MEMBER");
     }
 
+    @Test
+    void allDisclosesPrivateDetailsOnlyForReadableCardsAndCountsOnlyTheirIds() {
+        WorkspaceDO readOnly = privateWorkspace(100L);
+        WorkspaceDO adminMember = privateWorkspace(200L);
+        WorkspaceDO owned = privateWorkspace(300L);
+        owned.setOwnerId(7L);
+        when(workspaceDao.listAllPaged(null, 0, 10)).thenReturn(List.of(
+                readOnly, privateWorkspace(400L), adminMember, privateWorkspace(500L), owned));
+        when(workspaceDao.countAll(null)).thenReturn(5L);
+        when(workspaceDao.listMembershipsByUser(7L)).thenReturn(List.of(
+                membership(100L, WorkspaceAccessLevel.READ_ONLY),
+                membership(200L, WorkspaceAccessLevel.ADMIN),
+                membership(999L, WorkspaceAccessLevel.READ_WRITE)));
+        when(accessRequestDao.listPendingByRequester(7L)).thenReturn(List.of(
+                request(55L, 400L, 7L, WorkspaceAccessLevel.ADMIN, "PENDING")));
+        List<Long> readableIds = List.of(100L, 200L, 300L);
+        // Deliberately include unsolicited private rows: service must not populate unreadable cards.
+        when(workspaceDao.countMembersByWorkspaceIds(anyCollection(), eq(7L), eq(false)))
+                .thenReturn(List.of(cardCount(300L, 0L), cardCount(100L, 2L), cardCount(200L, 4L),
+                        cardCount(400L, 99L), cardCount(500L, 99L)));
+        when(workspaceDao.countWorkitemsByWorkspaceIds(anyCollection(), eq(7L), eq(false)))
+                .thenReturn(List.of(cardCount(200L, 8L), cardCount(100L, 0L), cardCount(300L, 3L),
+                        cardCount(400L, 99L), cardCount(500L, 99L)));
+
+        var result = service.listAll(null, 1, 10, 7L);
+
+        WorkspaceListItemVO member = result.getList().get(0);
+        assertThat(member.getMembershipStatus()).isEqualTo("MEMBER");
+        assertThat(member.getAccessLevel()).isEqualTo("READ_ONLY");
+        assertThat(member.getCanManage()).isFalse();
+        assertThat(member.getBackground()).isEqualTo("private background 100");
+        assertThat(member.getMemberCount()).isEqualTo(2L);
+        assertThat(member.getWorkitemCount()).isZero();
+        WorkspaceListItemVO admin = result.getList().get(2);
+        assertThat(admin.getCanManage()).isTrue();
+        assertThat(admin.getBackground()).isEqualTo("private background 200");
+        assertThat(admin.getMemberCount()).isEqualTo(4L);
+        assertThat(admin.getWorkitemCount()).isEqualTo(8L);
+        WorkspaceListItemVO owner = result.getList().get(4);
+        assertThat(owner.getIsOwner()).isTrue();
+        assertThat(owner.getCanManage()).isTrue();
+        assertThat(owner.getBackground()).isEqualTo("private background 300");
+        assertThat(owner.getMemberCount()).isZero();
+        assertThat(owner.getWorkitemCount()).isEqualTo(3L);
+        WorkspaceListItemVO pending = result.getList().get(1);
+        assertThat(pending.getMembershipStatus()).isEqualTo("PENDING");
+        assertThat(pending.getPendingRequestId()).isEqualTo(55L);
+        assertPrivateDetailsAbsent(pending);
+        WorkspaceListItemVO outsider = result.getList().get(3);
+        assertThat(outsider.getMembershipStatus()).isEqualTo("NOT_MEMBER");
+        assertPrivateDetailsAbsent(outsider);
+        ArgumentCaptor<Collection<Long>> memberIds = ArgumentCaptor.forClass(Collection.class);
+        ArgumentCaptor<Collection<Long>> workitemIds = ArgumentCaptor.forClass(Collection.class);
+        verify(workspaceDao).countMembersByWorkspaceIds(memberIds.capture(), eq(7L), eq(false));
+        verify(workspaceDao).countWorkitemsByWorkspaceIds(workitemIds.capture(), eq(7L), eq(false));
+        assertThat(memberIds.getValue()).containsExactlyElementsOf(readableIds);
+        assertThat(workitemIds.getValue()).containsExactlyElementsOf(readableIds);
+        verifyNoInteractions(workspaceMemberDao);
+    }
+
+    @Test
+    void allAllowsPlatformAdminPrivateDetailsWithoutJoiningIncludingPendingCards() {
+        when(workspaceDao.listAllPaged(null, 0, 10))
+                .thenReturn(List.of(privateWorkspace(100L), privateWorkspace(200L)));
+        when(systemAdminService.isSystemAdmin(7L)).thenReturn(true);
+        when(accessRequestDao.listPendingByRequester(7L)).thenReturn(List.of(
+                request(55L, 200L, 7L, WorkspaceAccessLevel.READ_ONLY, "PENDING")));
+        when(workspaceDao.countMembersByWorkspaceIds(anyCollection(), eq(7L), eq(true)))
+                .thenReturn(List.of(cardCount(100L, 1L), cardCount(200L, 0L)));
+        when(workspaceDao.countWorkitemsByWorkspaceIds(anyCollection(), eq(7L), eq(true)))
+                .thenReturn(List.of(cardCount(100L, 6L), cardCount(200L, 0L)));
+
+        var items = service.listAll(null, 1, 10, 7L).getList();
+
+        assertThat(items).extracting(WorkspaceListItemVO::getMembershipStatus)
+                .containsExactly("NOT_MEMBER", "PENDING");
+        assertThat(items).allSatisfy(item -> {
+            assertThat(item.getCanManage()).isTrue();
+            assertThat(item.getIsOwner()).isFalse();
+            assertThat(item.getBackground()).isNotNull();
+            assertThat(item.getMemberCount()).isNotNull();
+            assertThat(item.getWorkitemCount()).isNotNull();
+        });
+        assertThat(items.get(1).getMemberCount()).isZero();
+        assertThat(items.get(1).getWorkitemCount()).isZero();
+        ArgumentCaptor<Collection<Long>> ids = ArgumentCaptor.forClass(Collection.class);
+        verify(workspaceDao).countMembersByWorkspaceIds(ids.capture(), eq(7L), eq(true));
+        assertThat(ids.getValue()).containsExactly(100L, 200L);
+        verify(workspaceDao).countWorkitemsByWorkspaceIds(eq(ids.getValue()), eq(7L), eq(true));
+    }
+
+    @Test
+    void allSkipsBothCountQueriesWhenNoCardsAreReadable() {
+        when(workspaceDao.listAllPaged(null, 0, 10))
+                .thenReturn(List.of(privateWorkspace(100L), privateWorkspace(200L)));
+        when(accessRequestDao.listPendingByRequester(7L)).thenReturn(List.of(
+                request(55L, 100L, 7L, WorkspaceAccessLevel.ADMIN, "PENDING")));
+
+        var items = service.listAll(null, 1, 10, 7L).getList();
+
+        assertThat(items).allSatisfy(AccessRequestServiceTest::assertPrivateDetailsAbsent);
+        verify(workspaceDao, never()).countMembersByWorkspaceIds(anyCollection(), anyLong(), any(Boolean.class));
+        verify(workspaceDao, never()).countWorkitemsByWorkspaceIds(anyCollection(), anyLong(), any(Boolean.class));
+    }
+
+    @Test
+    void allSkipsBothCountQueriesForAnEmptyPageEvenForAPlatformAdmin() {
+        when(systemAdminService.isSystemAdmin(7L)).thenReturn(true);
+        assertThat(service.listAll(null, 1, 10, 7L).getList()).isEmpty();
+        verify(workspaceDao, never()).countMembersByWorkspaceIds(anyCollection(), anyLong(), any(Boolean.class));
+        verify(workspaceDao, never()).countWorkitemsByWorkspaceIds(anyCollection(), anyLong(), any(Boolean.class));
+    }
+
+    @Test
+    void cardJsonKeepsIsOwnerAndNullableLongStatistics() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var mine = new com.aliyun.autowonder.workspace.dto.WorkspaceVO();
+        mine.setIsOwner(true);
+        mine.setMemberCount(3L);
+        mine.setWorkitemCount(0L);
+        WorkspaceListItemVO all = new WorkspaceListItemVO();
+        all.setIsOwner(false);
+        for (Object card : List.of(mine, all)) {
+            var json = mapper.readTree(mapper.writeValueAsString(card));
+            assertThat(json.has("isOwner")).isTrue();
+            assertThat(json.has("owner")).isFalse();
+            assertThat(json.has("background")).isTrue();
+            assertThat(json.has("memberCount")).isTrue();
+            assertThat(json.has("workitemCount")).isTrue();
+            assertThat(card.getClass().getDeclaredField("memberCount").getType()).isEqualTo(Long.class);
+            assertThat(card.getClass().getDeclaredField("workitemCount").getType()).isEqualTo(Long.class);
+        }
+        var mineJson = mapper.valueToTree(mine);
+        assertThat(mineJson.get("memberCount").longValue()).isEqualTo(3L);
+        assertThat(mineJson.get("workitemCount").longValue()).isZero();
+        var allJson = mapper.valueToTree(all);
+        assertThat(allJson.get("background").isNull()).isTrue();
+        assertThat(allJson.get("memberCount").isNull()).isTrue();
+        assertThat(allJson.get("workitemCount").isNull()).isTrue();
+    }
+
+    private static WorkspaceDO privateWorkspace(long id) {
+        WorkspaceDO row = workspace(id, "Workspace " + id, "public description");
+        row.setBackground("private background " + id);
+        row.setOwnerId(8L);
+        return row;
+    }
+
+    private static WorkspaceCardCountDO cardCount(long id, long count) {
+        WorkspaceCardCountDO row = new WorkspaceCardCountDO();
+        row.setWorkspaceId(id);
+        row.setCount(count);
+        return row;
+    }
+
+    private static void assertPrivateDetailsAbsent(WorkspaceListItemVO item) {
+        assertThat(item.getCanManage()).isFalse();
+        assertThat(item.getBackground()).isNull();
+        assertThat(item.getMemberCount()).isNull();
+        assertThat(item.getWorkitemCount()).isNull();
+    }
+
     // ---------------- submitRequest ----------------
 
     @Test

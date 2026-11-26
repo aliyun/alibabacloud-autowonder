@@ -272,6 +272,135 @@ describe('UnifiedTimeline batching and accessibility', () => {
   });
 });
 
+describe('UnifiedTimeline segmented filter', () => {
+  // 评论与系统事件的 ID 来自不同后端序列，真实数据里两段会重叠（同一工单下 id 10011 同时存在两种类型）。
+  function makeSystemItem(overrides: Partial<TimelineItem>): TimelineItem {
+    return {
+      id: 100,
+      type: 'system',
+      authorId: 10000,
+      authorName: '蔡何(10000)',
+      authorType: 'HUMAN',
+      isAgent: false,
+      content: '工单状态已变更: verifying → closed （操作人：蔡何(10000)）',
+      gmtCreate: '2026-08-07T07:00:00Z',
+      ...overrides,
+    };
+  }
+
+  const overlappingItems = [
+    makeComment({ id: 3, content: '评论三' }),
+    makeSystemItem({ id: 3 }),
+    makeComment({ id: 2, content: '评论二' }),
+    makeSystemItem({ id: 2 }),
+    makeComment({ id: 1, content: '评论一' }),
+  ];
+
+  it('shows comment and event counts in the section head', () => {
+    render(<UnifiedTimeline items={overlappingItems} />);
+
+    expect(screen.getByText('3 条评论 · 2 条事件')).toBeInTheDocument();
+    expect(screen.getAllByTestId('timeline-item')).toHaveLength(5);
+  });
+
+  it('subsets the list when switching between comments-only and events-only', async () => {
+    render(<UnifiedTimeline items={overlappingItems} />);
+
+    await userEvent.click(screen.getByText('仅评论'));
+    let entries = screen.getAllByTestId('timeline-item');
+    expect(entries).toHaveLength(3);
+    expect(entries.every((entry) => entry.textContent?.includes('评论'))).toBe(true);
+    expect(screen.queryByText('工单状态已变更')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('仅时间线'));
+    entries = screen.getAllByTestId('timeline-item');
+    expect(entries).toHaveLength(2);
+    expect(screen.queryByText('评论三')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('全部'));
+    expect(screen.getAllByTestId('timeline-item')).toHaveLength(5);
+  });
+});
+
+describe('UnifiedTimeline long comment collapse', () => {
+  it('clamps long comment bodies behind an expand toggle and collapses them back', async () => {
+    // jsdom 无布局，scrollHeight 恒为 0；以 getter 桩模拟超限高的正文。
+    const heightSpy = vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(600);
+    const longContent = Array.from({ length: 120 }, (_, line) => `第 ${line} 行：这是一段很长的评论正文`).join('\n');
+    const { unmount } = render(<UnifiedTimeline items={[makeComment({ id: 901, content: longContent })]} />);
+
+    const expand = screen.getByRole('button', { name: '展开全文' });
+    expect(expand).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('.aw-tlc-body--clamped')).not.toBeNull();
+
+    await userEvent.click(expand);
+    expect(screen.getByRole('button', { name: '收起' })).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelector('.aw-tlc-body--clamped')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: '收起' }));
+    expect(screen.getByRole('button', { name: '展开全文' })).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('.aw-tlc-body--clamped')).not.toBeNull();
+
+    unmount();
+    heightSpy.mockRestore();
+  });
+
+  it('keeps short comments unclamped without a toggle', () => {
+    render(<UnifiedTimeline items={[makeComment({ id: 902, content: '短评论正文' })]} />);
+
+    expect(screen.queryByRole('button', { name: '展开全文' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '收起' })).not.toBeInTheDocument();
+    expect(document.querySelector('.aw-tlc-body--clamped')).toBeNull();
+  });
+});
+
+describe('UnifiedTimeline whole comment collapse', () => {
+  const agentComment = makeComment({
+    id: 903,
+    authorId: 10004,
+    authorName: '验收修复06(10004)',
+    authorType: 'AGENT',
+    isAgent: true,
+    content: '数字人发布影响分析的完整回复正文',
+    interactions: [{
+      guidanceId: 9,
+      targetAgentId: 40013,
+      targetAgentName: '全栈开发',
+      status: 'APPLIED',
+      replyContent: '数字人回复正文',
+      repliedAt: '2026-08-07T08:00:00Z',
+    }],
+  });
+
+  it('folds the whole comment entry down to its header row', async () => {
+    render(<UnifiedTimeline items={[agentComment]} />);
+
+    expect(document.querySelector('.aw-tlc-body')).not.toBeNull();
+    expect(screen.getByText('数字人回复正文')).toBeInTheDocument();
+
+    const fold = screen.getByRole('button', { name: '收起评论' });
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.click(fold);
+    expect(document.querySelector('.aw-tlc-body')).toBeNull();
+    expect(screen.queryByText('数字人回复正文')).not.toBeInTheDocument();
+    expect(screen.queryByText('数字人发布影响分析的完整回复正文')).not.toBeInTheDocument();
+    expect(screen.getByText('验收修复06(10004)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开评论' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('restores the body and agent replies after unfolding', async () => {
+    render(<UnifiedTimeline items={[agentComment]} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '收起评论' }));
+    await userEvent.click(screen.getByRole('button', { name: '展开评论' }));
+
+    expect(document.querySelector('.aw-tlc-body')).not.toBeNull();
+    expect(screen.getByText('数字人回复正文')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '收起评论' })).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
 describe('UnifiedTimeline operator display', () => {
   function makeSystemItem(overrides: Partial<TimelineItem>): TimelineItem {
     return {
@@ -389,4 +518,27 @@ it('renders interaction actions only when the page supplies the slot', () => {
 
   rerender(<UnifiedTimeline items={[item]} renderInteractionActions={() => <button type="button">结束本次执行</button>} />);
   expect(screen.getByRole('button', { name: '结束本次执行' })).toBeInTheDocument();
+});
+
+it('renders the human transition note only for status changes that carry one', () => {
+  const withNote = makeComment({
+    id: 901, type: 'system', content: '', eventType: 'STATUS_CHANGE',
+    fromValDisplay: '开发中', toValDisplay: '已上线', operatorDisplayName: '蔡何', note: '与需求方确认后流转',
+  });
+  const withoutNote = makeComment({
+    id: 902, type: 'system', content: '', eventType: 'STATUS_CHANGE',
+    fromValDisplay: '待处理', toValDisplay: '开发中', operatorDisplayName: '蔡何',
+  });
+
+  const { container, rerender } = render(<UnifiedTimeline items={[withNote]} />);
+  expect(screen.getByText('备注：与需求方确认后流转')).toBeInTheDocument();
+
+  rerender(<UnifiedTimeline items={[withoutNote]} />);
+  expect(container.querySelector('.aw-tle-note')).toBeNull();
+
+  rerender(<UnifiedTimeline items={[makeComment({ ...withNote, id: 903, note: '   ' })]} />);
+  expect(container.querySelector('.aw-tle-note')).toBeNull();
+
+  rerender(<UnifiedTimeline items={[makeComment({ id: 904, type: 'system', eventType: 'ASSIGN', content: 'ASSIGN: 1 -> 2', note: '不应展示' })]} />);
+  expect(container.querySelector('.aw-tle-note')).toBeNull();
 });

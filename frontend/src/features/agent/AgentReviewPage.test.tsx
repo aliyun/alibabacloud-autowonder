@@ -33,6 +33,10 @@ describe('AgentReviewPage', () => {
   beforeEach(() => {
     useAuthStore.getState().clear();
     useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
+    server.use(
+      http.get('/api/agents/:id/versions', () => HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data: [] })),
+      http.get('/api/sdlcs', () => HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data: [] })),
+    );
   });
 
   // antd 静态 message 的 toast 挂在 document.body 上，RTL 的 cleanup 不会移除，
@@ -247,6 +251,52 @@ describe('AgentReviewPage', () => {
     expect(await screen.findByText(/该数字员工尚无在线版本/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '上一处' })).not.toBeInTheDocument();
     expect(fetched).toEqual(['target']);
+  });
+
+  it('shows the pending version time as the submit time instead of the agent creation time', async () => {
+    server.use(
+      http.get('/api/agents', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null,
+        data: [{ ...pendingAgent, gmtCreate: '2026-07-01T08:00:00' }],
+      })),
+      http.get('/api/agents/1/versions', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null,
+        data: [
+          { id: 6, versionNo: 6, status: 'PENDING_REVIEW', roleName: 'Frontend Dev', gmtCreate: '2026-11-16T09:42:00' },
+          { id: 5, versionNo: 5, status: 'ONLINE', roleName: 'Frontend Dev', gmtCreate: '2026-07-01T08:00:00' },
+        ],
+      })),
+    );
+
+    renderPage();
+    const row = (await screen.findByText('PendingBot')).closest('tr')!;
+    expect(await within(row).findByText(/2026.*11.*16/)).toBeInTheDocument();
+    expect(within(row).queryByText(/2026.*07.*01/)).not.toBeInTheDocument();
+  });
+
+  it('renders SDLC names instead of ids in the diff field table', async () => {
+    server.use(
+      http.get('/api/agents', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null, data: [pendingAgent],
+      })),
+      http.get('/api/agents/1/versions', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null,
+        data: [{ id: 5, versionNo: 5, status: 'ONLINE', roleName: 'Frontend Dev', roleCode: 'FRONTEND_DEV', gmtCreate: '2026-07-01' }],
+      })),
+      http.get('/api/agents/1/versions/5', () => HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data: versionDetail(5, { status: 'ONLINE' }) })),
+      http.get('/api/agents/1/versions/6', () => HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data: versionDetail(6, { sdlcId: 2 }) })),
+      http.get('/api/sdlcs', () => HttpResponse.json({
+        success: true, code: '0', message: '', traceId: null,
+        data: [{ id: 1, name: '旧交付链', status: 'ENABLED' }, { id: 2, name: 'E2E交付链', status: 'ENABLED' }],
+      })),
+    );
+
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /查看变更/ }));
+
+    expect(await screen.findByText('+ E2E交付链')).toBeInTheDocument();
+    expect(screen.getByText('− 旧交付链')).toBeInTheDocument();
+    expect(screen.queryByText('+ #2')).not.toBeInTheDocument();
   });
 
   it('approves from inside the diff dialog after confirmation', async () => {

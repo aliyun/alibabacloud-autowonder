@@ -1,9 +1,9 @@
 import { formatDuration } from '@/features/workitem/duration';
 import { formatDateTime } from '@/shared/i18n/format';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
 import { useRef } from 'react';
-import { Button, Card, Descriptions, Popconfirm, Result, Space, Spin, Typography } from 'antd';
+import { Button, Card, Alert, Popconfirm, Result, Space, Spin, Typography } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
@@ -18,11 +18,13 @@ import { DeliveryProgress } from '@/features/workitem/components/DeliveryProgres
 import { UnifiedTimeline } from '@/features/workitem/components/UnifiedTimeline';
 import { ScrollToEdgeButton } from '@/features/workitem/components/ScrollToEdgeButton';
 import { MarkdownView } from '@/shared/ui/MarkdownView';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { RunStatusTag } from './components/RunStatusTag';
 import { RunCommentInput } from './components/RunCommentInput';
 import { DerivedWorkitems } from './components/DerivedWorkitems';
 import { reconcileScheduledRunEvent } from './realtime';
 import type { ScheduledRunCommentBody } from './types';
+import './ScheduledTaskRunDetailPage.css';
 import type { TimelineItem } from '@/shared/types/workitem';
 
 const { Text } = Typography;
@@ -61,6 +63,16 @@ export function ScheduledTaskRunDetailPage() {
   const sessionMode = data.sessionMode ?? '-';
   const active = ['QUEUED', 'STARTING', 'WAITING_EXECUTOR', 'WAITING_HUMAN', 'RUNNING', 'PAUSED'].includes(data.status);
   const resultContent = data.resultSummary || data.error || data.skipReason || '';
+  const isErrorResult = !data.resultSummary && !!data.error;
+  const isSkipResult = !data.resultSummary && !data.error && !!data.skipReason;
+  const realtimeChannel = `scheduled-run:${data.id}`;
+  const paused = data.status === 'PAUSED';
+  // 未结束时用省略号表示仍在计时。
+  const durationValue = data.startedAt
+    ? data.finishedAt
+      ? formatDuration(new Date(data.finishedAt).getTime() - new Date(data.startedAt).getTime())
+      : `${formatDuration(Date.now() - new Date(data.startedAt).getTime())}…`
+    : null;
 
   const timelineItems: TimelineItem[] = (comments.data ?? []).map((c) => ({
     id: c.id,
@@ -74,31 +86,46 @@ export function ScheduledTaskRunDetailPage() {
   }));
 
   return (
-    <div className="aw-split-page" style={{ display: 'flex', gap: 0, height: '100%', overflow: 'hidden' }}>
-      {/* Left Panel */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div className="aw-detail-page" style={{ height: '100%' }}>
+      {/* 原型 12：与工单详情同构的画布分块（头部白卡 / 汇总·结果·时间线 / 右 360 静态列） */}
+      <section className="aw-detail-main aw-run-main">
         <div
           data-testid="scheduled-run-scroll-region"
-          style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}
+          style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'visible', display: 'flex' }}
         >
-          <div ref={leftScrollRef} data-testid="scheduled-run-left-scroll" style={{ flex: 1, minWidth: 0, minHeight: 0, padding: 24, paddingRight: 38, paddingBottom: 12, overflowY: 'auto' }}>
-          <div style={{ marginBottom: 16 }}>
-            <div className="aw-detail-title">
-              <PageBackButton to={`/scheduled-tasks/${data.scheduledTaskId}`} label={t('actions.backToTasks')} />
-              <Typography.Title level={3} style={{ margin: 0 }}>{t('labels.runId', { id: data.id })}</Typography.Title>
-              <RunStatusTag status={data.status} />
-            </div>
-            <Text type="secondary">
-              {t('run.triggerSchedule', { trigger: Object.prototype.hasOwnProperty.call(triggers, data.triggerType) ? triggers[data.triggerType] : data.triggerType, time: formatTime(data.scheduledAt) })}
-              {data.startedAt && data.finishedAt ? t('run.duration', { duration: formatDuration(new Date(data.finishedAt).getTime() - new Date(data.startedAt).getTime()) }) : ''}
-            </Text>
+          <div ref={leftScrollRef} data-testid="scheduled-run-left-scroll" className="aw-detail-canvas" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
+          <section className="aw-detail-head-card aw-run-head">
+          <div className="aw-detail-title" style={{ gap: 10 }}>
+            <PageBackButton to={`/scheduled-tasks/${data.scheduledTaskId}`} label={t('actions.backToTasks')} />
+            {/* 原型 12 run-head 标题 16px/600；level=5 保住 heading role 供测试定位 */}
+            <Typography.Title level={5} ellipsis style={{ margin: 0, fontSize: 16, lineHeight: '24px', minWidth: 0, maxWidth: '100%' }}>{data.snapshot?.task?.name || t('labels.runId', { id: data.id })}</Typography.Title>
+            <span style={{ fontFamily: 'var(--aw-font-mono)', fontSize: 12, color: 'var(--aw-text-3)' }}>{t('run.rid', { id: data.id })}</span>
+            <RunStatusTag status={data.status} />
           </div>
+          <div className="aw-run-meta">
+            <span>
+              <Trans t={t} i18nKey="run.triggerSchedule" values={{ time: formatTime(data.scheduledAt) }}
+                components={{ value: <b>{Object.prototype.hasOwnProperty.call(triggers, data.triggerType) ? triggers[data.triggerType] : data.triggerType}</b> }} />
+            </span>
+            {data.startedAt ? (
+              <span>
+                <Trans t={t} i18nKey="run.duration" components={{ value: <b>{durationValue}</b> }} />
+              </span>
+            ) : null}
+            <span>
+              <Trans t={t} i18nKey="run.realtimeChannel" components={{ value: <b className="aw-meta-mono">{realtimeChannel}</b> }} />
+            </span>
+          </div>
+          </section>
 
-          <Card size="small" title={t('run.summary')} style={{ marginBottom: 16 }} extra={
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            {/* split · col-main */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+          <Card size="small" title={t('run.summary')} style={{ marginBottom: 12 }} extra={
             <Space>
-              {active && data.status !== 'PAUSED' ? <Button size="small" onClick={() => accessCommand('READ_WRITE', t('actions.pause'), () => transition.mutate({ action: 'pause' }))}>{t('actions.pause')}</Button> : null}
-              {data.status === 'PAUSED' ? <Button size="small" onClick={() => accessCommand('READ_WRITE', t('actions.resume'), () => transition.mutate({ action: 'resume' }))}>{t('actions.resume')}</Button> : null}
-              {active ? <Button size="small" danger onClick={() => accessCommand('READ_WRITE', t('actions.cancel'), () => transition.mutate({ action: 'cancel' }))}>{t('actions.cancel')}</Button> : null}
+              {active && !paused ? <Button size="small" icon={<AwStrokeIcon name="pause" size={14} />} onClick={() => accessCommand('READ_WRITE', t('actions.pause'), () => transition.mutate({ action: 'pause' }))}>{t('actions.pause')}</Button> : null}
+              {paused ? <Button size="small" icon={<AwStrokeIcon name="play" size={14} />} onClick={() => accessCommand('READ_WRITE', t('actions.resume'), () => transition.mutate({ action: 'resume' }))}>{t('actions.resume')}</Button> : null}
+              {active && !paused ? <Button size="small" danger onClick={() => accessCommand('READ_WRITE', t('actions.cancel'), () => transition.mutate({ action: 'cancel' }))}>{t('actions.cancel')}</Button> : null}
               {active ? (
                 <Popconfirm
                   title={t('confirm.forceCancel')}
@@ -113,18 +140,24 @@ export function ScheduledTaskRunDetailPage() {
               ) : null}
             </Space>
           }>
-            <Descriptions size="small" column={3}>
-              <Descriptions.Item label={t('run.startedAt')}>{formatTime(data.startedAt)}</Descriptions.Item>
-              <Descriptions.Item label={t('run.finishedAt')}>{formatTime(data.finishedAt)}</Descriptions.Item>
-              <Descriptions.Item label={t('run.executor')}>{data.executorId ? `#${data.executorId}` : '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('form.sessionMode')}>{Object.prototype.hasOwnProperty.call(sessions, sessionMode) ? sessions[sessionMode] : sessionMode}</Descriptions.Item>
-              <Descriptions.Item label={t('run.resumedFrom')}>{data.resumeFromRunId ? t('labels.runId', { id: data.resumeFromRunId }) : '-'}</Descriptions.Item>
-            </Descriptions>
+            {/* 原型 12 desc-grid：标签上、值下，两列栅格 */}
+            <div className="aw-desc-grid">
+              <div className="aw-desc-item"><div className="aw-dk">{t('run.startedAt')}</div><div className="aw-dv">{formatTime(data.startedAt)}</div></div>
+              <div className="aw-desc-item"><div className="aw-dk">{t('run.finishedAt')}</div><div className="aw-dv">{formatTime(data.finishedAt)}</div></div>
+              <div className="aw-desc-item"><div className="aw-dk">{t('run.executor')}</div><div className="aw-dv aw-desc-mono">{data.executorId ? `#${data.executorId}` : '-'}</div></div>
+              <div className="aw-desc-item"><div className="aw-dk">{t('form.sessionMode')}</div><div className="aw-dv">{Object.prototype.hasOwnProperty.call(sessions, sessionMode) ? sessions[sessionMode] : sessionMode}</div></div>
+              <div className="aw-desc-item"><div className="aw-dk">{t('run.resumedFrom')}</div><div className="aw-dv aw-desc-mono">{data.resumeFromRunId ? t('labels.runId', { id: data.resumeFromRunId }) : '-'}</div></div>
+            </div>
+            {data.degradedResume ? <Alert type="warning" showIcon style={{ marginTop: 12 }} message={t('run.degradedResume', { run: data.resumeFromRunId ? t('labels.runId', { id: data.resumeFromRunId }) : '', reason: data.degradedReason ?? '' })} /> : null}
           </Card>
 
-          <Card size="small" title={t('run.result')} style={{ marginBottom: 16 }}>
+          <Card size="small" title={t('run.result')} style={{ marginBottom: 12 }}>
             {resultContent
-              ? <MarkdownView content={resultContent} />
+              ? isErrorResult
+                ? <div style={{ border: '1px solid var(--aw-error)', background: 'var(--aw-error-bg)', color: 'var(--aw-error-deep)', borderRadius: 6, padding: 10 }}><MarkdownView content={resultContent} /></div>
+                : isSkipResult
+                  ? <div style={{ color: 'var(--aw-text-3)' }}><MarkdownView content={resultContent} /></div>
+                  : <MarkdownView content={resultContent} />
               : <Text type="secondary">-</Text>}
           </Card>
 
@@ -133,42 +166,42 @@ export function ScheduledTaskRunDetailPage() {
               participants={participants}
               artifacts={artifacts.data ?? []}
               loading={comments.isLoading}
+              scrollContainerRef={leftScrollRef}
+              composer={(
+                <div data-testid="scheduled-run-sticky-comment">
+                  <RunCommentInput
+                    runId={Number.isFinite(id) ? id : undefined}
+                    loading={comment.isPending}
+                    onSubmit={(payload) => accessCommand('READ_WRITE', t('comment.label'), () => comment.mutate(payload))}
+                  />
+                </div>
+              )}
             />
+            </div>
+            {/* split · col-side：原型 12 右列 360 静态面板（随主栏一起滚动） */}
+            <div style={{ width: 360, flexShrink: 0 }}>
+              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                {participantsLoading || participants.length > 0 ? (
+                  <Card size="small" title={t('run.members')}>
+                    <SquadMembers participants={participants} loading={participantsLoading} />
+                  </Card>
+                ) : null}
+                <DeliveryProgress
+                  steps={progress?.steps || []}
+                  progress={progress}
+                  terminalStatus={data.status}
+                  artifacts={artifacts.data ?? []}
+                  artifactsLoading={artifacts.isLoading}
+                  loading={progressLoading}
+                />
+                <DerivedWorkitems workitems={derived.data ?? []} />
+              </Space>
+            </div>
+          </div>
           </div>
           <ScrollToEdgeButton containerRef={leftScrollRef} />
         </div>
-
-        <div data-testid="scheduled-run-sticky-comment" style={{ flexShrink: 0, padding: '12px 24px 16px', borderTop: '1px solid var(--aw-border)' }}>
-          <RunCommentInput
-            runId={Number.isFinite(id) ? id : undefined}
-            loading={comment.isPending}
-            onSubmit={(payload) => accessCommand('READ_WRITE', t('comment.label'), () => comment.mutate(payload))}
-          />
-        </div>
-      </div>
-
-      {/* Right Panel */}
-      <div style={{
-        width: 'clamp(340px, 28vw, 420px)',
-        flexShrink: 0,
-        padding: 12,
-        background: 'var(--aw-raised)',
-        borderLeft: '1px solid var(--aw-border)',
-        overflowY: 'auto',
-      }}>
-        <Space direction="vertical" style={{ width: '100%' }} size={8}>
-          <SquadMembers participants={participants} loading={participantsLoading} />
-          <DeliveryProgress
-            steps={progress?.steps || []}
-            progress={progress}
-            terminalStatus={data.status}
-            artifacts={artifacts.data ?? []}
-            artifactsLoading={artifacts.isLoading}
-            loading={progressLoading}
-          />
-          <DerivedWorkitems workitems={derived.data ?? []} />
-        </Space>
-      </div>
+      </section>
     </div>
   );
 }

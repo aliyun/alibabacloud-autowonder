@@ -1,22 +1,26 @@
 import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
-import { formatNumber } from '@/shared/i18n/format';
+import { formatDateTime, formatNumber } from '@/shared/i18n/format';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { getAgentRoleLabel } from '@/features/agent/constants';
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Button, Space, Modal, Form, Input, Popconfirm, message, Tag, List, Select, Spin, Empty, Switch,
+  Button, Modal, Form, Input, Popconfirm, message, Tag, Select, Spin, Empty, Switch, Tooltip,
 } from 'antd';
-import { CloseOutlined, PlusOutlined, EditOutlined, DeleteOutlined, UserAddOutlined, EyeOutlined, CopyOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { MarkdownView } from '@/shared/ui/MarkdownView';
+import { EllipsisText } from '@/shared/ui/EllipsisText';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   listAllSquads, createSquad, updateSquad, deleteSquad, getSquad,
   getSquadMembers, addSquadMember, removeSquadMember,
 } from './api';
 import { listAgents } from '@/features/agent/api';
-import type { Squad, SquadMember } from './api';
+import type { Squad, SquadExecutorSummary, SquadMember, SquadSdlcStep } from './api';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
+import { Toolbar } from '@/shared/ui/Toolbar';
+import { PageHead } from '@/shared/ui/PageHead';
 import { SquadCopyModal } from './SquadCopyModal';
 import './SquadListPage.css';
 
@@ -33,18 +37,20 @@ export function SquadListPage() {
   const [membersOpen, setMembersOpen] = useState(false);
   const [membersSquadId, setMembersSquadId] = useState<number | null>(null);
   const [addAgentId, setAddAgentId] = useState<number | undefined>(undefined);
+  const [agentSearch, setAgentSearch] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailSquad, setDetailSquad] = useState<Squad | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set());
   const [copySquad, setCopySquad] = useState<Squad | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['squads'],
     queryFn: () => listAllSquads(),
   });
 
-  // Squad tags on the agent / SDLC / executor pages link here as /agents?tab=squads&squadId=<id>; there is
-  // no per-squad route, so the param drives this Modal. The param is consumed up front, otherwise a
+  // Squad tags on the agent / SDLC / executor pages link here as /squads?squadId=<id>; there is no
+  // per-squad route, so the param drives this Modal. The param is consumed up front, otherwise a
   // stale one reopens the Modal every time the list refreshes.
   const [deepLinkSquadId, setDeepLinkSquadId] = useState<number | null>(null);
 
@@ -171,6 +177,7 @@ export function SquadListPage() {
 
   const openDetail = (squad: Squad) => {
     setDetailSquad(squad);
+    setExpandedIds(new Set());
     setDetailOpen(true);
   };
 
@@ -198,27 +205,67 @@ export function SquadListPage() {
   const availableAgents = (agentsData || []).filter(
     (agent) => !members.some((member) => member.agentId === agent.id),
   );
-  const roleStats = buildRoleStats(detailMembers);
-  const sdlcGroups = buildSdlcGroups(detailMembers);
-  const detailExecutors = detailSquadFull?.executors ?? [];
-  const detailSdlcs = detailSquadFull?.sdlcs ?? [];
   const squads = data ?? [];
   const memberTotal = squads.reduce((sum, squad) => sum + (squad.memberCount ?? 0), 0);
   const executorOnlineTotal = squads.reduce((sum, squad) => sum + (squad.executorOnlineCount ?? 0), 0);
   const sdlcTotal = squads.reduce((sum, squad) => sum + (squad.sdlcCount ?? 0), 0);
 
+  const detail = detailSquadFull ?? detailSquad;
+  const detailExecutors = detailSquadFull?.executors ?? [];
+  const sdlcFlows = buildSdlcFlows(detailMembers);
+  const detailRoleCount = new Set(
+    detailMembers.map((member) => member.roleName || member.roleCode).filter(Boolean),
+  ).size;
+  // The detail endpoint's own counters lag behind its executor list, so the stats come from the loaded rows.
+  const detailOnline = detailSquadFull?.executors
+    ? detailExecutors.filter((executor) => executor.status === EXECUTOR_ONLINE).length
+    : detail?.executorOnlineCount ?? 0;
+  const detailExecutorTotal = detailSquadFull?.executors ? detailExecutors.length : detail?.executorTotalCount ?? 0;
+  const membersSquadName = squads.find((squad) => squad.id === membersSquadId)?.name
+    ?? (membersSquadId ? t('squadFallback', { id: membersSquadId }) : '');
+
+  const closeDetail = () => { setDetailOpen(false); setDetailSquad(null); setExpandedIds(new Set()); };
+  const closeMembers = () => { setMembersOpen(false); setMembersSquadId(null); setAgentSearch(''); };
+  const toggleExpanded = (agentId: number) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentId)) next.delete(agentId); else next.add(agentId);
+      return next;
+    });
+  };
+  const fromDetail = (open: (squad: Squad) => void) => {
+    if (!detail) return;
+    closeDetail();
+    open(detail);
+  };
+
   return (
     <>
+      <div className="squad-page-head">
+        <PageHead title={t('pageTitle')} description={t('pageDescription')} />
+      </div>
       <section className="squad-card-page">
-        <div className="squad-list-toolbar">
-          <div className="squad-summary-strip">
-            <SummaryPill label={t('squadTotal')} value={squads.length} />
-            <SummaryPill label={t('agentTotal')} value={memberTotal} />
-            <SummaryPill label={t('executorsOnline')} value={executorOnlineTotal} />
-            <SummaryPill label={t('linkedSdlcs')} value={sdlcTotal} />
-          </div>
-          <Button type="primary" icon={<PlusOutlined aria-hidden="true" />} onClick={openCreate}>{t('create')}</Button>
-        </div>
+        {/* 原型 33 小队页：汇总徽标在工具栏左侧，刷新、新建同排在右侧，一行收口。 */}
+        <Toolbar
+          left={(
+            <div className="squad-summary-strip">
+              <SummaryBadge label={t('squadTotal')} value={squads.length} />
+              <SummaryBadge label={t('agentTotal')} value={memberTotal} />
+              <SummaryBadge label={t('executorsOnline')} value={executorOnlineTotal} tone="green" />
+              <SummaryBadge label={t('linkedSdlcs')} value={sdlcTotal} />
+            </div>
+          )}
+          right={(
+            <div className="squad-toolbar-actions">
+              <Button icon={<AwStrokeIcon name="refresh" />} loading={isFetching && !isLoading} onClick={() => { void refetch(); }}>
+                {t('refresh')}
+              </Button>
+              <Button type="primary" icon={<AwStrokeIcon name="plus" />} aria-label={t('create')} onClick={openCreate}>
+                {t('createShort')}
+              </Button>
+            </div>
+          )}
+        />
 
         <Spin spinning={isLoading} aria-label={t('loading')}>
           {squads.length === 0 && !isLoading ? (
@@ -227,41 +274,50 @@ export function SquadListPage() {
             <div className="squad-card-grid">
               {squads.map((squad) => (
                 <article key={squad.id} className="squad-summary-card">
-                  <div className="squad-card-topline" />
-                  <div className="squad-card-main">
-                    <div className="squad-team-avatar">
-                      {(squad.name || '?').slice(0, 2)}
+                  <button
+                    type="button"
+                    className="squad-card-open"
+                    aria-label={t('viewSquad', { name: squad.name })}
+                    onClick={() => openDetail(squad)}
+                  />
+                  <div className="squad-card-content">
+                    <div className="squad-card-head">
+                      <span className="squad-card-avatar" aria-hidden>{(squad.name || '?').slice(0, 1)}</span>
+                      <span className="squad-card-title">{squad.name}</span>
+                      {squad.debugLogEnabled ? <Tag color="orange">{t('debug')}</Tag> : null}
                     </div>
-                    <div className="squad-card-title-area">
-                      <div className="squad-card-title">
-                        {squad.name}
-                        {squad.debugLogEnabled ? (
-                          <Tag color="orange" style={{ marginLeft: 6 }}>{t('debug')}</Tag>
-                        ) : null}
-                      </div>
-                      <div className="squad-card-description">{squad.description || t('noDescription')}</div>
+                    <div className="squad-card-description">{squad.description || t('noDescription')}</div>
+                    <SquadCardExecutors online={squad.executorOnlineCount ?? 0} total={squad.executorTotalCount ?? 0} />
+
+                    <div className="squad-metric-grid">
+                      <SquadMetric label={t('metricAgents')} value={formatNumber(squad.memberCount ?? 0)} />
+                      <SquadMetric label={t('metricRoles')} value={formatNumber(squad.roleCount ?? 0)} />
+                      <SquadMetric label={t('metricSdlcs')} value={formatNumber(squad.sdlcCount ?? 0)} />
                     </div>
-                  </div>
 
-                  <div className="squad-metric-grid">
-                    <SquadMetric label={t('agentCount', { count: squad.memberCount ?? 0 })} />
-                    <SquadMetric label={t('roleCount', { count: squad.roleCount ?? 0 })} />
-                    <SquadMetric label={executorText(squad)} active={(squad.executorOnlineCount ?? 0) > 0} />
-                    <SquadMetric label={sdlcText(squad)} />
-                  </div>
-
-                  <div className="squad-card-footer">
-                    <Button type="link" size="small" icon={<EyeOutlined aria-hidden="true" />} onClick={() => openDetail(squad)}>{t('details')}</Button>
-                    <Button type="link" size="small" icon={<UserAddOutlined aria-hidden="true" />} onClick={() => openMembers(squad)}>{t('members')}</Button>
-                    <Button type="link" size="small" icon={<EditOutlined aria-hidden="true" />} onClick={() => openEdit(squad)}>{t('edit')}</Button>
-                    <Button type="link" size="small" icon={<CopyOutlined aria-hidden="true" />} onClick={() => openCopy(squad)}>{t('copyToWorkspace')}</Button>
-                    <Popconfirm okText={t('confirm')} cancelText={t('cancel')} title={t('confirmDelete')} onConfirm={() => accessCommand(
-                      'READ_WRITE',
-                      t('deleteSquad'),
-                      () => deleteMut.mutate(squad.id),
-                    )}>
-                      <Button type="link" size="small" danger icon={<DeleteOutlined aria-hidden="true" />}>{t('delete')}</Button>
-                    </Popconfirm>
+                    <div className="squad-card-footer">
+                      <span className="squad-card-when">
+                        {squad.gmtCreate ? t('createdAt', { date: formatDateTime(squad.gmtCreate, { dateStyle: 'medium' }) }) : null}
+                      </span>
+                      <SquadOpButton icon="team" label={t('members')} onClick={() => openMembers(squad)} />
+                      <SquadOpButton icon="edit" label={t('edit')} onClick={() => openEdit(squad)} />
+                      <SquadOpButton icon="copy" label={t('copyToWorkspace')} onClick={() => openCopy(squad)} />
+                      <Popconfirm okText={t('confirm')} cancelText={t('cancel')} title={t('confirmDelete')} onConfirm={() => accessCommand(
+                        'READ_WRITE',
+                        t('deleteSquad'),
+                        () => deleteMut.mutate(squad.id),
+                      )}>
+                        <Tooltip title={t('delete')}>
+                          <Button
+                            type="text"
+                            size="small"
+                            className="aw-op-btn aw-op-btn--del"
+                            icon={<AwStrokeIcon name="trash" />}
+                            aria-label={t('delete')}
+                          />
+                        </Tooltip>
+                      </Popconfirm>
+                    </div>
                   </div>
                 </article>
               ))}
@@ -271,7 +327,7 @@ export function SquadListPage() {
       </section>
 
       <Modal
-        closable={{ 'aria-label': t('close'), closeIcon: <CloseOutlined aria-hidden="true" /> }}
+        closable={{ 'aria-label': t('close'), closeIcon: <AwStrokeIcon name="x" /> }}
         title={editingSquad ? t('editSquad') : t('create')}
         open={formOpen}
         okText={t('confirm')}
@@ -301,204 +357,240 @@ export function SquadListPage() {
       </Modal>
 
       <Modal
-        closable={{ 'aria-label': t('close'), closeIcon: <CloseOutlined aria-hidden="true" /> }}
+        className="squad-detail-modal"
         title={null}
+        closable={false}
         open={detailOpen}
-        onCancel={() => { setDetailOpen(false); setDetailSquad(null); }}
-        footer={null}
-        width={980}
+        onCancel={closeDetail}
+        width={960}
+        footer={(
+          <div className="squad-detail-foot">
+            <Button icon={<AwStrokeIcon name="team" />} onClick={() => fromDetail(openMembers)}>{t('manageMembers')}</Button>
+            <Button icon={<AwStrokeIcon name="edit" />} onClick={() => fromDetail(openEdit)}>{t('edit')}</Button>
+            <Button icon={<AwStrokeIcon name="copy" />} onClick={() => fromDetail(openCopy)}>{t('copyToWorkspace')}</Button>
+          </div>
+        )}
       >
-        <div style={{ margin: '-20px -24px 0' }}>
-          <div style={{
-            padding: '22px 56px 22px 26px',
-            borderBottom: '1px solid var(--aw-border)',
-            background: 'var(--aw-raised)',
-          }}>
-            <Space direction="vertical" size={4} style={{ width: '100%' }}>
-              <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start">
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--aw-text)' }}>{detailSquad?.name}</div>
-                  <div style={{ marginTop: 6, color: 'var(--aw-muted)' }}>{detailSquad?.description || t('noDescription')}</div>
-                </div>
-                <Space>
-                  <Tag color="cyan">{t('memberCount', { count: detailMembers.length || detailSquad?.memberCount || 0 })}</Tag>
-                  <Tag color="green">{t('roleCount', { count: roleStats.length })}</Tag>
-                  <Tag color="blue">{t('sdlcCount', { count: detailSdlcs.length || detailSquad?.sdlcCount || 0 })}</Tag>
-                </Space>
-              </Space>
-            </Space>
+        <div className="squad-detail-head">
+          <span className="squad-card-avatar squad-detail-avatar" aria-hidden>{(detail?.name || '?').slice(0, 1)}</span>
+          <div className="squad-detail-title-area">
+            <div className="squad-detail-title">
+              <span>{detail?.name}</span>
+              {detail?.debugLogEnabled ? <Tag color="orange">{t('debug')}</Tag> : null}
+            </div>
+            <div className="squad-detail-desc">{detail?.description || t('noDescription')}</div>
+          </div>
+          <Button
+            type="text"
+            size="small"
+            className="squad-detail-x"
+            icon={<AwStrokeIcon name="x" />}
+            aria-label={t('close')}
+            onClick={closeDetail}
+          />
+        </div>
+
+        <div className="squad-detail-body">
+          <div className="squad-detail-stats">
+            <DetailStat label={t('metricAgents')} value={formatNumber(detailMembers.length || detail?.memberCount || 0)} />
+            <DetailStat label={t('metricRoles')} value={formatNumber(detailRoleCount || detail?.roleCount || 0)} />
+            <DetailStat
+              label={t('executorsOnline')}
+              dot={executorDotClass(detailOnline, detailExecutorTotal)}
+              value={`${formatNumber(detailOnline)}/${formatNumber(detailExecutorTotal)}`}
+            />
+            <DetailStat label={t('metricSdlcs')} value={formatNumber(sdlcFlows.length || detail?.sdlcCount || 0)} />
           </div>
 
-          <div style={{ padding: 24 }}>
-            {detailLoading ? <Spin aria-label={t('loading')} /> : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 0.65fr', gap: 18 }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--aw-text)', marginBottom: 12 }}>{t('agentLineup')}</div>
-                  {detailMembers.length === 0 ? (
-                    <Empty description={t('emptyLineup')} />
-                  ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-                    {detailMembers.map((member, index) => (
-                      <div key={member.agentId} style={{
-                        border: `1px solid ${avatarPalette(index).border}`,
-                        background: avatarPalette(index).background,
-                        borderRadius: 8,
-                        padding: 14,
-                        textAlign: 'center',
-                        cursor: 'default',
-                        minHeight: 190,
-                      }}>
-                        <DigitalHeadAvatar member={member} />
-                        <div style={{ fontWeight: 800, color: 'var(--aw-text)', marginTop: 10 }}>{member.agentName}</div>
-                        <div style={{ color: avatarPalette(index).text, fontSize: 12, marginTop: 4 }}>
-                          {getAgentRoleLabel(member.roleCode, member.roleName) || t('roleUnset')}
-                        </div>
-                        <div style={{
-                          color: 'var(--aw-muted)',
-                          fontSize: 12,
-                          marginTop: 10,
-                          lineHeight: 1.5,
-                          minHeight: 36,
-                        }}>
-                          {member.responsibilities || t('noResponsibilities')}
-                        </div>
+          {detailLoading ? <div className="squad-detail-loading"><Spin aria-label={t('loading')} /></div> : (
+            <>
+              <DetailSection title={t('members')} count={detailMembers.length} />
+              {detailMembers.length === 0 ? <div className="squad-detail-empty">{t('emptyMembers')}</div> : (
+                <table className="squad-detail-table">
+                  <colgroup>
+                    <col style={{ width: 28 }} /><col style={{ width: '35%' }} /><col style={{ width: '17%' }} />
+                    <col style={{ width: '22%' }} /><col style={{ width: '24%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th aria-label={t('expandColumn')} />
+                      <th>{t('metricAgents')}</th><th>{t('metricRoles')}</th><th>{t('colSdlc')}</th><th>{t('executor')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailMembers.map((member) => {
+                      const summary = summarizeResponsibilities(member.responsibilities);
+                      const hasResp = !!member.responsibilities?.trim();
+                      const isOpen = hasResp && expandedIds.has(member.agentId);
+                      // The members endpoint does not fill executorOnline; the detail executor list is the live source.
+                      const memberExecutors = detailExecutors.filter((executor) => executor.agentId === member.agentId);
+                      const isPlatform = member.agentKind === PLATFORM_KIND;
+                      return (
+                        <Fragment key={member.agentId}>
+                          <tr className={isOpen ? 'is-open' : undefined}>
+                            <td className="squad-exp-td">
+                              {hasResp ? (
+                                <button
+                                  type="button"
+                                  className="squad-exp-btn"
+                                  aria-expanded={isOpen}
+                                  aria-label={t(isOpen ? 'collapseResp' : 'expandResp', { name: member.agentName })}
+                                  onClick={() => toggleExpanded(member.agentId)}
+                                >
+                                  <AwStrokeIcon name="chev-d" size={14} />
+                                </button>
+                              ) : null}
+                            </td>
+                            <td>
+                              <div className="squad-member-cell">
+                                <span className="squad-member-avatar" aria-hidden>{(member.agentName ?? '').slice(0, 2)}</span>
+                                <div className="squad-member-text">
+                                  <div className="squad-member-name">
+                                    <Link className="squad-text-link squad-ellip" to={`/agents/${member.agentId}`}>{member.agentName}</Link>
+                                    {isPlatform ? <Tag color="gold">{t('platform')}</Tag> : null}
+                                  </div>
+                                  {summary ? <div className="squad-member-resp"><EllipsisText lines={2}>{summary}</EllipsisText></div> : null}
+                                </div>
+                              </div>
+                            </td>
+                            <td><span className="squad-ellip">{getAgentRoleLabel(member.roleCode, member.roleName) || t('roleUnset')}</span></td>
+                            <td>
+                              {member.sdlcId != null ? (
+                                <Link className="squad-text-link squad-ellip" to={`/sdlcs/${member.sdlcId}`}>{sdlcLabel(member.sdlcId, member.sdlcName)}</Link>
+                              ) : <span className="squad-muted">{t('notBound')}</span>}
+                            </td>
+                            <td><MemberExecutorCell executors={memberExecutors} /></td>
+                          </tr>
+                          {isOpen ? (
+                            <tr className="squad-resp-row">
+                              <td colSpan={5}><MarkdownView className="squad-resp-md" content={member.responsibilities ?? ''} /></td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+
+              <DetailSection title={t('sdlcWorkflows')} count={sdlcFlows.length} />
+              {sdlcFlows.length === 0 ? <div className="squad-detail-empty">{t('noSdlcFlows')}</div> : (
+                <div className="squad-flow-grid">
+                  {sdlcFlows.map((flow) => (
+                    <div key={flow.id} className="squad-flow">
+                      <div className="squad-flow-head">
+                        <Link className="squad-text-link squad-flow-name" to={`/sdlcs/${flow.id}`}>{flow.name}</Link>
+                        <span className="squad-flow-count">{t('stepCount', { count: flow.steps.length })}</span>
                       </div>
-                    ))}
-                  </div>
-                  )}
+                      {flow.steps.length === 0 ? <span className="squad-muted">{t('noSteps')}</span> : (
+                        <div className="squad-steps">
+                          {flow.steps.map((step, index) => {
+                            const handler = step.handlerRoleRef ? getAgentRoleLabel(step.handlerRoleRef) : handlerTypeLabel(step.handlerType);
+                            return (
+                              <Fragment key={step.id}>
+                                {index > 0 ? <span className="squad-step-sep" aria-hidden /> : null}
+                                <span className="squad-step">
+                                  <span className="squad-step-i">{index + 1}</span>
+                                  <span>{step.name}</span>
+                                  {handler ? <span className="squad-step-h">{handler}</span> : null}
+                                </span>
+                              </Fragment>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div className="squad-flow-foot">
+                        <span className="squad-flow-foot-k">{t('sdlcMembers')}</span>
+                        <span className="squad-ellip">{flow.memberNames.join(t('listSeparator'))}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--aw-text)', marginBottom: 12 }}>{t('roleComposition')}</div>
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    {roleStats.map((role) => (
-                      <div key={role.key} style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        border: '1px solid var(--aw-border)',
-                        borderRadius: 8,
-                        padding: 12,
-                        background: 'var(--aw-panel)',
-                      }}>
-                        <span>{role.name}</span>
-                        <b>{formatNumber(role.count)}</b>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--aw-text)', marginTop: 20, marginBottom: 6 }}>{t('sdlcWorkflows')}</div>
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    {sdlcGroups.map((group) => (
-                      <div key={group.id} style={{
-                        border: '1px solid var(--aw-border)',
-                        borderRadius: 8,
-                        padding: 12,
-                        background: 'var(--aw-panel)',
-                      }}>
-                        <div style={{ fontWeight: 800, color: 'var(--aw-text)' }}>{group.name}</div>
-                        <div style={{ color: 'var(--aw-muted)', fontSize: 12, marginTop: 3, marginBottom: 10 }}>
-                          {group.roles.length > 0 ? group.roles.join(' / ') : t('noRoles')}
-                        </div>
-                        <div style={{ borderLeft: '3px solid color-mix(in srgb, var(--aw-info) 30%, var(--aw-border))', paddingLeft: 12, display: 'grid', gap: 10 }}>
-                          {group.steps.length === 0 ? (
-                            <span style={{ color: 'var(--aw-muted)' }}>{t('noSteps')}</span>
-                          ) : group.steps.map((step) => (
-                            <div key={step.id}>
-                              <b>{step.name}</b>
-                              <div style={{ fontSize: 12, color: 'var(--aw-muted)' }}>{step.handlerRoleRef || handlerTypeLabel(step.handlerType) || '-'}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--aw-text)', marginTop: 20, marginBottom: 6 }}>{t('relatedExecutors')}</div>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {detailExecutors.length === 0 ? (
-                      <span style={{ color: 'var(--aw-muted)' }}>{t('noExecutors')}</span>
-                    ) : detailExecutors.map((executor) => (
-                      <div key={executor.id} style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 8,
-                        border: '1px solid var(--aw-border)',
-                        borderRadius: 8,
-                        padding: '8px 12px',
-                        background: 'var(--aw-panel)',
-                      }}>
-                        <div>
-                          <div style={{ fontWeight: 700, color: 'var(--aw-text)' }}>{executor.name}</div>
-                          <div style={{ fontSize: 12, color: 'var(--aw-muted)' }}>{executor.agentName || t('unknownAgent')}</div>
-                        </div>
-                        <Tag color={executor.status === 'ONLINE' ? 'green' : 'default'}>{executorStatusLabel(executor.status)}</Tag>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </>
+          )}
         </div>
       </Modal>
 
       <Modal
-        closable={{ 'aria-label': t('close'), closeIcon: <CloseOutlined aria-hidden="true" /> }}
+        className="squad-sm-modal"
+        closable={{ 'aria-label': t('close'), closeIcon: <AwStrokeIcon name="x" /> }}
         title={t('manageMembers')}
         open={membersOpen}
-        onCancel={() => { setMembersOpen(false); setMembersSquadId(null); }}
+        onCancel={closeMembers}
         footer={null}
         width={520}
       >
-        <div style={{ marginBottom: 16 }}>
-          <Space.Compact style={{ width: '100%' }}>
-            <Select
-              style={{ width: '100%' }}
-              placeholder={t('selectAgent')}
-              aria-label={t('selectAgent')}
-              value={addAgentId}
-              onChange={setAddAgentId}
-              options={availableAgents.map((agent) => ({ value: agent.id, label: agent.name }))}
-              showSearch
-              filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-            />
-            <Button type="primary" icon={<PlusOutlined aria-hidden="true" />}
-              disabled={!addAgentId} loading={addMemberMut.isPending}
-              onClick={() => addAgentId && accessCommand(
-                'READ_WRITE',
-                t('addMember'),
-                () => addMemberMut.mutate(addAgentId),
-              )}>
-              {t('add')}
-            </Button>
-          </Space.Compact>
+        <div className="squad-sm-sub">{t('membersSubtitle', { name: membersSquadName, count: members.length })}</div>
+        <div className="squad-add-row">
+          <Select
+            className="squad-add-select"
+            placeholder={t('selectAgent')}
+            aria-label={t('selectAgent')}
+            value={addAgentId}
+            onChange={(value) => { setAddAgentId(value); setAgentSearch(''); }}
+            searchValue={agentSearch}
+            onSearch={setAgentSearch}
+            options={availableAgents.map((agent) => ({
+              value: agent.id,
+              label: agent.name,
+              role: getAgentRoleLabel(agent.roleCode, agent.roleName),
+            }))}
+            optionRender={(option) => (
+              <div className="squad-opt">
+                <span className="squad-member-avatar" aria-hidden>{String(option.data.label ?? '').slice(0, 2)}</span>
+                <span className="squad-opt-name">{highlightMatch(String(option.data.label ?? ''), agentSearch)}</span>
+                {option.data.role ? <span className="squad-opt-role">{option.data.role}</span> : null}
+              </div>
+            )}
+            showSearch
+            filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+          />
+          <Button type="primary" icon={<AwStrokeIcon name="plus" />}
+            disabled={!addAgentId} loading={addMemberMut.isPending}
+            onClick={() => addAgentId && accessCommand(
+              'READ_WRITE',
+              t('addMember'),
+              () => addMemberMut.mutate(addAgentId),
+            )}>
+            {t('add')}
+          </Button>
         </div>
 
-        {membersLoading ? <Spin aria-label={t('loading')} /> : (
-          <List
-            size="small"
-            dataSource={members}
-            locale={{ emptyText: t('emptyMembers') }}
-            renderItem={(item: SquadMember) => (
-              <List.Item
-                actions={[
-                  <Popconfirm okText={t('confirm')} cancelText={t('cancel')} key="rm" title={t('confirmRemove')} onConfirm={() => accessCommand(
-                    'READ_WRITE',
-                    t('removeMember'),
-                    () => removeMemberMut.mutate(item.agentId),
-                  )}>
-                    <Button type="link" size="small" danger>{t('remove')}</Button>
-                  </Popconfirm>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={item.agentName}
-                  description={<Tag>{getAgentRoleLabel(item.roleCode, item.roleName) || t('roleUnset')}</Tag>}
-                />
-              </List.Item>
-            )}
-          />
+        <div className="squad-ml-sec">
+          <span>{t('currentMembers')}</span>
+          <span className="squad-detail-sec-c">{formatNumber(members.length)}</span>
+        </div>
+        {membersLoading ? <div className="squad-detail-loading"><Spin aria-label={t('loading')} /></div> : members.length === 0 ? (
+          <div className="squad-detail-empty squad-ml-empty">{t('emptyMembersHint')}</div>
+        ) : (
+          <div className="squad-ml-list">
+            {members.map((item: SquadMember) => (
+              <div key={item.agentId} className="squad-ml-row">
+                <span className="squad-member-avatar" aria-hidden>{(item.agentName ?? '').slice(0, 2)}</span>
+                <span className="squad-ml-name">{item.agentName}</span>
+                {item.agentKind === PLATFORM_KIND ? <Tag color="gold">{t('platform')}</Tag> : null}
+                <span className="squad-ml-role">{getAgentRoleLabel(item.roleCode, item.roleName) || t('roleUnset')}</span>
+                <Popconfirm
+                  okText={t('remove')}
+                  cancelText={t('cancel')}
+                  okButtonProps={{ danger: true }}
+                  title={t('confirmRemove')}
+                  onConfirm={() => accessCommand('READ_WRITE', t('removeMember'), () => removeMemberMut.mutate(item.agentId))}
+                >
+                  <Tooltip title={t('remove')}>
+                    <Button
+                      type="text"
+                      size="small"
+                      className="aw-op-btn aw-op-btn--del"
+                      icon={<AwStrokeIcon name="trash" />}
+                      aria-label={t('remove')}
+                    />
+                  </Tooltip>
+                </Popconfirm>
+              </div>
+            ))}
+          </div>
         )}
       </Modal>
 
@@ -507,84 +599,150 @@ export function SquadListPage() {
   );
 }
 
-function SummaryPill({ label, value }: { label: string; value: number }) {
+function SummaryBadge({ label, value, tone }: { label: string; value: number; tone?: 'green' }) {
   useTranslation('squad');
   return (
-    <div className="squad-summary-pill">
-      <span>{label}</span>
-      <strong>{formatNumber(value)}</strong>
-    </div>
+    <span className={tone ? `squad-summary-badge squad-summary-badge--${tone}` : 'squad-summary-badge'}>
+      {label}<b>{formatNumber(value)}</b>
+    </span>
   );
 }
 
-function SquadMetric({ label, active = false }: { label: string; active?: boolean }) {
+function SquadMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="squad-metric">
-      <span className={`squad-metric-dot ${active ? 'is-active' : ''}`} />
-      <span>{label}</span>
+      <span className="squad-metric-k">{label}</span>
+      <strong className="squad-metric-v">{value}</strong>
     </div>
   );
 }
 
-function executorText(squad: Squad) {
-  const online = squad.executorOnlineCount ?? 0;
-  const total = squad.executorTotalCount ?? 0;
-  if (total <= 1) {
-    return i18n.t(online > 0 ? 'executorOnline' : 'executorOffline', { ns: 'squad' });
+function DetailStat({ label, value, dot }: { label: string; value: string; dot?: string }) {
+  return (
+    <div className="squad-detail-stat">
+      <div className="squad-detail-stat-k">{label}</div>
+      <div className="squad-detail-stat-v">{dot ? <i className={dot} /> : null}{value}</div>
+    </div>
+  );
+}
+
+function DetailSection({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="squad-detail-sec">
+      <span>{title}</span>
+      <span className="squad-detail-sec-c">{formatNumber(count)}</span>
+    </div>
+  );
+}
+
+function SquadOpButton({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+  return (
+    <Tooltip title={label}>
+      <Button type="text" size="small" className="aw-op-btn" icon={<AwStrokeIcon name={icon} />} aria-label={label} onClick={onClick} />
+    </Tooltip>
+  );
+}
+
+function executorDotClass(online: number, total: number) {
+  if (total > 0 && online === total) return 'squad-dot is-on';
+  if (online > 0) return 'squad-dot is-part';
+  return 'squad-dot';
+}
+
+function SquadCardExecutors({ online, total }: { online: number; total: number }) {
+  const { t } = useTranslation('squad');
+  return (
+    <div className={total > 0 ? 'squad-card-exec' : 'squad-card-exec is-muted'}>
+      <i className={executorDotClass(online, total)} />
+      {total > 0 ? t('cardExecutors', { online: formatNumber(online), total: formatNumber(total) }) : t('noExecutor')}
+    </div>
+  );
+}
+
+function MemberExecutorCell({ executors }: { executors: SquadExecutorSummary[] }) {
+  const { t } = useTranslation('squad');
+  if (executors.length === 0) {
+    return <span className="squad-exec-state squad-muted"><i className="squad-dot" />{t('noExecutor')}</span>;
   }
-  return i18n.t('onlineRatio', { ns: 'squad', online, total });
+  const lead = executors.find((executor) => executor.status === EXECUTOR_ONLINE) ?? executors[0];
+  const others = executors.filter((executor) => executor !== lead);
+  const leadOnline = lead.status === EXECUTOR_ONLINE;
+  const meta = [
+    leadOnline ? null : executorStatusLabel(lead.status),
+    lead.lastHeartbeat ? t('heartbeat', { time: formatDateTime(lead.lastHeartbeat) }) : null,
+  ].filter(Boolean).join(' · ');
+  return (
+    <div className="squad-ex-cell">
+      <div className="squad-ex-l1">
+        <i className={leadOnline ? 'squad-dot is-on' : 'squad-dot'} />
+        <span className="squad-mono squad-ellip">{lead.name}</span>
+        {others.length > 0 ? (
+          <Tooltip title={others.map((executor) => (
+            <div key={executor.id}>{t('executorStatusLine', { name: executor.name, status: executorStatusLabel(executor.status) })}</div>
+          ))}>
+            <span className="squad-ex-more">{t('executorMore', { count: others.length })}</span>
+          </Tooltip>
+        ) : null}
+      </div>
+      {meta ? <div className="squad-ex-l2">{meta}</div> : null}
+    </div>
+  );
 }
 
-function sdlcText(squad: Squad) {
-  const count = squad.sdlcCount ?? 0;
-  return count > 0 ? i18n.t('sdlcCount', { ns: 'squad', count }) : i18n.t('noSdlc', { ns: 'squad' });
+function highlightMatch(text: string, keyword: string): ReactNode {
+  const needle = keyword.trim().toLowerCase();
+  const at = needle ? text.toLowerCase().indexOf(needle) : -1;
+  if (at < 0) return text;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark>{text.slice(at, at + needle.length)}</mark>
+      {text.slice(at + needle.length)}
+    </>
+  );
 }
 
-function buildRoleStats(members: SquadMember[]) {
-  const counts = new Map<string, { key: string; name: string; count: number }>();
-  members.forEach((member) => {
-    const key = member.roleName || member.roleCode || '';
-    const role = counts.get(key) ?? {
-      key, name: getAgentRoleLabel(member.roleCode, member.roleName) || i18n.t('roleUnset', { ns: 'squad' }), count: 0,
-    };
-    role.count += 1;
-    counts.set(key, role);
-  });
-  return Array.from(counts.values());
-}
-
-function buildSdlcGroups(members: SquadMember[]) {
-  const groups = new Map<string, {
-    id: string;
-    name: string;
-    roles: Map<string, string>;
-    steps: NonNullable<SquadMember['sdlcSteps']>;
-  }>();
-
-  members.forEach((member) => {
-    const id = String(member.sdlcId ?? member.sdlcName ?? 'none');
-    const group = groups.get(id) ?? {
-      id,
-      name: member.sdlcName || i18n.t('noSdlc', { ns: 'squad' }),
-      roles: new Map<string, string>(),
-      steps: [],
-    };
-    const role = member.roleName || member.roleCode;
-    if (role) {
-      group.roles.set(role, getAgentRoleLabel(member.roleCode, member.roleName));
+// Responsibilities are free-form markdown; the table shows the first paragraph or first list item, headings skipped.
+function summarizeResponsibilities(text?: string) {
+  if (!text) return '';
+  const block: string[] = [];
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || /^#{1,6}\s/.test(trimmed)) {
+      if (block.length) break;
+      continue;
     }
-    if (group.steps.length === 0 && member.sdlcSteps?.length) {
-      group.steps = member.sdlcSteps;
+    const item = trimmed.match(/^(?:[-*+]|\d+[.)])\s+(.*)$/);
+    if (item) {
+      if (block.length) break;
+      return item[1];
     }
-    groups.set(id, group);
-  });
+    block.push(trimmed);
+  }
+  return block.join(' ');
+}
 
-  return Array.from(groups.values()).map((group) => ({
-    id: group.id,
-    name: group.name,
-    roles: Array.from(group.roles.values()),
-    steps: group.steps,
-  }));
+const PLATFORM_KIND = 'PLATFORM';
+const EXECUTOR_ONLINE = 'ONLINE';
+
+function sdlcLabel(id: number, name?: string | null) {
+  return name || `#${id}`;
+}
+
+function buildSdlcFlows(members: SquadMember[]) {
+  const flows = new Map<number, { id: number; name: string; steps: SquadSdlcStep[]; memberNames: string[] }>();
+  members.forEach((member) => {
+    if (member.sdlcId == null) return;
+    const flow = flows.get(member.sdlcId) ?? {
+      id: member.sdlcId, name: sdlcLabel(member.sdlcId, member.sdlcName), steps: [], memberNames: [],
+    };
+    flow.memberNames.push(member.agentName);
+    if (flow.steps.length === 0 && member.sdlcSteps?.length) {
+      flow.steps = [...member.sdlcSteps].sort((x, y) => x.stepOrder - y.stepOrder);
+    }
+    flows.set(member.sdlcId, flow);
+  });
+  return Array.from(flows.values());
 }
 
 const executorStatusKeys = new Map([
@@ -601,19 +759,4 @@ const handlerTypeKeys = new Map([
 function handlerTypeLabel(handlerType: string) {
   const key = handlerTypeKeys.get(handlerType as Parameters<typeof handlerTypeKeys.get>[0]);
   return key ? i18n.t(key, { ns: 'squad' }) : handlerType;
-}
-
-function avatarPalette(index: number) {
-  const palettes = [
-    { border: 'color-mix(in srgb, var(--aw-info) 30%, var(--aw-border))', background: 'color-mix(in srgb, var(--aw-info) 10%, var(--aw-panel))', text: 'var(--aw-info)' },
-    { border: 'color-mix(in srgb, var(--aw-success) 30%, var(--aw-border))', background: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))', text: 'var(--aw-success)' },
-    { border: '#fdba74', background: 'rgba(var(--aw-accent-rgb), .10)', text: 'var(--aw-accent-text)' },
-    { border: '#fcd34d', background: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', text: 'var(--aw-warning)' },
-    { border: '#c4b5fd', background: 'var(--aw-raised)', text: 'var(--aw-text)' },
-  ];
-  return palettes[index % palettes.length];
-}
-
-function DigitalHeadAvatar({ member }: { member: SquadMember }) {
-  return <div aria-label={member.agentName} style={{ width: 68, height: 68, margin: '0 auto', borderRadius: '50%', background: 'color-mix(in srgb, var(--aw-accent) 20%, var(--aw-raised))', color: 'var(--aw-accent-text)', fontWeight: 800, fontSize: 22, display: 'grid', placeItems: 'center' }}>{(member.agentName || '?').slice(0, 2)}</div>;
 }

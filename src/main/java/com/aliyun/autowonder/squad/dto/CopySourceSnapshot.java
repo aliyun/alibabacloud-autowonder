@@ -46,6 +46,12 @@ public final class CopySourceSnapshot {
      */
     public String snapshotRef() {
         StringBuilder material = new StringBuilder();
+        // Numeric IDs precede all free text. An all-off snapshot keeps its original digest.
+        for (SdlcSnapshot sdlc : sdlcs) {
+            if (sdlc.stageTimingEnabled()) {
+                material.append("timed-sdlc:").append(sdlc.sdlcId()).append(';');
+            }
+        }
         material.append("squad:").append(squad.squadId()).append('|').append(squad.name());
         for (AgentSnapshot agent : agents) {
             material.append(";agent:").append(agent.agentId()).append('|').append(agent.onlineVersionId());
@@ -96,7 +102,7 @@ public final class CopySourceSnapshot {
     }
 
     public record SdlcSnapshot(Long sdlcId, String name, String description, String workType,
-                               String status, Integer isDefault, Long entryStepId,
+                               String status, Integer isDefault, boolean stageTimingEnabled, Long entryStepId,
                                List<StepSnapshot> steps) {
     }
 

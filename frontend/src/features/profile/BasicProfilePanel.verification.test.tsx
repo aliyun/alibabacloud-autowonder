@@ -132,7 +132,8 @@ describe('BasicProfilePanel email verification', () => {
     await userEvent.type(email, 'new@example.com');
 
     expect(await screen.findByLabelText('新邮箱验证码')).toBeInTheDocument();
-    expect(screen.getByText('待验证')).toBeInTheDocument();
+    // 原型在区头、身份卡和字段标签各有一枚状态标；这里只看字段标签那枚
+    expect(screen.getByTestId('profile-email-verification-status')).toHaveTextContent('待验证');
   });
 
   it('hides the code entry when the email is verified and unchanged', async () => {
@@ -144,7 +145,7 @@ describe('BasicProfilePanel email verification', () => {
     renderPanel();
     expect(await screen.findByDisplayValue('alice@example.com')).toBeInTheDocument();
     expect(screen.queryByLabelText('新邮箱验证码')).not.toBeInTheDocument();
-    expect(screen.getByText('已验证')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-email-verification-status')).toHaveTextContent('已验证');
   });
 
   it('reports a failed code send without changing the saved email', async () => {

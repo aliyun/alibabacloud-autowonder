@@ -21,11 +21,14 @@ import com.aliyun.autowonder.sdlc.SdlcStepDO;
 import com.aliyun.autowonder.websocket.WsDispatchTransport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.aliyun.autowonder.sdlc.SdlcExecutionSnapshotService;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DuplicateKeyException;
 
-import java.util.List;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -754,12 +757,31 @@ class DispatchServiceRunPendingTest {
 
     @Test
     void runPendingHappyPathDispatches() {
+        verifyPackagedConfigurationCapture(false, false);
+    }
+
+    @Test
+    void runPendingCapturesConfigurationForTimedDelivery() {
+        verifyPackagedConfigurationCapture(true, false);
+    }
+
+    @Test
+    void runPendingStillDispatchesWhenConfigurationCaptureFails() {
+        verifyPackagedConfigurationCapture(true, true);
+    }
+
+    private void verifyPackagedConfigurationCapture(boolean timing, boolean captureFails) {
         DispatchDO d = pending();
+        var snapshots = mock(SdlcExecutionSnapshotService.class);
+        ReflectionTestUtils.setField(service, "sdlcExecutionSnapshotService", snapshots);
+        if (captureFails) doThrow(new IllegalStateException("snapshot storage unavailable")).when(snapshots).capture(any(), any(), anyInt());
         when(dispatchDao.findById(500L)).thenReturn(d);
         when(agentDao.findById(400L)).thenReturn(onlineAgent());
         when(agentVersionDao.findById(410L)).thenReturn(onlineVersion());
         when(executorSelector.select(400L)).thenReturn(9L);
-        when(assembler.assemble(eq(d), any(AgentVersionDO.class))).thenReturn(new PackageContext());
+        var ctx = new PackageContext();
+        ctx.setSdlc(timing ? Map.of("stageTimingEnabled", true) : Map.of());
+        when(assembler.assemble(eq(d), any(AgentVersionDO.class))).thenReturn(ctx);
         TaskPackageResult pkg = new TaskPackageResult("oss://b/500.zip", "md5", 10L, "http://dl", "deadbeef");
         when(taskPackager.build(any())).thenReturn(pkg);
 
@@ -773,6 +795,15 @@ class DispatchServiceRunPendingTest {
         verify(transport).dispatch(eq(d), eq(pkg));
         verify(redisManager).releaseLock(eq("dispatch:agent-capacity:400"), anyString());
         verify(redisManager).releaseLock(eq("dispatch:lock:500"), anyString());
+        var order = inOrder(taskPackager, snapshots, transport);
+        var context = ArgumentCaptor.forClass(PackageContext.class);
+        order.verify(taskPackager).build(context.capture());
+        if (timing) {
+            order.verify(snapshots).capture(same(context.getValue()), same(pkg), eq(d.getVersion()));
+        } else {
+            verifyNoInteractions(snapshots);
+        }
+        order.verify(transport).dispatch(eq(d), eq(pkg));
     }
 
     @Test
@@ -1985,6 +2016,8 @@ class DispatchServiceRunPendingTest {
     void runPendingAdmissionLostRaceDoesNotSendOrFail() {
         DispatchDO d = pending();
         stubPackagingHappyPath(d);
+        var snapshots = mock(SdlcExecutionSnapshotService.class);
+        ReflectionTestUtils.setField(service, "sdlcExecutionSnapshotService", snapshots);
         DispatchAdmissionService admission = mock(DispatchAdmissionService.class);
         when(admission.admit(any(), any(), anyLong(), any()))
                 .thenReturn(DispatchAdmissionService.Result.lost());
@@ -1992,6 +2025,7 @@ class DispatchServiceRunPendingTest {
 
         assertTrue(service.runPending(500L));
 
+        verifyNoInteractions(snapshots);
         verify(transport, never()).dispatch(any(), any());
         verify(dispatchDao, never()).updateStatus(eq(500L), eq(TENANT), eq(DispatchStatus.FAILED),
                 any(), any(), any(), any(), any(), anyInt(), anyLong());

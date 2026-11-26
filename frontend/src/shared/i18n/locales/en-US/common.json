@@ -7,6 +7,18 @@
   "account": { "settings": "Profile settings", "logout": "Sign out", "menu": "User menu", "login": "Sign in", "expired": "You are not signed in or your session has expired", "networkError": "Network error", "workspaceRecoveryFailed": "Session recovery is temporarily unavailable", "workspaceRecoveryHint": "You have left the unavailable workspace and remain signed in. Retry to update your session; platform features remain available.", "retryWorkspaceRecovery": "Retry session recovery" },
   "workspace": { "switched": "Switched to {{name}}", "switchFailed": "Could not switch workspace", "notMember": "You are not a member of this work item's workspace", "linkedSwitchFailed": "Could not switch to this work item's workspace", "manage": "Manage workspaces...", "unselected": "Not selected" },
   "navigation": { "expand": "Expand menu", "collapse": "Collapse menu", "help": "Help center", "content": "Page content" },
+  "mention": {
+    "label": "Mention member",
+    "select": "Select",
+    "insert": "Insert",
+    "close": "Close",
+    "offline": "Offline",
+    "unavailable": "Unavailable",
+    "emptyTitle": "No member matches \"{{query}}\"",
+    "emptyPlain": "No one to mention",
+    "emptyHint": "Try part of a name or account ID",
+    "searching": "Searching members"
+  },
   "duration": {
     "second_one": "{{count}} second",
     "second_other": "{{count}} seconds",

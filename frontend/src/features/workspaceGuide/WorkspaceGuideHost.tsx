@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Checkbox } from 'antd';
+import { Alert, Button, message } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/shared/auth/store';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { ApiError } from '@/shared/types/common';
 import { putMySetting } from '@/features/profile/userSettingApi';
 import {
@@ -20,20 +21,32 @@ import {
   openChiefPanel,
   prepareGuideSend,
   publishGuideRuntime,
-  subscribeGuideEntryClick,
+  registerGuideActions,
   subscribeGuideEvents,
+  useChiefPanelOpen,
+  type GuideActionHandlers,
+  type GuideNoticeKind,
 } from './bridge';
+import { GuideStepper } from './GuideStepper';
 import './workspaceGuide.css';
-import { useGuidePlacement } from './useGuidePlacement';
 
 function visibleGuide(guide: WorkspaceGuide | undefined): guide is WorkspaceGuide {
+  // 阶段 4 只是完成后端收尾点：历史数据若停在 IN_PROGRESS/4，由自动补全 effect 收敛成 COMPLETED，
+  // 期间不再渲染任何引导 UI。
   return !!guide && guide.eligible && !guide.globallyDisabled
-    && guide.status !== 'SKIPPED' && guide.status !== 'COMPLETED';
+    && guide.status !== 'SKIPPED' && guide.status !== 'COMPLETED'
+    && normalizeStage(guide.stage ?? 1) !== 4;
+}
+
+/** 旧数据可能停在阶段 2（点入口）；三阶段流程把它当作初始化阶段的恢复入口。 */
+function normalizeStage(stage: number): number {
+  return stage === 2 ? 3 : Math.min(Math.max(stage, 1), 4);
 }
 
 /**
- * 新空间创建者首次进入时的四阶段引导。资格与进度来自服务端；蒙版只放行当前目标
- * （阶段 2 是顶部入口、阶段 1 是 Chief 准备区、阶段 3 是 Chief 输入框、阶段 4 是引导卡）。
+ * 新空间创建者首次进入时的新手引导：接入执行器（选客户端与系统、生成并复制、等待上线）
+ * → 初始化 Chief（自动全屏并预填，用户点发送）。发送受理即完成，用一次性提示收尾。
+ * PENDING 用一张居中卡起步；进入 IN_PROGRESS 后不再另开浮层，讲解条与操作都在 Chief 面板内。
  */
 export function WorkspaceGuideHost() {
   const { t } = useTranslation('workspaceGuide');
@@ -50,36 +63,29 @@ export function WorkspaceGuideHost() {
   });
   const guide = guideQuery.data;
   const visible = visibleGuide(guide);
-  const savedStage = Math.min(Math.max(guide?.stage ?? 1, 1), 4);
-  const savedStep = savedStage === 1 ? guide?.substep ?? 0 : savedStage + 4;
-  const [reviewStep, setReviewStep] = useState<number | null>(null);
-  const step = Math.min(reviewStep ?? savedStep, savedStep);
-  const reviewing = step < savedStep;
-  const stage = step < 6 ? 1 : step - 4;
-  const substep = stage === 1 ? step : 0;
-  const [notice, setNotice] = useState<string | null>(null);
+  const chiefPanelOpen = useChiefPanelOpen();
+  const stage = normalizeStage(guide?.stage ?? 1);
+  const substep = stage === 1 ? Math.min(guide?.substep ?? 0, 1) : 0;
+  const pending = guide?.status === 'PENDING';
+  const [notice, setNotice] = useState<GuideNoticeKind | null>(null);
   const [setupError, setSetupError] = useState<{ substep: number; message: string } | null>(null);
   const [blockedPrefill, setBlockedPrefill] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [neverChecked, setNeverChecked] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [disableSaving, setDisableSaving] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
-  const copyingCommand = stage === 1 && substep === 4;
-  const placement = useGuidePlacement(cardRef, !visible || guide?.status === 'PENDING'
-    ? null : copyingCommand ? 'copy' : stage === 1 && substep === 5 ? 'wait' : stage === 1 ? 'setup' : stage === 2 ? 'entry' : stage === 3 && !reviewing ? 'send' : null);
-  const reviewingRef = useRef(reviewing);
-  reviewingRef.current = reviewing;
   const guideRef = useRef<WorkspaceGuide | undefined>(guide);
   guideRef.current = guide;
   const tRef = useRef(t);
   tRef.current = t;
   const autoOpenedRef = useRef<number | null>(null);
-  const stage3OpenedRef = useRef<number | null | undefined>(null);
-  // 入口点击与阶段 3 恢复 effect 可能同时触发；in-flight 守卫保证只预填一次。
+  const stage3OpenedRef = useRef<number | null>(null);
+  // 历史数据可能停在 IN_PROGRESS/4；按空间去重，只自动补全一次。
+  const legacyFinishRef = useRef<number | null>(null);
+  // setup-ready 与阶段 3 恢复 effect 可能同时触发；in-flight 守卫保证只预填一次。
   const stage3EnteringRef = useRef(false);
-  const stage2PendingRef = useRef(false);
   const pendingSendRef = useRef<{ conversationId: number; clientMessageId: string } | null>(null);
+  const failedAdvanceRef = useRef<UpdateWorkspaceGuideBody | null>(null);
   const workspaceRef = useRef(workspaceId);
   workspaceRef.current = workspaceId;
   const userRef = useRef(userId);
@@ -88,15 +94,14 @@ export function WorkspaceGuideHost() {
   useEffect(() => {
     autoOpenedRef.current = null;
     stage3OpenedRef.current = null;
+    legacyFinishRef.current = null;
     stage3EnteringRef.current = false;
-    stage2PendingRef.current = false;
     pendingSendRef.current = null;
-    setReviewStep(null);
+    failedAdvanceRef.current = null;
     setNotice(null);
     setSetupError(null);
     setBlockedPrefill(false);
     setDialogOpen(false);
-    setNeverChecked(false);
     setDialogError(null);
   }, [workspaceId, userId]);
 
@@ -106,10 +111,13 @@ export function WorkspaceGuideHost() {
       workspaceId: workspaceId ?? null,
       stage,
       substep,
-      reviewing,
       capabilityReady: guide?.capabilityReady ?? false,
+      pending,
+      notice,
+      setupError: setupError?.substep === substep ? setupError.message : null,
+      prefillBlocked: blockedPrefill,
     });
-  }, [visible, workspaceId, stage, substep, reviewing, guide?.capabilityReady]);
+  }, [visible, workspaceId, stage, substep, guide?.capabilityReady, pending, notice, setupError, blockedPrefill]);
 
   useEffect(() => () => { publishGuideRuntime(null); }, []);
 
@@ -122,9 +130,26 @@ export function WorkspaceGuideHost() {
     return () => document.body.classList.remove('aw-guide-lock');
   }, [visible]);
 
+  // PENDING 阶段只有居中卡，Chief 面板必须保持关闭；进入 IN_PROGRESS 后再由流程打开。
   useEffect(() => {
-    cardRef.current?.focus();
-  }, [stage, substep]);
+    if (visible && pending) {
+      closeChiefPanel();
+    }
+  }, [visible, pending]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    if (pending) {
+      cardRef.current?.focus();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      document.querySelector<HTMLElement>('[data-guide-strip]')?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [visible, pending, stage, substep]);
 
   useEffect(() => {
     if (!dialogOpen) {
@@ -136,7 +161,6 @@ export function WorkspaceGuideHost() {
       }
       event.preventDefault();
       setDialogOpen(false);
-      setNeverChecked(false);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -151,30 +175,65 @@ export function WorkspaceGuideHost() {
     if (!activeIdentity()) {
       return false;
     }
+    guideRef.current = data;
     queryClient.setQueryData(workspaceGuideQueryKey(workspaceRef.current, userRef.current), data);
     return true;
   }
 
-  async function persist(body: UpdateWorkspaceGuideBody): Promise<WorkspaceGuide | null> {
-    try {
-      const data = await advanceWorkspaceGuide(body);
-      return applyGuide(data) ? data : null;
-    } catch (error) {
-      if (!activeIdentity()) {
+  // 同一帧里子步完成与上线就绪会先后推进；串行写入并始终取最新版本号，
+  // 避免两次 PUT 拿同一个旧版本互相顶成 40002。
+  const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
+  function persist(body: UpdateWorkspaceGuideBody): Promise<WorkspaceGuide | null> {
+    const run = async (): Promise<WorkspaceGuide | null> => {
+      const version = guideRef.current?.version ?? body.version;
+      try {
+        const data = await advanceWorkspaceGuide({ ...body, version });
+        return applyGuide(data) ? data : null;
+      } catch (error) {
+        if (!activeIdentity()) {
+          return null;
+        }
+        if (error instanceof ApiError && error.code === '40002') {
+          setNotice('conflict');
+          void guideQuery.refetch();
+        } else {
+          failedAdvanceRef.current = body;
+          setNotice('advance');
+        }
         return null;
       }
-      stage2PendingRef.current = false;
-      if (error instanceof ApiError && error.code === '40002') {
-        setNotice(tRef.current('conflict'));
-        void guideQuery.refetch();
-      } else {
-        setNotice(tRef.current('advanceFailed'));
-      }
-      return null;
-    }
+    };
+    const next = persistQueueRef.current.then(run, run);
+    persistQueueRef.current = next.then(() => undefined, () => undefined);
+    return next;
   }
   const persistRef = useRef(persist);
   persistRef.current = persist;
+
+  // 发送受理即完成：阶段 4 只是后端允许写 COMPLETED 的最小落点，前端不渲染收尾界面，
+  // 成功后用一次性提示告知。返回是否写入成功，供重试路径判断。
+  async function completeGuideAfterSend(
+    conversationId?: number | null,
+    clientMessageId?: string | null,
+  ): Promise<boolean> {
+    const current = guideRef.current;
+    if (!current) {
+      return false;
+    }
+    const saved = await persistRef.current({
+      status: 'COMPLETED',
+      stage: 4,
+      substep: 0,
+      version: current.version ?? 0,
+      conversationId,
+      clientMessageId,
+    });
+    if (saved) {
+      const completedToast = tRef.current('completedToast');
+      message.success(completedToast);
+    }
+    return saved !== null;
+  }
 
   async function enterStage3(current: WorkspaceGuide): Promise<void> {
     if (stage3EnteringRef.current) {
@@ -183,21 +242,36 @@ export function WorkspaceGuideHost() {
     stage3EnteringRef.current = true;
     // 先落标记再写库：阶段 3 数据回来会立刻触发恢复 effect，必须在它之前对同一空间去重，
     // 否则正常入口会二次预填并被判成“已有草稿”。
-    stage3OpenedRef.current = workspaceRef.current;
+    stage3OpenedRef.current = workspaceRef.current ?? null;
     try {
       setBlockedPrefill(false);
       const prepared = current.conversationId !== null && current.clientMessageId !== null
         ? { conversationId: current.conversationId, clientMessageId: current.clientMessageId }
         : await prepareGuideSend(current.conversationId ?? null);
-      const changed = (current.stage ?? 1) !== 3
-        || current.conversationId !== prepared.conversationId
-        || current.clientMessageId !== prepared.clientMessageId;
+      // 后端只允许阶段逐级推进（最多 +1）。单面板把旧的阶段 2 合并掉了，
+      // 这里先补落阶段 2 再写阶段 3，否则 1→3 会被判成「引导进度不合法」(40003)。
+      let latest = current;
+      if ((latest.stage ?? 1) < 2) {
+        const bridged = await persist({
+          status: 'IN_PROGRESS',
+          stage: 2,
+          substep: 0,
+          version: latest.version ?? 0,
+        });
+        if (!bridged) {
+          return;
+        }
+        latest = bridged;
+      }
+      const changed = (latest.stage ?? 1) !== 3
+        || latest.conversationId !== prepared.conversationId
+        || latest.clientMessageId !== prepared.clientMessageId;
       if (changed) {
         const saved = await persist({
           status: 'IN_PROGRESS',
           stage: 3,
           substep: 0,
-          version: current.version ?? 0,
+          version: latest.version ?? 0,
           conversationId: prepared.conversationId,
           clientMessageId: prepared.clientMessageId,
         });
@@ -206,7 +280,7 @@ export function WorkspaceGuideHost() {
         }
       }
       openChiefPanel({
-        expanded: true,
+        source: 'guide',
         conversationId: prepared.conversationId,
         clientMessageId: prepared.clientMessageId,
         prefill: tRef.current('prompt.initial'),
@@ -214,7 +288,7 @@ export function WorkspaceGuideHost() {
       });
     } catch {
       if (activeIdentity()) {
-        setNotice(tRef.current('reserveFailed'));
+        setNotice('reserve');
       }
     } finally {
       stage3EnteringRef.current = false;
@@ -224,108 +298,63 @@ export function WorkspaceGuideHost() {
   enterStage3Ref.current = enterStage3;
 
   useEffect(() => {
-    const unsubscribeEvents = subscribeGuideEvents(event => {
+    return subscribeGuideEvents(event => {
       const current = guideRef.current;
       if (!current || !visibleGuide(current)) {
         return;
       }
+      const currentStage = normalizeStage(current.stage ?? 1);
+      const currentSubstep = currentStage === 1 ? Math.min(current.substep ?? 0, 1) : 0;
       if (event.type === 'setup-error') {
         setSetupError(event.message ? { substep: event.substep, message: event.message } : null);
         return;
       }
-      if (reviewingRef.current) {
-        if (event.type === 'substep-completed') reviewForwardRef.current();
-        return;
-      }
       if (event.type === 'substep-completed') {
-        if (stage2PendingRef.current || (current.stage ?? 1) !== 1) {
+        if (currentStage !== 1 || currentSubstep !== 0) {
           return;
         }
-        const nextSubstep = (current.substep ?? 0) + 1;
-        if (nextSubstep > 5) {
-          return;
-        }
-        void persistRef.current({ status: 'IN_PROGRESS', stage: 1, substep: nextSubstep, version: current.version ?? 0 });
+        void persistRef.current({ status: 'IN_PROGRESS', stage: 1, substep: 1, version: current.version ?? 0 });
         return;
       }
       if (event.type === 'setup-ready') {
-        if ((current.stage ?? 1) !== 1 || stage2PendingRef.current) {
+        if (currentStage !== 1) {
           return;
         }
-        stage2PendingRef.current = true;
-        void persistRef.current({ status: 'IN_PROGRESS', stage: 2, substep: 0, version: current.version ?? 0 });
+        void enterStage3Ref.current(current);
         return;
       }
       if (event.type === 'send-succeeded') {
-        if ((current.stage ?? 1) !== 3) {
+        if (currentStage !== 3) {
           return;
         }
-        // 能力未就绪时不能宣称已能接力：停在阶段 3，保留警告与重试入口。
+        // 能力未就绪时不能宣称已能接力：停在初始化阶段，保留警告与重试入口。
         if (!current.capabilityReady) {
           return;
         }
         pendingSendRef.current = { conversationId: event.conversationId, clientMessageId: event.clientMessageId };
-        void persistRef.current({
-          status: 'IN_PROGRESS',
-          stage: 4,
-          substep: 0,
-          version: current.version ?? 0,
-          conversationId: event.conversationId,
-          clientMessageId: event.clientMessageId,
-        }).then(saved => { if (saved) pendingSendRef.current = null; });
+        void completeGuideAfterSend(event.conversationId, event.clientMessageId)
+          .then(completed => { if (completed) pendingSendRef.current = null; });
         return;
       }
-      setNotice(tRef.current('sendFailed'));
+      setNotice('send');
     });
-    const unsubscribeEntry = subscribeGuideEntryClick(() => {
-      if (reviewingRef.current) {
-        reviewForwardRef.current();
-        return;
-      }
-      const current = guideRef.current;
-      if (!current || !visibleGuide(current) || (current.stage ?? 1) !== 2) {
-        return;
-      }
-      void enterStage3Ref.current(current);
-    });
-    return () => { unsubscribeEvents(); unsubscribeEntry(); };
   }, []);
-
-  function navigateStep(next: number) {
-    setSetupError(null);
-    setReviewStep(next === savedStep ? null : next);
-    setNotice(null);
-    const nextStage = next < 6 ? 1 : next - 4;
-    if (nextStage === stage) return;
-    if (nextStage === 2) closeChiefPanel();
-    else openChiefPanel({ expanded: nextStage >= 3, conversationId: guide?.conversationId });
-  }
-  const reviewForwardRef = useRef(() => {});
-  reviewForwardRef.current = () => navigateStep(Math.min(step + 1, savedStep));
 
   // 刷新或换回同一空间时恢复阶段 1：重新打开同一 Chief 实例继续配置。
   useEffect(() => {
-    if (!visible || !guide || guide.status !== 'IN_PROGRESS' || (guide.stage ?? 1) !== 1) {
+    if (!visible || !guide || guide.status !== 'IN_PROGRESS' || normalizeStage(guide.stage ?? 1) !== 1) {
       return;
     }
     if (autoOpenedRef.current === workspaceId) {
       return;
     }
     autoOpenedRef.current = workspaceId ?? null;
-    openChiefPanel({ expanded: false, conversationId: guide.conversationId });
+    openChiefPanel({ source: 'guide', conversationId: guide.conversationId });
   }, [visible, guide, workspaceId]);
 
-  // 配置完成后收起准备视图，页面只保留顶部入口作为阶段 2 的目标。
+  // 刷新恢复初始化阶段：复用已保存的会话与去重标识，不会新建会话或重复发送。
   useEffect(() => {
-    if (!visible || !guide || guide.status !== 'IN_PROGRESS' || (guide.stage ?? 1) !== 2) {
-      return;
-    }
-    closeChiefPanel();
-  }, [visible, guide?.stage, guide?.status]);
-
-  // 刷新恢复阶段 3：复用已保存的会话与去重标识，不会新建会话或重复发送。
-  useEffect(() => {
-    if (!visible || !guide || guide.status !== 'IN_PROGRESS' || (guide.stage ?? 1) !== 3) {
+    if (!visible || !guide || guide.status !== 'IN_PROGRESS' || normalizeStage(guide.stage ?? 1) !== 3) {
       return;
     }
     if (stage3OpenedRef.current === workspaceId) {
@@ -335,6 +364,20 @@ export function WorkspaceGuideHost() {
     void enterStage3Ref.current(guide);
   }, [visible, guide, workspaceId]);
 
+  // 历史数据可能停在 IN_PROGRESS/4（旧版「收尾阶段」）。该阶段已不再渲染，
+  // 这里直接补成 COMPLETED，否则这些空间会永远卡在一个看不见的引导里。
+  useEffect(() => {
+    if (!guide || guide.status !== 'IN_PROGRESS' || normalizeStage(guide.stage ?? 1) !== 4) {
+      return;
+    }
+    if (legacyFinishRef.current === workspaceId) {
+      return;
+    }
+    legacyFinishRef.current = workspaceId ?? null;
+    void completeGuideAfterSend(guide.conversationId, guide.clientMessageId)
+      .then(completed => { if (!completed) legacyFinishRef.current = null; });
+  }, [guide, workspaceId]);
+
   async function startGuide(): Promise<void> {
     const current = guideRef.current;
     if (!current) {
@@ -342,33 +385,17 @@ export function WorkspaceGuideHost() {
     }
     const saved = await persist({ status: 'IN_PROGRESS', stage: 1, substep: 0, version: current.version ?? 0 });
     if (saved) {
-      openChiefPanel({ expanded: false, conversationId: saved.conversationId });
+      openChiefPanel({ source: 'guide', conversationId: saved.conversationId });
     }
-  }
-
-  async function finishGuide(): Promise<void> {
-    const current = guideRef.current;
-    if (!current) {
-      return;
-    }
-    await persist({ status: 'COMPLETED', stage: 4, substep: 0, version: current.version ?? 0 });
   }
 
   async function retrySaveSendProgress(): Promise<void> {
-    const current = guideRef.current;
     const pending = pendingSendRef.current;
-    if (!current || !pending) {
+    if (!pending) {
       return;
     }
-    const saved = await persist({
-      status: 'IN_PROGRESS',
-      stage: 4,
-      substep: 0,
-      version: current.version ?? 0,
-      conversationId: pending.conversationId,
-      clientMessageId: pending.clientMessageId,
-    });
-    if (saved) {
+    const completed = await completeGuideAfterSend(pending.conversationId, pending.clientMessageId);
+    if (completed) {
       pendingSendRef.current = null;
       setNotice(null);
     }
@@ -382,9 +409,10 @@ export function WorkspaceGuideHost() {
     try {
       const data = await skipWorkspaceGuide(current.version);
       applyGuide(data);
+      setNotice(null);
     } catch {
       if (activeIdentity()) {
-        setNotice(tRef.current('skipFailed'));
+        setNotice('skip');
       }
     }
   }
@@ -399,7 +427,6 @@ export function WorkspaceGuideHost() {
         queryClient.setQueryData(workspaceGuideQueryKey(workspaceRef.current, userRef.current), { ...current, globallyDisabled: true });
       }
       setDialogOpen(false);
-      setNeverChecked(false);
     } catch {
       setDialogError(tRef.current('disableFailed'));
     } finally {
@@ -407,11 +434,57 @@ export function WorkspaceGuideHost() {
     }
   }
 
+  function retryNotice(): void {
+    const current = guideRef.current;
+    const kind = notice;
+    if (!current || !kind) {
+      return;
+    }
+    setNotice(null);
+    if (kind === 'skip') {
+      void skipNow();
+    } else if (kind === 'send' || kind === 'reserve') {
+      void enterStage3Ref.current(current);
+    } else if (kind === 'conflict') {
+      void guideQuery.refetch();
+    } else if (pendingSendRef.current) {
+      void retrySaveSendProgress();
+    } else if (failedAdvanceRef.current) {
+      const body = failedAdvanceRef.current;
+      failedAdvanceRef.current = null;
+      // 阶段 3 的入口保存失败时，重试要重新走进入流程，否则只补写库、始终打不开面板。
+      if (body.stage === 3) {
+        void enterStage3Ref.current(current);
+        return;
+      }
+      void persist(body).then(saved => { if (!saved) failedAdvanceRef.current = body; });
+    }
+  }
+
+  // 讲解条在 Chief 面板内渲染，按钮动作通过桥回交给这里执行。
+  const actionHandlers = useRef<GuideActionHandlers>({});
+  actionHandlers.current = {
+    skip: () => { void skipNow(); },
+    retry: retryNotice,
+    retryPrefill: () => {
+      const current = guideRef.current;
+      if (current) {
+        void enterStage3Ref.current(current);
+      }
+    },
+    disable: () => { setDialogError(null); setDialogOpen(true); },
+  };
+  useEffect(() => {
+    registerGuideActions(() => actionHandlers.current);
+    return () => registerGuideActions(null);
+  }, []);
+
   if (guideQuery.isError) {
     // 只有账号偏好读取失败才说成偏好问题；引导表、鉴权、网络等失败用中性文案，避免误导排查。
     const preferenceUnavailable = guideQuery.error instanceof ApiError
       && guideQuery.error.code === GUIDE_PREFERENCE_UNAVAILABLE_CODE;
     return <div className="aw-guide-notice" role="status">
+      <AwStrokeIcon name="alert-c" />
       <span>{t(preferenceUnavailable ? 'prefReadFailed' : 'loadFailed')}</span>
       <Button size="small" onClick={() => { void guideQuery.refetch(); }}>{t('retry')}</Button>
     </div>;
@@ -420,76 +493,48 @@ export function WorkspaceGuideHost() {
     return null;
   }
 
-  const stageTitle = stage === 1 ? t('stage.configure.title')
-    : stage === 2 ? t('stage.open.title')
-      : stage === 3 ? t('stage.send.title')
-        : t('stage.handoff.title');
-  const stageDescription = stage === 1 ? t('stage.configure.description')
-    : stage === 2 ? t('stage.open.description')
-      : stage === 3 ? t('stage.send.description')
-        : t('stage.handoff.description');
   const awaitingStart = guide.status === 'PENDING';
+  // 面板没打开（PENDING 起步失败、初始化对话准备失败）时，错误仍需可见，退回独立 notice。
+  const fallbackNotice = notice && (awaitingStart || !chiefPanelOpen)
+    ? t(notice === 'conflict' ? 'conflict' : `${notice}Failed`)
+    : null;
 
   return <>
     <div className="aw-guide-mask" aria-hidden="true" />
-    {placement && <svg className="aw-guide-connector" data-side={placement.side} aria-hidden="true" focusable="false">
-      <path className="aw-guide-connector-line" d={placement.connector.path} />
-      <path className="aw-guide-connector-arrow" d={placement.connector.arrow} />
-    </svg>}
-    <section ref={cardRef} tabIndex={-1} className="aw-guide-card" data-stage={stage} data-copy-command={copyingCommand || undefined} data-setup-panel={stage === 1 && substep >= 4 || undefined} role="dialog" aria-label={stageTitle} style={placement?.position}>
-      <div className="aw-guide-card-content">
-      <div className="aw-guide-flow-title">{t('flowTitle')}</div>
-      <span className="aw-guide-secondary">
-        {stage === 1
-          ? t('phaseProgress', { stage: 1, substep: substep + 1 })
-          : t('stageProgress', { stage })}
-      </span>
-      <h2>{stageTitle}</h2>
-      <p>{stage === 3 && reviewing ? t('sentReview') : stageDescription}</p>
-      {stage === 1 && setupError?.substep === substep && <Alert type="error" message={setupError.message} />}
-      {stage === 1 && awaitingStart
-        && <Button type="primary" onClick={() => { void startGuide(); }}>{t('start')}</Button>}
-      {stage === 3 && !guide.capabilityReady && <Alert type="warning" message={t('capabilityMissing')} />}
-      {stage === 3 && blockedPrefill && <Alert type="warning" message={t('draftBlocked')}
-        action={<Button size="small" onClick={() => { const current = guideRef.current; if (current) { void enterStage3Ref.current(current); } }}>{t('retry')}</Button>} />}
-      {notice && <Alert type="error" message={notice}
-        action={pendingSendRef.current
-          ? <Button size="small" onClick={() => { void retrySaveSendProgress(); }}>{t('retry')}</Button>
-          : stage === 3
-            ? <Button size="small" onClick={() => { const current = guideRef.current; if (current) { void enterStage3Ref.current(current); } }}>{t('retry')}</Button>
-            : undefined} />}
-      {stage === 4 && <div className="aw-guide-confirm">
-        <Button type="primary" onClick={() => { void finishGuide(); }}>{t('confirm')}</Button>
-      </div>}
-      <div className="aw-guide-skip">
-        <div className="aw-guide-navigation">
-          {step > 0 && <Button onClick={() => navigateStep(step - 1)}>{t('previous')}</Button>}
-          {reviewing && <Button type="primary" onClick={() => reviewForwardRef.current()}>{t('next')}</Button>}
-          <Button onClick={() => { void skipNow(); }}>{t('skip')}</Button>
-        </div>
-        <label className="aw-guide-never">
-          <Checkbox checked={neverChecked} onChange={event => {
-            const checked = event.target.checked;
-            setNeverChecked(checked);
-            if (checked) {
-              setDialogError(null);
-              setDialogOpen(true);
-            }
-          }} /> {t('never')}
-        </label>
+    {awaitingStart && <section ref={cardRef} tabIndex={-1} className="aw-guide-card" data-stage="1" data-phase="1"
+      role="dialog" aria-label={t('stageAccess.title')}>
+      <div className="guide-eyebrow">{t('eyebrow', { phase: 1 })}</div>
+      <GuideStepper phase={1} />
+      <h2><span className="aw-guide-title-icon"><AwStrokeIcon name="term" /></span>{t('stageAccess.title')}</h2>
+      <p>{t('stageAccess.description')}</p>
+      <div className="aw-guide-tip">
+        <AwStrokeIcon name="info" />
+        <span>{t('tipAccess')}</span>
       </div>
+      <div className="aw-guide-actions">
+        <Button type="primary" block onClick={() => { void startGuide(); }}>{t('start')}</Button>
       </div>
-    </section>
+      <div className="aw-guide-foot">
+        <Button type="text" className="aw-guide-skip" onClick={() => { void skipNow(); }}>{t('skip')}</Button>
+        <span className="spacer" />
+        <button type="button" className="aw-guide-never" onClick={() => { setDialogError(null); setDialogOpen(true); }}>{t('never')}</button>
+      </div>
+    </section>}
+    {fallbackNotice && <div className="aw-guide-notice" role="status">
+      <AwStrokeIcon name="alert-c" />
+      <span>{fallbackNotice}</span>
+      <Button size="small" onClick={retryNotice}>{t('retry')}</Button>
+    </div>}
     {dialogOpen && <div className="aw-guide-dialog-mask">
       <section className="aw-guide-dialog" role="dialog" aria-modal="true" aria-label={t('dialog.title')}>
         <h2>{t('dialog.title')}</h2>
         <p>{t('dialog.body')}</p>
         {dialogError && <Alert type="error" message={dialogError} />}
         <div className="aw-guide-dialog-actions">
-          <Button disabled={disableSaving} onClick={() => { setDialogOpen(false); setNeverChecked(false); }}>
+          <Button disabled={disableSaving} onClick={() => { setDialogOpen(false); }}>
             {t('dialog.cancel')}
           </Button>
-          <Button type="primary" loading={disableSaving} onClick={() => { void confirmDisable(); }}>
+          <Button danger type="primary" loading={disableSaving} onClick={() => { void confirmDisable(); }}>
             {t('dialog.confirm')}
           </Button>
         </div>

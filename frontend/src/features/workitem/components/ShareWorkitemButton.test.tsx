@@ -21,6 +21,10 @@ vi.mock('@/shared/lib/clipboard', () => ({
 
 const copyMock = vi.mocked(copyTextToClipboard);
 
+// AwStrokeIcon 不在 DOM 上暴露图标名，用描边路径特征区分 share / check 两个字形。
+const shareGlyph = (container: HTMLElement) => container.querySelector('.aw-stroke-icon circle');
+const checkGlyph = (container: HTMLElement) => container.querySelector('.aw-stroke-icon path[d^="M20 6"]');
+
 function branding(overrides: Partial<PlatformBranding> = {}): PlatformBranding {
   return { ...DEFAULT_BRANDING, ...overrides };
 }
@@ -56,8 +60,8 @@ describe('ShareWorkitemButton', () => {
     const button = screen.getByTestId('workitem-share-button');
     expect(button).toHaveTextContent('分享');
     expect(button).toHaveClass('ant-btn-text');
-    expect(container.querySelector('.anticon-share-alt')).not.toBeNull();
-    expect(container.querySelector('.anticon-check')).toBeNull();
+    expect(shareGlyph(container)).not.toBeNull();
+    expect(checkGlyph(container)).toBeNull();
   });
 
   it('copies the deployment url plus the title in book brackets', async () => {
@@ -104,8 +108,8 @@ describe('ShareWorkitemButton', () => {
     // findBy* 在假时钟下会挂死，显式冲一次微任务队列把剪贴板 Promise 落地
     await act(async () => {});
     expect(screen.getByRole('button', { name: '已复制' })).toBeInTheDocument();
-    expect(container.querySelector('.anticon-check')).not.toBeNull();
-    expect(container.querySelector('.anticon-share-alt')).toBeNull();
+    expect(checkGlyph(container)).not.toBeNull();
+    expect(shareGlyph(container)).toBeNull();
 
     // 卡住 1.5s 这个边界：早于它不复原、到点才复原
     act(() => { vi.advanceTimersByTime(SHARE_FEEDBACK_MS - 1); });
@@ -113,7 +117,7 @@ describe('ShareWorkitemButton', () => {
 
     act(() => { vi.advanceTimersByTime(1); });
     expect(screen.getByRole('button', { name: '分享' })).toBeInTheDocument();
-    expect(container.querySelector('.anticon-share-alt')).not.toBeNull();
+    expect(shareGlyph(container)).not.toBeNull();
   });
 
   it('resets the 1.5s window on re-click instead of letting the first timer cut ✓ short', async () => {

@@ -368,7 +368,7 @@ class PackageContextAssemblerTest {
                 "[{\"id\":\"tests\",\"text\":\"测试通过\",\"allowNotApplicable\":true,\"notApplicableWhen\":\"仅澄清\",\"checked\":true,\"status\":\"NOT_APPLICABLE\",\"reason\":\"prior run\"}]",
                 "{\"checklistRequired\":true}");
         when(stepDao.findById(300L)).thenReturn(step);
-        when(stepDao.listBySdlc(50L)).thenReturn(List.of(step));
+        when(stepDao.listForExecution(TENANT, 50L)).thenReturn(List.of(step));
         PackageContext context = assembler.assemble(dispatch(), version());
         List<?> steps = (List<?>) context.getSdlc().get("steps");
         Map<?, ?> workflow = (Map<?, ?>) steps.get(0);
@@ -402,7 +402,7 @@ class PackageContextAssemblerTest {
         interaction.setResumeMode("CANONICAL_INTERACTION");
         SdlcStepDO entry = workflowStep(300L, 56L, 1, "new entry", "analysis", "", null, null);
         when(stepDao.findById(300L)).thenReturn(entry);
-        when(stepDao.listBySdlc(56L)).thenReturn(List.of(entry));
+        when(stepDao.listForExecution(TENANT, 56L)).thenReturn(List.of(entry));
 
         PackageContext ctx = assembler.assemble(interaction, version());
         assertEquals(56L, ctx.getSdlcId());
@@ -764,7 +764,7 @@ class PackageContextAssemblerTest {
         SdlcStepDO crossTenant = workflowStep(302L, 900L, 3, "泄露", "bad", "bad", null, null);
         crossTenant.setTenantId(999L);
         when(stepDao.findById(300L)).thenReturn(current);
-        when(stepDao.listBySdlc(900L)).thenReturn(List.of(current, next, crossTenant));
+        when(stepDao.listForExecution(TENANT, 900L)).thenReturn(List.of(current, next, crossTenant));
 
         PackageContext ctx = assembler.assemble(dispatch(), version());
 

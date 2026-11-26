@@ -2,74 +2,111 @@
   min-width: 0;
 }
 
-.agent-list-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
+/* Hub tabs have no separator between toolbar/summary strip and content. */
+.agent-card-page .aw-toolbar,
+.agent-review-page .aw-toolbar {
+  border-bottom: none;
 }
 
+/* Filters fill the row and wrap among themselves so refresh/create never drop to a second line. */
+.agent-toolbar-filters {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 
+.agent-toolbar-filters + .aw-toolbar-gap {
+  display: none;
+}
 
+.agent-toolbar-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-self: flex-start;
+  gap: 8px;
+}
+
+/* 原型 06 审核表 .op-link：文字链接 2px 4px，不换行。 */
+.agent-review-ops {
+  flex-wrap: nowrap;
+}
+
+.agent-review-ops .ant-btn-sm.ant-btn-link {
+  padding-inline: 4px;
+}
+
+/* 原型 06 汇总条 = aw-badge：11px 浅底胶囊，执行器在线绿、待审核琥珀。 */
 .agent-summary-strip {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 8px 20px;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
-.agent-summary-pill {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
+.agent-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  font-size: 11px;
+  line-height: 16px;
 }
 
-.agent-summary-pill span {
-  color: var(--aw-muted);
-  font-size: 12px;
+.agent-summary-badge b {
+  margin-left: 2px;
+  font-weight: 600;
 }
 
-.agent-summary-pill strong {
-  color: var(--aw-accent-text);
-  font-size: 14px;
+.agent-summary-badge--green {
+  background: var(--aw-success-bg);
+  color: var(--aw-success-deep);
+}
+
+.agent-summary-badge--amber {
+  background: var(--aw-warning-bg);
+  color: var(--aw-warning-deep);
 }
 
 .agent-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
 }
 
+/* 原型 06 .agent-card：单层边框，hover 只变边框色，无位移动画。 */
 .agent-person-card {
   position: relative;
   overflow: hidden;
-  min-height: 206px;
   border: 1px solid var(--aw-border);
   border-radius: 8px;
   background: var(--aw-panel);
-  box-shadow: none;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .agent-person-card:hover,
 .agent-person-card:focus-within {
-  border-color: var(--aw-border);
-  box-shadow: none;
-  transform: translateY(-1px);
+  border-color: var(--aw-muted);
 }
 
+/* Content sits above the whole-card link but lets clicks fall through to it; only inner links opt back in. */
 .agent-card-content {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
   pointer-events: none;
 }
 
 .agent-card-detail-link {
   position: absolute;
-  z-index: 2;
+  z-index: 0;
   inset: 0;
   display: block;
   cursor: pointer;
@@ -81,217 +118,410 @@
   outline-offset: -3px;
 }
 
-.agent-card-topline {
-  height: 4px;
-  background: var(--aw-raised);
-}
-
-.agent-card-main {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto;
+.agent-card-head {
+  display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 14px 10px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .agent-card-avatar {
-  position: relative;
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--aw-accent) 20%, var(--aw-raised));
-  color: var(--aw-accent-text);
-  cursor: pointer;
-}
-
-.agent-card-avatar-img {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: var(--aw-ai);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
   object-fit: cover;
 }
 
-.agent-card-avatar-initials {
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.agent-card-avatar-badge {
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  min-width: 22px;
-  height: 18px;
-  border-radius: 999px;
-  padding: 0 4px;
-  background: var(--aw-primary);
-  color: var(--aw-primary-ink);
-  font-size: 10px;
-  font-weight: 400;
-  line-height: 18px;
-  text-align: center;
-}
-
 .agent-card-title-area {
+  flex: 1;
   min-width: 0;
 }
 
 .agent-card-title {
-  display: block;
-  width: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
   color: var(--aw-text);
-  cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
   overflow: hidden;
-  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-card-title:hover {
-  color: var(--aw-accent-text);
-}
-
 .agent-card-role {
-  margin-top: 4px;
-  color: var(--aw-muted);
-  font-size: 12px;
+  margin-top: 2px;
+  color: var(--aw-text-3);
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-status-tag {
-  margin-right: 0;
-  border-radius: 999px;
-}
-
-.agent-status-tag.is-active {
-  border-color: var(--aw-border);
-  background: rgba(var(--aw-accent-rgb), .10);
-  color: var(--aw-accent-text);
-}
-
-.agent-executor-row {
+.agent-card-status {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  margin: 0 14px;
-  border: 1px solid var(--aw-border);
-  border-radius: 8px;
-  padding: 9px 10px;
-  color: var(--aw-text);
-  background: var(--aw-raised);
-  font-size: 13px;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
-.agent-online-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--aw-muted);
+.agent-card-status .ant-tag {
+  margin-inline-end: 0;
 }
 
-.agent-online-dot.is-online {
-  background: var(--aw-success);
-  box-shadow: none;
-}
-
-.agent-meta-line {
+.agent-exec-state {
   display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 10px 14px;
-  color: var(--aw-muted);
+  align-items: center;
+  gap: 6px;
+  color: var(--aw-text-2);
   font-size: 12px;
 }
 
-.agent-metric-grid {
+.agent-exec-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #aaa;
+}
+
+.agent-exec-dot.is-online {
+  background: var(--aw-success);
+}
+
+.agent-card-sdlc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--aw-text-2);
+  font-size: 12px;
+}
+
+.agent-card-sdlc-k {
+  flex-shrink: 0;
+  color: var(--aw-text-3);
+}
+
+.agent-card-sdlc-v {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.agent-card-sdlc-v {
+  pointer-events: auto;
+}
+
+.agent-sdlc-unbound {
+  color: var(--aw-text-3);
+}
+
+/* 表格内可跳转的名称：常态正文色，hover 主色 + 下划线提示可点。 */
+.agent-text-link {
+  color: var(--aw-text);
+}
+
+.agent-text-link:hover {
+  color: var(--aw-primary);
+  text-decoration: underline;
+}
+
+.agent-squad-links {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.agent-squad-links .agent-text-link {
+  flex-shrink: 0;
+}
+
+.agent-squad-links .agent-text-link:last-child {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--aw-text-3);
+  font-family: var(--aw-font-mono);
+  font-size: 11px;
+}
+
+.agent-card-metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 0 14px 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--aw-border);
 }
 
-.agent-metric {
-  display: grid;
-  grid-template-columns: auto auto;
-  justify-content: center;
-  text-align: center;
-  grid-template-areas:
-    "icon value"
-    "icon label";
-  column-gap: 7px;
-  align-items: center;
-  border: 1px solid var(--aw-border);
-  border-radius: 8px;
-  padding: 8px;
-  background: var(--aw-panel);
-}
-
-.agent-metric-icon {
-  grid-area: icon;
-  color: var(--aw-accent-text);
-}
-
-.agent-metric strong {
-  grid-area: value;
-  color: var(--aw-text);
-  line-height: 1;
-}
-
-.agent-metric span:last-child {
-  grid-area: label;
-  color: var(--aw-muted);
-  font-size: 12px;
-}
-
-
-
-/* Above .agent-card-detail-link (z-index 2) so the squad links inside a card stay clickable. */
-.agent-card-squad-row {
-  position: relative;
-  z-index: 3;
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 8px 14px 0;
-}
-
-.agent-squad-groups {
+.agent-card-metric {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  align-items: center;
 }
 
-.agent-squad-group-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--aw-border);
+.agent-card-metric-k {
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.agent-card-metric-v {
+  margin-top: 2px;
   color: var(--aw-text);
   font-size: 14px;
   font-weight: 600;
 }
 
+.agent-mono {
+  color: var(--aw-text-3);
+  font-family: var(--aw-font-mono);
+  font-size: 11px;
+}
+
+.agent-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.agent-cell .agent-av {
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--aw-ai);
+  color: #fff;
+  font-weight: 600;
+}
+
+.agent-cell-text {
+  min-width: 0;
+}
+
+.agent-cell-name {
+  color: var(--aw-text);
+  font-weight: 600;
+}
+
+.agent-cell-role {
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.agent-num-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.agent-num-pill.is-on {
+  background: var(--aw-primary-weak);
+  color: var(--aw-primary);
+}
+
+/* 卡片视图分组：沿用执行器方案 F —— 每组一圈 1px 外框 + 圆角 8，组头白底 40px 无分割线。 */
+.agent-squad-groups {
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-squad-group {
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  background: var(--aw-panel);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.agent-squad-group:last-child {
+  margin-bottom: 0;
+}
+
+.agent-squad-group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 40px;
+  padding: 10px 12px;
+  background: var(--aw-panel);
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.agent-squad-group-body {
+  padding: 0 12px 12px;
+}
+
+.agent-squad-group-caret {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--aw-text-3);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.agent-squad-group-caret:focus-visible {
+  outline: 2px solid var(--aw-accent-text);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.agent-squad-group-header strong {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-squad-group-header a {
+  color: var(--aw-text);
+}
+
+.agent-squad-group-header a:hover {
+  color: var(--aw-primary);
+}
+
 .agent-squad-group-count {
-  color: var(--aw-muted);
-  font-size: 12px;
+  color: var(--aw-text-3);
+  font-size: 11px;
   font-weight: 400;
 }
 
-.agent-list-toolbar > .ant-btn { margin-left: auto; }
-.agent-config-help { margin-left: auto; color: var(--aw-muted); }
-.agent-card-status { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.agent-squad-group-body:empty {
+  display: none;
+}
+
+
+/* Tag column: read-only strip by default; the whole cell opens the popover editor when editable. */
+.agent-tags-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 24px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 4px;
+  border: 1px dashed transparent;
+  overflow: hidden;
+}
+
+.agent-tags-cell.is-editable {
+  cursor: pointer;
+}
+
+.agent-tags-cell.is-editable:hover,
+.agent-tags-cell.is-editable:focus-visible {
+  border-color: var(--aw-border);
+  outline: none;
+}
+
+.agent-tags {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.agent-tags .agent-tag {
+  margin-inline-end: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.agent-tags .agent-tag-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.agent-tags-overflow {
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.agent-tags-empty {
+  color: var(--aw-text-3);
+}
+
+/* Card tags stay click-through to the detail route while allowing tooltips on the +N chip. */
+.agent-card-tags {
+  display: flex;
+  min-width: 0;
+  padding-top: 2px;
+  border-top: 1px dashed var(--aw-border);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.agent-tags-editor {
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-tags-editor-select {
+  width: 100%;
+}
+
+/* Action bar sits above the Select; the always-open dropdown expands downwards from the input
+   and therefore can never intercept pointer events on Save/Cancel. */
+.agent-tags-editor-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-tags-editor-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.agent-tags-editor-error {
+  color: var(--aw-error);
+}
+
+.agent-tags-editor-actions {
+  flex-shrink: 0;
+  justify-content: flex-end;
+}

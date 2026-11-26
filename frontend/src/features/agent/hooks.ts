@@ -205,6 +205,29 @@ export function useDeleteAgent() {
   });
 }
 
+/** Suggestions are workspace-scoped; the workspace id in the key prevents cross-workspace reuse. */
+export function useAgentTagOptions() {
+  const workspaceId = useAuthStore((state) => state.currentWorkspace?.id);
+  return useQuery({
+    queryKey: ['agents', 'tag-options', workspaceId],
+    queryFn: api.fetchAgentTagOptions,
+    enabled: Boolean(workspaceId),
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateAgentTags() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ agentId, payload }: { agentId: number; payload: api.UpdateAgentTagsRequest }) =>
+      api.updateAgentTags(agentId, payload),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      queryClient.invalidateQueries({ queryKey: ['agent', updated.id] });
+    },
+  });
+}
+
 export function useAddRepoPerm() {
   const queryClient = useQueryClient();
   return useMutation({

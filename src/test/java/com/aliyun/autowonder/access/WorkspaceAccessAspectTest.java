@@ -28,6 +28,20 @@ class WorkspaceAccessAspectTest {
     }
 
     @Test
+    void snapshotRecoveryRequiresWriteAccessBeforeAnyStorageCall() {
+        var service = org.mockito.Mockito.mock(com.aliyun.autowonder.insights.StageDurationService.class);
+        var controller = proxy(new com.aliyun.autowonder.insights.StageDurationController(service));
+        setContext(7L, 100L, WorkspaceAccessLevel.READ_ONLY);
+        assertThrows(WorkspaceAccessDeniedException.class, () -> controller.recover("2026-01-01", "2026-01-07", null, null, null));
+        org.mockito.Mockito.verifyNoInteractions(service);
+        controller.workers(false);
+        org.mockito.Mockito.verify(service).workers(100, false);
+        setContext(7L, 100L, WorkspaceAccessLevel.READ_WRITE);
+        controller.recover("2026-01-01", "2026-01-07", null, null, null);
+        org.mockito.Mockito.verify(service).recoverSnapshots(100, java.time.LocalDate.of(2026, 1, 1), java.time.LocalDate.of(2026, 1, 7), null, null, null);
+    }
+
+    @Test
     void readOnlyDomainBlocksWritesAndRendersBothLanguages() {
         var service = org.mockito.Mockito.mock(com.aliyun.autowonder.sdlc.SdlcService.class);
         var controller = proxy(new com.aliyun.autowonder.sdlc.SdlcController(service));

@@ -1,0 +1,54 @@
+.aw-kb-src {
+  display: flex;
+  min-width: 0;
+  margin-bottom: 6px;
+}
+
+.aw-kb-src-link,
+.aw-kb-src-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.aw-kb-src .aw-kb-src-link {
+  color: var(--aw-primary);
+}
+
+.aw-kb-src .aw-kb-src-link:hover {
+  color: var(--aw-primary-hover);
+  text-decoration: underline;
+}
+
+.aw-kb-src-text {
+  color: var(--aw-text-3);
+}
+
+.aw-kb-src .anticon {
+  font-size: 12px;
+}
+
+/* 原型 04 .kb-star：20×20、默认 text-3、hover 主色、已关注主色实心 */
+html .aw-kb-star.ant-btn.ant-btn {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  border-radius: 4px;
+  color: var(--aw-text-3);
+}
+
+html .aw-kb-star.ant-btn .anticon {
+  font-size: 13px;
+}
+
+html .aw-kb-star.ant-btn.ant-btn:not(:disabled):hover {
+  background: var(--aw-gray-bg);
+  color: var(--aw-primary);
+}
+
+html .aw-kb-star.ant-btn .aw-watch-active {
+  color: var(--aw-primary);
+}

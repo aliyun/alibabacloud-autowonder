@@ -2,9 +2,12 @@ import { useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { PageBackButton } from '@/shared/ui/PageBackButton';
-import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Form, Input, Modal, Radio, Space, Switch, Tabs, Tag, Typography, Upload, message } from 'antd';
-import { SaveOutlined, UploadOutlined, EyeOutlined, EyeInvisibleOutlined, InfoCircleFilled, CloseCircleFilled } from '@ant-design/icons';
+import { PageHead } from '@/shared/ui/PageHead';
+import { PlatformShell } from '@/shared/ui/PlatformShell';
+import { useEffect, useRef, useState } from 'react';
+import { Button, Card, Form, Input, Modal, Radio, Switch, Tabs, Tag, Typography, Upload, message, type InputProps } from 'antd';
+import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import type { UploadRequestOption } from 'rc-upload/lib/interface';
@@ -19,9 +22,9 @@ import {
   getPlatformImChannels,
   getAdminBranding,
   selectImProvider,
+  selectedImProvider,
   updateDingTalkImChannel,
   updateFeishuImChannel,
-  selectedImProvider,
   updateBranding,
   uploadBrandingLogo,
   type PlatformImChannel,
@@ -31,6 +34,7 @@ import {
 } from './brandingApi';
 import { GroupChatConfigPanel } from './GroupChatConfigPanel';
 import { ImIdentityConflictAlert } from '@/shared/ui/ImIdentityConflictAlert';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 import './messageChannel.css';
 import { PlatformAdminPanel } from './PlatformAdminPanel';
 import { SsoConfigPanel } from './SsoConfigPanel';
@@ -40,8 +44,46 @@ import { MailSettingsPanel } from './MailSettingsPanel';
 import { PageError } from '@/shared/ui/PageError';
 import { WorkspacePageHeader } from '@/app/WorkspacePageHeader';
 import { ApiError } from '@/shared/types/common';
+import './brandingConfig.css';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+type BrandingColorInputProps = Omit<InputProps, 'value' | 'onChange'> & {
+  value?: string;
+  onChange?: (value: string) => void;
+};
+
+/** Both controls edit the same Form field; the native picker never receives an invalid draft. */
+function BrandingColorInput({ value = '', onChange, disabled, id, ...inputProps }: BrandingColorInputProps) {
+  const { t } = useTranslation('platform');
+  const [lastValidColor, setLastValidColor] = useState(DEFAULT_BRANDING.primaryColor);
+  const isValid = HEX_COLOR_PATTERN.test(value);
+  useEffect(() => {
+    if (isValid) setLastValidColor(value);
+  }, [isValid, value]);
+
+  return (
+    <div className="aw-branding-color-row">
+      <Input
+        type="color"
+        aria-label={t('chooseColor')}
+        disabled={disabled}
+        value={(isValid ? value : lastValidColor).toLowerCase()}
+        onChange={(event) => onChange?.(event.target.value)}
+      />
+      <Input
+        {...inputProps}
+        id={id}
+        className="aw-branding-color-hex"
+        aria-label={t('primaryColorHex')}
+        disabled={disabled}
+        value={value}
+        onChange={(event) => onChange?.(event.target.value)}
+      />
+    </div>
+  );
+}
 
 type ImRobotFormValues = UpdateDingTalkImChannelParams;
 
@@ -101,13 +143,14 @@ export function BrandingConfigPage() {
     data: imChannels,
     error: imChannelsError,
     isLoading: isImChannelsLoading,
+    refetch: refetchImChannels,
   } = useQuery({
     queryKey: PLATFORM_IM_CHANNELS_QUERY_KEY,
     queryFn: getPlatformImChannels,
     enabled: isPlatformAdmin,
     retry: false,
   });
-  const { data: imSelection } = useQuery({
+  const { data: imSelection, error: selectionError, refetch: refetchSelection } = useQuery({
     queryKey: IM_SELECTION_QUERY_KEY,
     queryFn: getImSelection,
     enabled: isPlatformAdmin,
@@ -126,23 +169,39 @@ export function BrandingConfigPage() {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [notificationDirty, setNotificationDirty] = useState(false);
   const [groupChatDirty, setGroupChatDirty] = useState(false);
+  const channelWriteLock = useRef(false);
+  const seededNotificationProvider = useRef<string>();
+  const [notificationSubmitting, setNotificationSubmitting] = useState(false);
+  const [groupChatSubmitting, setGroupChatSubmitting] = useState(false);
+  const [switchSubmitting, setSwitchSubmitting] = useState(false);
+  const [switchTarget, setSwitchTarget] = useState('');
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const [imConflictError, setImConflictError] = useState<unknown>(null);
-  // 非管理员打开受限页签的历史记录或深链时，回到品牌配置。
+  // 管理员专属页签（消息渠道、邮箱验证、企业 SSO、用户管理）不会对非管理员渲染；历史存储值落回品牌配置，避免空白页。
   const resolvedActiveTab = !isPlatformAdmin && ADMIN_ONLY_TAB_KEYS.has(activeTab)
     ? BRANDING_TAB_KEY
     : activeTab;
   useLocalizedValidation(form, !error && resolvedActiveTab === BRANDING_TAB_KEY);
-  useLocalizedValidation(imForm, isPlatformAdmin && !error && !imChannelsError);
+  useLocalizedValidation(imForm, isPlatformAdmin && !error && !imChannelsError && !selectionError);
   const provider = imSelection?.provider ?? (imChannels ? selectedImProvider(imChannels) : 'DINGTALK');
-  const providerLabel = provider === 'FEISHU' ? t('feishu') : provider === 'DINGTALK' ? t('dingtalk') : provider;
+  const selectionKnown = !selectionError && (provider === FEISHU_PROVIDER || provider === 'DINGTALK');
+  const providerLabel = selectionKnown ? provider === FEISHU_PROVIDER ? t('feishu') : t('dingtalk') : t('groupChatStatusUnknown');
+  const messageWritesAvailable = isPlatformAdmin && selectionKnown && imChannels != null && !imChannelsError;
+  const messageWritesAvailableRef = useRef(messageWritesAvailable);
+  messageWritesAvailableRef.current = messageWritesAvailable;
+  const channelBusy = notificationSubmitting || groupChatSubmitting || switchSubmitting;
+  const notificationDisabled = !messageWritesAvailable || channelBusy;
   const current = data || DEFAULT_BRANDING;
   const imChannel = imChannels?.find((item) => item.provider === provider) || EMPTY_IM_CHANNEL;
-  const selectedTheme = Form.useWatch('themeKey', form) || current.themeKey;
-  const primaryColor = Form.useWatch('primaryColor', form) || current.primaryColor;
-  const imEnabled = Form.useWatch('enabled', imForm) ?? imChannel.enabled;
+  // Keep the saved secret/ready indicators visible without duplicating the draft switch state.
   const imAppSecret = Form.useWatch('appSecret', imForm) || '';
   const hasImSecret = imChannel.secretConfigured || Boolean(imAppSecret);
   const imReady = Boolean(imChannel.ready);
+  const themeKey = Form.useWatch('themeKey', form) ?? current.themeKey;
+  const primaryColor = Form.useWatch('primaryColor', form) ?? current.primaryColor;
+  // Keep a supported themeKey in the payload, but never highlight a preset for a different color.
+  const selectedTheme = THEME_PRESETS.find((theme) =>
+    theme.key === themeKey && theme.primaryColor.toLowerCase() === primaryColor.toLowerCase())?.key;
 
   useEffect(() => {
     if (data) {
@@ -156,19 +215,19 @@ export function BrandingConfigPage() {
   }, [data, form]);
 
   useEffect(() => {
-    if (isPlatformAdmin && imChannels) {
-      const channel = imChannels.find((item) => item.provider === provider) || EMPTY_IM_CHANNEL;
-      imForm.setFieldsValue({
-        enabled: channel.enabled,
-        appKey: channel.appKey || '',
-        robotCode: channel.robotCode || '',
-        baseUrl: channel.baseUrl || '',
-        appSecret: '',
-      });
-      // Server data replaces the draft, so the section is no longer dirty for switch warnings.
-      setNotificationDirty(false);
-    }
-  }, [imForm, imChannels, isPlatformAdmin, provider]);
+    if (!imChannels || !provider || !selectionKnown) return;
+    if (notificationDirty && seededNotificationProvider.current === provider) return;
+    const channel = imChannels.find((item) => item.provider === provider) || EMPTY_IM_CHANNEL;
+    imForm.setFieldsValue({
+      enabled: channel.enabled,
+      appKey: channel.appKey || '',
+      robotCode: channel.robotCode || '',
+      baseUrl: channel.baseUrl || '',
+      appSecret: '',
+    });
+    seededNotificationProvider.current = provider;
+    setNotificationDirty(false);
+  }, [imForm, imChannels, provider, notificationDirty, selectionKnown]);
 
   const saveMutation = useMutation({
     mutationFn: updateBranding,
@@ -185,9 +244,8 @@ export function BrandingConfigPage() {
   });
 
   const imMutation = useMutation({
-    mutationFn: (params: UpdateDingTalkImChannelParams) => provider === 'FEISHU' ? updateFeishuImChannel(params) : updateDingTalkImChannel(params),
+    mutationFn: ({ targetProvider, params }: { targetProvider: string; params: UpdateDingTalkImChannelParams }) => targetProvider === 'FEISHU' ? updateFeishuImChannel(params) : updateDingTalkImChannel(params),
     onSuccess: async () => {
-      message.success(i18n.t('platform:imSaved'));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: PLATFORM_IM_CHANNELS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['user-im-identities'] }),
@@ -196,6 +254,7 @@ export function BrandingConfigPage() {
       ]);
       imForm.setFieldValue('appSecret', '');
       setNotificationDirty(false);
+      message.success(i18n.t('platform:imSaved'));
     },
     onError: (error: Error) => {
       setImConflictError(error);
@@ -204,9 +263,11 @@ export function BrandingConfigPage() {
   });
 
   const selectionMutation = useMutation({
-    mutationFn: (next: string) => selectImProvider(next, imSelection?.generation ?? 0),
+    mutationFn: ({ next, generation }: { next: string; generation: number }) => selectImProvider(next, generation),
     onSuccess: async (saved) => {
       queryClient.setQueryData(IM_SELECTION_QUERY_KEY, saved);
+      setNotificationDirty(false);
+      setGroupChatDirty(false);
       setSwitchOpen(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: PLATFORM_IM_CHANNELS_QUERY_KEY }),
@@ -216,9 +277,8 @@ export function BrandingConfigPage() {
       ]);
       message.success(i18n.t('platform:imSelectionSaved'));
     },
-    onError: async (error: Error) => {
+    onError: (error: Error) => {
       message.error(error.message || i18n.t('platform:imSelectionSaveFailed'));
-      await queryClient.invalidateQueries({ queryKey: IM_SELECTION_QUERY_KEY });
     },
   });
 
@@ -250,81 +310,121 @@ export function BrandingConfigPage() {
   };
 
   const handleImSubmit = async () => {
+    if (!messageWritesAvailable || !provider || channelWriteLock.current) return;
+    channelWriteLock.current = true;
+    setNotificationSubmitting(true);
     setImConflictError(null);
-    let values: ImRobotFormValues;
+    const targetProvider = provider;
     try {
-      values = await imForm.validateFields();
+      const values = await imForm.validateFields();
+      if (!messageWritesAvailableRef.current) return;
+      await imMutation.mutateAsync({
+        targetProvider,
+        params: {
+          enabled: values.enabled,
+          appKey: values.appKey || '',
+          appSecret: values.appSecret || '',
+          robotCode: values.robotCode || '',
+          ...(targetProvider === FEISHU_PROVIDER ? { baseUrl: values.baseUrl || '' } : {}),
+        },
+      });
     } catch {
+      // Validation retains field errors; mutation callbacks retain server diagnostics.
+    } finally {
+      channelWriteLock.current = false;
+      setNotificationSubmitting(false);
+    }
+  };
+
+  const handleSwitch = async () => {
+    if (!messageWritesAvailable || !imSelection || channelWriteLock.current) return;
+    if (!switchTarget || switchTarget === imSelection.provider) {
+      setSwitchError(t('switchChannelSameTarget'));
       return;
     }
-
-    imMutation.mutate({
-      enabled: values.enabled,
-      appKey: values.appKey || '',
-      appSecret: values.appSecret || '',
-      robotCode: values.robotCode || '',
-      ...(provider === 'FEISHU' ? { baseUrl: values.baseUrl || '' } : {}),
-    });
+    channelWriteLock.current = true;
+    setSwitchSubmitting(true);
+    try {
+      await selectionMutation.mutateAsync({
+        next: switchTarget,
+        generation: imSelection.generation,
+      });
+    } catch {
+      // A failed switch keeps the dialog and both drafts available for correction.
+    } finally {
+      channelWriteLock.current = false;
+      setSwitchSubmitting(false);
+    }
   };
+
+  const beginGroupChatSubmit = () => {
+    if (!messageWritesAvailableRef.current || channelWriteLock.current) return false;
+    channelWriteLock.current = true;
+    return true;
+  };
+
+  const handleGroupChatPending = (pending: boolean) => {
+    setGroupChatSubmitting(pending);
+    if (!pending) channelWriteLock.current = false;
+  };
+
+  const brandingDisabled = !isPlatformAdmin || isLoading || saveMutation.isPending;
 
   if (error) {
     const apiError = error instanceof ApiError ? error : null;
     return (
-      <>
-        <WorkspacePageHeader />
+      <PlatformShell topbar={<WorkspacePageHeader />}>
         <PageError
           status="500"
           title={t('systemError')}
           subTitle={apiError?.message}
           traceId={apiError?.traceId}
         />
-      </>
+      </PlatformShell>
     );
   }
 
   const brandingPane = (
     <>
-      <Alert
-        type="info"
-        showIcon
-        icon={<InfoCircleFilled aria-hidden="true" />}
-        style={{ marginBottom: 16 }}
-        message={t('brandingHint')}
-      />
+      <NoticeTip kind="info" className="aw-branding-hint" title={t('brandingHint')} />
 
       <Form
         form={form}
         layout="vertical"
-        disabled={isLoading || saveMutation.isPending}
-        onFinish={(values) => saveMutation.mutate(values)}
+        disabled={brandingDisabled}
+        onFinish={(values) => { if (isPlatformAdmin) saveMutation.mutate(values); }}
         initialValues={DEFAULT_BRANDING}
       >
+        <Form.Item name="themeKey" hidden><Input /></Form.Item>
         <div className="aw-branding-grid">
           <Card title={t('basicInfo')}>
-            <Form.Item
-              label={t('platformName')}
-              name="platformName"
-              rules={[{ required: true, message: t('platformNameRequired') }]}
-            >
-              <Input maxLength={128} placeholder="AutoWonder" />
-            </Form.Item>
-            <Form.Item
-              label={t('domain')}
-              name="domain"
-              extra={t('domainHint')}
-            >
-              <Input placeholder="https://wonder.example.com" />
-            </Form.Item>
+            <div className="aw-branding-basic-fields">
+              <Form.Item
+                label={t('platformName')}
+                name="platformName"
+                rules={[{ required: true, message: t('platformNameRequired') }]}
+              >
+                <Input maxLength={128} placeholder="AutoWonder" />
+              </Form.Item>
+              <Form.Item
+                label={t('domain')}
+                name="domain"
+                extra={t('domainHint')}
+              >
+                <Input placeholder="https://wonder.example.com" />
+              </Form.Item>
+            </div>
           </Card>
 
           <Card title={t('logo')}>
-            <div style={{ display: 'grid', gap: 16 }}>
-              <div style={{ border: '1px solid var(--aw-border)', borderRadius: 8, padding: 18, minHeight: 112, display: 'grid', placeItems: 'center', background: 'var(--aw-raised)' }}>
-                <img src={current.logoUrl || '/logo.svg'} alt={current.platformName} style={{ maxWidth: 176, maxHeight: 72, objectFit: 'contain' }} onError={(e) => { const t = e.currentTarget; if (!t.dataset.fb) { t.dataset.fb = '1'; t.src = '/logo.svg'; } }} />
+            <div className="aw-branding-logo-row">
+              <div className="aw-branding-logo-box">
+                <img src={current.logoUrl || '/logo.svg'} alt={current.platformName} onError={(e) => { const image = e.currentTarget; if (!image.dataset.fb) { image.dataset.fb = '1'; image.src = '/logo.svg'; } }} />
               </div>
               <div className="aw-branding-logo-actions">
                 <Upload
                   showUploadList={false}
+                  disabled={brandingDisabled || logoMutation.isPending}
                   accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.ico,.avif,image/png,image/jpeg,image/webp,image/svg+xml,image/gif,image/x-icon,image/vnd.microsoft.icon,image/avif"
                   beforeUpload={(file) => {
                     if (file.size > 512 * 1024) {
@@ -336,9 +436,9 @@ export function BrandingConfigPage() {
                   customRequest={handleUpload}
                 >
                   <Button
-                    block
-                    icon={<UploadOutlined aria-hidden="true" />}
+                    icon={<AwStrokeIcon name="upload" />}
                     aria-label={t('uploadLogo')}
+                    disabled={brandingDisabled}
                     loading={logoMutation.isPending}
                   >
                     {t('uploadLogo')}
@@ -349,16 +449,17 @@ export function BrandingConfigPage() {
             </div>
           </Card>
 
-          <Card title={t('themeColors')} style={{ gridColumn: '1 / -1' }}>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>{t('accentHint')}</Typography.Paragraph>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 24, alignItems: 'start' }}>
-              <Form.Item label={t('presetColors')} name="themeKey" style={{ marginBottom: 0 }}>
+          <Card title={t('themeColors')}>
+            <Typography.Paragraph type="secondary" className="aw-branding-accent-hint">{t('accentHint')}</Typography.Paragraph>
+            <div className="aw-branding-theme-fields">
+              <Form.Item label={t('presetColors')}>
                 <Radio.Group
-                  style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8 }}
+                  value={selectedTheme ?? null}
+                  className="aw-branding-presets"
                   onChange={(event) => {
                     const preset = THEME_PRESETS.find((item) => item.key === event.target.value);
                     if (preset) {
-                      form.setFieldValue('primaryColor', preset.primaryColor);
+                      form.setFieldsValue({ themeKey: preset.key, primaryColor: preset.primaryColor });
                     }
                   }}
                 >
@@ -366,24 +467,11 @@ export function BrandingConfigPage() {
                     <Radio.Button
                       key={theme.key}
                       value={theme.key}
-                      style={{
-                        minHeight: 36,
-                        height: 'auto',
-                        whiteSpace: 'normal',
-                        lineHeight: '16px',
-                        paddingBlock: 6,
-                        paddingInline: 8,
-                        fontSize: 12,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-start',
-                        borderRadius: 6,
-                        borderColor: selectedTheme === theme.key ? primaryColor : 'var(--aw-border)',
-                      }}
+                      style={{ borderColor: selectedTheme === theme.key ? primaryColor : 'var(--aw-border)' }}
                     >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span aria-hidden="true" style={{ width: 12, height: 12, flexShrink: 0, borderRadius: 3, background: theme.primaryColor }} />
-                        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{t(`themes.${theme.key}`)}</span>
+                      <span className="aw-branding-preset-label">
+                        <span aria-hidden="true" className="aw-branding-preset-dot" style={{ background: theme.primaryColor }} />
+                        <span>{t(`themes.${theme.key}`)}</span>
                       </span>
                     </Radio.Button>
                   ))}
@@ -392,21 +480,20 @@ export function BrandingConfigPage() {
               <Form.Item
                 label={t('primaryColor')}
                 name="primaryColor"
-                style={{ marginBottom: 0 }}
                 extra={t('primaryColorHint')}
-                rules={[{ pattern: /^#[0-9a-fA-F]{6}$/, message: t('colorRequired') }]}
+                rules={[{ required: true, pattern: HEX_COLOR_PATTERN, message: t('colorRequired') }]}
               >
-                <Input type="color" style={{ width: 96, height: 36, padding: 4, cursor: 'pointer' }} aria-label={t('chooseColor')} />
+                <BrandingColorInput disabled={brandingDisabled} />
               </Form.Item>
             </div>
           </Card>
         </div>
 
-        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+        <div className="aw-branding-save-bar">
           <Button
             type="primary"
             htmlType="submit"
-            icon={<SaveOutlined aria-hidden="true" />}
+            icon={<AwStrokeIcon name="check" />}
             aria-label={t('saveBranding')}
             loading={saveMutation.isPending}
           >
@@ -417,12 +504,17 @@ export function BrandingConfigPage() {
     </>
   );
 
-  const otherProvider = provider === 'FEISHU' ? 'DINGTALK' : 'FEISHU';
-  const otherProviderLabel = otherProvider === 'FEISHU' ? t('feishu') : t('dingtalk');
+  const switchTargetLabel = switchTarget === 'FEISHU' ? t('feishu') : t('dingtalk');
   const imDirty = notificationDirty || groupChatDirty;
   const notificationPane = (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Card styles={{ body: { padding: 18 } }}>
+    <div className="aw-platform-message-panels">
+      {!isPlatformAdmin && <NoticeTip kind="info" title={t('imReadOnly')} />}
+      <Card className="aw-platform-message-card">
+        {selectionError && <NoticeTip
+          kind="error" title={t('imSelectionLoadFailed')}
+          detail={selectionError instanceof Error ? selectionError.message : t('retryLater')}
+          action={<Button onClick={() => { void refetchSelection(); }}>{t('ssoRetry')}</Button>}
+        />}
         <div className="aw-channel-header">
           <div>
             <Text strong>{t('currentChannel', { provider: providerLabel })}</Text>
@@ -431,47 +523,66 @@ export function BrandingConfigPage() {
             </div>
           </div>
           <Button
-            onClick={() => setSwitchOpen(true)}
-            disabled={isImChannelsLoading || selectionMutation.isPending || imMutation.isPending}
+            onClick={() => {
+              if (channelWriteLock.current || !messageWritesAvailable) return;
+              setSwitchTarget(provider === 'FEISHU' ? 'DINGTALK' : 'FEISHU');
+              setSwitchError(null);
+              setSwitchOpen(true);
+            }}
+            disabled={notificationDisabled}
           >
-            {t('switchChannel')}
+            {selectionKnown
+              ? t('switchChannel', { provider: provider === 'FEISHU' ? t('dingtalk') : t('feishu') })
+              : t('switchChannelPending')}
           </Button>
         </div>
       </Card>
 
       {imChannelsError ? (
-        <Card styles={{ body: { padding: 18 } }}>
-          <Alert
-            type="error"
-            showIcon
-            icon={<CloseCircleFilled aria-hidden="true" />}
-            message={t('imLoadFailed')}
-            description={imChannelsError instanceof Error ? imChannelsError.message : t('retryLater')}
+        <Card className="aw-platform-message-card">
+          <NoticeTip
+            kind="error"
+            title={t('imLoadFailed')}
+            detail={imChannelsError instanceof Error ? imChannelsError.message : t('retryLater')}
+            action={<Button onClick={() => { void refetchImChannels(); }}>{t('ssoRetry')}</Button>}
           />
         </Card>
       ) : (
         <Card
-          title={t('notificationSection')}
+          title={
+            <div className="aw-config-card-title">
+              <span>{t('notificationSection')}</span>
+              <div className="aw-config-tags" aria-live="polite">
+                {selectionKnown && imChannels ? (
+                  <>
+                    <Tag color={imChannel.enabled ? 'green' : undefined} className={imChannel.enabled ? undefined : 'aw-tag-gray'}>{imChannel.enabled ? t('savedEnabled') : t('savedDisabled')}</Tag>
+                    <Tag color={hasImSecret ? 'green' : undefined} className={hasImSecret ? undefined : 'aw-tag-gray'}>{hasImSecret ? t('secretConfigured') : t('secretMissing')}</Tag>
+                    <Tag color={imReady ? 'green' : 'orange'}>{imReady ? t('ready') : t('notReady')}</Tag>
+                  </>
+                ) : <Tag className="aw-tag-gray">{t('groupChatStatusUnknown')}</Tag>}
+              </div>
+            </div>
+          }
           extra={
             <Button
               type="primary"
-              icon={<SaveOutlined aria-hidden="true" />}
               aria-label={t('saveIm')}
-              loading={imMutation.isPending}
-              disabled={isImChannelsLoading}
+              loading={notificationSubmitting}
+              disabled={notificationDisabled}
               onClick={handleImSubmit}
             >
               {t('saveIm')}
             </Button>
           }
-          styles={{ body: { padding: 18 } }}
+          className="aw-platform-message-card"
         >
           <Form
             form={imForm}
             name="imNotification"
             layout="vertical"
             className="aw-im-form"
-            disabled={isImChannelsLoading || imMutation.isPending}
+            aria-busy={isImChannelsLoading || notificationSubmitting}
+            disabled={notificationDisabled}
             initialValues={{
               enabled: false,
               appKey: '',
@@ -484,36 +595,39 @@ export function BrandingConfigPage() {
               setNotificationDirty(true);
             }}
           >
+            <input className="aw-autofill-decoy" type="text" aria-hidden="true" tabIndex={-1} autoComplete="off" />
+            <input className="aw-autofill-decoy" type="password" aria-hidden="true" tabIndex={-1} autoComplete="current-password" />
             <div className="aw-channel-section">
               <Typography.Text type="secondary">{t('notificationSectionHint')}</Typography.Text>
-              <Space size={[8, 8]} wrap>
-                <Tag color={imEnabled ? 'green' : 'default'}>{imEnabled ? t('enabled') : t('disabled')}</Tag>
-                <Tag color={hasImSecret ? 'green' : 'default'}>{hasImSecret ? t('secretConfigured') : t('secretMissing')}</Tag>
-                <Tag color={imReady ? 'green' : 'orange'}>{imReady ? t('ready') : t('notReady')}</Tag>
-              </Space>
 
-              <Form.Item label={t('enableSwitch')} name="enabled" valuePropName="checked" style={{ marginBottom: 0 }}>
-                <Switch aria-label={t('enableRobot', { provider: providerLabel })} />
-              </Form.Item>
+              <div className="aw-config-check-row">
+                <label className="aw-config-check">
+                  <Form.Item name="enabled" valuePropName="checked" noStyle>
+                    <Switch size="small" aria-label={t('enableRobot', { provider: providerLabel })} />
+                  </Form.Item>
+                  <span>{t('notificationEnableDraft')}</span>
+                </label>
+                <p className="aw-config-help">{notificationDirty ? t('notificationDirtyHint') : t('notificationDraftHint')}</p>
+              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-                <Form.Item label={provider === 'FEISHU' ? t('appId') : t('appKey')} name="appKey" validateTrigger={[]} rules={[({ getFieldValue }) => ({ validator: (_, value) => !getFieldValue('enabled') || value ? Promise.resolve() : Promise.reject(new Error(t('appKeyRequired'))) })]}>
+              <div className="aw-platform-message-fields">
+                <Form.Item label={provider === 'FEISHU' ? t('notificationAppIdLabel') : t('notificationAppKeyLabel')} name="appKey" validateTrigger={[]} rules={[({ getFieldValue }) => ({ validator: (_, value) => !getFieldValue('enabled') || value ? Promise.resolve() : Promise.reject(new Error(t('appKeyRequired'))) })]}>
                   <Input placeholder={provider === 'FEISHU' ? 'cli_xxxxxx' : 'dingxxxxxx'} />
                 </Form.Item>
-                {provider === 'DINGTALK' && <Form.Item label={t('robotCode')} name="robotCode" validateTrigger={[]} rules={[({ getFieldValue }) => ({ validator: (_, value) => !getFieldValue('enabled') || value ? Promise.resolve() : Promise.reject(new Error(t('robotCodeRequired'))) })]}>
+                {provider === 'DINGTALK' && <Form.Item label={t('notificationRobotCodeLabel')} name="robotCode" validateTrigger={[]} rules={[({ getFieldValue }) => ({ validator: (_, value) => !getFieldValue('enabled') || value ? Promise.resolve() : Promise.reject(new Error(t('robotCodeRequired'))) })]}>
                   <Input placeholder="robot_xxxxxx" />
                 </Form.Item>}
                 {provider === FEISHU_PROVIDER && <Form.Item label={t('feishuBaseUrlLabel')} name="baseUrl" extra={t('feishuBaseUrlHint')}>
                   <Input placeholder={FEISHU_DEFAULT_BASE_URL} />
                 </Form.Item>}
                 <Form.Item
-                  label={t('appSecret')}
+                  label={t('notificationAppSecretLabel')}
                   name="appSecret"
                   validateTrigger={[]}
                   rules={[({ getFieldValue }) => ({ validator: (_, value) => !getFieldValue('enabled') || value || imChannel.secretConfigured ? Promise.resolve() : Promise.reject(new Error(t('appSecretRequired'))) })]}
-                  extra={imChannel.secretConfigured ? t('keepSecretHint') : undefined}
+                  extra={imChannel.secretConfigured ? t('notificationSecretConfiguredHint') : t('notificationSecretMissingHint')}
                 >
-                  <Input.Password iconRender={visible => <Button type="text" htmlType="button" aria-label={t(visible ? 'hideSecret' : 'showSecret')} disabled={isImChannelsLoading || imMutation.isPending} icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />} />} placeholder={imChannel.secretConfigured ? t('keepSecret') : t('secretPlaceholder')} />
+                  <Input.Password autoComplete="new-password" iconRender={visible => <Button type="text" htmlType="button" aria-label={t(visible ? 'hideSecret' : 'showSecret')} disabled={notificationDisabled} icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />} />} placeholder={imChannel.secretConfigured ? t('keepSecret') : t('secretPlaceholder')} />
                 </Form.Item>
               </div>
 
@@ -522,74 +636,89 @@ export function BrandingConfigPage() {
           </Form>
         </Card>
       )}
-      {isPlatformAdmin && <GroupChatConfigPanel provider={provider} onDirtyChange={setGroupChatDirty} />}
+      {isPlatformAdmin && selectionKnown && provider && <GroupChatConfigPanel
+        key={provider}
+        provider={provider}
+        disabled={!messageWritesAvailable || notificationSubmitting || switchSubmitting}
+        onBeforeSubmit={beginGroupChatSubmit}
+        onPendingChange={handleGroupChatPending}
+        onDirtyChange={setGroupChatDirty}
+      />}
 
       <Modal
         open={switchOpen}
+        className="aw-platform-channel-modal"
+        width={520}
         title={t('switchChannelTitle')}
-        okText={t('confirmSwitchChannel', { provider: otherProviderLabel })}
+        okText={t('confirmSwitchChannel', { provider: switchTargetLabel })}
         cancelText={t('cancel')}
-        confirmLoading={selectionMutation.isPending}
-        onOk={() => selectionMutation.mutate(otherProvider)}
-        onCancel={() => setSwitchOpen(false)}
+        confirmLoading={switchSubmitting}
+        okButtonProps={{ disabled: notificationDisabled }}
+        cancelButtonProps={{ disabled: switchSubmitting }}
+        closable={!switchSubmitting}
+        keyboard={!switchSubmitting}
+        maskClosable={!switchSubmitting}
+        onOk={handleSwitch}
+        onCancel={() => { if (!channelWriteLock.current) setSwitchOpen(false); }}
         destroyOnClose
       >
         <p>{t('switchChannelBody')}</p>
-        {imDirty && <Alert type="warning" showIcon message={t('switchChannelDirty')} />}
+        {imDirty && <NoticeTip kind="warning" title={t('switchChannelDirty')} />}
+        {switchError != null && <p className="aw-channel-switch-error" role="alert">{switchError}</p>}
       </Modal>
-    </Space>
+    </div>
   );
 
   return (
-    <>
-    <WorkspacePageHeader />
-    <div className="aw-branding" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
-        <Title level={3} style={{ margin: 0, letterSpacing: 0 }}>{t('configuration')}</Title>
-        <PageBackButton to="/workspaces" label={t('backWorkspaces')} compact={false} />
-      </div>
+    <PlatformShell topbar={<WorkspacePageHeader />}>
+      <div className="aw-branding-config">
+        <PageHead
+          title={t('configuration')}
+          description={t('configurationDescription')}
+          actions={<PageBackButton to="/workspaces" label={t('backWorkspaces')} compact={false} />}
+        />
 
-      <Tabs
-        activeKey={resolvedActiveTab}
-        onChange={(key) => {
-          setActiveTab(key);
-          try {
-            localStorage.setItem(PLATFORM_CONFIG_TAB_STORAGE_KEY, key);
-          } catch {
-            // Browser policy may deny persistence; current-page switching still works.
-          }
-        }}
-        items={[
-          { key: BRANDING_TAB_KEY, label: t('brandingTab'), children: brandingPane },
-          ...(isPlatformAdmin ? [{
-            key: NOTIFICATION_TAB_KEY,
-            label: t('notificationTab'),
-            // imForm is seeded by an effect in this component and read through useWatch here,
-            // so the pane must stay mounted; a lazily mounted pane would leave the form instance
-            // disconnected from any rendered Form element.
-            forceRender: true,
-            children: notificationPane,
-          }] : []),
-          ...(isPlatformAdmin ? [{
-            key: EMAIL_VERIFICATION_TAB_KEY,
-            label: t('emailVerificationTab'),
-            children: <MailSettingsPanel />,
-          }] : []),
-          {
-            key: FEATURE_SWITCH_TAB_KEY,
-            label: t('featureSwitchTab'),
-            children: <FeatureSwitchesPanel canManage={isPlatformAdmin} />,
-          },
-          ...(isPlatformAdmin
-            ? [{ key: ENTERPRISE_SSO_TAB_KEY, label: t('ssoTab'), children: <SsoConfigPanel branding={data} /> }]
-            : []),
-          { key: PLATFORM_ADMIN_TAB_KEY, label: t('adminTab'), children: <PlatformAdminPanel /> },
-          ...(isPlatformAdmin
-            ? [{ key: USER_MANAGEMENT_TAB_KEY, label: t('userTab'), children: <UserManagementPanel /> }]
-            : []),
-        ]}
-      />
-    </div>
-    </>
+        <Tabs
+          activeKey={resolvedActiveTab}
+          onChange={(key) => {
+            setActiveTab(key);
+            try {
+              localStorage.setItem(PLATFORM_CONFIG_TAB_STORAGE_KEY, key);
+            } catch {
+              // Browser policy may deny persistence; current-page switching still works.
+            }
+          }}
+          items={[
+            { key: BRANDING_TAB_KEY, label: t('brandingTab'), children: brandingPane },
+            ...(isPlatformAdmin ? [{
+              key: NOTIFICATION_TAB_KEY,
+              label: t('notificationTab'),
+              // imForm is seeded by an effect in this component and read through useWatch here,
+              // so the pane must stay mounted; a lazily mounted pane would leave the form instance
+              // disconnected from any rendered Form element.
+              forceRender: true,
+              children: notificationPane,
+            }] : []),
+            ...(isPlatformAdmin ? [{
+              key: EMAIL_VERIFICATION_TAB_KEY,
+              label: t('emailVerificationTab'),
+              children: <MailSettingsPanel />,
+            }] : []),
+            {
+              key: FEATURE_SWITCH_TAB_KEY,
+              label: t('featureSwitchTab'),
+              children: <FeatureSwitchesPanel canManage={isPlatformAdmin} />,
+            },
+            { key: PLATFORM_ADMIN_TAB_KEY, label: t('adminTab'), children: <PlatformAdminPanel /> },
+            ...(isPlatformAdmin
+              ? [{ key: ENTERPRISE_SSO_TAB_KEY, label: t('ssoTab'), children: <SsoConfigPanel branding={data} /> }]
+              : []),
+            ...(isPlatformAdmin
+              ? [{ key: USER_MANAGEMENT_TAB_KEY, label: t('userTab'), children: <UserManagementPanel /> }]
+              : []),
+          ]}
+        />
+      </div>
+    </PlatformShell>
   );
 }

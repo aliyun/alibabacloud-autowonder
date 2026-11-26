@@ -1408,6 +1408,7 @@ class ScheduledTaskSpringMybatisIntegrationTest {
     }
 
     private static final class EmptyObjectStorage implements ObjectStorage {
+        @Override public byte[] get(String ref, int maxBytes) { return get(ref); }
         @Override public StoredObject put(String bucket, String key, byte[] data) { throw new UnsupportedOperationException(); }
         @Override public byte[] get(String ossRef) { return null; }
         @Override public String presignGet(String ossRef, int ttlSeconds) { return null; }
@@ -1417,6 +1418,11 @@ class ScheduledTaskSpringMybatisIntegrationTest {
     }
 
     private static final class InMemoryStorage implements ObjectStorage {
+        @Override public byte[] get(String ref, int maxBytes) {
+            byte[] bytes = get(ref);
+            if (bytes != null && bytes.length > maxBytes) throw new IllegalArgumentException("Object exceeds size limit");
+            return bytes;
+        }
         private final Map<String, byte[]> objects = new ConcurrentHashMap<>();
         @Override public StoredObject put(String bucket, String key, byte[] data) {
             String ref = bucket + "/" + key; objects.put(ref, data.clone()); return new StoredObject(ref, "test", data.length);

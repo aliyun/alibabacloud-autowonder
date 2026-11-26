@@ -155,7 +155,7 @@ describe('MembersPage', () => {
     renderPage();
 
     await screen.findByText('admin@co.com');
-    expect(screen.getByText('工作空间所有者')).toBeInTheDocument();
+    expect(screen.getByLabelText('工作空间所有者')).toBeInTheDocument();
     expect(screen.getByText('读写者')).toBeInTheDocument();
     expect(screen.getByText('需求管理员')).toBeInTheDocument();
     expect(screen.getByText('澄清员')).toBeInTheDocument();
@@ -199,7 +199,7 @@ describe('MembersPage', () => {
     const devRow = (await screen.findByText('dev1@co.com')).closest('tr');
     expect(devRow).not.toBeNull();
     await waitForAdminControls();
-    await user.click(within(devRow!).getByRole('button', { name: '编辑' }));
+    await user.click(within(devRow!).getByRole('button', { name: '编辑成员' }));
     await selectRole(user, '角色', '只读者');
     const tagsInput = screen.getByRole('combobox', { name: '身份标签' });
     await user.type(tagsInput, '验收员{enter}');
@@ -221,10 +221,12 @@ describe('MembersPage', () => {
     renderPage();
     const row = (await screen.findByText('dev1@co.com')).closest('tr');
     await waitForAdminControls();
-    await user.click(within(row!).getByRole('button', { name: '编辑' }));
+    await user.click(within(row!).getByRole('button', { name: '编辑成员' }));
     expect(screen.queryByText('访问等级')).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /保\s*存/ }));
+    // 未改动时保存按钮不可用，避免发出空写请求。
+    expect(screen.getByRole('button', { name: /保\s*存/ })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: /取\s*消/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(roleHandler).not.toHaveBeenCalled();
     expect(tagsHandler).not.toHaveBeenCalled();
@@ -255,8 +257,8 @@ describe('MembersPage', () => {
     expect(devRow).not.toBeNull();
     const transferButton = screen.getByRole('button', { name: '移交 Owner' });
     const addButton = screen.getByRole('button', { name: '添加成员' });
-    const editButton = within(devRow!).getByRole('button', { name: '编辑' });
-    const removeButton = within(devRow!).getByRole('button', { name: '移除' });
+    const editButton = within(devRow!).getByRole('button', { name: '编辑成员' });
+    const removeButton = within(devRow!).getByRole('button', { name: '移除成员' });
     expect(transferButton).toBeDisabled();
     expect(addButton).toBeDisabled();
     expect(editButton).toBeDisabled();
@@ -276,6 +278,54 @@ describe('MembersPage', () => {
     expect(writeHandler).not.toHaveBeenCalled();
   });
 
+  it.each(['ADMIN', 'READ_WRITE', 'READ_ONLY'])('does not render any owner removal item for %s viewers', async (accessLevel) => {
+    useAuthStore.getState().setAccessLevel(accessLevel as 'ADMIN' | 'READ_WRITE' | 'READ_ONLY');
+    server.use(http.get('/api/workspaces/current/membership', () => HttpResponse.json({
+      success: true, code: '0', data: { ...mockMembers[0], accessLevel },
+    })));
+    renderPage();
+    const ownerRow = (await screen.findByText('admin@co.com')).closest('tr')!;
+    await waitFor(() => expect(useAuthStore.getState().accessLevel).toBe(accessLevel));
+    if (accessLevel === 'ADMIN') await waitForAdminControls();
+    expect(within(ownerRow).queryByRole('button', { name: '移除成员' })).not.toBeInTheDocument();
+    expect(ownerRow.querySelector('.aw-op-btn--del')).toBeNull();
+    expect(within(ownerRow).getAllByRole('button')).toHaveLength(1);
+    expect(within(ownerRow).getByRole('button', { name: '编辑成员' })).toBeInTheDocument();
+    const otherRow = screen.getByText('dev1@co.com').closest('tr')!;
+    const remove = within(otherRow).getByRole('button', { name: '移除成员' });
+    if (accessLevel === 'ADMIN') expect(remove).toBeEnabled();
+    else expect(remove).toBeDisabled();
+  });
+
+  it('removes only a non-owner after confirmation and performs no delete on cancellation', async () => {
+    const user = userEvent.setup();
+    const ownerDelete = vi.fn();
+    const otherDelete = vi.fn();
+    server.use(
+      http.delete('/api/workspaces/current/members/1', ownerDelete),
+      http.delete('/api/workspaces/current/members/2', () => {
+        otherDelete();
+        return HttpResponse.json({ success: true, code: '0', data: null });
+      }),
+    );
+    renderPage();
+    const row = (await screen.findByText('dev1@co.com')).closest('tr')!;
+    await waitForAdminControls();
+    const remove = within(row).getByRole('button', { name: '移除成员' });
+    await user.click(remove);
+    const firstPopup = await screen.findByRole('tooltip');
+    expect(firstPopup).toHaveTextContent('确定移除该成员？');
+    expect(otherDelete).not.toHaveBeenCalled();
+    await user.click(within(firstPopup).getByRole('button', { name: /取\s*消|Cancel/ }));
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    expect(otherDelete).not.toHaveBeenCalled();
+    await user.click(remove);
+    const popup = await screen.findByRole('tooltip');
+    await user.click(within(popup).getByRole('button', { name: /确\s*定|OK/ }));
+    await waitFor(() => expect(otherDelete).toHaveBeenCalledTimes(1));
+    expect(ownerDelete).not.toHaveBeenCalled();
+  });
+
   it('enables edit controls for admin members once membership loads', async () => {
     const user = userEvent.setup();
     renderPage();
@@ -285,8 +335,8 @@ describe('MembersPage', () => {
     await waitForAdminControls();
     const addButton = screen.getByRole('button', { name: '添加成员' });
     expect(addButton).toBeEnabled();
-    expect(within(devRow!).getByRole('button', { name: '编辑' })).toBeEnabled();
-    expect(within(devRow!).getByRole('button', { name: '移除' })).toBeEnabled();
+    expect(within(devRow!).getByRole('button', { name: '编辑成员' })).toBeEnabled();
+    expect(within(devRow!).getByRole('button', { name: '移除成员' })).toBeEnabled();
 
     await user.click(addButton);
     const dialog = screen.getByRole('dialog', { name: '添加成员' });
@@ -303,7 +353,7 @@ describe('MembersPage', () => {
 
     const devRow = (await screen.findByText('dev1@co.com')).closest('tr');
     await waitForAdminControls();
-    await user.click(within(devRow!).getByRole('button', { name: '编辑' }));
+    await user.click(within(devRow!).getByRole('button', { name: '编辑成员' }));
     await selectRole(user, '角色', '只读者');
     act(() => {
       useAuthStore.getState().setAccessLevel('READ_ONLY');
@@ -366,7 +416,7 @@ describe('MembersPage', () => {
 
     const devRow = (await screen.findByText('dev1@co.com')).closest('tr');
     await waitForAdminControls();
-    await user.click(within(devRow!).getByRole('button', { name: '编辑' }));
+    await user.click(within(devRow!).getByRole('button', { name: '编辑成员' }));
     await selectRole(user, '角色', '只读者');
     await user.click(screen.getByRole('button', { name: /保\s*存/ }));
 
@@ -432,7 +482,7 @@ describe('MembersPage', () => {
     await waitForAdminControls();
     await user.click(screen.getByRole('button', { name: '添加成员' }));
     const dialog = screen.getByRole('dialog', { name: '添加成员' });
-    const roleSelect = within(dialog).getByRole('combobox', { name: '新成员角色' });
+    const roleSelect = within(dialog).getByRole('combobox', { name: '角色' });
     expect(roleSelect.closest('.ant-select')).toHaveTextContent('只读者');
 
     await user.type(within(dialog).getByRole('combobox', { name: '搜索全局人员' }), 'new');
@@ -535,10 +585,10 @@ describe('MembersPage', () => {
     renderPage();
 
     await screen.findByText('admin@co.com');
-    expect(screen.getByRole('tab', { name: '待审批申请' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '访问申请' })).toBeInTheDocument();
     expect(accessRequestsFetches).toBe(0);
 
-    await user.click(screen.getByRole('tab', { name: '待审批申请' }));
+    await user.click(screen.getByRole('tab', { name: '访问申请' }));
 
     expect(await screen.findByText('暂无待审批的申请')).toBeInTheDocument();
     expect(accessRequestsFetches).toBe(1);
@@ -565,10 +615,12 @@ describe('MembersPage', () => {
     );
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: '待审批申请' }));
+    await user.click(await screen.findByRole('tab', { name: '访问申请' }));
 
     const row = (await screen.findByText('张三')).closest('tr');
     await user.click(within(row!).getByRole('button', { name: '通过' }));
+    // 通过申请前要二次确认。
+    await user.click(await screen.findByRole('button', { name: '确认通过' }));
 
     await waitFor(() => expect(approveHandler).toHaveBeenCalledTimes(1));
   });
@@ -594,7 +646,7 @@ describe('MembersPage', () => {
     );
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: '待审批申请' }));
+    await user.click(await screen.findByRole('tab', { name: '访问申请' }));
 
     const row = (await screen.findByText('张三')).closest('tr');
     await user.click(within(row!).getByRole('button', { name: '拒绝' }));
@@ -633,10 +685,11 @@ describe('MembersPage', () => {
     );
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: '待审批申请' }));
+    await user.click(await screen.findByRole('tab', { name: '访问申请' }));
 
     const row = (await screen.findByText('张三')).closest('tr');
     await user.click(within(row!).getByRole('button', { name: '通过' }));
+    await user.click(await screen.findByRole('button', { name: '确认通过' }));
     expect(
       await screen.findAllByText('当前为读写权限，通过权限申请需要管理员权限'),
     ).toHaveLength(1);
@@ -647,9 +700,9 @@ describe('MembersPage', () => {
     stubAccessRequests();
     renderPage('/settings/members?tab=requests');
 
-    expect(await screen.findByRole('tab', { name: '待审批申请' }))
+    expect(await screen.findByRole('tab', { name: '访问申请' }))
       .toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '成员管理' }))
+    expect(screen.getByRole('tab', { name: '成员' }))
       .toHaveAttribute('aria-selected', 'false');
     expect(await screen.findByText('暂无待审批的申请')).toBeInTheDocument();
   });
@@ -658,9 +711,9 @@ describe('MembersPage', () => {
     renderPage();
 
     await screen.findByText('admin@co.com');
-    expect(screen.getByRole('tab', { name: '成员管理' }))
+    expect(screen.getByRole('tab', { name: '成员' }))
       .toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '待审批申请' }))
+    expect(screen.getByRole('tab', { name: '访问申请' }))
       .toHaveAttribute('aria-selected', 'false');
   });
 
@@ -668,7 +721,7 @@ describe('MembersPage', () => {
     renderPage('/settings/members?tab=bogus');
 
     await screen.findByText('admin@co.com');
-    expect(screen.getByRole('tab', { name: '成员管理' }))
+    expect(screen.getByRole('tab', { name: '成员' }))
       .toHaveAttribute('aria-selected', 'true');
   });
 
@@ -676,8 +729,8 @@ describe('MembersPage', () => {
     const user = userEvent.setup();
     stubAccessRequests();
     const router = renderPageWithRouter('/settings/members?workspaceId=7');
-    const requestsTab = await screen.findByRole('tab', { name: '待审批申请' });
-    const membersTab = screen.getByRole('tab', { name: '成员管理' });
+    const requestsTab = await screen.findByRole('tab', { name: '访问申请' });
+    const membersTab = screen.getByRole('tab', { name: '成员' });
 
     await user.click(requestsTab);
     await waitFor(() => {

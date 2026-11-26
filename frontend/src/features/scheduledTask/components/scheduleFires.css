@@ -1,0 +1,6 @@
+.aw-sched-fires { margin: 0; padding: 0; list-style: none; }
+.aw-sched-fires li { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 24px; color: var(--aw-text-2); font-variant-numeric: tabular-nums; }
+.aw-sched-fires .fd { width: 6px; height: 6px; border-radius: 50%; background: var(--aw-border); flex-shrink: 0; }
+.aw-sched-fires li.is-next { color: var(--aw-text); font-weight: 600; }
+.aw-sched-fires li.is-next .fd { background: var(--aw-primary); }
+.aw-sched-fires .rel { margin-left: auto; font-size: 11px; color: var(--aw-text-3); font-weight: 400; }

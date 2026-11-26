@@ -3,9 +3,19 @@
 export const PARTIAL_OPACITY = 0.55;
 
 export interface WeekRange {
-  displayStart: string;
-  displayEnd: string;
+  /** 后端新增的展示区间；旧版本只返回 start/end，读不到时回退。 */
+  displayStart?: string;
+  displayEnd?: string;
+  start?: string;
+  end?: string;
 }
+
+const day = (week: WeekRange, edge: 'start' | 'end'): string => {
+  const display = edge === 'start' ? week.displayStart : week.displayEnd;
+  if (display) return display;
+  const timestamp = edge === 'start' ? week.start : week.end;
+  return timestamp ? timestamp.slice(0, 10) : '';
+};
 
 export interface LabelDensity {
   interval: number;
@@ -18,11 +28,11 @@ export type ChartPoint = number | { value: number; itemStyle: { opacity: number 
 
 /** Two-line axis label: start date over end date, both MM/DD. */
 export const axisRange = (week: WeekRange): string =>
-  `${week.displayStart.slice(5).replace('-', '/')}\n${week.displayEnd.slice(5).replace('-', '/')}`;
+  `${day(week, 'start').slice(5).replace('-', '/')}\n${day(week, 'end').slice(5).replace('-', '/')}`;
 
 /** Tooltip range keeps the year so windows crossing New Year stay unambiguous. */
 export const tooltipRange = (week: WeekRange): string =>
-  `${week.displayStart.replace(/-/g, '/')} – ${week.displayEnd.replace(/-/g, '/')}`;
+  `${day(week, 'start').replace(/-/g, '/')} – ${day(week, 'end').replace(/-/g, '/')}`;
 
 /**
  * Labels are sized from the chart container width, not the viewport: two-line labels need

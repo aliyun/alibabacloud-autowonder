@@ -34,6 +34,27 @@ class DispatchWorkflowSnapshotStoreTest {
         assertTrue(resumed.document().contains("old instruction"));
     }
 
+    @Test void timingFollowsTheFrozenFlowWithoutBreakingAnOtherwiseCompatibleResume() {
+        var original = f.freeze(f.dispatch(100L, "PAUSED"));
+        assertFalse(original.workflow().containsKey("stageTimingEnabled"));
+
+        f.step.setFlowStageTimingEnabled(true);
+        DispatchDO continued = f.dispatch(101L, "PENDING");
+        continued.setResumeMode("CANONICAL_INTERACTION");
+        continued.setResumeFromDispatchId(100L);
+        var enabled = f.freeze(continued);
+        assertEquals(Boolean.TRUE, enabled.workflow().get("stageTimingEnabled"));
+        assertEquals(100L, continued.getResumeFromDispatchId());
+
+        f.step.setFlowStageTimingEnabled(false);
+        DispatchDO retry = f.dispatch(102L, "PENDING");
+        retry.setResumeMode("RECOVERY");
+        retry.setResumeFromDispatchId(101L);
+        assertEquals(enabled.document(), f.freeze(retry).document());
+        assertFalse(f.freeze(f.dispatch(103L, "PENDING")).workflow().containsKey("stageTimingEnabled"));
+        assertEquals(original.document(), f.snapshots.find(1L, 100L).document());
+    }
+
     @Test void importsLegacyPackageInsteadOfUsingTheCurrentWorkflow() {
         DispatchDO source = f.dispatch(100L, "PAUSED");
         source.setAgentVersionId(21L); source.setExecutorId(50L);

@@ -1,8 +1,8 @@
 import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useTranslation } from 'react-i18next';
-import { Alert, Button, Collapse, Modal, Space, Tag, Tooltip, Typography, message } from 'antd';
-import { useRef } from 'react';
+import { Alert, Button, Modal, Tooltip, Typography, message } from 'antd';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/api/client';
@@ -16,14 +16,15 @@ interface Execution {
   control?: { action?: string; phase?: string; origin?: string; requestedById?: number; requestedByName?: string;
     stopPending?: boolean; forced?: boolean } | null;
 }
-/** 一次用户发起的交付重启轮次（统一重新指派语义）。 */
-interface RestartRound {
+/** 一次用户发起的交付重启轮次（统一重新指派语义）。agent_id 是该轮重新指派的目标数字人。 */
+export interface RestartRound {
   restart_round: number; restart_token?: string | null; status: string; stop_reason?: string | null;
   dispatch_id?: number | null; scheduled_start_at?: string | null; requested_by?: number;
   operator_type?: string; gmt_create?: string; gmt_modified?: string;
   source_dispatch_id?: number | null; sdlc_id?: number | null;
+  agent_id?: number | null; agent_name?: string | null;
 }
-interface RecoveryState {
+export interface RecoveryState {
   closed: boolean;
   executions: Execution[];
   restarts?: RestartRound[];
@@ -31,36 +32,121 @@ interface RecoveryState {
   reopenReasonKey?: string | null;
 }
 const terminal = new Set(['SUCCEEDED', 'FAILED', 'TIMEOUT', 'CANCELED']);
+// 最新一轮处于进行中的正常态时不透出轮次，避免与数字人执行状态争抢。
+const normalRoundStatuses = new Set(['STARTED', 'STARTING']);
 const restartLabels: Record<string, string> = { get STARTING() { return i18n.t('workitem:recovery.starting'); }, get STOPPING_OLD() { return i18n.t('workitem:recovery.stoppingOld'); }, get STARTED() { return i18n.t('workitem:recovery.started'); }, get FAILED() { return i18n.t('workitem:recovery.startFailed'); }, get SUPERSEDED() { return i18n.t('workitem:recovery.superseded'); } };
 const reasons: Record<string, string> = { get AGENT_NOT_PUBLISHED() { return i18n.t('workitem:recovery.agentNotPublished'); }, get AGENT_VERSION_NOT_FOUND() { return i18n.t('workitem:recovery.versionNotFound'); }, get NO_EXECUTOR_ONLINE() { return i18n.t('workitem:recovery.noExecutor'); }, get NO_EXECUTOR_CAPACITY() { return i18n.t('workitem:recovery.noCapacity'); }, get CAPACITY_LOCK_BUSY() { return i18n.t('workitem:recovery.lockBusy'); }, get EXECUTOR_AT_CAPACITY() { return i18n.t('workitem:recovery.atCapacity'); }, get EXECUTOR_RECOVERING() { return i18n.t('workitem:recovery.executorRecovering'); }, get RUNTIME_INCOMPATIBLE() { return i18n.t('workitem:recovery.incompatible'); }, get SELECTION_INTERNAL_ERROR() { return i18n.t('workitem:recovery.selectionError'); } };
+const ROUND_META_SEPARATOR = ' · ';
+const ROUND_TIME_OPTIONS: Intl.DateTimeFormatOptions = { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' };
 
-function restartAlert(r: RestartRound): { type: 'success' | 'info' | 'warning' | 'error'; message: string; description?: string } {
-  if (r.status === 'STOPPING_OLD') {
-    return { type: 'warning', message: i18n.t('workitem:recovery.stoppingRound', { number: r.restart_round }), description: r.stop_reason || undefined };
-  }
-  if (r.status === 'STARTING') {
-    return { type: 'info', message: r.scheduled_start_at && !r.dispatch_id
-      ? i18n.t('workitem:recovery.startingScheduledRound', { number: r.restart_round, time: formatDateTime(r.scheduled_start_at) })
-      : i18n.t('workitem:recovery.startingRound', { number: r.restart_round }), description: r.stop_reason || undefined };
-  }
-  if (r.status === 'FAILED') {
-    return { type: 'error', message: i18n.t('workitem:recovery.failedRound', { number: r.restart_round }), description: r.stop_reason || undefined };
-  }
-  if (r.status === 'SUPERSEDED') {
-    return { type: 'info', message: i18n.t('workitem:recovery.supersededRound', { number: r.restart_round }), description: r.stop_reason || undefined };
-  }
-  return { type: 'success', message: r.dispatch_id ? i18n.t('workitem:recovery.startedDispatchRound', { number: r.restart_round, id: r.dispatch_id }) : i18n.t('workitem:recovery.startedRound', { number: r.restart_round, dispatch: '' }) };
-}
-
-export function RecoveryControls({ workitemId, renderActions, variant = 'header', dispatchId }: { workitemId: string; renderActions?: (deliveryControl: ReactNode) => ReactNode; variant?: 'header' | 'execution' | 'history'; dispatchId?: number }) {
-  const { t } = useTranslation('workitem');
-  const client = useQueryClient();
-  const accessCommand = useAccessCommand();
-  const { data, error } = useQuery<RecoveryState>({
+export function useRecoveryState(workitemId?: string) {
+  return useQuery<RecoveryState>({
     queryKey: ['workitem-recovery', workitemId],
     queryFn: async () => (await apiClient.get<RecoveryState>(`/api/workitems/${workitemId}/recovery`)).data,
     refetchInterval: 5000,
+    enabled: Boolean(workitemId),
   });
+}
+
+/**
+ * 交付启动记录。按持久化的 agent_id 归属到数字人：`section` 在关注块卡身内展示全部轮次，
+ * `summary` 在非关注块卡头下只透出最新异常或一个弱化折叠入口。
+ */
+export function DeliveryStartRecords({ rounds, variant = 'section', currentDispatchId = null }: {
+  rounds: RestartRound[];
+  variant?: 'section' | 'summary' | 'unattributed';
+  /** 数字人当前执行对应的派发；有值时只有挂在该派发上的轮次才算「当前这轮」，其余视为历史。 */
+  currentDispatchId?: number | null;
+}) {
+  const { t } = useTranslation('workitem');
+  const [open, setOpen] = useState<boolean | null>(null);
+  if (rounds.length === 0) return null;
+  const ordered = [...rounds].sort((a, b) => b.restart_round - a.restart_round);
+  const unattributed = variant === 'unattributed';
+  // 当前这轮：已产出当前派发时按派发归属匹配；从未派发时最新一轮就是当前尝试。
+  const currentRound = currentDispatchId != null
+    ? ordered.find(round => round.dispatch_id === currentDispatchId) ?? null
+    : ordered[0];
+  const currentNormal = currentRound == null || normalRoundStatuses.has(currentRound.status);
+  const multipleRounds = ordered.length > 1;
+  const hasHistoricalFailure = currentRound == null && ordered.some(round => round.status === 'FAILED');
+  const canFold = multipleRounds || hasHistoricalFailure;
+  // 历史轮次异常不默认展开，也不占用摘要行。
+  if (!unattributed && !canFold && currentNormal) return null;
+  const expanded = open ?? (unattributed || (variant === 'section' && !currentNormal));
+  const roundLabel = (round: RestartRound) => round.restart_round === 1
+    ? t('recovery.deliveryStart')
+    : t('delivery.round', { number: round.restart_round });
+  const summaryLabel = (round: RestartRound) => round.restart_round === 1
+    ? t('recovery.deliveryStart')
+    : t('recovery.roundStart', { number: round.restart_round });
+  const dispatchNote = (round: RestartRound) => round.dispatch_id
+    ? [t('recovery.roundDispatch', { id: round.dispatch_id }),
+      round.source_dispatch_id ? t('recovery.roundReplaces', { id: round.source_dispatch_id }) : null].filter(Boolean).join(ROUND_META_SEPARATOR)
+    : t('recovery.roundNoDispatch');
+  const note = (round: RestartRound) => round.status === 'SUPERSEDED'
+    ? dispatchNote(round)
+    : round.stop_reason || dispatchNote(round);
+  const roundRows = (list: RestartRound[]) => list.map(round => <div className="aw-restart-row" key={round.restart_round}>
+    <div className="aw-restart-line">
+      <span className="aw-restart-no">{roundLabel(round)}</span>
+      <span className={`aw-restart-status${round.status === 'FAILED' ? ' is-failed' : ''}`}>{restartLabels[round.status] || round.status}</span>
+      {round.gmt_create && <time dateTime={round.gmt_create}
+        title={formatDateTime(round.gmt_create)}>{formatDateTime(round.gmt_create, ROUND_TIME_OPTIONS)}</time>}
+    </div>
+    <div className="aw-restart-note">{note(round)}</div>
+  </div>);
+  const foldLabel = (value: boolean) => value ? t('recovery.collapseRounds') : t('recovery.allRounds', { count: ordered.length });
+
+  if (variant === 'summary' && !expanded) {
+    if (currentRound == null || currentRound.status !== 'FAILED') {
+      return <button type="button" className="aw-agent-block-sub is-quiet" aria-expanded={false}
+        onClick={() => setOpen(true)}>
+        <span className="aw-agent-block-sub-text">{t('recovery.recordsQuiet', { count: ordered.length })}</span>
+      </button>;
+    }
+    const reason = currentRound.stop_reason || null;
+    const time = currentRound.gmt_create
+      ? <time dateTime={currentRound.gmt_create} title={formatDateTime(currentRound.gmt_create)}>{formatDateTime(currentRound.gmt_create, ROUND_TIME_OPTIONS)}</time>
+      : null;
+    return <div className="aw-agent-block-sub" role="alert" data-testid="recovery-controls">
+      <span className="aw-agent-block-sub-k">{summaryLabel(currentRound)}</span>
+      <span className="aw-restart-status is-failed">{restartLabels[currentRound.status] || currentRound.status}</span>
+      {reason && <span className="aw-agent-block-sub-text" title={reason}>{reason}</span>}
+      {time}
+      {multipleRounds && <button type="button" className="aw-restart-fold" aria-expanded={false} title={foldLabel(false)}
+        onClick={() => setOpen(true)}>
+        {foldLabel(false)}
+      </button>}
+    </div>;
+  }
+
+  return <div className="aw-restart-sec" data-testid="delivery-restart-rounds">
+    <div className="aw-restart-head">
+      <span>{t(unattributed ? 'recovery.unattributedStartRecords' : 'recovery.deliveryStartRecords')}</span>
+      {canFold && <button type="button" className="aw-restart-fold" aria-expanded={expanded} title={foldLabel(expanded)}
+        onClick={() => setOpen(!expanded)}>
+        {foldLabel(expanded)}
+      </button>}
+    </div>
+    {expanded && roundRows(ordered)}
+  </div>;
+}
+
+export interface DeliveryControlAction {
+  label: string;
+  danger: boolean;
+  disabled: boolean;
+  disabledReason: string | null;
+  pending: boolean;
+  invoke: () => void;
+}
+
+export function RecoveryControls({ workitemId, renderActions, variant = 'header', dispatchId }: { workitemId: string; renderActions?: (deliveryControl: DeliveryControlAction | null) => ReactNode; variant?: 'header' | 'execution'; dispatchId?: number }) {
+  const { t } = useTranslation('workitem');
+  const client = useQueryClient();
+  const accessCommand = useAccessCommand();
+  const { data, error } = useRecoveryState(workitemId);
   const mutation = useMutation({
     mutationFn: async ({ action, dispatchId, force }: { action: string; dispatchId?: number; force?: boolean }) => {
       if (action === 'retry') return continueDispatch(workitemId, dispatchId!);
@@ -80,10 +166,6 @@ export function RecoveryControls({ workitemId, renderActions, variant = 'header'
   if (error) return <>{renderActions?.(null)}<Alert type="warning" message={t('recovery.loadFailed')} /></>;
   if (!data) return <>{renderActions?.(null)}</>;
   const executions = variant === 'execution' ? data.executions.filter(e => e.dispatchId === dispatchId) : [];
-  const restarts = data.restarts || [];
-  const latestRestart = restarts[0];
-  const showRestartAlert = latestRestart && latestRestart.status !== 'STARTED';
-  const collapseItems = [] as { key: string; label: string; children: ReactNode }[];
   const executionRows = executions.map(e => {
     const reason = e.error || e.recovery.reason;
     const userForceUnconfirmed = e.control?.origin === 'USER'
@@ -95,21 +177,6 @@ export function RecoveryControls({ workitemId, renderActions, variant = 'header'
       {reason && <div style={{ overflowWrap: 'anywhere' }}><Typography.Text type="secondary">{reasons[reason] || reason}</Typography.Text></div>}
       {retrying && <div>{e.recovery.next_retry_at ? t('recovery.retryScheduled', { number: e.recovery.retry_count, maximum: e.recovery.max_retries ?? 3, time: formatDateTime(e.recovery.next_retry_at) }) : t('recovery.retryCount', { number: e.recovery.retry_count, maximum: e.recovery.max_retries ?? 3 })}</div>}
     </div>;
-  });
-  if (variant === 'history' && restarts.length > 0) collapseItems.push({
-    key: 'restarts', label: t('recovery.rounds', { count: restarts.length }), children: restarts.map(r => <div key={r.restart_round} style={{ marginBottom: 8 }}>
-      <Space wrap>
-        <Typography.Text>{t('delivery.round', { number: r.restart_round })}</Typography.Text>
-        <Tag color={r.status === 'FAILED' ? 'error' : r.status === 'STARTED' ? 'success' : r.status === 'SUPERSEDED' ? 'default' : 'processing'}>
-          {restartLabels[r.status] || r.status}
-        </Tag>
-        {r.dispatch_id && <Typography.Text type="secondary">Dispatch #{r.dispatch_id}</Typography.Text>}
-        {r.source_dispatch_id && <Typography.Text type="secondary">{t('recovery.roundSource', { id: r.source_dispatch_id })}</Typography.Text>}
-        {r.sdlc_id && <Typography.Text type="secondary">{t('recovery.roundWorkflow', { id: r.sdlc_id })}</Typography.Text>}
-        {r.gmt_modified && <Typography.Text type="secondary">{formatDateTime(r.gmt_modified)}</Typography.Text>}
-      </Space>
-      {r.stop_reason && <div style={{ overflowWrap: 'anywhere' }}><Typography.Text type="secondary">{r.stop_reason}</Typography.Text></div>}
-    </div>),
   });
   const reopenAction = 'reopen';
   const closeAction = 'close';
@@ -151,14 +218,14 @@ export function RecoveryControls({ workitemId, renderActions, variant = 'header'
       </Tooltip>
       : <Tooltip title={deliveryHint} trigger={['hover', 'focus']}>{deliveryButton}</Tooltip>}
   </span>;
-  if (variant === 'history') return collapseItems.length > 0 ? <Collapse items={collapseItems} /> : null;
+  const deliveryAction: DeliveryControlAction = {
+    label: data.closed ? t('recovery.reopenDelivery') : t('recovery.closeDelivery'),
+    danger: !data.closed,
+    disabled: reopenDisabled,
+    disabledReason: reopenDisabled ? deliveryHint : null,
+    pending: mutation.isPending,
+    invoke: requestDeliveryControl,
+  };
   if (variant === 'execution') return <>{executionRows}</>;
-  return <>
-    {renderActions ? renderActions(deliveryControl) : deliveryControl}
-    <div data-testid="recovery-controls" style={{ margin: data.closed || showRestartAlert ? '12px 0' : 0 }}>
-    {data.closed && <Typography.Text type="secondary">{t('recovery.closedHint')}</Typography.Text>}
-    {showRestartAlert && <div style={{ marginTop: 8 }}>
-      <Alert {...restartAlert(latestRestart)} showIcon />
-    </div>}
-  </div></>;
+  return renderActions ? renderActions(deliveryAction) : deliveryControl;
 }

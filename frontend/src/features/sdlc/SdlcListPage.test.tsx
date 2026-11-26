@@ -84,11 +84,24 @@ describe('SdlcListPage', () => {
     server.use(http.post('/api/sdlcs', () => { posts++; return HttpResponse.json({ success: true, data: {} }); }));
     renderPage();
     await userEvent.click(screen.getByRole('button', { name: /新建$/ }));
+    expect(screen.getByRole('switch', { name: '记录交付阶段耗时' })).not.toBeChecked();
     await userEvent.type(screen.getByLabelText('描述'), '<raw 中文>');
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /OK|确\s*定/ }));
     expect(await screen.findByText('请输入名称')).toBeInTheDocument();
     expect(screen.getByLabelText('描述')).toHaveValue('<raw 中文>');
     expect(screen.getByRole('dialog')).toBeInTheDocument(); expect(posts).toBe(0);
+  });
+
+  it('starts with timing off again after cancelling a new workflow', async () => {
+    useSquadsAndSdlcs([]);
+    renderPage();
+    const create = screen.getByRole('button', { name: /新建$/ });
+    await userEvent.click(create);
+    await userEvent.click(screen.getByRole('switch', { name: '记录交付阶段耗时' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Cancel|取\s*消/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await userEvent.click(create);
+    expect(screen.getByRole('switch', { name: '记录交付阶段耗时' })).not.toBeChecked();
   });
 
   it('renders SDLC template table with create button', async () => {
@@ -172,7 +185,7 @@ describe('SdlcListPage', () => {
     renderPage();
 
     await screen.findByText('代码评审SDLC');
-    const deleteIcon = document.querySelector('.anticon-delete');
+    const deleteIcon = document.querySelector('.ant-table-row .aw-op-btn--del .aw-stroke-icon');
     expect(deleteIcon).toBeTruthy();
     await userEvent.click(deleteIcon!.closest('button')!);
 
@@ -195,8 +208,8 @@ describe('SdlcListPage', () => {
 
     expect(await screen.findByText('全栈交付')).toBeInTheDocument();
     expect(screen.getByText('所属小队')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Squad A' })).toHaveAttribute('href', '/agents?tab=squads&squadId=7');
-    expect(screen.getByRole('link', { name: 'Squad B' })).toHaveAttribute('href', '/agents?tab=squads&squadId=8');
+    expect(screen.getByRole('link', { name: 'Squad A' })).toHaveAttribute('href', '/squads?squadId=7');
+    expect(screen.getByRole('link', { name: 'Squad B' })).toHaveAttribute('href', '/squads?squadId=8');
     expect(screen.getByText('未分组')).toBeInTheDocument();
   });
 
@@ -265,7 +278,7 @@ describe('SdlcListPage', () => {
     expect(await screen.findByText('全栈交付')).toBeInTheDocument();
     expect(container.querySelectorAll('.sdlc-squad-group-header')).toHaveLength(0);
 
-    await user.click(screen.getByText('分组'));
+    await user.click(screen.getByText('按小队分组'));
 
     await waitFor(() => expect(container.querySelectorAll('.sdlc-squad-group-header')).toHaveLength(3));
     expect(window.localStorage.getItem('autowonder.sdlcs.view')).toBe('grouped');

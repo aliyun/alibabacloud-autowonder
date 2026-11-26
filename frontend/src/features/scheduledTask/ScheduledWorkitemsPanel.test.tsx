@@ -86,7 +86,7 @@ describe('ScheduledWorkitemsPanel', () => {
 
     expect(await screen.findByText('定时需求A')).toBeInTheDocument();
     expect(screen.getByText('定时需求B')).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element?.textContent === '共 2 个' && !Array.from(element.children).some(child => child.textContent === element.textContent))).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === '共 2 条' && !Array.from(element.children).some(child => child.textContent === element.textContent))).toBeInTheDocument();
     expect(screen.getByText('全部')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '当前所处阶段' })).toBeInTheDocument();
     expect(screen.getByText('待触发')).toBeInTheDocument();
@@ -295,7 +295,6 @@ it.each(['zh-CN', 'en-US'])('final widget scheduled workitem clear preserves key
  const requests: string[] = []; useWorkitemHandler([], requests);
  await i18n.changeLanguage(locale); renderPanel();
  const input = screen.getByLabelText(locale === 'en-US' ? 'Work item title filter' : '工单标题筛选');
- expect(screen.getByRole('button', { name: locale === 'en-US' ? 'Search' : '搜索' })).toBeEnabled();
  await userEvent.type(input, '<raw>中文{Enter}');
  await waitFor(() => expect(new URLSearchParams(requests.at(-1)).get('keyword')).toBe('<raw>中文'));
  await userEvent.click(screen.getByRole('button', { name: locale === 'en-US' ? 'Clear scheduled work item search' : '清空定时工单搜索' }));

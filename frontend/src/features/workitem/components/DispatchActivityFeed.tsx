@@ -17,9 +17,10 @@ function displayTime(value?: string | null): string {
 interface DispatchActivityFeedProps {
   dispatchId: number;
   status?: string | null;
+  hideTitle?: boolean;
 }
 
-export function DispatchActivityFeed({ dispatchId, status }: DispatchActivityFeedProps) {
+export function DispatchActivityFeed({ dispatchId, status, hideTitle = false }: DispatchActivityFeedProps) {
   const { t } = useTranslation('workitem');
   const [activities, setActivities] = useState<RuntimeActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +106,7 @@ export function DispatchActivityFeed({ dispatchId, status }: DispatchActivityFee
       data-testid={`dispatch-activities-${dispatchId}`}
       style={{ margin: '6px 0 8px 4px', paddingLeft: 9, borderLeft: '2px solid var(--aw-border)' }}
     >
-      <h4 id={titleId} style={{ margin: '0 0 4px', fontSize: 12 }}>{t('execution.details')}</h4>
+      <h4 id={titleId} hidden={hideTitle} style={{ margin: '0 0 4px', fontSize: 12 }}>{t('execution.details')}</h4>
       {loading && (
         <div role="status" aria-label={t('execution.loading')}>
           <Spin size="small" />

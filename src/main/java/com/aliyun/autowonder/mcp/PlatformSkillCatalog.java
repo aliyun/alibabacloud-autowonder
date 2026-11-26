@@ -14,6 +14,7 @@ import java.util.Set;
 public class PlatformSkillCatalog {
     public static final String ONBOARDING_SKILL_ID = "initialize-autowonder-workspace";
     public static final String OPTIMIZER_SKILL_ID = "optimize-squad-workflow";
+    public static final String USER_DIRECTORY_SKILL_ID = "autowonder-user-directory";
     public static final String WORKBENCH_CREATE_SKILL_ID = "autowonder-workbench-create-workitem";
     /**
      * 平台官方 Skill 的标准业务类型。installSpec 内的 kind=codex-skill 属于执行器协议字段，
@@ -57,6 +58,11 @@ public class PlatformSkillCatalog {
             skill("autowonder-project-navigator", PLATFORM_SKILL_TYPE, "AutoWonder Project Navigator",
                     "List AutoWonder projects available to the token owner before selecting an MCP workspace.",
                     List.of("autowonder.list_projects")),
+            skill(USER_DIRECTORY_SKILL_ID, PLATFORM_SKILL_TYPE, "AutoWonder 用户与成员信息",
+                    "Query the token owner's personal profile and workspace membership, and list the human "
+                            + "members of a workspace through MCP tools.",
+                    List.of("autowonder.get_current_user", "autowonder.get_workspace_membership",
+                            "autowonder.list_workspace_members")),
             skill("autowonder-skill-manager", PLATFORM_SKILL_TYPE, "AutoWonder Skill Manager",
                     "Manage skills, MCP server records and plugin records, upload Skill packages, browse and download "
                             + "package files, test MCP connections, install reusable AutoWonder platform skills, and "

@@ -78,9 +78,19 @@ class DeliveryOverviewServiceTest {
         return row;
     }
 
+    private static DeliveryOverviewService.DeliveredWorkitem delivered(long id, Date deliveredAt) {
+        var row = new DeliveryOverviewService.DeliveredWorkitem();
+        row.setId(id);
+        row.setDeliveredAt(deliveredAt);
+        return row;
+    }
+
     private void currentThenPrevious(long current, long previous) {
+        when(dao.listDeliveredWorkitems(eq(9L), any(Date.class), any(Date.class)))
+                .thenReturn(java.util.stream.LongStream.range(0, current)
+                        .mapToObj(id -> delivered(id, at("2026-01-05T10:00:00"))).toList());
         when(dao.countDeliveredWorkitems(eq(9L), any(Date.class), any(Date.class)))
-                .thenReturn(current).thenReturn(previous);
+                .thenReturn(previous);
     }
 
     @Test
@@ -132,10 +142,11 @@ class DeliveryOverviewServiceTest {
 
         verify(dao).listCreatedWorkitems(9L, Date.from(Instant.parse("2026-01-04T16:00:00Z")),
                 Date.from(Instant.parse("2026-01-07T16:00:00Z")));
-        verify(dao).countDeliveredWorkitems(9L, Date.from(Instant.parse("2026-01-04T16:00:00Z")),
+        verify(dao).listDeliveredWorkitems(9L, Date.from(Instant.parse("2026-01-04T16:00:00Z")),
                 Date.from(Instant.parse("2026-01-07T16:00:00Z")));
         verify(dao).countDeliveredWorkitems(9L, Date.from(Instant.parse("2026-01-01T16:00:00Z")),
                 Date.from(Instant.parse("2026-01-04T16:00:00Z")));
+        org.mockito.Mockito.verifyNoMoreInteractions(dao);
     }
 
     @Test
@@ -158,12 +169,70 @@ class DeliveryOverviewServiceTest {
     }
 
     @Test
+    void deliveredTrendUsesRealCompletionInstantsAndZeroFillsShanghaiDaysWithConsistentTotal() {
+        when(dao.listDeliveredWorkitems(eq(9L), any(Date.class), any(Date.class))).thenReturn(List.of(
+                delivered(20L, Date.from(Instant.parse("2026-01-04T16:00:00Z"))),
+                delivered(21L, Date.from(Instant.parse("2026-01-05T15:59:59.999Z"))),
+                delivered(22L, Date.from(Instant.parse("2026-01-06T16:00:00Z"))),
+                delivered(23L, Date.from(Instant.parse("2026-01-07T15:59:59.999Z")))));
+        when(dao.countDeliveredWorkitems(eq(9L), any(Date.class), any(Date.class))).thenReturn(2L);
+
+        DeliveryOverviewVO.Delivered result = service.overview(9L, START, END).getDelivered();
+
+        assertEquals(List.of("2026-01-05", "2026-01-06", "2026-01-07"),
+                result.getDaily().stream().map(DeliveryOverviewVO.DailyCount::getDate).toList());
+        assertEquals(List.of(2L, 0L, 2L),
+                result.getDaily().stream().map(DeliveryOverviewVO.DailyCount::getCount).toList());
+        assertEquals(4L, result.getCount());
+        assertEquals(result.getCount(), result.getDaily().stream()
+                .mapToLong(DeliveryOverviewVO.DailyCount::getCount).sum());
+        assertEquals(1.3, result.getDailyAverage());
+        assertEquals(2L, result.getPrevious().getCount());
+        assertEquals(100.0, result.getChangePercent());
+        verify(dao, org.mockito.Mockito.never()).countDeliveredWorkitems(9L,
+                at("2026-01-05T00:00:00"), at("2026-01-08T00:00:00"));
+    }
+
+    @Test
+    void emptyDeliveredTrendHasEveryZeroBucketAndNoComparableBase() {
+        currentThenPrevious(0L, 0L);
+
+        DeliveryOverviewVO.Delivered result = service.overview(9L, START, END).getDelivered();
+
+        assertEquals(0L, result.getCount());
+        assertEquals(0.0, result.getDailyAverage());
+        assertEquals(List.of(0L, 0L, 0L),
+                result.getDaily().stream().map(DeliveryOverviewVO.DailyCount::getCount).toList());
+        assertEquals(result.getCount(), result.getDaily().stream()
+                .mapToLong(DeliveryOverviewVO.DailyCount::getCount).sum());
+        assertNull(result.getChangePercent());
+    }
+
+    @Test
+    void singleDayDeliveredTrendAndPreviousPeriodRemainOneDay() {
+        when(dao.listDeliveredWorkitems(eq(9L), any(Date.class), any(Date.class)))
+                .thenReturn(List.of(delivered(20L, at("2026-01-05T00:00:00"))));
+        when(dao.countDeliveredWorkitems(eq(9L), any(Date.class), any(Date.class))).thenReturn(2L);
+
+        DeliveryOverviewVO.Delivered result = service.overview(9L, START, START).getDelivered();
+
+        assertEquals(List.of("2026-01-05"),
+                result.getDaily().stream().map(DeliveryOverviewVO.DailyCount::getDate).toList());
+        assertEquals(1L, result.getDaily().get(0).getCount());
+        assertEquals(1.0, result.getDailyAverage());
+        assertEquals("2026-01-04", result.getPrevious().getStartDate());
+        assertEquals("2026-01-04", result.getPrevious().getEndDate());
+        assertEquals(-50.0, result.getChangePercent());
+        verify(dao).countDeliveredWorkitems(9L, at("2026-01-04T00:00:00"), at("2026-01-05T00:00:00"));
+    }
+
+    @Test
     void roundsDailyAverageToOneDecimal() {
         // 三天区间：23/3 = 7.666… → 7.7，1/3 = 0.333… → 0.3
-        when(dao.countDeliveredWorkitems(eq(9L), any(Date.class), any(Date.class))).thenReturn(23L, 0L);
+        currentThenPrevious(23L, 0L);
         assertEquals(7.7, service.overview(9L, START, END).getDelivered().getDailyAverage());
 
-        when(dao.countDeliveredWorkitems(eq(9L), any(Date.class), any(Date.class))).thenReturn(1L, 0L);
+        currentThenPrevious(1L, 0L);
         assertEquals(0.3, service.overview(9L, START, END).getDelivered().getDailyAverage());
     }
 

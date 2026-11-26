@@ -80,6 +80,9 @@
   "input": "Message",
   "placeholder": "Type a message. Enter to send, Shift+Enter for a new line…",
   "privateSaved": "Only you can see this · Saved automatically",
+  "composerDisabledSetup": "Finish setup to start chatting",
+  "composerDisabledArchived": "Conversation archived · Restore it to continue",
+  "composerDisabledError": "Couldn't load the conversation · Retry to continue",
   "send": "Send",
   "posix": "macOS / Linux",
   "contextHeader": "Current page · {{page}}",
@@ -118,5 +121,7 @@
   "imageTypes": "PNG, JPEG, and WebP images are supported.",
   "imageTooLarge": "Each image cannot exceed 5 MB.",
   "imageTooMany": "Add up to {{max}} images.",
-  "imageTotalTooLarge": "Total image size cannot exceed 20 MB."
+  "imageTotalTooLarge": "Total image size cannot exceed 20 MB.",
+  "statusNotConfigured": "No executor configured",
+  "statusOffline": "All executors offline"
 }

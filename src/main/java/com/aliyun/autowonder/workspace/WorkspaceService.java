@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -45,6 +46,7 @@ import java.util.UUID;
 @Service
 public class WorkspaceService {
     private static final int MEMBER_CANDIDATE_LIMIT = 20;
+    private static final int MEMBER_DIRECTORY_BATCH_SIZE = 200;
     private static final String AUDIT_ACTOR_HUMAN = "HUMAN";
     private static final String AUDIT_MODULE_ORG = "ORG";
 
@@ -166,6 +168,26 @@ public class WorkspaceService {
             value.setCanManage(owner || accessLevel == WorkspaceAccessLevel.ADMIN);
             result.add(value);
         }
+        // Every returned mine card comes from an active membership. Count only these IDs,
+        // in two independent batches; the SQL also rechecks the caller's read authorization.
+        if (!result.isEmpty()) {
+            List<Long> workspaceIds = result.stream().map(WorkspaceVO::getId).toList();
+            Map<Long, WorkspaceVO> cardById = new HashMap<>();
+            for (WorkspaceVO card : result) {
+                cardById.put(card.getId(), card);
+            }
+            boolean systemAdmin = systemAdminService.isSystemAdmin(userId);
+            for (WorkspaceCardCountDO count : workspaceDao.countMembersByWorkspaceIds(
+                    workspaceIds, userId, systemAdmin)) {
+                WorkspaceVO card = cardById.get(count.getWorkspaceId());
+                if (card != null) card.setMemberCount(count.getCount());
+            }
+            for (WorkspaceCardCountDO count : workspaceDao.countWorkitemsByWorkspaceIds(
+                    workspaceIds, userId, systemAdmin)) {
+                WorkspaceVO card = cardById.get(count.getWorkspaceId());
+                if (card != null) card.setWorkitemCount(count.getCount());
+            }
+        }
         return result;
     }
 
@@ -284,20 +306,88 @@ public class WorkspaceService {
         WorkspaceDO workspace = workspaceDao.findById(workspaceId);
         List<MemberVO> result = new ArrayList<>();
         for (WorkspaceMemberDO member : workspaceMemberDao.listByTenant(workspaceId)) {
-            MemberVO value = new MemberVO();
-            value.setUserId(member.getUserId());
-            value.setJoinedAt(member.getJoinedAt());
-            value.setOwner(workspace != null && Objects.equals(workspace.getOwnerId(), member.getUserId()));
-            value.setAccessLevel(exactAccessLevel(member.getAccessLevel()));
-            value.setIdentityTags(IdentityTags.fromJson(member.getIdentityTags()));
-            value.setReadOnlyDomains(readOnlyDomainsOf(member));
-            value.setRoleId(member.getRoleId());
-            value.setRoleCode(member.getRoleCode());
-            value.setRoleName(member.getRoleName());
-            applyUserIdentity(value, userDao.findByIdIncludingDeleted(member.getUserId()));
-            result.add(value);
+            result.add(memberView(workspace, member, userDao.findByIdIncludingDeleted(member.getUserId())));
         }
         return result;
+    }
+
+    /** MCP 目录保留既有的用户身份回读与关键字匹配，精确查询和普通分页限于请求范围。 */
+    @Transactional(readOnly = true)
+    public PageResult<MemberVO> listMembers(long workspaceId, String keyword, Long userId, int page, int size) {
+        String needle = keyword == null || keyword.isBlank() ? null : keyword.trim().toLowerCase(Locale.ROOT);
+        long offset = (long) (page - 1) * size;
+        WorkspaceDO workspace = workspaceDao.findById(workspaceId);
+        if (userId != null) {
+            WorkspaceMemberDO member = workspaceMemberDao.findByWorkspaceAndUser(workspaceId, userId);
+            if (!isActiveMember(member)) {
+                return new PageResult<>(List.of(), 0, page, size);
+            }
+            MemberVO value = memberView(workspace, member, userDao.findByIdIncludingDeleted(userId));
+            boolean match = needle == null || matchesMemberKeyword(value, needle);
+            return new PageResult<>(match && offset == 0 ? List.of(value) : List.of(), match ? 1 : 0, page, size);
+        }
+        if (needle == null) {
+            long total = workspaceMemberDao.countActiveByTenant(workspaceId);
+            List<MemberVO> values = offset >= total ? List.of() : memberViews(workspace,
+                    workspaceMemberDao.listActivePage(workspaceId, size, offset, null));
+            return new PageResult<>(values, total, page, size);
+        }
+
+        // Case folding and deleted identity snapshots follow the existing Java semantics.
+        List<MemberVO> values = new ArrayList<>(size);
+        WorkspaceMemberDO after = null;
+        long total = 0;
+        while (true) {
+            var batch = workspaceMemberDao.listActivePage(workspaceId, MEMBER_DIRECTORY_BATCH_SIZE, 0, after);
+            for (var value : memberViews(workspace, batch)) {
+                if (matchesMemberKeyword(value, needle)) {
+                    if (total >= offset && values.size() < size) {
+                        values.add(value);
+                    }
+                    total++;
+                }
+            }
+            if (batch.size() < MEMBER_DIRECTORY_BATCH_SIZE) {
+                return new PageResult<>(values, total, page, size);
+            }
+            after = batch.getLast();
+        }
+    }
+
+    private List<MemberVO> memberViews(WorkspaceDO workspace, List<WorkspaceMemberDO> members) {
+        if (members.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, UserDO> users = new HashMap<>();
+        for (var user : userDao.listByIdsIncludingDeleted(members.stream().map(WorkspaceMemberDO::getUserId).toList())) {
+            users.put(user.getId(), user);
+        }
+        return members.stream().map(member -> memberView(workspace, member, users.get(member.getUserId()))).toList();
+    }
+
+    private MemberVO memberView(WorkspaceDO workspace, WorkspaceMemberDO member, UserDO user) {
+        MemberVO value = new MemberVO();
+        value.setUserId(member.getUserId());
+        value.setJoinedAt(member.getJoinedAt());
+        value.setOwner(workspace != null && Objects.equals(workspace.getOwnerId(), member.getUserId()));
+        value.setAccessLevel(exactAccessLevel(member.getAccessLevel()));
+        value.setIdentityTags(IdentityTags.fromJson(member.getIdentityTags()));
+        value.setReadOnlyDomains(readOnlyDomainsOf(member));
+        value.setRoleId(member.getRoleId());
+        value.setRoleCode(member.getRoleCode());
+        value.setRoleName(member.getRoleName());
+        applyUserIdentity(value, user);
+        return value;
+    }
+
+    private static boolean matchesMemberKeyword(MemberVO member, String needle) {
+        return containsIgnoreCase(member.getUsername(), needle)
+                || containsIgnoreCase(member.getNickname(), needle)
+                || containsIgnoreCase(member.getEmail(), needle);
+    }
+
+    private static boolean containsIgnoreCase(String value, String needle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
     }
 
     public CurrentMembershipVO currentMembership(long workspaceId, long userId) {

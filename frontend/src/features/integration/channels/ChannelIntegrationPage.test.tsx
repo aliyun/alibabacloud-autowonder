@@ -1,10 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
+import { useAuthStore } from '@/shared/auth/store';
 import { ChannelIntegrationPage } from './ChannelIntegrationPage';
+
+const platformAdmin = { id: 1, username: 'admin', nickname: '平台管理员', email: 'admin@example.com', isAdmin: true };
+const regularUser = { id: 2, username: 'alice', nickname: '爱丽丝', email: 'alice@example.com', isAdmin: false };
+
+afterEach(() => {
+  useAuthStore.setState({ user: null });
+});
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -113,7 +121,7 @@ describe('ChannelIntegrationPage', () => {
 
     expect(await screen.findByText('已暂停接收')).toBeInTheDocument();
     expect(screen.getByText('待收尾 2 条')).toBeInTheDocument();
-    expect(screen.getByText('平台群聊接入')).toBeInTheDocument();
+    expect(screen.getByText('平台通道接入')).toBeInTheDocument();
     expect(await screen.findByText('钉钉机器人绑定')).toBeInTheDocument();
   });
 
@@ -136,6 +144,32 @@ describe('ChannelIntegrationPage', () => {
     renderPage();
 
     expect(await screen.findByText('群聊机器人配置异常')).toBeInTheDocument();
+  });
+
+  it('blocks new bindings and points to platform configuration when the bot is not ready', async () => {
+    useAuthStore.getState().setUser(platformAdmin);
+    mockChannelList([{ provider: 'DINGTALK', selected: true, enabled: true }]);
+    mockSelection('DINGTALK');
+    mockGroupConfig({ status: 'DISABLED', ready: false, desiredEnabled: false });
+    renderPage();
+
+    expect(await screen.findByText('群聊机器人未启用')).toBeInTheDocument();
+    expect(screen.getByText('平台尚未启用当前渠道的共享群聊机器人，群内 @机器人 消息不会被接收。')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /新建绑定/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '去平台配置' })).toBeInTheDocument();
+  });
+
+  it('points members without platform configuration rights to their administrator', async () => {
+    useAuthStore.getState().setUser(regularUser);
+    mockChannelList([{ provider: 'DINGTALK', selected: true, enabled: true }]);
+    mockSelection('DINGTALK');
+    mockGroupConfig({ status: 'DISABLED', ready: false, desiredEnabled: false });
+    renderPage();
+
+    expect(await screen.findByText('群聊机器人未启用')).toBeInTheDocument();
+    expect(screen.getByText(/请联系平台管理员在平台配置中启用共享群聊机器人并填写完整凭据。/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '去平台配置' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /新建绑定/ })).toBeDisabled();
   });
 
   it('shows an unknown platform access state instead of green when the status is unrecognized', async () => {

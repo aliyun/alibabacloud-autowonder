@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
-import { Alert, Button, Input, Modal, Select, Space, Tag, Typography, message } from 'antd';
-import { CloseCircleFilled, InfoCircleFilled, ReloadOutlined } from '@ant-design/icons';
+import { Button, Input, Modal, Select, Space, Tag, Typography, message } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -194,6 +195,12 @@ export function UserManagementPanel() {
       render: (value: string | null) => renderDateTime(value),
     },
     {
+      title: t('colLastLoginAt'),
+      dataIndex: 'lastLoginAt',
+      width: 160,
+      render: (value: string | null) => renderDateTime(value),
+    },
+    {
       title: t('colActions'),
       key: 'actions',
       width: 220,
@@ -244,12 +251,10 @@ export function UserManagementPanel() {
 
   if (listQuery.isError) {
     return (
-      <Alert
-        type="error"
-        showIcon
-        icon={<CloseCircleFilled aria-hidden="true" />}
-        message={t('loadFailed')}
-        description={listQuery.error instanceof Error ? listQuery.error.message : t('retryLater')}
+      <NoticeTip
+        kind="error"
+        title={t('loadFailed')}
+        detail={listQuery.error instanceof Error ? listQuery.error.message : t('retryLater')}
         action={
           <Button size="small" onClick={() => listQuery.refetch()} loading={listQuery.isFetching}>
             {t('retry')}
@@ -260,8 +265,8 @@ export function UserManagementPanel() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <Alert type="info" showIcon icon={<InfoCircleFilled aria-hidden="true" />} message={t('totalAll', { total: data?.totalAll ?? 0 })} />
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 16 }}>
+      <NoticeTip kind="info" title={t('totalAll', { total: data?.totalAll ?? 0 })} />
 
       <Space wrap>
         <Input.Search
@@ -321,7 +326,7 @@ export function UserManagementPanel() {
           ]}
         />
         <Button
-          icon={<ReloadOutlined aria-hidden="true" />}
+          icon={<AwStrokeIcon name="refresh" />}
           onClick={() => {
             setSearchInput('');
             setKeyword('');
@@ -340,7 +345,7 @@ export function UserManagementPanel() {
         columns={columns}
         dataSource={rows}
         loading={listQuery.isLoading}
-        scroll={{ x: 1480 }}
+        scroll={{ x: 1540 }}
         onRow={(record) =>
           record.status === 'DELETED' ? { style: { color: 'var(--aw-text-tertiary)', opacity: 0.72 } } : {}
         }

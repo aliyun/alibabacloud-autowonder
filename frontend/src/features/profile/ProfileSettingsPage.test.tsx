@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
@@ -7,7 +7,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
 import { createAppRoutes } from '@/app/router';
 import { useAuthStore } from '@/shared/auth/store';
-import { USER_IM_IDENTITIES_QUERY_KEY } from './profileApi';
+import { USER_IM_IDENTITIES_QUERY_KEY, USER_PROFILE_QUERY_KEY } from './profileApi';
 import type { UpdateDingTalkIdentityParams } from './profileApi';
 import { ProfileSettingsPage } from './ProfileSettingsPage';
 import { getMcpPermissionHint } from '@/features/open-platform/McpTokenSettingsPanel';
@@ -163,13 +163,13 @@ describe('ProfileSettingsPage', () => {
     await waitFor(() => expect(screen.getByLabelText('昵称')).toHaveValue('爱丽丝'));
 
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['基本信息', 'IM 工号', '企业身份', 'MCP 令牌', '修改密码', '账号注销']);
+    expect(tabs.map((tab) => tab.getAttribute('data-prof-tab'))).toEqual(['basic', 'im', 'federated', 'mcp', 'password', 'deactivate']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
 
-    await userEvent.click(screen.getByRole('tab', { name: 'IM 工号' }));
+    await userEvent.click(screen.getByRole('tab', { name: /IM 工号/ }));
     expect(await screen.findByLabelText('钉钉工号')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('tab', { name: '企业身份' }));
+    await userEvent.click(screen.getByRole('tab', { name: /企业身份/ }));
     expect(await screen.findByTestId('federated-empty')).toBeInTheDocument();
   });
 
@@ -442,12 +442,16 @@ describe('ProfileSettingsPage', () => {
     });
   });
 
-  it('shows the required workspaceId parameter in the tool schema', async () => {
+  it('shows the required workspaceId parameter in the expanded tool schema', async () => {
     stubMcpEndpoints();
 
     renderPage('/profile/settings?tab=mcp');
 
-    await userEvent.click(await screen.findByRole('tab', { name: '工具' }));
+    await userEvent.click(await screen.findByText('工具', { selector: '.ant-segmented-item-label' }));
+    await userEvent.click(await screen.findByRole('button', { name: /工单管理/ }));
+
+    const toolRow = (await screen.findByText('autowonder.get_workitem')).closest('tr') as HTMLElement;
+    await userEvent.click(within(toolRow).getByRole('button', { name: '展开行' }));
 
     expect(await screen.findByText('workspaceId')).toBeInTheDocument();
   });
@@ -457,9 +461,11 @@ describe('ProfileSettingsPage', () => {
 
     renderPage('/profile/settings?tab=mcp');
 
-    await userEvent.click(await screen.findByRole('tab', { name: '工具' }));
+    await userEvent.click(await screen.findByText('工具', { selector: '.ant-segmented-item-label' }));
 
     expect(await screen.findByText('记忆管理')).toBeInTheDocument();
+    expect(screen.queryByText('autowonder.create_memory')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /记忆管理/ }));
     expect(screen.getByText('autowonder.create_memory')).toBeInTheDocument();
     expect(screen.getByText('autowonder.search_memories')).toBeInTheDocument();
     expect(screen.queryByText('其他能力')).not.toBeInTheDocument();
@@ -470,10 +476,11 @@ describe('ProfileSettingsPage', () => {
 
     renderPage('/profile/settings?tab=mcp');
 
-    await userEvent.click(await screen.findByRole('tab', { name: '工具' }));
+    await userEvent.click(await screen.findByText('工具', { selector: '.ant-segmented-item-label' }));
 
     expect(await screen.findByText('执行器管理')).toBeInTheDocument();
     expect(screen.getByText('8 个工具')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /执行器管理/ }));
     expect(screen.getByText('autowonder.list_executors')).toBeInTheDocument();
     expect(screen.getByText('autowonder.create_executor')).toBeInTheDocument();
     expect(screen.getByText('autowonder.get_executor_launch_options')).toBeInTheDocument();
@@ -481,6 +488,7 @@ describe('ProfileSettingsPage', () => {
 
     expect(screen.getByText('其他能力')).toBeInTheDocument();
     expect(screen.getByText('1 个工具')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /其他能力/ }));
     expect(screen.getByText('autowonder.list_repos')).toBeInTheDocument();
   });
 
@@ -504,10 +512,14 @@ describe('ProfileSettingsPage', () => {
 
     renderPage('/profile/settings?tab=mcp');
 
-    await userEvent.click(await screen.findByRole('tab', { name: '工具' }));
+    await userEvent.click(await screen.findByText('工具', { selector: '.ant-segmented-item-label' }));
+    await userEvent.click(await screen.findByRole('button', { name: /工单管理/ }));
 
     expect(await screen.findByText('autowonder.get_workitem')).toBeInTheDocument();
     expect(screen.getByTestId('mcp-tools-table')).toBeInTheDocument();
+
+    const toolRow = screen.getByText('autowonder.get_workitem').closest('tr') as HTMLElement;
+    await userEvent.click(within(toolRow).getByRole('button', { name: '展开行' }));
 
     expect(await screen.findByText('workspaceId')).toBeInTheDocument();
     expect(screen.getByTestId('mcp-input-schema-table')).toBeInTheDocument();
@@ -551,8 +563,11 @@ it('edits and tests the platform-selected Feishu identity', async () => {
       return HttpResponse.json({ ...identityPayload(), data: { provider: 'FEISHU', ...saved } });
     }),
     http.post('/api/users/me/im-identities/feishu/test', () => { tests++; return HttpResponse.json(mcpPayload(null)); }),
+    http.get('/api/users/me/profile', () => HttpResponse.json(mcpPayload({ id: 1, username: 'alice', nickname: '爱丽丝', email: 'alice@example.com', phone: '' }))),
   );
-  renderPage();
+  const { queryClient } = renderPage();
+  // 页面挂载即拉取个人资料；标签页只看 IM 时也要等它落地，否则请求会在用例结束后才发出而被 MSW 判为未处理。
+  await waitFor(() => expect(queryClient.getQueryState(USER_PROFILE_QUERY_KEY)?.status).toBe('success'));
   const input = await screen.findByLabelText('飞书工号');
   expect(screen.queryByLabelText('钉钉工号')).not.toBeInTheDocument();
   expect(screen.getByText(/不是员工编号或 open_id/)).toBeInTheDocument();

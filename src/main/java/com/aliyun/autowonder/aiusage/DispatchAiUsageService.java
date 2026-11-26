@@ -39,16 +39,16 @@ public class DispatchAiUsageService {
         this.storage = storage;
     }
 
-    public void recordTaskUsage(long tenantId, long dispatchId, List<TaskUsageReportRequest.TaskUsageEntry> entries) {
+    public int recordUsage(long tenantId, long dispatchId, List<TaskUsageReportRequest.TaskUsageEntry> entries) {
         if (entries == null || entries.isEmpty()) {
-            return;
+            return 0;
         }
         DispatchDO dispatch = dispatchDao.findById(dispatchId);
         if (dispatch == null || dispatch.getTenantId() == null || dispatch.getTenantId() != tenantId) {
-            log.warn("task usage skipped dispatchId={} tenantId={} reason=dispatch_not_found", dispatchId, tenantId);
-            return;
+            log.warn("usage report skipped dispatchId={} tenantId={} reason=dispatch_not_found", dispatchId, tenantId);
+            return 0;
         }
-        persistEntries(dispatch, null, entries, new Date());
+        return persistEntries(dispatch, null, entries, new Date());
     }
 
     public void ingestArtifact(long tenantId, long workitemId, long dispatchId, Long artifactId,
@@ -130,8 +130,8 @@ public class DispatchAiUsageService {
         return result;
     }
 
-    private void persistEntries(DispatchDO dispatch, Long artifactId,
-                                List<TaskUsageReportRequest.TaskUsageEntry> entries, Date usageAt) {
+    private int persistEntries(DispatchDO dispatch, Long artifactId,
+                               List<TaskUsageReportRequest.TaskUsageEntry> entries, Date usageAt) {
         for (TaskUsageReportRequest.TaskUsageEntry entry : entries) {
             String provider = normalize(entry.getProvider());
             String model = normalize(entry.getModel());
@@ -167,6 +167,7 @@ public class DispatchAiUsageService {
             log.info("dispatch usage recorded tenantId={} workitemId={} dispatchId={} provider={} model={} totalTokens={}",
                     dispatch.getTenantId(), dispatch.getWorkitemId(), dispatch.getId(), provider, model, totalTokens);
         }
+        return entries.size();
     }
 
     private List<TaskUsageReportRequest.TaskUsageEntry> parseUsageEntries(byte[] bytes) {

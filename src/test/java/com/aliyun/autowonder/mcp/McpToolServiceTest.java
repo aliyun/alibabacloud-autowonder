@@ -864,6 +864,9 @@ class McpToolServiceTest {
                 "autowonder.get_dispatch_turn",
                 "autowonder.get_dispatch_observation",
                 "autowonder.list_projects",
+                "autowonder.get_current_user",
+                "autowonder.get_workspace_membership",
+                "autowonder.list_workspace_members",
                 "autowonder.list_workitems",
                 "autowonder.get_workitem",
                 "autowonder.get_workitem_metadata",
@@ -952,8 +955,138 @@ class McpToolServiceTest {
         hiddenFromReadWrite.removeAll(readWriteCatalog);
         assertEquals(adminOnlyTools, hiddenFromReadWrite);
         assertEquals(fullCatalog, adminCatalog);
-        assertEquals(154, fullCatalog.size());
-        assertEquals(143, readWriteCatalog.size());
+        assertEquals(157, fullCatalog.size());
+        assertEquals(146, readWriteCatalog.size());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void currentUserReportsOwnerProfileAndCredentialScope() {
+        var userService = mock(com.aliyun.autowonder.user.UserService.class);
+        var profile = new com.aliyun.autowonder.user.dto.UserProfileVO();
+        profile.setId(USER_ID);
+        profile.setUsername("alice");
+        profile.setNickname("Alice");
+        profile.setEmail("alice@example.com");
+        profile.setPhone("13800000000");
+        profile.setCanCreateWorkspace(true);
+        when(userService.getProfile(USER_ID)).thenReturn(profile);
+        ReflectionTestUtils.setField(service, "userService", userService);
+
+        Map<String, Object> personal = (Map<String, Object>) call(principal(WorkspaceAccessLevel.READ_ONLY),
+                "autowonder.get_current_user", Map.of());
+        assertEquals(USER_ID, personal.get("id"));
+        assertEquals("alice", personal.get("username"));
+        assertEquals("Alice", personal.get("nickname"));
+        assertEquals("alice@example.com", personal.get("email"));
+        assertEquals("13800000000", personal.get("phone"));
+        assertEquals(true, personal.get("canCreateWorkspace"));
+        assertEquals("LONG_LIVED", personal.get("credentialType"));
+        assertNull(personal.get("workspaceId"));
+        assertNull(personal.get("accessLevel"));
+
+        when(workspaceService.activeAccessLevel(WORKSPACE_ID, USER_ID))
+                .thenReturn(WorkspaceAccessLevel.READ_WRITE);
+        Map<String, Object> scoped = (Map<String, Object>) call(
+                scopedPrincipal(WorkspaceAccessLevel.READ_WRITE), "autowonder.get_current_user", Map.of());
+        assertEquals(WORKSPACE_ID, scoped.get("workspaceId"));
+        assertEquals("READ_WRITE", scoped.get("accessLevel"));
+        assertEquals("CONVERSATION", scoped.get("credentialType"));
+        verify(userService, times(2)).getProfile(USER_ID);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void workspaceMemberToolsReadMembershipAndDirectory() {
+        when(workspaceService.activeAccessLevel(WORKSPACE_ID, USER_ID))
+                .thenReturn(WorkspaceAccessLevel.READ_ONLY);
+        var membership = new com.aliyun.autowonder.workspace.dto.CurrentMembershipVO();
+        membership.setUserId(USER_ID);
+        membership.setAccessLevel(WorkspaceAccessLevel.READ_ONLY);
+        membership.setRoleCode("READ_ONLY");
+        when(workspaceService.currentMembership(WORKSPACE_ID, USER_ID)).thenReturn(membership);
+        var member = new com.aliyun.autowonder.workspace.dto.MemberVO();
+        member.setUserId(8L);
+        member.setUsername("alice");
+        when(workspaceService.listMembers(WORKSPACE_ID, "ali", 8L, 2, 5))
+                .thenReturn(new PageResult<>(List.of(member), 3, 2, 5));
+
+        var caller = scopedPrincipal(WorkspaceAccessLevel.READ_ONLY);
+        assertSame(membership, call(caller, "autowonder.get_workspace_membership", Map.of()));
+
+        Map<String, Object> directory = (Map<String, Object>) call(caller,
+                "autowonder.list_workspace_members",
+                Map.of("keyword", "ali", "userId", 8L, "page", 2, "size", 5));
+        assertEquals(List.of(member), directory.get("items"));
+        assertEquals(2, directory.get("page"));
+        assertEquals(5, directory.get("size"));
+        assertEquals(3L, directory.get("total"));
+    }
+
+    @Test
+    void workspaceMemberToolsRejectInvalidFiltersAndNonMembers() {
+        when(workspaceService.activeAccessLevel(WORKSPACE_ID, USER_ID))
+                .thenReturn(WorkspaceAccessLevel.READ_ONLY);
+        var caller = scopedPrincipal(WorkspaceAccessLevel.READ_ONLY);
+        assertThrows(BizException.class, () -> call(caller, "autowonder.list_workspace_members",
+                Map.of("page", 0)));
+        assertThrows(BizException.class, () -> call(caller, "autowonder.list_workspace_members",
+                Map.of("size", 0)));
+        assertThrows(BizException.class, () -> call(caller, "autowonder.list_workspace_members",
+                Map.of("size", 101)));
+        assertThrows(BizException.class, () -> call(caller, "autowonder.list_workspace_members",
+                Map.of("userId", 0L)));
+        verify(workspaceService, never()).listMembers(anyLong(), any(), any(), anyInt(), anyInt());
+
+        when(workspaceService.activeAccessLevel(WORKSPACE_ID, USER_ID))
+                .thenThrow(new BizException(ErrorCode.WORKSPACE_NOT_MEMBER));
+        assertThrows(BizException.class, () -> call(scopedPrincipal(WorkspaceAccessLevel.READ_ONLY),
+                "autowonder.get_workspace_membership", Map.of()));
+        assertThrows(BizException.class, () -> call(scopedPrincipal(WorkspaceAccessLevel.READ_ONLY),
+                "autowonder.list_workspace_members", Map.of()));
+    }
+
+    @Test
+    void dispatchMemberDirectoryStopsReadingWhenTheCallerLosesMembership() {
+        var dispatch = dispatchPrincipal(-321L);
+        when(workspaceService.activeAccessLevel(WORKSPACE_ID, USER_ID))
+                .thenReturn(WorkspaceAccessLevel.READ_ONLY);
+        when(workspaceService.listMembers(WORKSPACE_ID, null, null, 1, 20))
+                .thenReturn(new PageResult<>(List.of(), 0, 1, 20));
+        assertNotNull(call(dispatch, "autowonder.list_workspace_members", Map.of()));
+
+        when(workspaceService.activeAccessLevel(WORKSPACE_ID, USER_ID))
+                .thenThrow(new BizException(ErrorCode.WORKSPACE_NOT_MEMBER));
+        assertEquals(ErrorCode.WORKSPACE_NOT_MEMBER.getCode(), assertThrows(BizException.class,
+                () -> call(dispatch, "autowonder.list_workspace_members", Map.of())).getCode());
+        verify(workspaceService, times(1)).listMembers(WORKSPACE_ID, null, null, 1, 20);
+    }
+
+    @Test
+    void userMemberToolsDeclareObjectSchemasAndSitInTheCapabilityCatalog() {
+        assertEquals("object", outputSchemaFor("autowonder.get_current_user").get("type"));
+        assertEquals("object", outputSchemaFor("autowonder.get_workspace_membership").get("type"));
+        Map<String, Object> members = properties(outputSchemaFor("autowonder.list_workspace_members"));
+        assertTrue(Set.of("items", "page", "size", "total").stream().allMatch(members::containsKey));
+        assertTrue(properties(outputSchemaFor("autowonder.get_current_user"))
+                .containsKey("credentialType"));
+
+        var memberTool = service.listTools().stream()
+                .filter(tool -> "autowonder.list_workspace_members".equals(tool.getName()))
+                .findFirst().orElseThrow();
+        assertTrue(((List<?>) memberTool.getInputSchema().get("required")).contains("workspaceId"));
+
+        var group = new PlatformSkillCatalog().get("autowonder-user-directory");
+        var tools = com.aliyun.autowonder.json.JSON.parseObject(group.getInstallSpec())
+                .getJSONArray("tools");
+        Set<String> names = new java.util.LinkedHashSet<>();
+        tools.forEach(tool -> names.add(String.valueOf(tool)));
+        assertEquals(Set.of("autowonder.get_current_user", "autowonder.get_workspace_membership",
+                "autowonder.list_workspace_members"), names);
+        Set<String> catalogNames = service.listTools().stream()
+                .map(McpToolVO::getName)
+                .collect(java.util.stream.Collectors.toSet());
+        assertTrue(catalogNames.containsAll(names));
     }
 
     @Test
@@ -4469,10 +4602,10 @@ class McpToolServiceTest {
         when(sdlcService.create(any(), eq(100L), eq(7L))).thenReturn(sdlc);
 
         Object result = call(principal, "autowonder.create_sdlc",
-                Map.of("name", "研发流程", "workType", "REQ"));
+                Map.of("name", "研发流程", "workType", "REQ", "stageTimingEnabled", true));
 
         assertSame(sdlc, result);
-        verify(sdlcService).create(argThat(req -> "研发流程".equals(req.getName())), eq(100L), eq(7L));
+        verify(sdlcService).create(argThat(req -> "研发流程".equals(req.getName()) && req.isStageTimingEnabled()), eq(100L), eq(7L));
     }
 
     @Test
@@ -5584,6 +5717,7 @@ class McpToolServiceTest {
     void workspaceScopedToolsAllRequireWorkspaceIdWhileGlobalToolsDoNot() {
         Set<String> globalTools = Set.of(
                 "autowonder.list_projects",
+                "autowonder.get_current_user",
                 "autowonder.inspect_skill_package",
                 "autowonder.list_platform_skills");
 
@@ -5682,6 +5816,7 @@ class McpToolServiceTest {
 
         Set<String> globalToolNames = Set.of(
                 "autowonder.list_projects",
+                "autowonder.get_current_user",
                 "autowonder.inspect_skill_package",
                 "autowonder.list_platform_skills");
 

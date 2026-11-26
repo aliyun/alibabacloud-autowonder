@@ -64,7 +64,8 @@ describe('status template system labels', () => {
     expect(await screen.findByText('New')).toBeInTheDocument();
     expect(screen.getByText('In Development')).toBeInTheDocument();
     expect(screen.getByText('Advance')).toBeInTheDocument();
-    expect(screen.getByText('Requirement Default Flow')).toBeInTheDocument();
+    // 选中项文案为「名称 · 默认」，系统标签翻译后仍包含英文名
+    expect(screen.getByText(/Requirement Default Flow/)).toBeInTheDocument();
     // 无来源键的名称与用户自建流转保持原文
     expect(screen.getByText('已发布')).toBeInTheDocument();
     expect(screen.getByText('自定义流转')).toBeInTheDocument();

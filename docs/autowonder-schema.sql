@@ -213,6 +213,7 @@ CREATE TABLE IF NOT EXISTS `org_member` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_org_user` (`tenant_id`, `user_id`),
   KEY `idx_member_role` (`tenant_id`, `role_id`, `is_deleted`),
+  KEY `idx_member_active_joined` (`tenant_id`, `is_deleted`, `status`, `joined_at`, `id`),
   KEY `idx_user` (`user_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COMMENT='工作空间成员（历史物理表 org_member）';
 
@@ -892,6 +893,7 @@ CREATE TABLE IF NOT EXISTS `repo` (
   `name`           VARCHAR(128)    NOT NULL,
   `url`            VARCHAR(512)    NOT NULL COMMENT '仓库地址（https/ssh）',
   `default_branch` VARCHAR(128)    DEFAULT NULL COMMENT '默认分支',
+  `design_base_branch` VARCHAR(128) DEFAULT NULL COMMENT '交互设计基线分支',
   `description`    VARCHAR(512)    DEFAULT NULL,
   `scan_status`    VARCHAR(16)     NOT NULL DEFAULT 'UNSCANNED' COMMENT 'UNSCANNED/SCANNING/CONCLUDED',
   `gmt_create`     DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -1077,6 +1079,7 @@ CREATE TABLE IF NOT EXISTS `sdlc` (
   `modifier_id`   BIGINT UNSIGNED DEFAULT NULL,
   `is_deleted`    TINYINT         NOT NULL DEFAULT 0,
   `version`       INT             NOT NULL DEFAULT 0,
+  `stage_timing_enabled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '记录流程阶段耗时和派发时的分析快照，0 关闭，1 开启',
   PRIMARY KEY (`id`),
   KEY `idx_type_status` (`tenant_id`, `work_type`, `status`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COMMENT='SDLC 流程定义';
@@ -1203,7 +1206,6 @@ CREATE TABLE IF NOT EXISTS `dispatch_ai_usage` (
   `gmt_modified`       DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_dispatch_step_provider_model` (`tenant_id`, `dispatch_id`, `step_id`, `provider`, `model`),
-  UNIQUE KEY `uk_artifact_provider_model` (`tenant_id`, `artifact_id`, `provider`, `model`),
   KEY `idx_usage_at` (`tenant_id`, `usage_at`),
   KEY `idx_agent_usage_at` (`tenant_id`, `agent_id`, `usage_at`),
   KEY `idx_workitem` (`tenant_id`, `workitem_id`)
@@ -2003,6 +2005,22 @@ CREATE TABLE IF NOT EXISTS `asset_category_ref` (
   KEY `idx_tenant_category` (`tenant_id`, `category_id`, `is_deleted`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COMMENT='资产与分类的主分类关联（一资产一分类，物理删除即取消打标）';
 
+CREATE TABLE IF NOT EXISTS `asset_tag` (
+  `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `tenant_id`   BIGINT UNSIGNED NOT NULL,
+  `asset_type`  VARCHAR(32)     NOT NULL DEFAULT 'AGENT' COMMENT '资产类型：AGENT；未来可扩展 MEMORY 等',
+  `asset_id`    BIGINT UNSIGNED NOT NULL COMMENT '资产 id，AGENT 对应 agent.id',
+  `tag_type`    VARCHAR(16)     NOT NULL COMMENT 'SYSTEM / CUSTOM',
+  `tag_code`    VARCHAR(64)     DEFAULT NULL COMMENT '系统标签稳定 code；自定义标签为 NULL',
+  `tag_name`    VARCHAR(64) COLLATE utf8mb4_bin NOT NULL COMMENT '系统标签存 code，自定义标签存用户输入文本',
+  `gmt_create`  DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `creator_id`  BIGINT UNSIGNED DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tenant_asset_tag` (`tenant_id`, `asset_type`, `asset_id`, `tag_type`, `tag_name`),
+  KEY `idx_tenant_asset` (`tenant_id`, `asset_type`, `asset_id`),
+  KEY `idx_tenant_type_name` (`tenant_id`, `asset_type`, `tag_type`, `tag_name`)
+) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COMMENT='资产标签（数字人系统标签与自定义标签）';
+
 -- Claude-compatible server-backed memory (V045/V046/V047).
 CREATE TABLE IF NOT EXISTS `memory_store` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -2338,6 +2356,30 @@ CREATE TABLE IF NOT EXISTS squad_copy_operation (
  KEY idx_squad_copy_target (target_workspace_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- SDLC configurations actually packaged for an execution.
+-- Additive analytical snapshots. Existing dispatches remain unknown until their task package is verified.
+CREATE TABLE IF NOT EXISTS sdlc_execution_snapshot (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    workspace_id BIGINT UNSIGNED NOT NULL,
+    sdlc_id BIGINT UNSIGNED NOT NULL,
+    content_hash CHAR(64) NOT NULL,
+    configuration_json JSON NOT NULL,
+    gmt_create DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_sdlc_snapshot (workspace_id, sdlc_id, content_hash)
+) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dispatch_sdlc_snapshot (
+    workspace_id BIGINT UNSIGNED NOT NULL,
+    dispatch_id BIGINT UNSIGNED NOT NULL,
+    snapshot_id BIGINT UNSIGNED DEFAULT NULL,
+    package_sha256 CHAR(64) DEFAULT NULL,
+    source VARCHAR(24) NOT NULL,
+    gmt_create DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (workspace_id, dispatch_id),
+    KEY idx_snapshot_dispatch (workspace_id, snapshot_id, dispatch_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Keep fresh installations aligned with V095__squad_workflow_snapshot.sql.
 CREATE TABLE IF NOT EXISTS `squad_workflow_snapshot` (
  id BIGINT NOT NULL AUTO_INCREMENT,
@@ -2669,6 +2711,8 @@ CREATE TABLE IF NOT EXISTS `prd_design` (
   `delivery_mode` VARCHAR(24) NOT NULL DEFAULT 'LEGACY' COMMENT 'LEGACY=原有交付路径，PRD_DRIVEN=强制校验确认版本',
   `latest_version_no` INT NOT NULL DEFAULT 0 COMMENT '已分配的最大版本号，用于乐观并发分配',
   `content_language` VARCHAR(16) DEFAULT NULL COMMENT '生成内容语言；NULL 表示未显式选择',
+  `review_slug` VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin COMMENT '公开分享英文名',
+  `review_share_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '英文名绑定的分享记录',
   `version` INT NOT NULL DEFAULT 0 COMMENT '乐观并发版本',
   `creator_id` BIGINT UNSIGNED DEFAULT NULL,
   `modifier_id` BIGINT UNSIGNED DEFAULT NULL,
@@ -2676,6 +2720,7 @@ CREATE TABLE IF NOT EXISTS `prd_design` (
   `gmt_modified` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_prd_design_workitem` (`workspace_id`, `workitem_id`),
+  UNIQUE KEY `uk_prd_design_review_slug` (`review_slug`),
   KEY `idx_prd_design_repo` (`workspace_id`, `target_repo_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10000 DEFAULT CHARSET=utf8mb4 COMMENT='工单 PRD 设计聚合根';
 
@@ -2867,8 +2912,38 @@ CREATE TABLE IF NOT EXISTS conversation_event_content_segment (
   UNIQUE KEY uk_segment (display_id,projection_version,segment_index)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- PRD 设计评审与交付记录
+CREATE TABLE IF NOT EXISTS prd_design_handoff (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  workspace_id BIGINT UNSIGNED NOT NULL,
+  workitem_id BIGINT UNSIGNED NOT NULL,
+  conversation_id BIGINT UNSIGNED NOT NULL,
+  executor_id BIGINT UNSIGNED NOT NULL,
+  source_key VARCHAR(64) NOT NULL,
+  version_id BIGINT UNSIGNED NOT NULL,
+  design_digest VARCHAR(64) NOT NULL,
+  repo_id BIGINT UNSIGNED NOT NULL,
+  repo_url VARCHAR(1024) NOT NULL,
+  branch VARCHAR(128) NOT NULL,
+  reviewers_json TEXT NOT NULL,
+  markdown MEDIUMTEXT NOT NULL,
+  creator_id BIGINT UNSIGNED NOT NULL,
+  decided_by BIGINT UNSIGNED NULL,
+  decision_at DATETIME(3) NULL,
+  decision_reason TEXT NULL,
+  status VARCHAR(32) NOT NULL,
+  commit_sha VARCHAR(64) NULL,
+  attachment_id BIGINT UNSIGNED NULL,
+  attempt INT NOT NULL DEFAULT 1,
+  next_check DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  deadline DATETIME(3) NULL,
+  PRIMARY KEY(id),
+  KEY idx_prd_handoff_item (workspace_id,workitem_id,id),
+  KEY idx_prd_handoff_pending (status,next_check)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- =============================================================================
--- PRD 实时预览与设计评审（V086）
+-- PRD 实时预览与设计评审（V122）
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS `prd_design_runtime` (

@@ -1,5 +1,6 @@
 import { Button, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { QuestionHistoryEntry } from '../answerHistory';
 import { ElicitationCard } from './ElicitationCard';
 
@@ -15,13 +16,20 @@ export function AnswerHistory({ entries, onContinue, canContinue = false }: {
       ? t(`clarification.answerDelivery.${entry.deliveryStatus}`) : null;
     return <div key={`${entry.turnId}:${entry.requestId}`} data-testid={`question-history-${entry.turnId}-${entry.requestId}`}>
     <ElicitationCard requestId={entry.requestId} message={entry.message} schema={entry.requestedSchema}
-      resolved action={entry.action} answers={entry.content} expired={expired} />
-    {entry.rawAnswer && <details><summary>{t('clarification.history.originalAnswer')}</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{entry.rawAnswer}</pre></details>}
-    {issue && <Typography.Text type="warning" style={{ display: 'block', marginBottom: 8 }}>{issue}</Typography.Text>}
-    {expired && onContinue && <div style={{ marginBottom: 12 }}>
-      <Button size="small" disabled={!canContinue} onClick={() => onContinue(entry)}>{t('clarification.history.continue')}</Button>
-      {!canContinue && <Typography.Text type="secondary"> {t('clarification.history.continueUnavailable')}</Typography.Text>}
-    </div>}
+      resolved action={entry.action} answers={entry.content} expired={expired}>
+      {entry.rawAnswer && <details style={{ marginTop: 8 }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--aw-text-3)' }}>{t('clarification.history.originalAnswer')}</summary>
+        <pre className="aw-cl-pre" style={{ marginTop: 4 }}>{entry.rawAnswer}</pre>
+      </details>}
+      {issue && <div className="aw-cl-note warn" style={{ marginTop: 8 }}>
+        <span className="ic"><AwStrokeIcon name="alert-t" size={14} /></span>
+        <span className="grow">{issue}</span>
+      </div>}
+      {expired && onContinue && <div className="aw-cl-qa-foot">
+        <Button size="small" disabled={!canContinue} onClick={() => onContinue(entry)}>{t('clarification.history.continue')}</Button>
+        {!canContinue && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('clarification.history.continueUnavailable')}</Typography.Text>}
+      </div>}
+    </ElicitationCard>
   </div>; });
   return <>{history}</>;
 }

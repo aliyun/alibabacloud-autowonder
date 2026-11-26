@@ -24,13 +24,9 @@ describe('ToolCallNode', () => {
     const titleNode = screen.getByTestId('tool-call-title');
     expect(titleNode).toHaveTextContent(title);
     expect(titleNode).toHaveAttribute('title', title);
-    expect(titleNode).toHaveStyle({
-      flex: '1',
-      minWidth: '0',
-      whiteSpace: 'nowrap',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-    });
+    // 单行省略由 .aw-cl-step > summary .t 的样式承担
+    expect(titleNode).toHaveClass('t');
+    expect(titleNode.closest('summary')).not.toBeNull();
   });
 
   it('keeps a short title readable and status visible', () => {
@@ -63,16 +59,15 @@ describe('ToolCallNode', () => {
 
   it('tags the call status so failures stand out', () => {
     const failed = render(<ToolCallNode tool={call({ status: 'failed' })} />);
-    expect(screen.getByText('失败')).toBeInTheDocument();
-    expect(failed.container.querySelector('.ant-tag-red')).not.toBeNull();
+    expect(screen.getByText('失败')).toHaveClass('aw-cl-st-fail');
     failed.unmount();
 
     const done = render(<ToolCallNode tool={call({ status: 'completed' })} />);
-    expect(done.container.querySelector('.ant-tag-green')).not.toBeNull();
+    expect(done.container.querySelector('.aw-cl-st-ok')).not.toBeNull();
     done.unmount();
 
     const running = render(<ToolCallNode tool={call({ status: 'running' })} />);
-    expect(running.container.querySelector('.ant-tag')).not.toBeNull();
+    expect(running.container.querySelector('.aw-cl-st-run')).not.toBeNull();
   });
 
   // F23：diff 是「Agent 改了什么」的唯一凭据，必须展示路径与前后文本。

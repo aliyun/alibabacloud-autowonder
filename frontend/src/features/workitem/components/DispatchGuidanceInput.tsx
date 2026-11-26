@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Input, Space, Typography } from 'antd';
+import { Alert, Button, Input, Typography } from 'antd';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 import { useTranslation } from 'react-i18next';
 import { getDispatchGuidance, sendDispatchGuidance, type DispatchGuidance } from '../api';
 import { createUuidV4 } from '@/shared/lib/uuid';
+import './DispatchGuidanceInput.css';
 
 export function DispatchGuidanceInput({ dispatchId }: { dispatchId: number }) {
   const { t } = useTranslation('workitem');
@@ -39,13 +40,16 @@ export function DispatchGuidanceInput({ dispatchId }: { dispatchId: number }) {
     } catch (e) { if (mounted.current) setError(e instanceof Error ? e.message : t('runtimeLog.guidance.failed')); }
     finally { if (mounted.current) setSending(false); }
   };
-  return <section aria-label={t('runtimeLog.guidance.title')} style={{ marginTop: 12 }}>
-    <Typography.Paragraph type="secondary">{t('runtimeLog.guidance.hint')}</Typography.Paragraph>
-    <Space.Compact style={{ width: '100%' }}>
-      <Input.TextArea aria-label={t('runtimeLog.guidance.title')} placeholder={t('runtimeLog.guidance.placeholder')} value={content}
-        maxLength={16000} autoSize={{ minRows: 2, maxRows: 6 }} disabled={sending} onChange={e => setContent(e.target.value)} />
-      <Button type="primary" loading={sending} disabled={!content.trim()} onClick={() => access('READ_WRITE', t('runtimeLog.guidance.send'), () => void send(), 'DISPATCH')}>{t('runtimeLog.guidance.send')}</Button>
-    </Space.Compact>
+  return <section className="dispatch-guidance" aria-label={t('runtimeLog.guidance.title')}>
+    <div className="dispatch-guidance-box">
+      <Input.TextArea className="dispatch-guidance-text" variant="borderless" aria-label={t('runtimeLog.guidance.title')} placeholder={t('runtimeLog.guidance.placeholder')} value={content}
+        maxLength={16000} autoSize={{ minRows: 2, maxRows: 2 }} disabled={sending}
+        onChange={e => setContent(e.target.value)} />
+      <div className="dispatch-guidance-row">
+        <span className="dispatch-guidance-hint">{t('runtimeLog.guidance.hint')}</span>
+        <Button type="primary" size="small" className="dispatch-guidance-send" loading={sending} disabled={!content.trim()} onClick={() => access('READ_WRITE', t('runtimeLog.guidance.send'), () => void send(), 'DISPATCH')}>{t('runtimeLog.guidance.send')}</Button>
+      </div>
+    </div>
     {error && <Alert type="error" showIcon message={error} style={{ marginTop: 8 }} />}
     {history.map(row => <div key={row.id} style={{ marginTop: 8 }}>
       <Typography.Text type="secondary">{t('runtimeLog.guidance.actor', { id: row.actorId })}{t(`runtimeLog.guidance.status.${row.status}`)}</Typography.Text>

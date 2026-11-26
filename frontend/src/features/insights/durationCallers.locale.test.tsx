@@ -65,7 +65,7 @@ it('switches a cached slow-tail table in place without rewriting data, paginatin
   const table = screen.getByRole('table');
   await act(async () => { await i18n.changeLanguage('en-US'); });
   expect(screen.getByRole('table')).toBe(table);
-  expect(within(table).getByRole('columnheader', { name: 'Human responsibility' })).toBeInTheDocument();
+  expect(within(table).getByRole('columnheader', { name: 'Responsibility' })).toBeInTheDocument();
   expect(within(table).getByText('1h')).toBeInTheDocument();
   expect(within(table).getByText('<b>报告</b>')).toBeInTheDocument();
   expect(requests).toBe(1);

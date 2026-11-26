@@ -1,0 +1,58 @@
+{
+  "shell": {
+    "title": "设置",
+    "description": "初始化交付环境，管理空间规则与成员。这里只放一次性和低频操作，日常交付请回左侧导航。",
+    "navLabel": "设置导航",
+    "roleAdmin": "空间管理员",
+    "roleEditor": "可编辑成员",
+    "roleViewer": "只读成员"
+  },
+  "groups": {
+    "init": "初始化",
+    "rules": "交付规则",
+    "workspace": "空间与权限",
+    "compliance": "合规"
+  },
+  "nav": {
+    "online": "{{value}} 在线"
+  },
+  "overview": {
+    "initTitle": "初始化",
+    "initHint": "新空间只需走一遍；未完成时侧栏「设置」带琥珀点。每一步都直达现有配置页，不复制表单。",
+    "manageTitle": "管理与规则",
+    "manageHint": "初始化之后仍会改的，按影响范围分三段：交付规则、空间与权限、合规。",
+    "unavailable": "—",
+    "manage": "管理{{name}}",
+    "status": {
+      "done": "已完成",
+      "todo": "未配置",
+      "offline": "未在线",
+      "suggest": "建议补充",
+      "review": "待审核 {{value}}"
+    },
+    "meta": {
+      "agents": "{{value}} 个数字员工",
+      "agentsPending": "{{value}} 个数字员工；{{pending}} 个版本待审核",
+      "agentsEmpty": "尚未创建数字员工",
+      "executors": "{{value}} 台在线，最近心跳正常",
+      "executorsOffline": "{{value}} 台执行器，当前均未在线",
+      "executorsEmpty": "尚未接入执行器",
+      "repos": "{{value}} 个代码仓库已绑定",
+      "reposEmpty": "尚未绑定代码仓库",
+      "sdlcs": "{{value}} 条流程",
+      "sdlcsEmpty": "尚未创建 SDLC 流程",
+      "skills": "{{value}} 个能力已安装",
+      "skillsEmpty": "尚未安装能力",
+      "memories": "{{value}} 个记忆库",
+      "memoriesEmpty": "尚未创建记忆库"
+    },
+    "cards": {
+      "statusTemplates": "工单状态流转与阶段门禁",
+      "environment": "密钥与运行时配置，按需挂载到数字员工",
+      "integrations": "Aone 工单同步与 IM 消息渠道",
+      "members": "成员与角色权限",
+      "backups": "导出与恢复空间配置",
+      "audit": "关键操作留痕，按成员与时间筛选"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { PageHead } from '@/shared/ui/PageHead';
 import { Tabs } from 'antd';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -40,19 +40,19 @@ export interface HubPageShellTab {
 export interface HubPageShellProps {
   title: string;
   description: ReactNode;
-  extra?: ReactNode;
+  actions?: ReactNode;
   activeTab: string;
   onTabChange: (key: string) => void;
   items: HubPageShellTab[];
 }
 
-/** Unified hub rhythm: page header (title + description + actions) → tab bar → content. */
-export function HubPageShell({ title, description, extra, activeTab, onTabChange, items }: HubPageShellProps) {
+/** Unified hub rhythm: page head (title + description + actions) → tab bar → content. */
+export function HubPageShell({ title, description, actions, activeTab, onTabChange, items }: HubPageShellProps) {
   return (
     <section className="hub-page">
-      <PageHeading title={title} description={description} extra={extra} />
+      <PageHead title={title} description={description} actions={actions} />
       <Tabs
-        className="hub-page-tabs"
+        className="aw-list-tabs"
         activeKey={activeTab}
         onChange={onTabChange}
         items={items.map((item) => ({ key: item.key, label: item.label, children: item.children }))}

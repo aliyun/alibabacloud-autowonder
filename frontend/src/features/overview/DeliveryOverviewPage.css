@@ -1,17 +1,88 @@
-.delivery-overview-page { display: flex; flex-direction: column; gap: 16px; }
+.delivery-overview-page { display: flex; flex-direction: column; gap: 12px; }
+.delivery-overview-page > .aw-page-head { margin-bottom: 6px; }
 
-.overview-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.overview-section-divider { border: 0; border-top: 1px solid var(--aw-border); }
 
-.overview-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.overview-meta-strip { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--aw-text-3); padding: 4px 0; }
 
-.overview-stat-detail { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; color: var(--aw-muted); font-size: 12px; }
+/* 原型 .btn.sm.ghost：透明底无边框，26px 高，hover 浅灰底不描边。 */
+.overview-meta-strip .overview-refresh-btn.ant-btn {
+  height: 26px;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--aw-text-2);
+}
+.overview-meta-strip .overview-refresh-btn.ant-btn:not(:disabled):hover {
+  background: var(--aw-gray-bg);
+  color: var(--aw-text);
+  border-color: transparent;
+}
 
-.overview-trend { display: flex; align-items: center; gap: 10px; }
+.overview-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 
-.overview-sparkline { display: block; line-height: 0; }
+.overview-stat-card .overview-sparkline { display: block; min-width: 0; line-height: 0; margin-top: 2px; }
+.overview-stat-card .overview-sparkline svg { width: 100%; }
+.overview-stat-card .aw-stat-label .ant-space { flex-wrap: wrap; max-width: 100%; }
+.overview-stat-card .aw-stat-foot { overflow-wrap: anywhere; }
 
-.overview-caption { margin: 0 0 12px; color: var(--aw-muted); font-size: 12px; }
+.overview-card-note { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 
-.overview-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); gap: 14px; align-items: start; }
+.overview-caption { margin: 0; color: var(--aw-text-3); font-size: 12px; }
 
 .overview-row-decision > td { background: rgba(250, 173, 20, 0.09); }
+
+.overview-table-card { min-width: 0; }
+
+/* Card-local density: leave the only fluid column (title) usable in a half-width card. */
+.overview-table-card .ant-table-wrapper.ant-table-wrapper .ant-table-thead > tr > th,
+.overview-table-card .ant-table-wrapper.ant-table-wrapper .ant-table-tbody > tr > td {
+  padding: 8px;
+  font-size: 12px;
+}
+
+.overview-table-card .ant-table-wrapper.ant-table-wrapper .ant-table-thead > tr > th {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 原型 .list-title-cell：标题列正文号字，其余列保持表格号字。 */
+.overview-table-card .ant-table-wrapper.ant-table-wrapper .ant-table-tbody > tr > td.overview-title-cell {
+  font-size: 13px;
+}
+
+/* 原型 .dim：时间整列弱化色。 */
+.overview-table-card .ant-table-wrapper.ant-table-wrapper .ant-table-tbody > tr > td.overview-time-cell {
+  color: var(--aw-text-3);
+}
+
+/* 原型 .aw-table .mono / .dim：工单 ID 与需处理原因列。 */
+.overview-table-card .overview-reason { color: var(--aw-text-3); }
+
+.overview-table-card .overview-cell-tag {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* 原型修订：卡头标题下不加线、不加背景条，正文顶距归零，两张表格卡统一极简。 */
+.overview-table-card .aw-card-head { flex-wrap: wrap; border-bottom: none; }
+.overview-table-card .aw-card-body { padding-top: 0; }
+.overview-table-card .aw-card-title { min-width: 0; overflow-wrap: anywhere; }
+.overview-table-card .aw-table-footer { flex-wrap: wrap; }
+.overview-table-card .aw-table-footer > span { min-width: 0; overflow-wrap: anywhere; }
+.overview-table-card .aw-table-pager { min-width: 0; max-width: 100%; }
+.overview-table-card .ant-pagination { display: flex; flex-wrap: wrap; gap: 4px; max-width: 100%; }
+.overview-table-card .ant-pagination > li { margin-inline-end: 0; }
+
+@media (max-width: 1024px) {
+  .overview-stats { grid-template-columns: 1fr; }
+}
+
+/* Only phone-sized cards need local scrolling; desktop tables have no forced scroll width. */
+@media (max-width: 600px) {
+  .overview-table-card .ant-table-content { overflow-x: auto; }
+  .overview-table-card .ant-table-content > table { min-width: 480px; }
+}

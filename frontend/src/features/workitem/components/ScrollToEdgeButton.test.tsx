@@ -44,10 +44,10 @@ describe('ScrollToEdgeButton', () => {
     expect(screen.getByTitle('到达底部')).toBeInTheDocument();
 
     // jsdom 中 offsetWidth === clientWidth，相当于叠加滚动条：
-    // 居中偏移 = (轨道 38 - 按钮 22) / 2 = 8px
+    // 中线压右边框 = 右内边距 38 - 按钮 22 / 2 = 27px
     expect(container.querySelector('[data-testid="scroll-edge-controls"]')).toHaveStyle({
       position: 'absolute',
-      right: '8px',
+      right: '27px',
       bottom: '12px',
     });
     container.querySelectorAll('button').forEach((button) => {

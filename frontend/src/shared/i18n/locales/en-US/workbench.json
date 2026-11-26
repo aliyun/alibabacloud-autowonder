@@ -1,25 +1,62 @@
 {
   "title": "Workbench",
+  "description": "What needs you today, and how your digital workers are doing.",
   "newWorkitem": "New work item",
-  "todo": {
-    "title": "My queue",
-    "count": "{{total}} total",
-    "empty": "Nothing needs your attention right now",
-    "handle": "Handle",
-    "reason": {
-      "assigned": "Waiting for you",
-      "pendingDecision": "Waiting for your decision"
+  "totalRows": "{{total}} total",
+  "overview": {
+    "decision": "Awaiting my decision",
+    "assigned": "Assigned to me",
+    "review": "Pending review",
+    "unread": "Unread notifications",
+    "refresh": "Refresh"
+  },
+  "queue": {
+    "title": "Needs your action",
+    "sortedHint": "Sorted by last update",
+    "filterAria": "Pending item types",
+    "filter": {
+      "all": "All",
+      "decision": "Decision",
+      "assigned": "Assigned",
+      "review": "Review",
+      "alert": "Alerts"
     },
-    "columns": {
-      "status": "Status",
-      "title": "Work item",
-      "id": "ID",
-      "reason": "Reason",
-      "updated": "Updated"
+    "kind": {
+      "decision": "Decision",
+      "assigned": "Assigned",
+      "review": "Review",
+      "alert": "Alert"
+    },
+    "action": {
+      "decision": "Decide",
+      "assigned": "Handle",
+      "review": "Review",
+      "alert": "View"
+    },
+    "reason": {
+      "decision": "A digital worker is waiting for your decision",
+      "assigned": "You are the current assignee",
+      "review": "A version change is waiting for review",
+      "alert": "The latest run needs attention"
+    },
+    "source": {
+      "agent": "Digital worker",
+      "scheduledTask": "Scheduled task"
+    },
+    "reviewTitle": "Digital worker “{{name}}” has a version pending review",
+    "reviewTitleVersioned": "Digital worker “{{name}}” v{{version}} is pending review",
+    "alertTitle": "Scheduled task “{{name}}” needs attention",
+    "filterEmpty": "No items to show in this category",
+    "empty": {
+      "title": "Nothing needs your action today",
+      "description": "Check “Following”, or create a new work item.",
+      "viewFollowing": "View following"
     }
   },
   "following": {
     "title": "Following",
+    "viewAll": "View all",
+    "tabsAria": "Followed workitem scope",
     "tabs": {
       "all": "All",
       "created": "Created by me",
@@ -49,7 +86,23 @@
     },
     "changeStatus": {
       "action": "Change status",
+      "title": "Change status",
+      "current": "Current",
+      "target": "Target",
+      "targetPlaceholder": "Select a target status",
+      "recommended": "Recommended",
+      "others": "Other statuses",
+      "transitionEdge": "Transition “{{name}}”",
+      "outOfTemplateHint": "Not in template recommendations",
+      "contextMeta": "#{{id}} · {{type}} · Owner {{owner}}",
+      "reasonLabel": "Note (optional)",
+      "reasonPlaceholder": "Explain why; this will be added to the timeline…",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "close": "Close",
       "stale": "This work item was updated. Please try again.",
+      "staleHint": "Reload to get the targets for the latest status.",
+      "staleReload": "Reload",
       "noWorkflow": "This work item has no status workflow, so its status cannot be changed here.",
       "noTarget": "This template has no other status node to transition to.",
       "loadFailed": "Could not load available statuses. Please try again."
@@ -58,16 +111,27 @@
     "loadFailed": "Failed to load, please retry",
     "retry": "Retry"
   },
+  "running": {
+    "title": "Running deliveries",
+    "viewExecutions": "Execution history",
+    "empty": "No deliveries are running right now",
+    "previewHint": "Showing the first {{limit}} of {{total}} running deliveries",
+    "minutes_one": "Running for {{count}} minute",
+    "minutes_other": "Running for {{count}} minutes",
+    "hours_one": "Running for {{count}} hour",
+    "hours_other": "Running for {{count}} hours",
+    "hoursMinutes_one": "Running for {{count}} hour {{minutes}} min",
+    "hoursMinutes_other": "Running for {{count}} hours {{minutes}} min"
+  },
   "activity": {
-    "title": "Activity",
+    "title": "Recent activity",
     "empty": "No recent activity",
-    "viewAll": "View all notifications",
-    "unread": "Unread"
+    "viewAll": "All notifications",
+    "unread": "Unread",
+    "previewHint": "Showing the first {{limit}} of {{total}} notifications"
   },
   "duration": {
     "none": "—",
-    "notStarted": "Not started",
-    "ended": "Ended",
     "lessThanMinute": "Less than 1 minute",
     "minutes": "{{value}} min",
     "hours": "{{value}} h",
@@ -75,19 +139,6 @@
   },
   "create": {
     "title": "New work item",
-    "tabs": {
-      "default": "Default",
-      "smart": "Smart create"
-    },
-    "smart": {
-      "description": "Describe the goal in one sentence; Chief will search, draft, and create after your confirmation.",
-      "draftLabel": "Goal and context",
-      "draftPlaceholder": "e.g. Add an assignee filter to the work item list with backend and frontend tests",
-      "open": "Continue in Chief",
-      "checking": "Checking Chief availability…",
-      "unavailable": "Chief is unavailable; use default create",
-      "prefillRejected": "Chief already has a draft. Your input is kept; send the current draft first."
-    },
     "delivery": {
       "mode": "Delivery",
       "later": "Do not assign",

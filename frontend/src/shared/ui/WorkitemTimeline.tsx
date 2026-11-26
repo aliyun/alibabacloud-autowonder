@@ -3,27 +3,20 @@ import { Trans, useTranslation } from 'react-i18next';
 import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { Timeline, Typography, Tag } from 'antd';
-import {
-  PlusCircleOutlined,
-  EditOutlined,
-  SwapOutlined,
-  UserSwitchOutlined,
-  RocketOutlined,
-  CheckCircleOutlined,
-  CommentOutlined,
-} from '@ant-design/icons';
+import { RocketOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { TimelineEvent } from '@/shared/types/workitem';
 
 const { Text } = Typography;
 
 const iconMap: Record<string, React.ReactNode> = {
-  CREATE: <PlusCircleOutlined aria-hidden="true" style={{ color: 'var(--aw-success)' }} />,
-  EDIT: <EditOutlined aria-hidden="true" style={{ color: 'var(--aw-accent-text)' }} />,
-  STATUS_CHANGE: <SwapOutlined aria-hidden="true" style={{ color: 'var(--aw-warning)' }} />,
-  ASSIGN: <UserSwitchOutlined aria-hidden="true" style={{ color: 'var(--aw-info)' }} />,
+  CREATE: <span aria-hidden="true" style={{ color: 'var(--aw-success-deep)', display: 'inline-flex' }}><AwStrokeIcon name="plus" /></span>,
+  EDIT: <span aria-hidden="true" style={{ color: 'var(--aw-accent-text)', display: 'inline-flex' }}><AwStrokeIcon name="edit" size={14} /></span>,
+  STATUS_CHANGE: <span aria-hidden="true" style={{ color: 'var(--aw-warning-deep)', display: 'inline-flex' }}><AwStrokeIcon name="shuffle" size={14} /></span>,
+  ASSIGN: <span aria-hidden="true" style={{ color: 'var(--aw-info)', display: 'inline-flex' }}><AwStrokeIcon name="transfer" /></span>,
   DISPATCH: <RocketOutlined aria-hidden="true" style={{ color: 'var(--aw-info)' }} />,
-  RESULT: <CheckCircleOutlined aria-hidden="true" style={{ color: 'var(--aw-success)' }} />,
-  COMMENT: <CommentOutlined aria-hidden="true" style={{ color: 'var(--aw-muted)' }} />,
+  RESULT: <span aria-hidden="true" style={{ color: 'var(--aw-success-deep)', display: 'inline-flex' }}><AwStrokeIcon name="check" size={14} /></span>,
+  COMMENT: <span aria-hidden="true" style={{ color: 'var(--aw-muted)', display: 'inline-flex' }}><AwStrokeIcon name="msg" size={14} /></span>,
 };
 
 function renderEventContent(event: TimelineEvent): React.ReactNode {

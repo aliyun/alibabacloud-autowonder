@@ -96,6 +96,23 @@ export function getAgentRoleNameOptions() {
   return [...options.values()];
 }
 
+/** Adds an explicit "use custom value" row so free typing reads as supported, not select-only. */
+export function withCustomRoleOption(
+  options: Array<{ value: string; label: string }>,
+  input: string,
+  buildCustomLabel: (value: string) => string,
+  normalize: (value: string) => string = value => value,
+) {
+  const value = normalize(input.trim());
+  if (!value) {
+    return options;
+  }
+  if (options.some(option => option.value.toLowerCase() === value.toLowerCase())) {
+    return options;
+  }
+  return [{ value, label: buildCustomLabel(value) }, ...options];
+}
+
 export function getAgentRoleCodeOptions() {
   return AGENT_ROLE_PRESETS.map(({ roleCode }) => ({
     value: roleCode,
@@ -129,4 +146,29 @@ const statusLabelKeys = new Map([
 export function getAgentStatusLabel(status: string): string {
   const key = statusLabelKeys.get(status as Parameters<typeof statusLabelKeys.get>[0]);
   return key ? i18n.t(key, { ns: 'agent' }) : status;
+}
+
+/** Platform system tags; the backend stores these stable codes, display names come from i18n. */
+export const AGENT_SYSTEM_TAGS = ['REQ_CLARIFY', 'PROTOTYPE_DESIGN'] as const;
+export type AgentSystemTagCode = typeof AGENT_SYSTEM_TAGS[number];
+
+const systemTagLabelKeys = {
+  REQ_CLARIFY: 'tags.system.REQ_CLARIFY',
+  PROTOTYPE_DESIGN: 'tags.system.PROTOTYPE_DESIGN',
+} as const;
+
+export function isAgentSystemTag(code: string): code is AgentSystemTagCode {
+  return (AGENT_SYSTEM_TAGS as readonly string[]).includes(code);
+}
+
+/** System tag display name for the current language; unknown codes fall back to the raw code. */
+export function getAgentSystemTagLabel(code: string): string {
+  if (!isAgentSystemTag(code)) return code;
+  return i18n.t(systemTagLabelKeys[code], { ns: 'agent' });
+}
+
+/** Explicit-language lookup so validation can reject names colliding with either locale. */
+export function getAgentSystemTagLabelForLanguage(code: string, language: string): string {
+  if (!isAgentSystemTag(code)) return code;
+  return i18n.getFixedT(language, 'agent')(systemTagLabelKeys[code]);
 }

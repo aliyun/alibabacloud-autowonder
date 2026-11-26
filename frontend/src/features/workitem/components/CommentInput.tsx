@@ -1,9 +1,10 @@
 import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
-import { Fragment, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type CSSProperties, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type CSSProperties, type ChangeEvent, type KeyboardEvent } from 'react';
 import { Alert, Button, Input, Space, message } from 'antd';
 import type { TextAreaRef } from 'antd/es/input/TextArea';
-import { PaperClipOutlined, SendOutlined } from '@ant-design/icons';
+import { PaperClipOutlined } from '@ant-design/icons';
+import { MentionMenu, type MentionMenuRow, type MentionMenuSection } from '@/shared/ui/MentionMenu';
 import { useAddComment, useMentionCandidates, useUploadRequirementDocuments } from '../hooks';
 import type { Artifact, Participant } from '@/shared/types/workitem';
 import { ApiError, ErrorCodes } from '@/shared/types/common';
@@ -20,62 +21,26 @@ interface CommentInputProps {
   documents?: Artifact[];
 }
 
-const MENTION_QUERY_DEBOUNCE_MS = 200;
+interface WorkitemMentionOption {
+  key: string;
+  value: string;
+  targetId: number;
+  targetType: 'AGENT' | 'HUMAN';
+  squadName: string | null;
+  currentSquad: boolean;
+  displayId: string | null;
+  online: boolean | null;
+}
 
-const mentionOptionHighlightStyle: CSSProperties = {
-  color: 'var(--aw-accent-text)',
-  background: 'rgba(var(--aw-accent-rgb),.10)',
-  borderRadius: 4,
-  padding: '0 4px',
-  fontWeight: 600,
-};
+const MENTION_QUERY_DEBOUNCE_MS = 200;
 
 const composerTextStyle: CSSProperties = {
   fontFamily: 'inherit',
-  fontSize: 14,
-  lineHeight: '22px',
+  fontSize: 13,
+  lineHeight: '20px',
   letterSpacing: 0,
   whiteSpace: 'pre-wrap',
   overflowWrap: 'break-word',
-};
-
-const mentionMenuStyle: CSSProperties = {
-  position: 'absolute',
-  left: 0,
-  right: 0,
-  bottom: '100%',
-  marginBottom: 6,
-  padding: '4px 0',
-  background: 'var(--aw-glass)',
-  backdropFilter: 'blur(18px)',
-  border: '1px solid var(--aw-border)',
-  borderRadius: 6,
-  boxShadow: '0 6px 16px rgba(0, 0, 0, 0.08)',
-  zIndex: 20,
-  maxHeight: 350, // ≈10 个候选项高度，超出滚动查看
-  overflowY: 'auto',
-};
-
-const mentionMenuItemStyle: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: '6px 12px',
-  border: 0,
-  background: 'transparent',
-  color: 'var(--aw-text)',
-  textAlign: 'left',
-  cursor: 'pointer',
-};
-
-const activeMentionMenuItemStyle: CSSProperties = {
-  background: 'rgba(var(--aw-accent-rgb),.10)',
-};
-
-const mentionGroupHeaderStyle: CSSProperties = {
-  padding: '6px 12px 2px',
-  color: 'var(--aw-muted)',
-  fontSize: 12,
-  fontWeight: 600,
 };
 
 function findActiveMentionQuery(value: string, caretIndex: number): string | null {
@@ -104,7 +69,7 @@ export function CommentInput({ workitemId, participants = [], documents = [] }: 
   const [deliveryClosed, setDeliveryClosed] = useState(false);
   const textAreaRef = useRef<TextAreaRef>(null);
   const { mutate, isPending } = useAddComment();
-  const { data: mentionCandidates } = useMentionCandidates(workitemId, debouncedMentionQuery);
+  const { data: mentionCandidates, isFetching: candidatesFetching } = useMentionCandidates(workitemId, debouncedMentionQuery);
   const accessCommand = useAccessCommand();
   const uploadMutation = useUploadRequirementDocuments(workitemId);
   const [attachments, setAttachments] = useState<CommentAttachmentDraft[]>([]);
@@ -186,7 +151,7 @@ export function CommentInput({ workitemId, participants = [], documents = [] }: 
     return byTarget;
   }, [allMentionCandidates, participants]);
 
-  const mentionOptions = useMemo(() => {
+  const mentionOptions = useMemo<WorkitemMentionOption[]>(() => {
     const normalizedQuery = mentionQuery?.toLowerCase() ?? '';
 
     return allMentionCandidates
@@ -196,35 +161,67 @@ export function CommentInput({ workitemId, participants = [], documents = [] }: 
       .map((item) => {
         const targetType: 'AGENT' | 'HUMAN' = item.isAgent ? 'AGENT' : 'HUMAN';
         const targetId = Number(item.userId);
-        const kindLabel = item.isAgent ? t('comment.agent') : t('comment.human');
         return {
+          key: `${targetType}:${targetId}`,
           value: item.name,
-          label: (
-            <span>
-              <span style={mentionOptionHighlightStyle}>
-                @{item.name}
-              </span>
-              {item.squadName ? (
-                <span style={{ color: 'var(--aw-muted)' }}>{t('comment.mentionSquadName', { squad: item.squadName })}</span>
-              ) : null}
-              <span style={{ marginLeft: 6, color: item.isAgent ? 'var(--aw-warning)' : 'var(--aw-accent-text)' }}>{kindLabel}</span>
-              {item.displayId ? <span style={{ marginLeft: 6, color: 'var(--aw-muted)' }}>{item.displayId}</span> : null}
-              {item.isAgent && !item.online ? t('comment.offline') : ''}
-            </span>
-          ),
           targetId,
           targetType,
           squadName: item.squadName ?? null,
           currentSquad: Boolean(item.currentSquad),
+          displayId: item.displayId ?? null,
+          online: item.online ?? null,
         };
       });
-  }, [allMentionCandidates, mentionQuery, t]);
+  }, [allMentionCandidates, mentionQuery]);
 
   // 只有后端返回小队信息时才插入分组标题；旧数据与降级场景保持原来的平铺菜单。
   const showMentionSquadGroups = useMemo(
     () => mentionOptions.some((option) => option.currentSquad || option.squadName != null),
     [mentionOptions],
   );
+
+  const activeOption = mentionOptions[activeMentionIndex];
+  const activeKey = activeOption?.key ?? null;
+  const optionsByKey = useMemo(() => new Map(mentionOptions.map((option) => [option.key, option])), [mentionOptions]);
+
+  const toMentionRow = (option: WorkitemMentionOption): MentionMenuRow => ({
+    key: option.key,
+    name: option.value,
+    isAgent: option.targetType === 'AGENT',
+    active: option.key === activeKey,
+    online: option.online,
+    meta: [
+      option.targetType === 'AGENT' ? option.squadName : (option.displayId ?? option.squadName),
+      option.targetType === 'AGENT' ? t('comment.agent') : t('comment.human'),
+    ],
+    query: mentionQuery,
+  });
+
+  const mentionSections: MentionMenuSection[] = (() => {
+    if (!showMentionSquadGroups) {
+      return [{ key: 'all', rows: mentionOptions.map(toMentionRow) }];
+    }
+
+    const sections: MentionMenuSection[] = [];
+    const currentSquadOptions = mentionOptions.filter((option) => option.currentSquad);
+    if (currentSquadOptions.length > 0) {
+      sections.push({
+        key: 'current',
+        label: t('comment.mentionGroupCurrentSquadUnknown'),
+        squadName: currentSquadOptions[0].squadName,
+        rows: currentSquadOptions.map(toMentionRow),
+      });
+    }
+    const otherOptions = mentionOptions.filter((option) => !option.currentSquad);
+    if (otherOptions.length > 0) {
+      sections.push({
+        key: 'others',
+        label: t('comment.mentionGroupOthers'),
+        rows: otherOptions.map(toMentionRow),
+      });
+    }
+    return sections;
+  })();
 
   // keyup/click 常推导出与当前相同的查询；先比对 ref 直接跳过 setState，避免无意义重渲染。
   const applyMentionQuery = (nextQuery: string | null) => {
@@ -372,22 +369,20 @@ export function CommentInput({ workitemId, participants = [], documents = [] }: 
     }, 0);
   };
 
+  const selectMentionRow = (row: MentionMenuRow) => {
+    const option = optionsByKey.get(row.key);
+    if (option) insertMention(option);
+  };
+
+  const hoverMentionRow = (row: MentionMenuRow) => {
+    const index = mentionOptions.findIndex((option) => option.key === row.key);
+    if (index >= 0) setActiveMentionIndex(index);
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return;
 
-    if (mentionQuery !== null && mentionOptions.length > 0) {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        setActiveMentionIndex((current) => (current + 1) % mentionOptions.length);
-        return;
-      }
-
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        setActiveMentionIndex((current) => (current - 1 + mentionOptions.length) % mentionOptions.length);
-        return;
-      }
-
+    if (mentionQuery !== null) {
       if (event.key === 'Escape') {
         event.preventDefault();
         clearMentionQuery();
@@ -395,9 +390,21 @@ export function CommentInput({ workitemId, participants = [], documents = [] }: 
         return;
       }
 
-      if (event.key === 'Enter' && !event.shiftKey) {
+      if (event.key === 'ArrowDown' && mentionOptions.length > 0) {
         event.preventDefault();
-        insertMention(mentionOptions[activeMentionIndex] ?? mentionOptions[0]);
+        setActiveMentionIndex((current) => (current + 1) % mentionOptions.length);
+        return;
+      }
+
+      if (event.key === 'ArrowUp' && mentionOptions.length > 0) {
+        event.preventDefault();
+        setActiveMentionIndex((current) => (current - 1 + mentionOptions.length) % mentionOptions.length);
+        return;
+      }
+
+      if (event.key === 'Enter' && !event.shiftKey && activeOption) {
+        event.preventDefault();
+        insertMention(activeOption);
         return;
       }
     }
@@ -445,74 +452,38 @@ export function CommentInput({ workitemId, participants = [], documents = [] }: 
           dragDepth.current = Math.max(0, dragDepth.current - 1);
           if (dragDepth.current === 0) setDragActive(false);
         }}
-        style={{ borderRadius: 6, outline: dragActive ? '2px dashed var(--aw-accent)' : undefined }}
+        className="aw-cm-input"
+        style={dragActive ? { outline: '2px dashed var(--aw-accent)' } : undefined}
       >
-        <Space.Compact style={{ width: '100%', alignItems: 'stretch' }}>
-          <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-            {mentionQuery !== null && mentionOptions.length > 0 && (
-              <div role="menu" style={mentionMenuStyle}>
-                {mentionOptions.map((option, index) => {
-                  const startsGroup = showMentionSquadGroups
-                    && (index === 0 || Boolean(mentionOptions[index - 1]?.currentSquad) !== option.currentSquad);
-                  return (
-                    <Fragment key={`${option.targetType}:${option.targetId}`}>
-                      {startsGroup ? (
-                        <div role="presentation" style={mentionGroupHeaderStyle}>
-                          {option.currentSquad
-                            ? (option.squadName
-                              ? t('comment.mentionGroupCurrentSquad', { squad: option.squadName })
-                              : t('comment.mentionGroupCurrentSquadUnknown'))
-                            : t('comment.mentionGroupOthers')}
-                        </div>
-                      ) : null}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        aria-current={index === activeMentionIndex ? 'true' : undefined}
-                        style={{
-                          ...mentionMenuItemStyle,
-                          ...(index === activeMentionIndex ? activeMentionMenuItemStyle : {}),
-                        }}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => insertMention(option)}
-                      >
-                        {option.label}
-                      </button>
-                    </Fragment>
-                  );
-                })}
-              </div>
-            )}
-            <Input.TextArea
-              ref={textAreaRef}
-              className="workitem-comment-mentions"
-              value={content}
-              onChange={handleChange}
-              onClick={(event) => updateMentionQuery(content, event.currentTarget.selectionStart ?? content.length)}
-              onFocus={() => setIsExpanded(true)}
-              onBlur={() => { if (!content.trim()) setIsExpanded(false); }}
-              onKeyDown={handleKeyDown}
-              onKeyUp={handleKeyUp}
-              autoSize={isExpanded ? { minRows: 3, maxRows: 10 } : { minRows: 1, maxRows: 10 }}
-              rows={isExpanded ? 3 : 1}
-              placeholder={t('comment.placeholder')}
-              disabled={busy}
-              style={{ width: '100%', ...composerTextStyle }}
+        <div style={{ position: 'relative' }}>
+          {mentionQuery !== null && (
+            <MentionMenu
+              className="aw-mm--floating"
+              sections={mentionSections}
+              loading={candidatesFetching}
+              query={mentionQuery}
+              onSelect={selectMentionRow}
+              onHover={hoverMentionRow}
             />
-          </div>
-          <Button
-            icon={<SendOutlined />}
-            style={{
-              alignSelf: 'stretch', height: 'auto', padding: '0 18px',
-              background: 'rgba(var(--aw-accent-rgb),.10)', borderColor: 'var(--aw-accent)', color: 'var(--aw-accent-text)',
-            }}
-            onClick={handleSend}
-            loading={busy}
-            disabled={!content.trim() && attachments.length === 0}
-          >
-            {t('comment.send')}
-          </Button>
-        </Space.Compact>
+          )}
+          <Input.TextArea
+            ref={textAreaRef}
+            className="workitem-comment-mentions"
+            variant="borderless"
+            value={content}
+            onChange={handleChange}
+            onClick={(event) => updateMentionQuery(content, event.currentTarget.selectionStart ?? content.length)}
+            onFocus={() => setIsExpanded(true)}
+            onBlur={() => { if (!content.trim()) setIsExpanded(false); }}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            autoSize={isExpanded ? { minRows: 3, maxRows: 10 } : { minRows: 1, maxRows: 10 }}
+            rows={isExpanded ? 3 : 1}
+            placeholder={t('comment.placeholder')}
+            disabled={busy}
+            style={{ width: '100%', padding: 0, ...composerTextStyle }}
+          />
+        </div>
         {attachments.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8, maxHeight: 160, overflowY: 'auto' }}>
             {attachments.map((attachment, index) => (
@@ -521,20 +492,30 @@ export function CommentInput({ workitemId, participants = [], documents = [] }: 
             ))}
           </div>
         )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <div className="aw-cm-input-row">
           <input ref={fileInputRef} type="file" multiple accept={DOCUMENT_ACCEPT_ATTRIBUTE}
             aria-label={t('comment.attachFiles')} data-testid="comment-file-input" hidden disabled={busy}
             onChange={(event) => { selectFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
-          <Button size="small" icon={<PaperClipOutlined />} disabled={busy}
+          <Button size="small" className="aw-card-head-btn" icon={<PaperClipOutlined />} disabled={busy}
             onClick={() => accessCommand('READ_WRITE', t('comment.attachFiles'), () => fileInputRef.current?.click())}>
             {t('comment.attachFiles')}
           </Button>
-          <span style={{ color: 'var(--aw-muted)', fontSize: 12 }}>
+          <span className="aw-cm-input-hint">
             {uploadMutation.isPending ? t('comment.uploadingAttachments') : t('comment.attachmentHint')}
           </span>
+          <Button
+            type="primary"
+            size="small"
+            className="aw-card-head-btn-primary aw-cm-input-send"
+            onClick={handleSend}
+            loading={busy}
+            disabled={!content.trim() && attachments.length === 0}
+          >
+            {t('comment.send')}
+          </Button>
         </div>
-        {attachments.length > 0 && <div style={{ color: 'var(--aw-muted)', fontSize: 12, marginTop: 4 }}>{t('comment.attachmentStorageHint')}</div>}
       </div>
+      {attachments.length > 0 && <div style={{ color: 'var(--aw-text-3)', fontSize: 11 }}>{t('comment.attachmentStorageHint')}</div>}
     </Space>
   );
 }

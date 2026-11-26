@@ -1,0 +1,67 @@
+/* 工单页筛选控件契约（原型 03/03c）：
+   标签筛选聚焦无主色描边；高级筛选按钮/已应用 chips；高级筛选 Modal 行式布局。 */
+
+/* 标签筛选输入框（AutoComplete 内嵌 Input）：聚焦回归中性边框（验收返修 1） */
+html .aw-tag-filter.ant-select-focused .ant-select-selector,
+html .aw-tag-filter .ant-input-affix-wrapper-focused,
+html .aw-tag-filter .ant-input-affix-wrapper:focus-within { border-color: var(--aw-border) !important; box-shadow: none !important; }
+
+/* 高级筛选入口按钮（原型 04d .btn.sm.ghost）：26px 高、透明底/边框、text-2 色；hover 灰底文字加深，不转主色（验收返修 04d-1） */
+html .aw-adv-filter-btn.ant-btn {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--aw-text-2);
+  box-shadow: none;
+}
+html .aw-adv-filter-btn.ant-btn:not(:disabled):hover,
+html .aw-adv-filter-btn.ant-btn:not(:disabled):active {
+  background: var(--aw-gray-bg);
+  border-color: transparent;
+  color: var(--aw-text);
+}
+html .aw-adv-filter-btn.ant-btn .aw-stroke-icon { width: 14px; height: 14px; }
+
+/* 已应用条件 chips：另起一行占满工具栏（验收返修 7），按钮本体不换行 */
+.aw-adv-filter-chips {
+  flex-basis: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.aw-adv-filter-chips .ant-tag { margin: 0; }
+
+/* 高级筛选 Modal（原型 03c .modal/.f-row）：行式布局，60px 右对齐标签列 */
+html .aw-adv-filter-modal .ant-modal-header { border-bottom: 1px solid var(--aw-border); }
+.aw-af-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; row-gap: 8px; margin-top: 12px; }
+.aw-af-row:first-child { margin-top: 0; }
+.aw-af-label { font-size: 12px; color: var(--aw-text-2); width: 60px; flex-shrink: 0; text-align: right; line-height: 20px; }
+.aw-af-sep { color: var(--aw-text-3); flex-shrink: 0; }
+.aw-af-hint { font-size: 11px; color: var(--aw-text-3); line-height: 18px; }
+
+/* 快捷段 chip（原型 .f-chip）：24px 主色描边胶囊 */
+html .aw-af-chip.ant-btn.ant-btn { height: 24px; padding: 0 10px; border-radius: 4px; font-size: 12px; line-height: 22px; border-color: var(--aw-primary); color: var(--aw-primary); background: var(--aw-panel); }
+html .aw-af-chip.ant-btn.ant-btn:not(:disabled):hover { background: var(--aw-primary-weak); border-color: var(--aw-primary); color: var(--aw-primary); }
+
+/* 标签条件行（原型 .f-cond）：运算符 + 标签多选 + 删除 */
+.aw-af-cond { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; row-gap: 8px; min-width: 0; flex: 1 1 240px; }
+html .aw-af-del.ant-btn.ant-btn { width: 24px; height: 24px; min-width: 24px; padding: 0; border-radius: 4px; color: var(--aw-text-disabled); }
+html .aw-af-del.ant-btn .aw-stroke-icon { width: 13px; height: 13px; }
+html .aw-af-del.ant-btn.ant-btn:not(:disabled):hover { background: var(--aw-error-bg); color: var(--aw-error-deep); }
+
+/* 添加条件（原型 .f-add）：主色文字链接按钮 */
+html .aw-af-add.ant-btn.ant-btn { border: none; background: none; padding: 0; height: 26px; color: var(--aw-primary); box-shadow: none; }
+html .aw-af-add.ant-btn.ant-btn:not(:disabled):hover { background: transparent; color: var(--aw-primary-hover); }
+html .aw-af-add.ant-btn .aw-stroke-icon { width: 12px; height: 12px; }
+
+/* 弹窗底部（原型 04d .modal-foot）：重置/取消/应用单行靠右、应用最右，26px 紧凑带边框（验收返修 04d-3） */
+.aw-af-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+html .aw-af-foot .ant-btn { flex-shrink: 0; height: 26px; padding: 0 8px; font-size: 12px; border-radius: 4px; }
+
+/* 校验错误：一行红字，左缘与条件内容区对齐（60px 标签 + 10px 间距 = 70px，验收返修 04d-3） */
+.aw-af-error { margin: 4px 0 0 70px; color: var(--aw-error); font-size: 12px; line-height: 20px; }

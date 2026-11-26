@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -64,6 +65,7 @@ public class SdlcService {
         s.setName(req.getName().trim());
         s.setDescription(req.getDescription());
         s.setWorkType(req.getWorkType());
+        s.setStageTimingEnabled(req.isStageTimingEnabled());
         s.setStatus("DRAFT");
         s.setIsDefault(0);
         s.setCreatorId(userId);
@@ -131,12 +133,17 @@ public class SdlcService {
         if (s == null) {
             throw new BizException(ErrorCode.SDLC_NOT_FOUND);
         }
-        requireEditable(s);
-        int rows = sdlcDao.update(id, tenantId,
-                req.getName() != null ? req.getName().trim() : s.getName(),
-                req.getDescription() != null ? req.getDescription() : s.getDescription(),
-                req.getWorkType() != null ? req.getWorkType() : s.getWorkType(),
-                s.getVersion(), userId);
+        String name = req.getName() != null ? req.getName().trim() : s.getName();
+        String description = req.getDescription() != null ? req.getDescription() : s.getDescription();
+        String workType = req.getWorkType() != null ? req.getWorkType() : s.getWorkType();
+        if (req.getStageTimingEnabled() != null && Objects.equals(name, s.getName())
+                && Objects.equals(description, s.getDescription()) && Objects.equals(workType, s.getWorkType())) {
+            requireContentEditable(s);
+        } else {
+            requireEditable(s);
+        }
+        int rows = sdlcDao.update(id, tenantId, name, description, workType,
+                req.getStageTimingEnabled(), s.getVersion(), userId);
         if (rows == 0) {
             throw new BizException(ErrorCode.SDLC_VERSION_CONFLICT);
         }
@@ -500,6 +507,7 @@ public class SdlcService {
         vo.setName(s.getName());
         vo.setDescription(s.getDescription());
         vo.setWorkType(s.getWorkType());
+        vo.setStageTimingEnabled(s.isStageTimingEnabled());
         vo.setStatus(s.getStatus());
         vo.setIsDefault(s.getIsDefault());
         vo.setEntryStepId(s.getEntryStepId());

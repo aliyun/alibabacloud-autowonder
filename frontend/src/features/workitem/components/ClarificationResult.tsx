@@ -22,6 +22,7 @@ export function ClarificationResult({ clarification }: ClarificationResultProps)
         border: '1px solid var(--aw-accent)',
         borderRadius: 8,
         padding: 16,
+        marginTop: 12,
       }}
     >
       <Text strong style={{ display: 'block', marginBottom: 12, fontSize: 14, color: 'var(--aw-accent-text)' }}>

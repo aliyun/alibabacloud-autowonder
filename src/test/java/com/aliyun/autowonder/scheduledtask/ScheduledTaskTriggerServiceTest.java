@@ -86,7 +86,7 @@ class ScheduledTaskTriggerServiceTest {
         MemoryDO memory = new MemoryDO(); memory.setTenantId(1L); memory.setStatus("ADOPTED"); memory.setContentMd("frozen memory"); when(memoryDao.findById(41L)).thenReturn(memory);
         when(squadDao.listByAgent(11L)).thenReturn(List.of(member));
         trigger.setSnapshotDependencies(repoPermDao, repoDao, relationDao, skillDao, skillCatalogDao, memoryRefDao, memoryDao);
-        SdlcStepDao steps = mock(SdlcStepDao.class); SdlcStepDO step = new SdlcStepDO(); step.setId(61L); step.setTenantId(1L); step.setSdlcId(51L); step.setStepOrder(1); step.setName("test"); step.setKind("TEST"); step.setInstructionMd("execute"); step.setChecklistJson("[\"check\"]"); step.setGatePolicyJson("{\"review\":true}"); when(steps.listBySdlc(51L)).thenReturn(List.of(step)); trigger.setSdlcStepDao(steps);
+        SdlcStepDao steps = mock(SdlcStepDao.class); SdlcStepDO step = new SdlcStepDO(); step.setId(61L); step.setTenantId(1L); step.setSdlcId(51L); step.setStepOrder(1); step.setName("test"); step.setFlowStageTimingEnabled(true); step.setKind("TEST"); step.setInstructionMd("execute"); step.setChecklistJson("[\"check\"]"); step.setGatePolicyJson("{\"review\":true}"); when(steps.listForExecution(1L, 51L)).thenReturn(List.of(step)); trigger.setSdlcStepDao(steps);
     }
     @Test
     void buildsStableTriggerKeys() {
@@ -309,6 +309,7 @@ class ScheduledTaskTriggerServiceTest {
         verify(runDao).insert(argThat(run -> {
             var sdlc = JSON.parseObject(run.getExecutionSnapshotJson()).getJSONObject("sdlc");
             return run.getSdlcId() == 51L && run.getCurrentStepId() == 61L && sdlc.getLongValue("id") == 51L
+                    && Boolean.TRUE.equals(sdlc.get("stageTimingEnabled"))
                     && sdlc.getLongValue("currentStepId") == 61L && "execute".equals(sdlc.getJSONArray("steps").getJSONObject(0).getString("instruction"));
         }));
     }

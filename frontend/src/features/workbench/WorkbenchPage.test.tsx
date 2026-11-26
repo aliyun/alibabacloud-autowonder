@@ -5,18 +5,30 @@ import { message } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/shared/auth/store';
+import { ApiError } from '@/shared/types/common';
 import type { Workitem, WorkitemDetail } from '@/shared/types/workitem';
+import type { Agent } from '@/features/agent/api';
+import type { ScheduledTask, ScheduledTaskRun } from '@/features/scheduledTask/types';
 import type { StatusNode, TemplateDetail } from '@/features/statemachine/types';
 import { WorkbenchPage } from './WorkbenchPage';
 
 const {
-  listWorkitemsMock, listNotificationsMock, listAgentsMock, useMembersMock,
-  getWorkitemMock, transitionWorkitemMock, getTemplateDetailMock,
+  listWorkitemsMock, listNotificationsMock, getUnreadNotificationCountMock,
+  listAgentsMock, listPendingReviewsMock, getPendingReviewCountMock, useMembersMock,
+  getScheduledTaskSummaryMock, listScheduledTasksMock, listScheduledTaskRunsMock,
+  getRunningWorkitemsMock, getWorkitemMock, transitionWorkitemMock, getTemplateDetailMock,
 } = vi.hoisted(() => ({
   listWorkitemsMock: vi.fn(),
   listNotificationsMock: vi.fn(),
+  getUnreadNotificationCountMock: vi.fn(),
   listAgentsMock: vi.fn(),
+  listPendingReviewsMock: vi.fn(),
+  getPendingReviewCountMock: vi.fn(),
   useMembersMock: vi.fn(),
+  getScheduledTaskSummaryMock: vi.fn(),
+  listScheduledTasksMock: vi.fn(),
+  listScheduledTaskRunsMock: vi.fn(),
+  getRunningWorkitemsMock: vi.fn(),
   getWorkitemMock: vi.fn(),
   transitionWorkitemMock: vi.fn(),
   getTemplateDetailMock: vi.fn(),
@@ -37,16 +49,31 @@ vi.mock('@/features/statemachine/api', async (importOriginal) => ({
 vi.mock('@/features/notification/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/notification/api')>()),
   listNotifications: listNotificationsMock,
+  getUnreadNotificationCount: getUnreadNotificationCountMock,
 }));
 
 vi.mock('@/features/agent/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/agent/api')>()),
   listAgents: listAgentsMock,
+  listPendingReviews: listPendingReviewsMock,
+  getPendingReviewCount: getPendingReviewCountMock,
 }));
 
 vi.mock('@/features/settings/hooks', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/settings/hooks')>()),
   useMembers: useMembersMock,
+}));
+
+vi.mock('@/features/scheduledTask/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/scheduledTask/api')>()),
+  getScheduledTaskSummary: getScheduledTaskSummaryMock,
+  listScheduledTasks: listScheduledTasksMock,
+  listScheduledTaskRuns: listScheduledTaskRunsMock,
+}));
+
+vi.mock('@/features/insights/realtime/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/insights/realtime/api')>()),
+  getRunningWorkitems: getRunningWorkitemsMock,
 }));
 
 function workitem(overrides: Partial<Workitem>): Workitem {
@@ -78,6 +105,67 @@ function page(list: Workitem[]) {
 
 function totalPage(list: Workitem[], total: number, query: { page?: number; size?: number } = {}) {
   return { list, total, pageNum: query.page ?? 1, pageSize: query.size ?? 5 };
+}
+
+function pendingAgent(overrides: Partial<Agent>): Agent {
+  return {
+    id: 9,
+    name: '代码小云',
+    avatarUrl: null,
+    status: 'PENDING_REVIEW',
+    onlineVersionId: null,
+    editingVersionId: null,
+    latestVersionNo: 3,
+    version: 0,
+    gmtCreate: '2026-11-12T00:30:00.000Z',
+    ...overrides,
+  } as Agent;
+}
+
+function scheduledTask(overrides: Partial<ScheduledTask>): ScheduledTask {
+  return {
+    id: 5,
+    name: '每日对账巡检',
+    instructionMd: '',
+    squadId: 1,
+    initialAgentId: 88,
+    scheduleType: 'CRON',
+    runAt: null,
+    cronExpression: '0 0 * * *',
+    timezone: 'Asia/Shanghai',
+    sessionMode: 'NEW',
+    overlapPolicy: 'SKIP',
+    misfirePolicy: 'FIRE_ONCE',
+    startDeadlineSeconds: null,
+    affinityTimeoutSeconds: null,
+    status: 'ACTIVE',
+    nextFireAt: null,
+    lastFireAt: '2026-11-12T01:00:00.000Z',
+    gmtCreate: '2026-11-01T00:00:00.000Z',
+    gmtModified: '2026-11-12T01:00:00.000Z',
+    creatorId: 7,
+    modifierId: 7,
+    version: 0,
+    ...overrides,
+  } as ScheduledTask;
+}
+
+function scheduledRun(overrides: Partial<ScheduledTaskRun>): ScheduledTaskRun {
+  return {
+    id: 51,
+    scheduledTaskId: 5,
+    status: 'FAILED',
+    triggerType: 'SCHEDULED',
+    triggerKey: 'k',
+    scheduledAt: '2026-11-12T01:00:00.000Z',
+    startedAt: '2026-11-12T01:00:00.000Z',
+    finishedAt: '2026-11-12T01:30:00.000Z',
+    currentAgentId: null,
+    currentStepId: null,
+    failureReason: null,
+    version: 0,
+    ...overrides,
+  } as ScheduledTaskRun;
 }
 
 type ExternalCollaboration = NonNullable<Workitem['externalCollaboration']>;
@@ -114,7 +202,7 @@ function renderPage() {
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="route-path">{location.pathname}</div>;
+  return <div data-testid="route-path">{location.pathname}{location.search}</div>;
 }
 
 function renderPageWithRoutes() {
@@ -131,6 +219,14 @@ function renderPageWithRoutes() {
   );
 }
 
+function queueCard(container: HTMLElement): HTMLElement {
+  return container.querySelector('#aw-workbench-queue') as HTMLElement;
+}
+
+function followingCard(container: HTMLElement): HTMLElement {
+  return container.querySelector('#aw-workbench-following') as HTMLElement;
+}
+
 function paginationOf(container: HTMLElement): HTMLElement {
   return container.querySelector('.ant-pagination') as HTMLElement;
 }
@@ -141,7 +237,7 @@ function openDropdown(): HTMLElement {
 
 /** 跟进筛选区最后一个下拉是「当前负责人」，避免按文案取到无障碍 live region。 */
 function assigneeSelectSelector(): HTMLElement {
-  const selects = document.querySelectorAll('.aw-workbench-filters .ant-select');
+  const selects = document.querySelectorAll('.aw-wb-bar .ant-select');
   const root = selects[selects.length - 1] as HTMLElement;
   return root.querySelector('.ant-select-selector') as HTMLElement;
 }
@@ -155,32 +251,11 @@ async function changePageSize(container: HTMLElement, optionIndex: number) {
   await userEvent.click(options[optionIndex] as HTMLElement);
 }
 
-beforeEach(() => {
-  window.sessionStorage.clear();
-  useAuthStore.getState().clear();
-  useAuthStore.getState().setUser({ id: 7, username: 'me', nickname: '我', email: 'me@example.com' });
-  useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'W', description: '' }, 'READ_WRITE');
-  listWorkitemsMock.mockReset();
-  listNotificationsMock.mockReset();
-  listAgentsMock.mockReset();
-  getWorkitemMock.mockReset();
-  transitionWorkitemMock.mockReset();
-  getTemplateDetailMock.mockReset();
-  listAgentsMock.mockResolvedValue([{ id: 88, name: 'Agent-88' }]);
-  useMembersMock.mockReset();
-  useMembersMock.mockReturnValue({ data: [{ userId: 7, nickname: '我', username: 'me' }] });
-  listNotificationsMock.mockResolvedValue({
-    items: [{
-      id: 11, type: 'COMMENT', title: '有新的评论', content: '请看下工单', link: null,
-      refType: 'WORKITEM', refId: 2, status: 'UNREAD', gmtCreate: '2026-11-12T02:00:00.000Z',
-      relatedLinks: null,
-    }],
-    total: 1,
-  });
-  listWorkitemsMock.mockImplementation((query: { assigneeType?: string; assigneeRef?: number }) => {
-    if (query.assigneeType === 'HUMAN' && query.assigneeRef === 7) {
-      return Promise.resolve(page([workitem({ id: 1, title: '待我处理事项', statusCategory: 'PENDING_DECISION' })]));
-    }
+/** 默认列表路由：跟进（mineScopes/mineScope）→ 决策桶 → 指派桶。 */
+function defaultListWorkitems(query: {
+  mineScopes?: string; mineScope?: string; assigneeType?: string; assigneeRef?: number; statusCategories?: string;
+}) {
+  if (query.mineScopes || query.mineScope) {
     return Promise.resolve(page([workitem({
       id: 2,
       title: '跟进事项',
@@ -192,7 +267,51 @@ beforeEach(() => {
       roundEndedAt: null,
       externalCollaboration: externalWorkitem('AONE-1', 'https://example.com/aone/1'),
     })]));
+  }
+  if (query.assigneeType === 'HUMAN' && query.assigneeRef === 7 && query.statusCategories === 'PENDING_DECISION') {
+    return Promise.resolve(page([workitem({ id: 1, title: '待我处理事项', statusCategory: 'PENDING_DECISION' })]));
+  }
+  return Promise.resolve(page([]));
+}
+
+beforeEach(() => {
+  window.sessionStorage.clear();
+  Element.prototype.scrollIntoView = vi.fn();
+  useAuthStore.getState().clear();
+  useAuthStore.getState().setUser({ id: 7, username: 'me', nickname: '我', email: 'me@example.com' });
+  useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'W', description: '' }, 'READ_WRITE');
+  listWorkitemsMock.mockReset();
+  listNotificationsMock.mockReset();
+  getUnreadNotificationCountMock.mockReset();
+  listAgentsMock.mockReset();
+  listPendingReviewsMock.mockReset();
+  getPendingReviewCountMock.mockReset();
+  getScheduledTaskSummaryMock.mockReset();
+  listScheduledTasksMock.mockReset();
+  listScheduledTaskRunsMock.mockReset();
+  getRunningWorkitemsMock.mockReset();
+  getWorkitemMock.mockReset();
+  transitionWorkitemMock.mockReset();
+  getTemplateDetailMock.mockReset();
+  useMembersMock.mockReset();
+  listAgentsMock.mockResolvedValue([{ id: 88, name: 'Agent-88' }]);
+  listPendingReviewsMock.mockResolvedValue([]);
+  getPendingReviewCountMock.mockResolvedValue(0);
+  getScheduledTaskSummaryMock.mockResolvedValue({ running: 0, today: 0, success30d: 0, completed30d: 0, attention: 0 });
+  listScheduledTasksMock.mockResolvedValue({ list: [], total: 0, offset: 0, size: 50 });
+  listScheduledTaskRunsMock.mockResolvedValue([]);
+  getRunningWorkitemsMock.mockResolvedValue([]);
+  getUnreadNotificationCountMock.mockResolvedValue(0);
+  useMembersMock.mockReturnValue({ data: [{ userId: 7, nickname: '我', username: 'me' }] });
+  listNotificationsMock.mockResolvedValue({
+    items: [{
+      id: 11, type: 'COMMENT', title: '有新的评论', content: '请看下工单', link: null,
+      refType: 'WORKITEM', refId: 2, status: 'UNREAD', gmtCreate: '2026-11-12T02:00:00.000Z',
+      relatedLinks: null,
+    }],
+    total: 1,
   });
+  listWorkitemsMock.mockImplementation(defaultListWorkitems);
 });
 
 afterEach(() => {
@@ -203,7 +322,7 @@ afterEach(() => {
 });
 
 describe('WorkbenchPage', () => {
-  it('loads the todo list with the server-side unfinished filter and updated-first order', async () => {
+  it('loads the decision queue with the server-side pending-decision filter and updated-first order', async () => {
     renderPage();
 
     expect(await screen.findByText('待我处理事项')).toBeInTheDocument();
@@ -211,13 +330,37 @@ describe('WorkbenchPage', () => {
       expect(listWorkitemsMock).toHaveBeenCalledWith(expect.objectContaining({
         assigneeType: 'HUMAN',
         assigneeRef: 7,
-        statusCategories: 'NEW,IN_PROGRESS,PENDING_DECISION',
+        statusCategories: 'PENDING_DECISION',
         sortBy: 'UPDATED',
-        size: 5,
+        size: 50,
+      }));
+      expect(listWorkitemsMock).toHaveBeenCalledWith(expect.objectContaining({
+        assigneeType: 'HUMAN',
+        assigneeRef: 7,
+        statusCategories: 'NEW,IN_PROGRESS',
+        sortBy: 'UPDATED',
+        size: 50,
       }));
     });
+    expect(screen.getByText('去决策')).toBeInTheDocument();
+    expect(screen.getByText('数字员工等待你的决定')).toBeInTheDocument();
+    expect(screen.getByText('#1')).toBeInTheDocument();
+  });
+
+  it('merges assigned workitems into the queue with their own kind and action', async () => {
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string; statusCategories?: string }) => {
+      if (query.mineScopes || query.mineScope) return Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]));
+      if (query.statusCategories === 'NEW,IN_PROGRESS') {
+        return Promise.resolve(page([workitem({ id: 3, title: '指派事项', statusCategory: 'IN_PROGRESS' })]));
+      }
+      return Promise.resolve(page([]));
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('指派事项')).toBeInTheDocument();
     expect(screen.getByText('去处理')).toBeInTheDocument();
-    expect(screen.getByText('等待你的决定')).toBeInTheDocument();
+    expect(screen.getByText('当前负责人是本人')).toBeInTheDocument();
   });
 
   it('loads the following list as a de-duplicated personal union with agent details and duration', async () => {
@@ -232,7 +375,7 @@ describe('WorkbenchPage', () => {
         size: 5,
       }));
     });
-    expect(screen.getByText('交付小队')).toBeInTheDocument();
+    expect(screen.getByText('Agent-88')).toBeInTheDocument();
     expect(screen.getByText('Aone AONE-1')).toBeInTheDocument();
     expect(screen.getByText(/分钟/)).toBeInTheDocument();
   });
@@ -241,18 +384,18 @@ describe('WorkbenchPage', () => {
     renderPage();
     await screen.findByText('跟进事项');
 
-    await userEvent.click(screen.getByText('我发起的'));
+    await userEvent.click(screen.getByText('我创建的'));
 
     await waitFor(() => {
       expect(listWorkitemsMock).toHaveBeenCalledWith(expect.objectContaining({ mineScope: 'CREATED' }));
     });
   });
 
-  it('renders recent collaboration activity from notifications', async () => {
+  it('renders recent activity from notifications with an all-notifications entry', async () => {
     renderPage();
 
     expect(await screen.findByText('有新的评论')).toBeInTheDocument();
-    expect(screen.getByText('查看全部通知')).toBeInTheDocument();
+    expect(screen.getByText('全部通知')).toBeInTheDocument();
     expect(listNotificationsMock).toHaveBeenCalledWith({ page: 1, size: 6 });
   });
 
@@ -288,30 +431,31 @@ describe('WorkbenchPage', () => {
     await waitFor(() => {
       const following = listWorkitemsMock.mock.calls
         .map((call) => call[0] as Record<string, unknown>)
-        .find((call) => 'mineScopes' in call);
+        .find((call) => 'mineScopes' in call || 'mineScope' in call);
       expect(following).toMatchObject({ assigneeType: 'HUMAN', assigneeRef: 7 });
       expect(following?.statusCategories).toBeUndefined();
     });
   });
 
-  it('retries a failed following list without failing the todo list', async () => {
-    listWorkitemsMock.mockImplementation((query: { mineScopes?: string }) => (
-      query.mineScopes
+  it('retries a failed following list without failing the action queue', async () => {
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string }) => (
+      query.mineScopes || query.mineScope
         ? Promise.reject(new Error('boom'))
-        : Promise.resolve(page([workitem({ id: 1, title: '待我处理事项' })]))
+        : defaultListWorkitems(query)
     ));
 
     renderPage();
 
     expect(await screen.findByText('加载失败，请重试')).toBeInTheDocument();
+    expect(screen.getByText('待我处理事项')).toBeInTheDocument();
     const before = listWorkitemsMock.mock.calls.length;
     await userEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
     await waitFor(() => expect(listWorkitemsMock.mock.calls.length).toBeGreaterThan(before));
   });
 
   it('renders unassigned rows and external rows without a link honestly', async () => {
-    listWorkitemsMock.mockImplementation((query: { mineScopes?: string }) => (
-      query.mineScopes
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string }) => (
+      query.mineScopes || query.mineScope
         ? Promise.resolve(page([
             workitem({ id: 2, title: '未指派事项', assigneeType: 'HUMAN', assigneeRef: null }),
             workitem({
@@ -324,7 +468,7 @@ describe('WorkbenchPage', () => {
               externalCollaboration: externalWorkitem('AONE-9', null),
             }),
           ]))
-        : Promise.resolve(page([workitem({ id: 1, title: '待我处理事项' })]))
+        : defaultListWorkitems(query)
     ));
 
     renderPage();
@@ -350,73 +494,67 @@ describe('WorkbenchPage', () => {
     expect(screen.queryByText('有新的评论')).not.toBeInTheDocument();
   });
 
-  it('paginates the todo list and returns to the first page when the page size changes', async () => {
-    listWorkitemsMock.mockImplementation((query: { assigneeType?: string; page?: number; size?: number }) => (
-      query.assigneeType === 'HUMAN'
-        ? Promise.resolve(totalPage([workitem({ id: 1, title: '待我处理事项' })], 12, query))
-        : Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]))
-    ));
-
-    renderPage();
-    const todoCard = (await screen.findByText('待我处理事项')).closest('.ant-card') as HTMLElement;
-    const pagination = paginationOf(todoCard);
-
-    await userEvent.click(within(pagination).getByTitle('2'));
-    await waitFor(() => {
-      expect(listWorkitemsMock).toHaveBeenCalledWith(expect.objectContaining({
-        assigneeType: 'HUMAN',
-        page: 2,
-      }));
+  it('paginates the merged queue client-side at eight rows per page', async () => {
+    const decisionRows = Array.from({ length: 10 }, (_, index) => workitem({
+      id: 101 + index,
+      title: `决策事项${index + 1}`,
+      statusCategory: 'PENDING_DECISION',
+      gmtModified: new Date(Date.now() - index * 60_000).toISOString(),
+    }));
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string; statusCategories?: string }) => {
+      if (query.mineScopes || query.mineScope) return Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]));
+      if (query.statusCategories === 'PENDING_DECISION') return Promise.resolve(totalPage(decisionRows, 10));
+      return Promise.resolve(page([]));
     });
 
-    await changePageSize(todoCard, 1);
-    await waitFor(() => {
-      expect(listWorkitemsMock).toHaveBeenCalledWith(expect.objectContaining({
-        assigneeType: 'HUMAN',
-        page: 1,
-        size: 10,
-      }));
-    });
+    const { container } = renderPage();
+    const card = queueCard(container);
+    await within(card).findByText('决策事项1');
+    expect(within(card).getAllByText(/决策事项/)).toHaveLength(8);
+    expect(within(card).getByText('共 10 条')).toBeInTheDocument();
+
+    const callsBefore = listWorkitemsMock.mock.calls.length;
+    await userEvent.click(within(paginationOf(card)).getByTitle('2'));
+    expect(within(card).getAllByText(/决策事项/)).toHaveLength(2);
+    expect(within(card).getByText('决策事项9')).toBeInTheDocument();
+    // 客户端分页不触发新的服务端请求。
+    expect(listWorkitemsMock.mock.calls.length).toBe(callsBefore);
   });
 
-  it('retries a failed todo list after the error state', async () => {
-    let failTodo = true;
-    listWorkitemsMock.mockImplementation((query: { assigneeType?: string }) => {
-      if (query.assigneeType === 'HUMAN') {
-        return failTodo
+  it('retries a failed queue after the error state', async () => {
+    let failQueue = true;
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string; statusCategories?: string }) => {
+      if (query.mineScopes || query.mineScope) return Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]));
+      if (query.statusCategories === 'PENDING_DECISION') {
+        return failQueue
           ? Promise.reject(new Error('boom'))
-          : Promise.resolve(page([workitem({ id: 1, title: '待我处理事项' })]));
+          : Promise.resolve(page([workitem({ id: 1, title: '待我处理事项', statusCategory: 'PENDING_DECISION' })]));
       }
-      return Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]));
+      return Promise.resolve(page([]));
     });
 
     renderPage();
 
     expect(await screen.findByText('加载失败，请重试')).toBeInTheDocument();
-    failTodo = false;
+    failQueue = false;
     await userEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
     expect(await screen.findByText('待我处理事项')).toBeInTheDocument();
   });
 
-  it('shows the todo empty state when nothing is assigned', async () => {
-    listWorkitemsMock.mockImplementation((query: { assigneeType?: string }) => (
-      query.assigneeType === 'HUMAN'
-        ? Promise.resolve(totalPage([], 0))
-        : Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]))
-    ));
+  it('shows the queue empty state with a shortcut to the following card', async () => {
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string }) => {
+      if (query.mineScopes || query.mineScope) return Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]));
+      return Promise.resolve(page([]));
+    });
+    const { container } = renderPage();
 
-    renderPage();
-
-    expect(await screen.findByText('当前没有需要你处理的工单')).toBeInTheDocument();
+    expect(await within(queueCard(container)).findByText('今天没有需要你处理的事')).toBeInTheDocument();
+    expect(within(queueCard(container)).getByText('全部')).toBeInTheDocument();
+    await userEvent.click(within(queueCard(container)).getByRole('button', { name: '查看我在跟进' }));
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
   it('searches the following list from the input and clears the keyword', async () => {
-    listWorkitemsMock.mockImplementation((query: { mineScopes?: string }) => (
-      query.mineScopes
-        ? Promise.resolve(page([workitem({ id: 2, title: '跟进事项', assigneeType: 'AGENT', assigneeRef: 88, assigneeName: 'Agent-88' })]))
-        : Promise.resolve(page([workitem({ id: 1, title: '待我处理事项' })]))
-    ));
-
     renderPage();
     await screen.findByText('跟进事项');
 
@@ -439,15 +577,16 @@ describe('WorkbenchPage', () => {
   });
 
   it('paginates the following list independently', async () => {
-    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; page?: number; size?: number }) => (
-      query.mineScopes
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string; page?: number; size?: number }) => (
+      query.mineScopes || query.mineScope
         ? Promise.resolve(totalPage([workitem({ id: 2, title: '跟进事项' })], 12, query))
-        : Promise.resolve(page([workitem({ id: 1, title: '待我处理事项' })]))
+        : defaultListWorkitems(query)
     ));
 
-    renderPage();
-    const followingCard = (await screen.findByText('跟进事项')).closest('.ant-card') as HTMLElement;
-    const pagination = paginationOf(followingCard);
+    const { container } = renderPage();
+    const card = followingCard(container);
+    await within(card).findByText('跟进事项');
+    const pagination = paginationOf(card);
 
     await userEvent.click(within(pagination).getByTitle('2'));
     await waitFor(() => {
@@ -457,7 +596,7 @@ describe('WorkbenchPage', () => {
       }));
     });
 
-    await changePageSize(followingCard, 1);
+    await changePageSize(card, 1);
     await waitFor(() => {
       expect(listWorkitemsMock).toHaveBeenCalledWith(expect.objectContaining({
         mineScopes: 'CREATED,WATCHED,COMMENTED',
@@ -497,25 +636,9 @@ describe('WorkbenchPage', () => {
     });
   });
 
-  it('shows the external id on todo rows', async () => {
-    listWorkitemsMock.mockImplementation((query: { assigneeType?: string }) => (
-      query.assigneeType === 'HUMAN'
-        ? Promise.resolve(page([workitem({
-            id: 1,
-            title: '待我处理事项',
-            externalCollaboration: externalWorkitem('AONE-T1', null),
-          })]))
-        : Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]))
-    ));
-
-    renderPage();
-
-    expect(await screen.findByText(/Aone AONE-T1/)).toBeInTheDocument();
-  });
-
   it('falls back to the assignee id when a human name is missing', async () => {
-    listWorkitemsMock.mockImplementation((query: { mineScopes?: string }) => (
-      query.mineScopes
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string }) => (
+      query.mineScopes || query.mineScope
         ? Promise.resolve(page([workitem({
             id: 2,
             title: '无姓名事项',
@@ -524,7 +647,7 @@ describe('WorkbenchPage', () => {
             assigneeName: null,
             assigneeDisplayName: null,
           })]))
-        : Promise.resolve(page([workitem({ id: 1, title: '待我处理事项' })]))
+        : defaultListWorkitems(query)
     ));
 
     renderPage();
@@ -532,7 +655,7 @@ describe('WorkbenchPage', () => {
     expect(await screen.findByText('#55')).toBeInTheDocument();
   });
 
-  it('navigates to the referenced workitem from collaboration activity', async () => {
+  it('navigates to the referenced workitem from recent activity', async () => {
     listNotificationsMock.mockResolvedValue({
       items: [{
         id: 13, type: 'COMMENT', title: '工单动态', content: null, link: null,
@@ -553,7 +676,135 @@ describe('WorkbenchPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('暂无协作动态')).toBeInTheDocument();
+    expect(await screen.findByText('暂无最近动态')).toBeInTheDocument();
+  });
+
+  it('renders the review bucket and jumps to the agent review tab when permitted', async () => {
+    getPendingReviewCountMock.mockResolvedValue(1);
+    listPendingReviewsMock.mockResolvedValue([pendingAgent({})]);
+
+    renderPageWithRoutes();
+
+    expect(await screen.findByText('数字员工「代码小云」v3 版本待审核')).toBeInTheDocument();
+    expect(screen.getByText('版本变更等待评审')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('去审核'));
+    expect(await screen.findByTestId('route-path')).toHaveTextContent('/agents?tab=reviews');
+  });
+
+  it('hides the review bucket without read-write access and never queries it', async () => {
+    useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'W', description: '' }, 'READ_ONLY');
+
+    renderPage();
+    await screen.findByText('待我处理事项');
+
+    expect(getPendingReviewCountMock).not.toHaveBeenCalled();
+    expect(listPendingReviewsMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('待审核')).not.toBeInTheDocument();
+  });
+
+  it('hides the review bucket silently when the count query fails', async () => {
+    getPendingReviewCountMock.mockRejectedValue(new Error('403'));
+    listPendingReviewsMock.mockResolvedValue([pendingAgent({})]);
+
+    renderPage();
+    await screen.findByText('待我处理事项');
+
+    expect(screen.queryByText('待审核')).not.toBeInTheDocument();
+    expect(screen.queryByText('数字员工「代码小云」v3 版本待审核')).not.toBeInTheDocument();
+    expect(screen.queryByText('加载失败，请重试')).not.toBeInTheDocument();
+  });
+
+  it('aggregates scheduled-task attention rows by the backend run-status condition', async () => {
+    getScheduledTaskSummaryMock.mockResolvedValue({ running: 0, today: 0, success30d: 0, completed30d: 0, attention: 1 });
+    listScheduledTasksMock.mockResolvedValue({
+      list: [scheduledTask({ id: 5 }), scheduledTask({ id: 6, name: '正常任务' })],
+      total: 2, offset: 0, size: 50,
+    });
+    listScheduledTaskRunsMock.mockImplementation((id: number) => Promise.resolve([
+      id === 5 ? scheduledRun({ status: 'FAILED' }) : scheduledRun({ id: 61, scheduledTaskId: 6, status: 'SUCCEEDED' }),
+    ]));
+
+    renderPageWithRoutes();
+
+    expect(await screen.findByText('定时任务「每日对账巡检」需要关注')).toBeInTheDocument();
+    expect(screen.queryByText('定时任务「正常任务」需要关注')).not.toBeInTheDocument();
+    expect(screen.getByText('需要关注最近一次运行')).toBeInTheDocument();
+    expect(listScheduledTasksMock).toHaveBeenCalledWith({ size: 50, offset: 0 });
+    expect(listScheduledTaskRunsMock).toHaveBeenCalledWith(5, 1, 0);
+    await userEvent.click(screen.getByText('去查看'));
+    expect(await screen.findByTestId('route-path')).toHaveTextContent('/scheduled-tasks/5');
+  });
+
+  it('takes filter counts from server totals and filters only the visible list', async () => {
+    listWorkitemsMock.mockImplementation((query: { mineScopes?: string; mineScope?: string; statusCategories?: string }) => {
+      if (query.mineScopes || query.mineScope) return Promise.resolve(page([workitem({ id: 2, title: '跟进事项' })]));
+      if (query.statusCategories === 'PENDING_DECISION') {
+        return Promise.resolve(totalPage([workitem({ id: 1, title: '待我处理事项', statusCategory: 'PENDING_DECISION' })], 3));
+      }
+      if (query.statusCategories === 'NEW,IN_PROGRESS') {
+        return Promise.resolve(totalPage([workitem({ id: 3, title: '指派事项' })], 2));
+      }
+      return Promise.resolve(page([]));
+    });
+
+    const { container } = renderPage();
+    const card = queueCard(container);
+    await within(card).findByText('指派事项');
+
+    // 概览与卡头计数来自服务端 total（3+2），不是当前分页行数。
+    expect(card.querySelector('.aw-wb-cnt')?.textContent).toBe('5');
+    const qbar = card.querySelector('.aw-wb-qbar') as HTMLElement;
+    expect(within(qbar).getByText('3')).toBeInTheDocument();
+    expect(within(qbar).getByText('2')).toBeInTheDocument();
+
+    await userEvent.click(within(qbar).getByText('待决策'));
+    expect(within(card).getByText('待我处理事项')).toBeInTheDocument();
+    expect(within(card).queryByText('指派事项')).not.toBeInTheDocument();
+    expect(within(card).getByText('共 3 条')).toBeInTheDocument();
+    // 过滤不改概览：指派徽标仍为 2。
+    expect(within(qbar).getByText('2')).toBeInTheDocument();
+  });
+
+  it('renders running deliveries with agent, step and elapsed time', async () => {
+    getRunningWorkitemsMock.mockResolvedValue([
+      { workitemId: 2, title: '跟进事项', agentName: '代码小云', stepName: '编码', runningMinutes: 24, runningDispatchCount: 1 },
+      { workitemId: 3, title: '长时任务', agentName: '测试小满', stepName: '回归测试', runningMinutes: 72, runningDispatchCount: 1 },
+    ]);
+
+    renderPageWithRoutes();
+
+    expect(await screen.findByText('运行中的交付')).toBeInTheDocument();
+    expect(screen.getByText('已运行 24 分钟')).toBeInTheDocument();
+    expect(screen.getByText('已运行 1 小时 12 分')).toBeInTheDocument();
+    expect(screen.getByText('编码')).toBeInTheDocument();
+    expect(screen.getByText('执行记录')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('长时任务'));
+    expect(await screen.findByTestId('route-path')).toHaveTextContent('/workitems/3');
+  });
+
+  it('shows the unread notification count in the overview badges', async () => {
+    getUnreadNotificationCountMock.mockResolvedValue(6);
+
+    renderPage();
+
+    expect(await screen.findByText('未读通知')).toBeInTheDocument();
+    const badge = screen.getByText('未读通知').closest('.aw-wb-kpi') as HTMLElement;
+    expect(within(badge).getByText('6')).toBeInTheDocument();
+  });
+
+  it('refreshes all workbench queries from the overview refresh button', async () => {
+    renderPage();
+    await screen.findByText('待我处理事项');
+    await waitFor(() => expect(getRunningWorkitemsMock).toHaveBeenCalled());
+
+    const before = listWorkitemsMock.mock.calls.length;
+    const runningBefore = getRunningWorkitemsMock.mock.calls.length;
+    await userEvent.click(screen.getByRole('button', { name: /刷\s*新/ }));
+    await waitFor(() => {
+      expect(listWorkitemsMock.mock.calls.length).toBeGreaterThan(before);
+      expect(getRunningWorkitemsMock.mock.calls.length).toBeGreaterThan(runningBefore);
+    });
   });
 });
 
@@ -617,7 +868,7 @@ function statusDialogOpen(): boolean {
 }
 
 describe('WorkbenchPage inline status change', () => {
-  it('changes a following work item status with template candidates and the optimistic guard', async () => {
+  it('opens the grouped dialog and commits the selected status with the optimistic guard', async () => {
     mockFollowingRows([followingRow()]);
     getWorkitemMock.mockResolvedValue(workitemDetail());
     getTemplateDetailMock.mockResolvedValue(statusTemplate());
@@ -627,24 +878,62 @@ describe('WorkbenchPage inline status change', () => {
     await openStatusChange();
 
     expect(await screen.findByText('选择目标状态')).toBeInTheDocument();
-    expect(screen.getByText('当前状态「待处理」可流转到以下状态：')).toBeInTheDocument();
-    const candidates = screen.getAllByRole('button', { name: /^流转到/ });
-    expect(candidates.map((button) => button.getAttribute('aria-label'))).toEqual(['流转到执行中', '流转到已完成']);
-    expect(candidates[0].className).toContain('ant-btn-primary');
-    expect(candidates[1].className).not.toContain('ant-btn-primary');
+    expect(screen.getByText('推荐流转')).toBeInTheDocument();
+    expect(screen.getByText('其他状态')).toBeInTheDocument();
+    expect(screen.getByText('流转「开始执行」')).toBeInTheDocument();
+    expect(screen.getByText('不在模板推荐范围')).toBeInTheDocument();
+    const dialog = document.querySelector('.aw-wb-transition') as HTMLElement;
+    const radios = within(dialog).getAllByRole('radio');
+    expect(radios.map(radio => radio.getAttribute('aria-label'))).toEqual(['执行中', '已完成']);
+    expect(radios.every(radio => radio.getAttribute('aria-checked') === 'false')).toBe(true);
     expect(getWorkitemMock).toHaveBeenCalledWith(2);
     expect(getTemplateDetailMock).toHaveBeenCalledWith(TEMPLATE_ID);
 
-    await userEvent.click(screen.getByRole('button', { name: '流转到执行中' }));
+    await userEvent.click(screen.getByRole('radio', { name: '执行中' }));
+    expect(screen.getByRole('radio', { name: '执行中' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(screen.getByRole('button', { name: '确认流转' }));
 
-    await waitFor(() => expect(transitionWorkitemMock).toHaveBeenCalledWith(2, 22, { fromNodeId: 20, expectedVersion: 3 }));
+    await waitFor(() => expect(transitionWorkitemMock).toHaveBeenCalledWith(
+      2, 22, expect.objectContaining({ fromNodeId: 20, expectedVersion: 3 }),
+    ));
     expect(await screen.findByText('状态已更新为「执行中」')).toBeInTheDocument();
     await waitFor(() => expect(statusDialogOpen()).toBe(false));
-    // 成功后退效工作台查询，「我在跟进」重新拉取。
+    /* 成功后退效工作台查询，「我在跟进」重新拉取。 */
     await waitFor(() => expect(followingCalls()).toBeGreaterThan(1));
   });
 
-  it('shows the server warning when the transition is outside the template recommendations', async () => {
+  it('keeps the confirm action disabled until a target status is selected', async () => {
+    mockFollowingRows([followingRow()]);
+    getWorkitemMock.mockResolvedValue(workitemDetail());
+    getTemplateDetailMock.mockResolvedValue(statusTemplate());
+
+    renderPage();
+    await openStatusChange();
+
+    expect(await screen.findByRole('button', { name: '确认流转' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('radio', { name: '已完成' }));
+    expect(screen.getByRole('button', { name: '确认流转' })).toBeEnabled();
+    expect(transitionWorkitemMock).not.toHaveBeenCalled();
+  });
+
+  it('passes the optional reason to the transition', async () => {
+    mockFollowingRows([followingRow()]);
+    getWorkitemMock.mockResolvedValue(workitemDetail());
+    getTemplateDetailMock.mockResolvedValue(statusTemplate());
+    transitionWorkitemMock.mockResolvedValue(workitemDetail({ statusNodeId: 22, statusName: '执行中', version: 4 }));
+
+    renderPage();
+    await openStatusChange();
+    await userEvent.click(await screen.findByRole('radio', { name: '执行中' }));
+    await userEvent.type(screen.getByRole('textbox', { name: '流转备注（选填）' }), '客户确认方案');
+    await userEvent.click(screen.getByRole('button', { name: '确认流转' }));
+
+    await waitFor(() => expect(transitionWorkitemMock).toHaveBeenCalledWith(
+      2, 22, expect.objectContaining({ fromNodeId: 20, expectedVersion: 3, reason: '客户确认方案' }),
+    ));
+  });
+
+  it('confirms a target outside the template recommendations and shows the server warning', async () => {
     mockFollowingRows([followingRow()]);
     getWorkitemMock.mockResolvedValue(workitemDetail());
     getTemplateDetailMock.mockResolvedValue(statusTemplate());
@@ -654,7 +943,8 @@ describe('WorkbenchPage inline status change', () => {
 
     renderPage();
     await openStatusChange();
-    await userEvent.click(await screen.findByRole('button', { name: '流转到已完成' }));
+    await userEvent.click(await screen.findByRole('radio', { name: '已完成' }));
+    await userEvent.click(screen.getByRole('button', { name: '确认流转' }));
 
     expect(await screen.findByText('该流转不在模板推荐范围内')).toBeInTheDocument();
   });
@@ -717,7 +1007,8 @@ describe('WorkbenchPage inline status change', () => {
 
     await userEvent.click(within(row).getByRole('button', { name: '改状态' }));
 
-    expect(await screen.findByText('当前状态「」可流转到以下状态：')).toBeInTheDocument();
+    expect(await screen.findByText('选择目标状态')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '执行中' })).toBeInTheDocument();
   });
 
   it('surfaces the error message when the latest state cannot be loaded', async () => {
@@ -742,7 +1033,7 @@ describe('WorkbenchPage inline status change', () => {
     expect(await screen.findByText('读取可变更状态失败，请重试')).toBeInTheDocument();
   });
 
-  it('closes the dialog with an error message when the transition fails', async () => {
+  it('keeps the dialog open with an error when the transition fails', async () => {
     mockFollowingRows([followingRow()]);
     getWorkitemMock.mockResolvedValue(workitemDetail());
     getTemplateDetailMock.mockResolvedValue(statusTemplate());
@@ -750,11 +1041,14 @@ describe('WorkbenchPage inline status change', () => {
 
     renderPage();
     await openStatusChange();
-    await userEvent.click(await screen.findByRole('button', { name: '流转到执行中' }));
+    await userEvent.click(await screen.findByRole('radio', { name: '执行中' }));
+    await userEvent.click(screen.getByRole('button', { name: '确认流转' }));
 
     expect(await screen.findByText('状态已变化')).toBeInTheDocument();
+    expect(statusDialogOpen()).toBe(true);
+
+    await userEvent.click(screen.getByRole('button', { name: /^取\s*消$/ }));
     await waitFor(() => expect(statusDialogOpen()).toBe(false));
-    await waitFor(() => expect(followingCalls()).toBeGreaterThan(1));
   });
 
   it('falls back to a readable error when the transition rejects without a message', async () => {
@@ -765,9 +1059,31 @@ describe('WorkbenchPage inline status change', () => {
 
     renderPage();
     await openStatusChange();
-    await userEvent.click(await screen.findByRole('button', { name: '流转到执行中' }));
+    await userEvent.click(await screen.findByRole('radio', { name: '执行中' }));
+    await userEvent.click(screen.getByRole('button', { name: '确认流转' }));
 
     expect(await screen.findByText('状态更新失败，请重试')).toBeInTheDocument();
+    expect(statusDialogOpen()).toBe(true);
+  });
+
+  it('offers a reload action when the transition hits a version conflict', async () => {
+    mockFollowingRows([followingRow()]);
+    getWorkitemMock.mockResolvedValue(workitemDetail());
+    getTemplateDetailMock.mockResolvedValue(statusTemplate());
+    transitionWorkitemMock.mockRejectedValue(new ApiError('13005', '工单已被修改,请重试', null));
+
+    renderPage();
+    await openStatusChange();
+    await userEvent.click(await screen.findByRole('radio', { name: '执行中' }));
+    await userEvent.click(screen.getByRole('button', { name: '确认流转' }));
+
+    expect(await screen.findByText('工单已被更新，请重试')).toBeInTheDocument();
+    expect(screen.getByText('加载后按最新状态重新给出可流转目标。')).toBeInTheDocument();
+    expect(statusDialogOpen()).toBe(true);
+
+    await userEvent.click(screen.getByRole('button', { name: '重新加载' }));
+    await waitFor(() => expect(getWorkitemMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('选择目标状态')).toBeInTheDocument();
   });
 
   it('closes the dialog without submitting', async () => {

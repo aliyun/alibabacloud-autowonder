@@ -1,6 +1,6 @@
 import { i18n } from '@/shared/i18n';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { message } from 'antd';
 import { createMemoryRouter, RouterProvider, MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
 import { useAuthStore } from '@/shared/auth/store';
 import { AgentListPage } from './AgentListPage';
+import { AgentsHubPage } from './AgentsHubPage';
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -82,18 +83,31 @@ describe('AgentListPage', () => {
         success: true, code: '0', message: '', traceId: null, data: [],
       })),
     );
-    renderPage();
+    // 新建按钮在数字员工 Tab 工具栏右侧（原型 06），只读态点击只报权限错误不跳转。
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/agents']}>
+          <Routes>
+            <Route path="/agents" element={<AgentsHubPage />} />
+            <Route path="/agents/new" element={<div>新建数字员工路由</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
 
     await screen.findByText('暂无数字员工');
     expect(screen.getAllByRole('button', { name: /新建/ })).toHaveLength(1);
-    await userEvent.click(screen.getByRole('button', { name: /新建$/ }));
+    const create = screen.getByRole('button', { name: /新建数字员工/ });
+    expect(create.closest('.aw-toolbar')).not.toBeNull();
+    await userEvent.click(create);
 
     expect(error).toHaveBeenCalledWith('当前为只读权限，新建数字员工需要读写权限');
-    await userEvent.hover(screen.getByRole('button', { name: '配置说明' }));
-    expect(await screen.findByText('点击任一数字员工卡片进入详情与配置。')).toBeInTheDocument();
+    expect(screen.queryByText('新建数字员工路由')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '配置说明' })).not.toBeInTheDocument();
   });
 
-  it('shows configuration guidance and one accessible detail link per card', async () => {
+  it('shows the bound SDLC and one accessible detail link per card', async () => {
     server.use(
       http.get('/api/agents', () => {
         return HttpResponse.json({
@@ -122,9 +136,7 @@ describe('AgentListPage', () => {
     renderPage();
     await screen.findByText('Alpha');
 
-    await userEvent.hover(screen.getByRole('button', { name: '配置说明' }));
-    expect(await screen.findByText('点击任一数字员工卡片进入详情与配置。')).toBeInTheDocument();
-    expect(screen.getByText('可维护 SOUL.md、AGENT.md、记忆、仓库权限、SDLC流程及技能/能力配置。')).toBeInTheDocument();
+    expect(document.querySelector('.agent-card-sdlc')).toHaveTextContent('未绑定');
 
     const detailLink = screen.getByRole('link', { name: '查看 Alpha 的详情与配置' });
     expect(detailLink).toHaveAttribute('href', '/agents/1');
@@ -256,8 +268,8 @@ describe('AgentListPage', () => {
     renderPage();
 
     expect(await screen.findByText('Alpha')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Squad A' })).toHaveAttribute('href', '/agents?tab=squads&squadId=7');
-    expect(screen.getByRole('link', { name: 'Squad B' })).toHaveAttribute('href', '/agents?tab=squads&squadId=8');
+    expect(screen.getByRole('link', { name: 'Squad A' })).toHaveAttribute('href', '/squads?squadId=7');
+    expect(screen.getByRole('link', { name: 'Squad B' })).toHaveAttribute('href', '/squads?squadId=8');
     expect(screen.getByText('未分组')).toBeInTheDocument();
   });
 
@@ -310,6 +322,29 @@ describe('AgentListPage', () => {
     expect(screen.getByText('Gamma')).toBeInTheDocument();
   });
 
+  it('collapses and expands a squad group from its keyboard-operable header', async () => {
+    const user = userEvent.setup();
+    useSquadsAndAgents([agentRow(1, 'Alpha', [7], ['Squad A'])]);
+
+    renderPage();
+    await screen.findByText('Alpha');
+
+    const toggle = screen.getByRole('button', { name: '收起分组' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAttribute('aria-controls', 'agent-group-body-squad-7');
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '展开分组' }));
+    expect(await screen.findByText('Alpha')).toBeInTheDocument();
+
+    // The header row itself is clickable too, not only the toggle button.
+    await user.click(screen.getByText('1 个'));
+    await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument());
+  });
+
   it('restores the stored flat list view and persists every toggle', async () => {
     const user = userEvent.setup();
     window.localStorage.setItem('autowonder.agents.view', 'list');
@@ -338,7 +373,7 @@ describe('AgentListPage', () => {
     expect(window.localStorage.getItem('autowonder.agents.view')).toBe('list');
   });
 
-  it('renders the table with ID first, short executor text and a trailing 详情 action', async () => {
+  it('renders ID first, combined name/role, short executor text and an accessible detail icon', async () => {
     window.localStorage.setItem('autowonder.agents.view', 'list');
     useSquadsAndAgents([agentRow(1, 'Alpha', [7], ['Squad A'])]);
 
@@ -347,13 +382,20 @@ describe('AgentListPage', () => {
 
     const headerCells = [...screen.getAllByRole('columnheader')].map((cell) => cell.textContent ?? '');
     expect(headerCells[0]).toBe('ID');
+    expect(headerCells[1]).toBe('名称 / 角色');
+    expect(headerCells).not.toContain('角色');
     expect(headerCells).not.toContain('创建时间');
     expect(headerCells[headerCells.length - 1]).toBe('操作');
+    expect(screen.getByText('Alpha').closest('td')).toContainElement(screen.getByText('前端开发工程师'));
 
     // 表格执行器列省略「执行器」前缀；卡片视图的完整文案不受影响。
     expect(screen.getByText('离线')).toBeInTheDocument();
     expect(screen.queryByText('执行器离线')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '详情' })).toHaveAttribute('href', '/agents/1');
+    const detail = screen.getByRole('button', { name: '查看 Alpha 的详情与配置' });
+    expect(detail.querySelector('[data-glyph="eye"]')).not.toBeNull();
+    expect(detail).toHaveTextContent('');
+    await userEvent.click(detail);
+    expect(await screen.findByText('数字员工详情路由')).toBeInTheDocument();
   });
 
   it('filters the table server-side by the selected status', async () => {
@@ -382,9 +424,169 @@ describe('AgentListPage', () => {
     await user.click(await screen.findByText('使用中', { selector: '.ant-select-item-option-content' }));
 
     await waitFor(() => expect(seen.some((entry) => entry === 'status=ONLINE')).toBe(true));
-    // 分组模式下没有状态筛选；切回分组不携带 status 参数。
+    // 分组视图共用同一套筛选：切到分组后状态筛选仍在，且保留已选值。
     await user.click(screen.getByText('分组'));
-    await waitFor(() => expect(screen.queryByRole('combobox', { name: '按状态筛选' })).not.toBeInTheDocument());
+    expect(screen.getByRole('combobox', { name: '按状态筛选' })).toBeInTheDocument();
+    expect(seen[seen.length - 1]).toBe('status=ONLINE');
+  });
+
+  it('searches name and ID across all loaded pages without adding API query parameters', async () => {
+    window.localStorage.setItem('autowonder.agents.view', 'list');
+    const requests: URLSearchParams[] = [];
+    const agents = Array.from({ length: 101 }, (_, index) => agentRow(index + 1, `Worker ${index + 1}`));
+    agents[100] = agentRow(101, 'Beyond First Page');
+    server.use(http.get('/api/agents', ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      requests.push(params);
+      const page = Number(params.get('page'));
+      return HttpResponse.json({ success: true, data: agents.slice((page - 1) * 100, page * 100) });
+    }));
+    renderPage();
+    await screen.findByText('Beyond First Page');
+    expect(requests.map(params => params.get('page'))).toEqual(['1', '2']);
+    expect(requests.every(params => params.get('size') === '100')).toBe(true);
+    const input = screen.getByRole('textbox', { name: '搜索名称或 ID' });
+    fireEvent.change(input, { target: { value: '  bEyOnD  ' } });
+    expect(screen.getByText('Beyond First Page')).toBeInTheDocument();
+    expect(screen.queryByText('Worker 1')).not.toBeInTheDocument();
+    fireEvent.change(input, { target: { value: '101' } });
+    expect(screen.getByText('Beyond First Page')).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: 'missing' } });
+    expect(screen.getByText('没有匹配的数字员工')).toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: '' } });
+    expect(screen.getByText('Worker 1')).toBeInTheDocument();
+    expect(requests).toHaveLength(2);
+    expect(requests.every(params => !params.has('search') && !params.has('roleCode'))).toBe(true);
+  });
+
+  it('combines name search with canonical role filtering and applies the same filters to grouped cards', async () => {
+    window.localStorage.setItem('autowonder.agents.view', 'list');
+    useSquadsAndAgents([
+      { ...agentRow(1, 'Alpha Frontend'), roleCode: 'FRONTEND_DEV' },
+      { ...agentRow(2, 'Alpha Backend'), roleCode: 'BACKEND_DEV' },
+      { ...agentRow(3, 'Beta Frontend'), roleCode: 'FRONTEND_DEV' },
+    ]);
+    renderPage();
+    await screen.findByText('Alpha Frontend');
+    await userEvent.type(screen.getByRole('textbox', { name: '搜索名称或 ID' }), 'Alpha');
+    await userEvent.click(screen.getByRole('combobox', { name: '按角色筛选' }));
+    expect(document.querySelectorAll('.ant-select-item-option-content')).toHaveLength(14);
+    await userEvent.click(screen.getByText('前端开发工程师', { selector: '.ant-select-item-option-content' }));
+    expect(screen.getByText('Alpha Frontend')).toBeInTheDocument();
+    expect(screen.queryByText('Alpha Backend')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beta Frontend')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('分组'));
+    expect(screen.getByText('Alpha Frontend')).toBeInTheDocument();
+    expect(screen.queryByText('Alpha Backend')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beta Frontend')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '搜索名称或 ID' })).toHaveValue('Alpha');
+    expect(screen.getByRole('combobox', { name: '按角色筛选' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument();
+    expect(localStorage.getItem('autowonder.agents.view')).toBe('grouped');
+    await userEvent.click(screen.getByText('列表'));
+    expect(screen.getByRole('textbox', { name: '搜索名称或 ID' })).toHaveValue('Alpha');
+    expect(screen.queryByText('Alpha Backend')).not.toBeInTheDocument();
+  });
+
+  it('offers view, edit and delete row operations, hiding delete for in-use agents', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem('autowonder.agents.view', 'list');
+    const deleted: string[] = [];
+    useSquadsAndAgents([
+      agentRow(1, 'Alpha'),
+      { ...agentRow(2, 'Draft'), status: 'OFFLINE' },
+      { ...agentRow(3, 'Pending'), status: 'PENDING_REVIEW' },
+    ]);
+    server.use(http.delete('/api/agents/:id', ({ params }) => {
+      deleted.push(String(params.id));
+      return HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data: null });
+    }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/agents']}>
+          <Routes>
+            <Route path="/agents" element={<AgentListPage />} />
+            <Route path="/agents/:id/edit" element={<div>编辑数字员工路由</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Draft')).toBeInTheDocument();
+    expect(screen.getByText('共 3 个数字员工 · 1 个使用中 · 1 个待审核')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '编辑 Alpha' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '删除 Alpha' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '删除 Pending' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '删除 Draft' }));
+    await user.click(await screen.findByRole('button', { name: '确定删除' }));
+    await waitFor(() => expect(deleted).toEqual(['2']));
+
+    await user.click(screen.getByRole('button', { name: '编辑 Alpha' }));
+    expect(await screen.findByText('编辑数字员工路由')).toBeInTheDocument();
+  });
+
+  it('filters authored custom roles by code or missing-code name without conflating them', async () => {
+    window.localStorage.setItem('autowonder.agents.view', 'list');
+    useSquadsAndAgents([
+      { ...agentRow(1, 'Coded'), roleCode: 'CUSTOM', roleName: '<b>自定义角色</b>' },
+      { ...agentRow(2, 'Uncoded'), roleCode: null, roleName: 'CUSTOM' },
+      { ...agentRow(3, 'No role'), roleCode: null, roleName: null },
+    ]);
+    renderPage();
+    await screen.findByText('Coded');
+    await userEvent.click(screen.getByRole('combobox', { name: '按角色筛选' }));
+    await userEvent.click(screen.getByText('<b>自定义角色</b>', { selector: '.ant-select-item-option-content' }));
+    expect(screen.getByText('Coded')).toBeInTheDocument();
+    expect(screen.queryByText('Uncoded')).not.toBeInTheDocument();
+    expect(screen.queryByText('No role')).not.toBeInTheDocument();
+    expect(screen.queryByText('自定义角色')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '按角色筛选' }).closest('.ant-select')).toHaveStyle({ width: '140px' });
+    await userEvent.click(screen.getByRole('combobox', { name: '按角色筛选' }));
+    await userEvent.click(screen.getByText('CUSTOM', { selector: '.ant-select-item-option-content' }));
+    expect(screen.getByText('Uncoded')).toBeInTheDocument();
+    expect(screen.queryByText('Coded')).not.toBeInTheDocument();
+    const clear = screen.getByRole('combobox', { name: '按角色筛选' })
+      .closest('.ant-select')?.querySelector('.ant-select-clear') as HTMLElement;
+    await userEvent.click(clear);
+    expect(screen.getByText('Coded')).toBeInTheDocument();
+    expect(screen.getByText('Uncoded')).toBeInTheDocument();
+    expect(screen.getByText('No role')).toBeInTheDocument();
+  });
+
+  it('refetches the current query on refresh, shows loading and retains local filters', async () => {
+    window.localStorage.setItem('autowonder.agents.view', 'list');
+    useSquadsAndAgents([]);
+    let calls = 0;
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    server.use(http.get('/api/agents', async () => {
+      calls += 1;
+      if (calls > 1) await pending;
+      return HttpResponse.json({ success: true, data: [
+        { ...agentRow(1, calls === 1 ? 'Alpha Before' : 'Alpha After'), roleCode: 'QA' },
+        { ...agentRow(2, 'Beta'), roleCode: 'BACKEND_DEV' },
+      ] });
+    }));
+    renderPage();
+    await screen.findByText('Alpha Before');
+    const input = screen.getByRole('textbox', { name: '搜索名称或 ID' });
+    await userEvent.type(input, 'Alpha');
+    await userEvent.click(screen.getByRole('combobox', { name: '按角色筛选' }));
+    await userEvent.click(screen.getByText('测试工程师', { selector: '.ant-select-item-option-content' }));
+    const refresh = screen.getByRole('button', { name: '刷新' });
+    await userEvent.click(refresh);
+    await waitFor(() => expect(calls).toBe(2));
+    expect(refresh).toHaveClass('ant-btn-loading');
+    expect(screen.getByText('Alpha Before')).toBeInTheDocument();
+    await act(async () => { release(); });
+    expect(await screen.findByText('Alpha After')).toBeInTheDocument();
+    await waitFor(() => expect(refresh).not.toHaveClass('ant-btn-loading'));
+    expect(input).toHaveValue('Alpha');
+    expect(screen.queryByText('Beta')).not.toBeInTheDocument();
+    expect(calls).toBe(2);
   });
 
   it('falls back to the grouped view when the stored view value is invalid', async () => {
@@ -425,5 +627,132 @@ describe('routed squad grouping localization', () => {
     expect(screen.getByText('<b>自定义资源</b>')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Filter by squad' })).toBeInTheDocument();
     await act(async () => { await i18n.changeLanguage('zh-CN'); });
+  });
+});
+
+function tagOk(data: unknown) {
+  return HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data });
+}
+
+function tagAgent(id: number, name: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id, name, avatarUrl: null, status: 'ONLINE', onlineVersionId: null, editingVersionId: null,
+    latestVersionNo: 1, version: 1, gmtCreate: '2026-07-01',
+    roleName: '前端开发工程师', roleCode: 'FRONTEND_DEV',
+    executorOnlineCount: 0, executorTotalCount: 0, skillCount: 0, memoryCount: 0, repoPermCount: 0,
+    systemTags: [], customTags: [],
+    ...overrides,
+  };
+}
+
+describe('AgentListPage tags', () => {
+  beforeEach(() => {
+    useAuthStore.getState().clear();
+    useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
+    window.localStorage.setItem('autowonder.agents.view', 'list');
+    vi.restoreAllMocks();
+    server.use(http.get('/api/squads', () => tagOk({ list: [], total: 0, pageNum: 1, pageSize: 100 })));
+  });
+
+  it('renders the tags column between name and status with an inline edit entry', async () => {
+    server.use(http.get('/api/agents', () => tagOk([
+      tagAgent(1, 'Alpha', { systemTags: ['REQ_CLARIFY'], customTags: ['报表', 'React'] }),
+      tagAgent(2, 'Beta'),
+    ])));
+
+    renderPage();
+    expect(await screen.findByText('Alpha')).toBeInTheDocument();
+
+    const headers = [...screen.getAllByRole('columnheader')].map((cell) => cell.textContent ?? '');
+    expect(headers[1]).toBe('名称 / 角色');
+    expect(headers[2]).toBe('标签');
+    expect(headers[3]).toBe('状态');
+
+    const alphaCell = screen.getByTestId('agent-tags-cell-1');
+    expect(within(alphaCell).getByText('需求澄清')).toBeInTheDocument();
+    expect(within(alphaCell).getByText('报表')).toBeInTheDocument();
+    expect(within(alphaCell).getByText('+1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '编辑 Alpha 的标签' })).toBeInTheDocument();
+    expect(screen.getByTestId('agent-tags-cell-2')).toHaveTextContent('—');
+  });
+
+  it('keeps read-only members without any tag edit entry', async () => {
+    useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_ONLY');
+    server.use(http.get('/api/agents', () => tagOk([tagAgent(1, 'Alpha', { customTags: ['报表'] })])));
+
+    renderPage();
+    await screen.findByText('Alpha');
+
+    expect(screen.getByText('报表')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '编辑 Alpha 的标签' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('agent-tags-cell-1'));
+    expect(screen.queryByTestId('agent-tags-editor')).not.toBeInTheDocument();
+  });
+
+  it('keeps platform agent tags read-only with a lock hint even for writers', async () => {
+    server.use(http.get('/api/agents', () => tagOk([
+      tagAgent(9, 'Chief', { kind: 'PLATFORM', systemTags: ['REQ_CLARIFY'] }),
+    ])));
+
+    renderPage();
+    await screen.findByText('Chief');
+
+    expect(screen.queryByRole('button', { name: '编辑 Chief 的标签' })).not.toBeInTheDocument();
+    await userEvent.hover(screen.getByTestId('agent-tags-cell-9'));
+    expect(await screen.findByText('平台数字人标签只读')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('agent-tags-cell-9'));
+    expect(screen.queryByTestId('agent-tags-editor')).not.toBeInTheDocument();
+  });
+
+  it('saves tags from the row popover and refreshes the row', async () => {
+    let tags: { systemTags: string[]; customTags: string[] } = { systemTags: [], customTags: [] };
+    const puts: unknown[] = [];
+    server.use(
+      http.get('/api/agents', () => tagOk([tagAgent(1, 'Alpha', tags)])),
+      http.get('/api/agents/tag-options', () => tagOk(['报表'])),
+      http.put('/api/agents/1/tags', async ({ request }) => {
+        const body = await request.json() as { systemTags: string[]; customTags: string[] };
+        puts.push(body);
+        tags = body;
+        return tagOk(tagAgent(1, 'Alpha', tags));
+      }),
+    );
+
+    renderPage();
+    await screen.findByText('Alpha');
+    expect(screen.getByTestId('agent-tags-cell-1')).toHaveTextContent('—');
+
+    await userEvent.click(screen.getByRole('button', { name: '编辑 Alpha 的标签' }));
+    expect(await screen.findByTestId('agent-tags-editor')).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByText('需求澄清', { selector: '.ant-select-item-option-content' }));
+    await userEvent.click(screen.getByRole('button', { name: /保\s*存/ }));
+
+    await waitFor(() => expect(puts).toEqual([{ systemTags: ['REQ_CLARIFY'], customTags: [] }]));
+    await waitFor(() => expect(screen.queryByTestId('agent-tags-editor')).not.toBeInTheDocument());
+    expect(await within(screen.getByTestId('agent-tags-cell-1')).findByText('需求澄清')).toBeInTheDocument();
+  });
+
+  it('shows read-only tags on grouped cards and folds the overflow', async () => {
+    window.localStorage.removeItem('autowonder.agents.view');
+    server.use(http.get('/api/agents', () => tagOk([
+      tagAgent(1, 'Alpha', {
+        systemTags: ['REQ_CLARIFY', 'PROTOTYPE_DESIGN'], customTags: ['报表', 'React'],
+      }),
+      tagAgent(2, 'Beta'),
+    ])));
+
+    renderPage();
+    expect(await screen.findByText('Alpha')).toBeInTheDocument();
+
+    const cardTags = await screen.findByTestId('agent-card-tags');
+    expect(within(cardTags).getByText('需求澄清')).toBeInTheDocument();
+    expect(within(cardTags).getByText('原型设计')).toBeInTheDocument();
+    expect(within(cardTags).getByText('报表')).toBeInTheDocument();
+    expect(within(cardTags).getByText('+1')).toBeInTheDocument();
+    await userEvent.hover(within(cardTags).getByText('+1'));
+    expect(await screen.findByText('React')).toBeInTheDocument();
+    // A worker without tags renders no tag row at all.
+    expect(screen.getAllByTestId('agent-card-tags')).toHaveLength(1);
   });
 });

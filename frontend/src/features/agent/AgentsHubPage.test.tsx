@@ -12,7 +12,6 @@ import { useAgentPendingReviewCount } from './hooks';
 
 vi.mock('./AgentListPage', () => ({ AgentListPage: () => <div data-testid="agent-list-pane" /> }));
 vi.mock('./AgentReviewPage', () => ({ AgentReviewPage: () => <div data-testid="agent-review-pane" /> }));
-vi.mock('@/features/squad/SquadListPage', () => ({ SquadListPage: () => <div data-testid="squad-list-pane" /> }));
 vi.mock('./hooks', () => ({ useAgentPendingReviewCount: vi.fn() }));
 
 function LocationProbe() {
@@ -37,10 +36,10 @@ function mockPendingCount(count: number) {
 
 describe('resolveAgentsHubTab', () => {
   it('whitelists the merged hub tabs and falls back to the list tab', () => {
-    expect(AGENTS_HUB_TAB_KEYS).toEqual(['list', 'reviews', 'squads']);
+    expect(AGENTS_HUB_TAB_KEYS).toEqual(['list', 'reviews']);
     expect(DEFAULT_AGENTS_HUB_TAB).toBe('list');
     expect(resolveAgentsHubTab('reviews')).toBe('reviews');
-    expect(resolveAgentsHubTab('squads')).toBe('squads');
+    expect(resolveAgentsHubTab('squads')).toBe('list');
     expect(resolveAgentsHubTab('bogus')).toBe('list');
     expect(resolveAgentsHubTab(null)).toBe('list');
   });
@@ -52,21 +51,19 @@ describe('AgentsHubPage', () => {
     mockPendingCount(0);
   });
 
-  it('renders the merged hub with the three tabs and the default pane', () => {
+  it('renders the hub with the list and reviews tabs only', () => {
     renderHub();
     expect(screen.getByRole('heading', { name: '数字员工管理' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '数字员工' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '版本审核' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '小队' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '小队' })).not.toBeInTheDocument();
     expect(screen.getByTestId('agent-list-pane')).toBeInTheDocument();
-    expect(screen.queryByTestId('squad-list-pane')).not.toBeInTheDocument();
     expect(screen.queryByTestId('agent-review-pane')).not.toBeInTheDocument();
   });
 
-  it('opens the tab requested by the url', () => {
-    renderHub('/agents?tab=squads');
-    expect(screen.getByTestId('squad-list-pane')).toBeInTheDocument();
-    expect(screen.queryByTestId('agent-list-pane')).not.toBeInTheDocument();
+  it('forwards legacy squads tab links to the standalone squads page', async () => {
+    renderHub('/agents?tab=squads&squadId=7');
+    await waitFor(() => expect(screen.getByTestId('hub-location')).toHaveTextContent('/squads?squadId=7'));
   });
 
   it('falls back to the list pane for unknown tab values', () => {
@@ -79,9 +76,9 @@ describe('AgentsHubPage', () => {
     renderHub();
     expect(screen.getByTestId('hub-location')).toHaveTextContent('/agents(empty)');
 
-    await user.click(screen.getByRole('tab', { name: '小队' }));
-    expect(await screen.findByTestId('squad-list-pane')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('hub-location')).toHaveTextContent('/agents?tab=squads'));
+    await user.click(screen.getByRole('tab', { name: '版本审核' }));
+    expect(screen.getByTestId('agent-review-pane')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('hub-location')).toHaveTextContent('/agents?tab=reviews'));
 
     await user.click(screen.getByRole('tab', { name: '数字员工' }));
     expect(await screen.findByTestId('agent-list-pane')).toBeInTheDocument();

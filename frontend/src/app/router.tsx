@@ -22,6 +22,7 @@ import { AgentCreatePage } from '@/features/agent/AgentCreatePage';
 import { AgentDetailPage } from '@/features/agent/AgentDetailPage';
 import { AgentEditPage } from '@/features/agent/AgentEditPage';
 import { AgentsHubPage } from '@/features/agent/AgentsHubPage';
+import { SquadListPage } from '@/features/squad/SquadListPage';
 import { ExecutorListPage } from '@/features/executor/ExecutorListPage';
 import { ExecutionListPage } from '@/features/execution/ExecutionListPage';
 import { SdlcListPage } from '@/features/sdlc/SdlcListPage';
@@ -34,6 +35,7 @@ import { SkillListPage } from '@/features/skill/SkillListPage';
 import { AuditLogPage } from '@/features/audit/AuditLogPage';
 import { ProjectBackupsPage } from '@/features/settings/ProjectBackupsPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
+import { SettingsShell } from '@/features/settings/SettingsShell';
 import { MemberRoleSettingsPage } from '@/features/settings/MemberRoleSettingsPage';
 import { StatusTemplatePage } from '@/features/statemachine/StatusTemplatePage';
 import { InsightsPage } from '@/features/insights/InsightsPage';
@@ -120,21 +122,40 @@ export function createAppRoutes(): RouteObject[] {
         { path: '/workitems/recycled', element: <WorkitemRecycleBinPage /> },
         { path: '/workitems/:id', element: <Suspense fallback={<Spin />}><WorkitemDetailPage /></Suspense> },
         { path: '/workitems/:workitemId/design', element: <Suspense fallback={<Spin />}><PrdDesignWorkbench /></Suspense> },
-        { path: '/agents', element: <AgentsHubPage /> },
-        { path: '/agents/reviews', element: <RedirectWithQuery to="/agents" tab="reviews" /> },
-        { path: '/agents/new', element: <AgentCreatePage /> },
         { path: '/agents/:id', element: <AgentDetailPage /> },
         { path: '/agents/:id/edit', element: <AgentEditPage /> },
-        { path: '/squads', element: <RedirectWithQuery to="/agents" tab="squads" /> },
-        { path: '/sdlcs', element: <SdlcListPage /> },
-        { path: '/sdlcs/generate', element: <SdlcGeneratePage /> },
         { path: '/sdlcs/:id', element: <SdlcDetailPage /> },
-        { path: '/repos', element: <Suspense fallback={<Spin />}><ReposHubPage /></Suspense> },
-        { path: '/repos/map', element: <RedirectWithQuery to="/repos" tab="map" /> },
         { path: '/repos/:id', element: <RepoDetailPage /> },
-        { path: '/memories', element: <MemoryListPage /> },
-        { path: '/skills', element: <SkillListPage /> },
-        { path: '/executors', element: <ExecutorListPage /> },
+        {
+          // 空间页共用外层页框：导航在轨道面板，正文渲染各页面；详情页仍走独立页。
+          element: <SettingsShell />,
+          children: [
+            { path: '/settings/overview', element: <Navigate to="/status-templates" replace /> },
+            { path: '/agents', element: <AgentsHubPage /> },
+            { path: '/agents/reviews', element: <RedirectWithQuery to="/agents" tab="reviews" /> },
+            { path: '/agents/new', element: <AgentCreatePage /> },
+            { path: '/squads', element: <SquadListPage /> },
+            { path: '/sdlcs', element: <SdlcListPage /> },
+            { path: '/sdlcs/generate', element: <SdlcGeneratePage /> },
+            { path: '/repos', element: <Suspense fallback={<Spin />}><ReposHubPage /></Suspense> },
+            { path: '/repos/map', element: <RedirectWithQuery to="/repos" tab="map" /> },
+            { path: '/memories', element: <MemoryListPage /> },
+            { path: '/skills', element: <SkillListPage /> },
+            { path: '/executors', element: <ExecutorListPage /> },
+            { path: '/status-templates', element: <StatusTemplatePage /> },
+            { path: '/integrations', element: <IntegrationsHubPage /> },
+            { path: '/integrations/aone', element: <Navigate to="/integrations" replace /> },
+            { path: '/integrations/channels', element: <RedirectWithQuery to="/integrations" tab="channels" /> },
+            { path: '/audit-logs', element: <AuditLogPage /> },
+            { path: '/settings/members', element: <MemberRoleSettingsPage /> },
+            { path: '/settings/members-roles', element: <Navigate to="/settings/members" replace /> },
+            { path: '/settings/members-roles/:tab', element: <Navigate to="/settings/members" replace /> },
+            { path: '/settings/roles', element: <Navigate to="/settings/members" replace /> },
+            { path: '/settings/backups', element: <ProjectBackupsPage /> },
+            { path: '/settings/environment-variables', element: <EnvironmentVariablesPage /> },
+            { path: '/settings', element: <SettingsPage /> },
+          ],
+        },
         { path: '/scheduled-tasks', element: <ScheduledTaskCapabilityGate><ScheduledTaskListPage /></ScheduledTaskCapabilityGate> },
         { path: '/scheduled-tasks/new', element: <ScheduledTaskCapabilityGate><ScheduledTaskCreatePage /></ScheduledTaskCapabilityGate> },
         { path: '/scheduled-tasks/:id/edit', element: <ScheduledTaskCapabilityGate><ScheduledTaskEditPage /></ScheduledTaskCapabilityGate> },

@@ -592,7 +592,7 @@ describe('AgentEditPage', () => {
 
     renderPage();
     expect(await screen.findByText(/编辑配置/)).toBeInTheDocument();
-    const repoCard = screen.getAllByText('仓库权限')[0].closest('.ant-card') as HTMLElement;
+    const repoCard = screen.getAllByText('仓库权限')[0].closest('.aw-agent-sec') as HTMLElement;
     expect(within(repoCard).getByText('无需配置平台智能体的仓库配置')).toBeInTheDocument();
     expect(within(repoCard).getByText('其默认拥有平台所有的仓库的读取权限，进行平台智能的管理。')).toBeInTheDocument();
     expect(within(repoCard).queryByRole('button', { name: /添加仓库/ })).not.toBeInTheDocument();
@@ -617,7 +617,7 @@ describe('AgentEditPage', () => {
 
     renderPage();
     expect(await screen.findByText(/编辑配置/)).toBeInTheDocument();
-    const repoCard = screen.getAllByText('仓库权限')[0].closest('.ant-card') as HTMLElement;
+    const repoCard = screen.getAllByText('仓库权限')[0].closest('.aw-agent-sec') as HTMLElement;
     expect(within(repoCard).getByRole('button', { name: /添加仓库/ })).toBeInTheDocument();
     expect(within(repoCard).getByText('操作')).toBeInTheDocument();
     expect(within(repoCard).queryByText('无需配置平台智能体的仓库配置')).not.toBeInTheDocument();
@@ -651,7 +651,7 @@ describe('AgentEditPage', () => {
     );
 
     renderPage();
-    const card = (await screen.findByText('环境变量')).closest('.ant-card') as HTMLElement;
+    const card = (await screen.findByText('环境变量')).closest('.aw-agent-sec') as HTMLElement;
 
     expect(within(card).getByText('API_TOKEN')).toBeInTheDocument();
     expect(within(card).getByText('服务调用凭证')).toBeInTheDocument();
@@ -797,7 +797,7 @@ describe('AgentEditPage', () => {
     );
 
     renderPage();
-    const card = (await screen.findByText('环境变量')).closest('.ant-card') as HTMLElement;
+    const card = (await screen.findByText('环境变量')).closest('.aw-agent-sec') as HTMLElement;
 
     expect(within(card).getByText('API_TOKEN')).toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: '挂载环境变量' })).not.toBeInTheDocument();
@@ -844,7 +844,7 @@ describe('AgentEditPage', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: /挂.*载/ }));
 
     expect(await within(dialog).findByText('当前版本不是草稿,无法编辑')).toBeInTheDocument();
-    const card = screen.getByText('环境变量').closest('.ant-card') as HTMLElement;
+    const card = screen.getByText('环境变量').closest('.aw-agent-sec') as HTMLElement;
     expect(within(card).queryByText('当前版本不是草稿,无法编辑')).not.toBeInTheDocument();
 
     await userEvent.click(within(dialog).getByRole('button', { name: /取.*消/ }));
@@ -1060,7 +1060,7 @@ describe('AgentEditPage', () => {
     act(() => finishUnmount());
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    const card = screen.getByText('环境变量').closest('.ant-card') as HTMLElement;
+    const card = screen.getByText('环境变量').closest('.aw-agent-sec') as HTMLElement;
     expect(within(card).queryByText('旧上下文解绑失败')).not.toBeInTheDocument();
   });
 
@@ -1295,7 +1295,7 @@ describe('AgentEditPage', () => {
     act(() => finishOldUnmount());
     await waitFor(() => expect(screen.getByRole('button', { name: /保存草稿/ })).toBeEnabled());
 
-    const card = screen.getByText('环境变量').closest('.ant-card') as HTMLElement;
+    const card = screen.getByText('环境变量').closest('.aw-agent-sec') as HTMLElement;
     expect(within(card).queryByText('ABA 旧解绑失败')).not.toBeInTheDocument();
     expect(within(row).getByRole('button', { name: '解绑 CACHE_HOST' })).toBeEnabled();
   });
@@ -1519,7 +1519,7 @@ describe('AgentEditPage', () => {
     );
 
     renderPage();
-    const card = (await screen.findByText('环境变量')).closest('.ant-card') as HTMLElement;
+    const card = (await screen.findByText('环境变量')).closest('.aw-agent-sec') as HTMLElement;
     expect(within(card).getByText('正在加载环境变量挂载...')).toBeInTheDocument();
     expect(within(card).queryByText('暂无已挂载的环境变量')).not.toBeInTheDocument();
     expect(within(card).getByRole('button', { name: /挂载环境变量/ })).toBeDisabled();
@@ -1562,7 +1562,7 @@ describe('AgentEditPage', () => {
     );
 
     renderPage();
-    const card = (await screen.findByText('环境变量')).closest('.ant-card') as HTMLElement;
+    const card = (await screen.findByText('环境变量')).closest('.aw-agent-sec') as HTMLElement;
     expect(await within(card).findByText('环境变量挂载加载失败')).toBeInTheDocument();
     expect(within(card).getByText('版本详情暂时不可用')).toBeInTheDocument();
     expect(within(card).queryByText('暂无已挂载的环境变量')).not.toBeInTheDocument();

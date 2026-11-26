@@ -98,10 +98,19 @@ public class DispatchWorkflowSnapshotStore {
             Snapshot original = require(source);
             return Objects.equals(original.stepId(), next.stepId())
                     && Objects.equals(original.agentVersionId(), next.agentVersionId())
-                    && original.sha256().equals(next.sha256());
+                    && sameWorkflowForResume(original, next);
         } catch (BizException missingHistoricalSnapshot) {
             return false;
         }
+    }
+
+    private static boolean sameWorkflowForResume(Snapshot original, Snapshot next) {
+        if (original.sha256().equals(next.sha256())) return true;
+        // Switching observation alone must not discard a compatible conversation.
+        var before = original.workflow();
+        var after = next.workflow();
+        return !Objects.equals(before.remove("stageTimingEnabled"), after.remove("stageTimingEnabled"))
+                && before.equals(after);
     }
 
     public void insert(DispatchDO dispatch, Snapshot snapshot) {

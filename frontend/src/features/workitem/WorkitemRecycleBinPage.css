@@ -1,0 +1,19 @@
+/* 工单回收站（原型 20）：ID 列等宽微字；删除时间两行由共享 TimeCell 承载，列密度走 ThemedTable 全局。 */
+.aw-recycle-bin-id {
+  font-family: var(--aw-font-mono);
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+/* 筛选行与表格之间不画分隔线。 */
+.aw-recycle-bin-page .aw-toolbar {
+  border-bottom: none;
+}
+
+.aw-recycle-bin-empty {
+  padding: 24px 0;
+}
+
+.aw-recycle-bin-page .ant-table-placeholder:hover > td {
+  background: transparent;
+}

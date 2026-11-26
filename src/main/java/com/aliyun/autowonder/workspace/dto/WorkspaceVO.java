@@ -11,6 +11,9 @@ public class WorkspaceVO {
     private String name;
     private String description;
     private String background;
+    /** Populated only for authorized workspace list cards; null means not disclosed. */
+    private Long memberCount;
+    private Long workitemCount;
     /** Echoed back so the edit modal can send it as the optimistic-lock expectation. */
     private Integer version;
     private WorkspaceAccessLevel accessLevel;

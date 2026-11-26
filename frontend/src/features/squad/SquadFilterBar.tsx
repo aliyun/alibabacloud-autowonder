@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { Segmented, Select, Space } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { listAllSquads } from './api';
@@ -35,36 +35,66 @@ export interface SquadFilterBarProps {
   groupLabel?: string;
 }
 
-export function SquadFilterBar({
-  options, value, onChange, grouped, onGroupedChange, loading,
-  listLabel, groupLabel,
-}: SquadFilterBarProps) {
+export function SquadViewSwitch({ grouped, onGroupedChange, listLabel, groupLabel }: Pick<SquadFilterBarProps, 'grouped' | 'onGroupedChange' | 'listLabel' | 'groupLabel'>) {
   const { t } = useTranslation('squad');
   return (
-    <Space wrap>
+    <Segmented
+      value={grouped ? 'group' : 'list'}
+      onChange={(next) => onGroupedChange(next === 'group')}
+      options={[
+        { value: 'group', label: groupLabel ?? t('grouped') },
+        { value: 'list', label: listLabel ?? t('list') },
+      ]}
+      aria-label={t('switchView')}
+    />
+  );
+}
+
+export function SquadSelect({ options, value, onChange, loading, style, single }: Pick<SquadFilterBarProps, 'options' | 'value' | 'onChange' | 'loading'> & { style?: CSSProperties; single?: boolean }) {
+  const { t } = useTranslation('squad');
+  if (single) {
+    return (
       <Select
-        mode="multiple"
         allowClear
         showSearch
         optionFilterProp="label"
         placeholder={t('filter')}
-        style={{ minWidth: 220 }}
+        style={style ?? { minWidth: 220 }}
         loading={loading}
-        value={value}
-        onChange={onChange}
+        value={value[0]}
+        onChange={(next) => onChange(next == null ? [] : [next])}
         options={options}
-        maxTagCount="responsive"
         aria-label={t('filter')}
       />
-      <Segmented
-        value={grouped ? 'group' : 'list'}
-        onChange={(next) => onGroupedChange(next === 'group')}
-        options={[
-          { value: 'group', label: groupLabel ?? t('grouped') },
-          { value: 'list', label: listLabel ?? t('list') },
-        ]}
-        aria-label={t('switchView')}
-      />
+    );
+  }
+  return (
+    <Select
+      mode="multiple"
+      allowClear
+      showSearch
+      optionFilterProp="label"
+      placeholder={t('filter')}
+      style={style ?? { minWidth: 220 }}
+      loading={loading}
+      value={value}
+      onChange={onChange}
+      options={options}
+      maxTagCount="responsive"
+      aria-label={t('filter')}
+    />
+  );
+}
+
+export function SquadFilterBar({
+  options, value, onChange, grouped, onGroupedChange, loading,
+  listLabel, groupLabel,
+}: SquadFilterBarProps) {
+  return (
+    <Space wrap>
+      {/* 原型 21/24 工具栏：视图切换 Segmented 在前，小队筛选 Select 在后。 */}
+      <SquadViewSwitch grouped={grouped} onGroupedChange={onGroupedChange} listLabel={listLabel} groupLabel={groupLabel} />
+      <SquadSelect options={options} value={value} onChange={onChange} loading={loading} />
     </Space>
   );
 }

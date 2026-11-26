@@ -42,13 +42,28 @@ class DeliveryOverviewControllerTest {
     void returnsOverviewWithParsedDatesForCurrentWorkspace() throws Exception {
         AutoWonderContext.get().setCurrentWorkspaceId(7L);
         AutoWonderContext.get().setUserId(9L);
-        when(service.overview(7L, LocalDate.of(2026, 1, 5), LocalDate.of(2026, 1, 7)))
-                .thenReturn(new DeliveryOverviewVO());
+        DeliveryOverviewVO vo = new DeliveryOverviewVO();
+        DeliveryOverviewVO.Delivered delivered = new DeliveryOverviewVO.Delivered();
+        delivered.setCount(2L);
+        DeliveryOverviewVO.DailyCount bucket = new DeliveryOverviewVO.DailyCount();
+        bucket.setDate("2026-01-05");
+        bucket.setCount(2L);
+        delivered.setDaily(List.of(bucket));
+        DeliveryOverviewVO.Period previous = new DeliveryOverviewVO.Period();
+        previous.setCount(1L);
+        delivered.setPrevious(previous);
+        vo.setDelivered(delivered);
+        when(service.overview(7L, LocalDate.of(2026, 1, 5), LocalDate.of(2026, 1, 7))).thenReturn(vo);
 
         http.perform(get("/api/insights/delivery-overview")
                         .param("start_date", "2026-01-05").param("end_date", "2026-01-07"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.delivered.count").value(2))
+                .andExpect(jsonPath("$.data.delivered.daily[0].date").value("2026-01-05"))
+                .andExpect(jsonPath("$.data.delivered.daily[0].count").value(2))
+                .andExpect(jsonPath("$.data.delivered.previous.count").value(1))
+                .andExpect(jsonPath("$.data.delivered.previous.daily").doesNotExist());
 
         verify(service).overview(7L, LocalDate.of(2026, 1, 5), LocalDate.of(2026, 1, 7));
     }

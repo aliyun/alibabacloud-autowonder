@@ -41,7 +41,12 @@ const mockDetail = {
 };
 
 describe('StatusTemplatePage', () => {
-  afterEach(async () => { await i18n.changeLanguage('zh-CN'); });
+  afterEach(async () => {
+    await act(async () => {
+      message.destroy();
+      await i18n.changeLanguage('zh-CN');
+    });
+  });
   beforeEach(() => {
     useAuthStore.getState().clear();
     useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
@@ -122,7 +127,10 @@ describe('status template locale contracts', () => {
     useAuthStore.setState({ accessLevel: 'READ_WRITE' });
     vi.restoreAllMocks();
   });
-  afterEach(async () => { await switchLanguage('zh-CN'); });
+  afterEach(async () => {
+    await act(async () => { message.destroy(); });
+    await switchLanguage('zh-CN');
+  });
 
   it('keeps each invalid real modal OK open with errors and makes no create request', async () => {
     const writes = vi.fn();

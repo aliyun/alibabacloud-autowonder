@@ -356,6 +356,134 @@ class WorkspaceLifecycleDaoSqlTest {
         assertEquals(0, method.getParameterCount());
     }
 
+    @Test
+    void cardCountSqlUsesIndependentLeftJoinsAndBoundCallerAuthorization() throws Exception {
+        String xml = orgXml();
+        String filter = statement(xml, "cardCountReadFilter", "sql");
+        assertTrue(filter.contains("o.is_deleted = 0 AND o.status = 0"), filter);
+        assertTrue(filter.contains("o.id IN"), filter);
+        assertTrue(filter.contains("collection=\"workspaceIds\""), filter);
+        assertTrue(filter.contains("#{workspaceId}"), filter);
+        assertTrue(filter.contains("<if test=\"!systemAdmin\">"), filter);
+        assertTrue(filter.contains("o.owner_id = #{userId}"), filter);
+        assertTrue(filter.contains("EXISTS (SELECT 1 FROM org_member reader"), filter);
+        assertTrue(filter.contains("reader.tenant_id = o.id"), filter);
+        assertTrue(filter.contains("reader.user_id = #{userId}"), filter);
+        assertTrue(filter.contains("reader.status = 0"), filter);
+        assertTrue(filter.contains("reader.is_deleted = 0"), filter);
+        assertFalse(filter.contains("${"), "IDs and identity must never be interpolated");
+
+        String members = statement(xml, "countMembersByWorkspaceIds", "select");
+        assertTrue(members.contains("COUNT(m.id) AS count"), members);
+        assertTrue(members.contains("LEFT JOIN org_member m ON m.tenant_id = o.id AND m.status = 0 AND m.is_deleted = 0"), members);
+        assertFalse(members.contains("workitem"), "joining both metric tables multiplies counts");
+        String workitems = statement(xml, "countWorkitemsByWorkspaceIds", "select");
+        assertTrue(workitems.contains("COUNT(w.id) AS count"), workitems);
+        assertTrue(workitems.contains("LEFT JOIN workitem w ON w.tenant_id = o.id AND w.is_deleted = 0"), workitems);
+        assertFalse(workitems.contains("w.status"), "all workitem states count");
+        assertFalse(workitems.contains("w.type"), "all workitem types count");
+        assertFalse(workitems.contains("gmt_create"), "card counts have no dashboard time window");
+        for (String sql : List.of(members, workitems)) {
+            assertTrue(sql.contains("o.id AS workspace_id"), sql);
+            assertTrue(sql.contains("<include refid=\"cardCountReadFilter\"/>"), sql);
+            assertTrue(sql.contains("GROUP BY o.id"), sql);
+            assertFalse(sql.contains("COUNT(*)"), "LEFT JOIN must yield true zero for empty tables");
+            assertFalse(sql.contains("${"), sql);
+        }
+        for (String method : List.of("countMembersByWorkspaceIds", "countWorkitemsByWorkspaceIds")) {
+            assertWorkspaceParamNames(method, List.of("workspaceIds", "userId", "systemAdmin"),
+                    Collection.class, Long.class, boolean.class);
+        }
+    }
+
+    @Test
+    void cardMapperCountsActiveMembersAndAllUndeletedWorkitemsIncludingZero() throws Exception {
+        try (var session = cardCountSession()) {
+            WorkspaceDao dao = session.getMapper(WorkspaceDao.class);
+            List<Long> ids = List.of(10L, 20L, 30L, 40L, 50L, 60L, 70L);
+            assertEquals(java.util.Map.of(10L, 3L, 20L, 0L),
+                    cardCounts(dao.countMembersByWorkspaceIds(ids, 7L, false)));
+            assertEquals(java.util.Map.of(10L, 3L, 20L, 0L),
+                    cardCounts(dao.countWorkitemsByWorkspaceIds(ids, 7L, false)));
+            assertTrue(dao.countMembersByWorkspaceIds(List.of(30L, 60L, 70L), 7L, false).isEmpty(),
+                    "inactive/deleted/non-members cannot authorize IDs");
+            assertTrue(dao.countWorkitemsByWorkspaceIds(List.of(30L, 60L, 70L), 7L, false).isEmpty());
+        }
+    }
+
+    @Test
+    void cardMapperPlatformAdminReadsUnjoinedWorkspacesButNotDeletedOrDisabledOnes() throws Exception {
+        try (var session = cardCountSession()) {
+            WorkspaceDao dao = session.getMapper(WorkspaceDao.class);
+            List<Long> ids = List.of(10L, 20L, 30L, 40L, 50L, 60L, 70L);
+            assertEquals(java.util.Map.of(10L, 3L, 20L, 0L, 30L, 1L, 60L, 1L, 70L, 0L),
+                    cardCounts(dao.countMembersByWorkspaceIds(ids, 7L, true)));
+            assertEquals(java.util.Map.of(10L, 3L, 20L, 0L, 30L, 1L, 60L, 1L, 70L, 0L),
+                    cardCounts(dao.countWorkitemsByWorkspaceIds(ids, 7L, true)));
+            assertEquals(java.util.Map.of(70L, 0L),
+                    cardCounts(dao.countMembersByWorkspaceIds(List.of(70L), 7L, true)),
+                    "even an admin's query is limited to the server-provided ID set");
+        }
+    }
+
+    @Test
+    void cardMapperWithRealTenantPluginDoesNotTruncateCountsToTheBoundWorkspace() throws Exception {
+        com.aliyun.autowonder.context.AutoWonderContext.get().setCurrentWorkspaceId(999L);
+        try (var session = cardCountSession()) {
+            WorkspaceDao dao = session.getMapper(WorkspaceDao.class);
+            assertEquals(java.util.Map.of(10L, 3L, 20L, 0L),
+                    cardCounts(dao.countMembersByWorkspaceIds(List.of(10L, 20L), 7L, false)));
+            assertEquals(java.util.Map.of(10L, 3L, 20L, 0L),
+                    cardCounts(dao.countWorkitemsByWorkspaceIds(List.of(10L, 20L), 7L, false)));
+        } finally {
+            com.aliyun.autowonder.context.AutoWonderContext.destroy();
+        }
+    }
+
+    private static java.util.Map<Long, Long> cardCounts(List<WorkspaceCardCountDO> rows) {
+        java.util.Map<Long, Long> counts = new java.util.HashMap<>();
+        for (WorkspaceCardCountDO row : rows) {
+            assertFalse(counts.containsKey(row.getWorkspaceId()), "one aggregate row per workspace");
+            counts.put(row.getWorkspaceId(), row.getCount());
+        }
+        return counts;
+    }
+
+    /** Isolated in-memory fixture only; it never connects to the local development database. */
+    private static org.apache.ibatis.session.SqlSession cardCountSession() throws Exception {
+        var dataSource = new org.apache.ibatis.datasource.unpooled.UnpooledDataSource(
+                "org.h2.Driver", "jdbc:h2:mem:workspace_card_" + java.util.UUID.randomUUID()
+                + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE", "sa", "");
+        var config = new org.apache.ibatis.session.Configuration(new org.apache.ibatis.mapping.Environment(
+                "workspace-card-test", new org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory(), dataSource));
+        config.setMapUnderscoreToCamelCase(true);
+        config.addInterceptor(new com.aliyun.autowonder.tenant.TenantInterceptor());
+        try (var stream = WorkspaceLifecycleDaoSqlTest.class.getResourceAsStream("/mapping/WorkspaceDao.xml")) {
+            assertNotNull(stream);
+            new org.apache.ibatis.builder.xml.XMLMapperBuilder(stream, config,
+                    "mapping/WorkspaceDao.xml", config.getSqlFragments()).parse();
+        }
+        var session = new org.apache.ibatis.session.SqlSessionFactoryBuilder().build(config).openSession();
+        try (var sql = session.getConnection().createStatement()) {
+            sql.execute("CREATE TABLE org (id BIGINT PRIMARY KEY, owner_id BIGINT, status INT, is_deleted INT)");
+            sql.execute("CREATE TABLE org_member (id BIGINT PRIMARY KEY, tenant_id BIGINT, user_id BIGINT, status INT, is_deleted INT)");
+            sql.execute("CREATE TABLE workitem (id BIGINT PRIMARY KEY, tenant_id BIGINT, type VARCHAR(32), status VARCHAR(32), is_deleted INT, gmt_create TIMESTAMP)");
+            sql.execute("INSERT INTO org VALUES (10,8,0,0),(20,7,0,0),(30,8,0,0),(40,7,0,1),(50,7,1,0),(60,8,0,0),(70,8,0,0)");
+            sql.execute("INSERT INTO org_member VALUES (1,10,7,0,0),(2,10,8,0,0),(3,10,9,0,0),"
+                    + "(4,10,11,1,0),(5,10,12,0,1),(6,30,7,1,0),(7,30,8,0,0),"
+                    + "(8,40,7,0,0),(9,50,7,0,0),(10,60,7,0,1),(11,60,8,0,0)");
+            sql.execute("INSERT INTO workitem VALUES (1,10,'REQUIREMENT','OPEN',0,'2020-01-01 00:00:00'),"
+                    + "(2,10,'TASK','DONE',0,'2026-01-01 00:00:00'),(3,10,'BUG','CANCELLED',0,'2026-01-01 00:00:00'),"
+                    + "(4,10,'TASK','OPEN',1,'2026-01-01 00:00:00'),(5,30,'TASK','OPEN',0,'2026-01-01 00:00:00'),"
+                    + "(6,40,'TASK','OPEN',0,'2026-01-01 00:00:00'),(7,50,'TASK','OPEN',0,'2026-01-01 00:00:00'),"
+                    + "(8,60,'TASK','OPEN',0,'2026-01-01 00:00:00')");
+        } catch (Exception failure) {
+            session.close();
+            throw failure;
+        }
+        return session;
+    }
+
     private static void assertWorkspaceParamNames(String methodName, List<String> expectedNames,
                                                   Class<?>... parameterTypes) throws Exception {
         assertParamNames(WorkspaceDao.class, methodName, expectedNames, parameterTypes);

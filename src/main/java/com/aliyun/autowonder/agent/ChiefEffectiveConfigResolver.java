@@ -1,6 +1,7 @@
 package com.aliyun.autowonder.agent;
 
 import com.aliyun.autowonder.mcp.dto.PlatformSkillVO;
+import com.aliyun.autowonder.mcp.PlatformSkillCatalog;
 import com.aliyun.autowonder.json.JSON;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -24,6 +25,8 @@ public final class ChiefEffectiveConfigResolver {
     private static final Set<Map<String, Object>> HISTORICAL_DEFINITIONS = historicalDefinitions();
     private static final Set<String> HISTORICAL_KEYS = HISTORICAL_DEFINITIONS.stream()
             .map(config -> (String) config.get("id")).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    private static final List<String> ALIASABLE_SKILL_KEYS = List.of(
+            PlatformSkillCatalog.OPTIMIZER_SKILL_ID, PlatformSkillCatalog.USER_DIRECTORY_SKILL_ID);
     public record EffectiveConfig(String systemPrompt, String officialFingerprint,
                                   List<Map<String, Object>> capabilities) {}
 
@@ -115,22 +118,27 @@ public final class ChiefEffectiveConfigResolver {
         var result = new ArrayList<>(official);
         // A newly added optional skill must not invalidate pre-existing workspace skills.
         // Alias only the platform copy; preserve custom names, packages, ids and instructions.
-        String optimizerKey = com.aliyun.autowonder.mcp.PlatformSkillCatalog.OPTIMIZER_SKILL_ID;
         Set<String> customSkillNames = new HashSet<>();
         for (var extension : extensions) {
             if ("SKILL".equalsIgnoreCase(String.valueOf(extension.get("type")))
-                    && !isEquivalentOfficialCopy(extension, optimizerKey)) {
+                    && ALIASABLE_SKILL_KEYS.stream().noneMatch(key -> isEquivalentOfficialCopy(extension, key))) {
                 customSkillNames.add(requireText(extension.get("name")));
             }
         }
-        if (customSkillNames.contains(optimizerKey) && officialByKey.containsKey(optimizerKey)) {
-            String alias = "platform-" + optimizerKey;
+        for (String key : ALIASABLE_SKILL_KEYS) {
+            var capability = officialByKey.get(key);
+            if (capability == null || !customSkillNames.contains(key)) {
+                continue;
+            }
+            String baseAlias = "platform-" + key;
+            String alias = baseAlias;
             int suffix = 2;
-            while (customSkillNames.contains(alias) || officialByKey.containsKey(alias))
-                alias = "platform-" + optimizerKey + "-" + suffix++;
-            var aliased = new LinkedHashMap<>(officialByKey.get(optimizerKey));
+            while (customSkillNames.contains(alias) || officialByKey.containsKey(alias)) {
+                alias = baseAlias + "-" + suffix++;
+            }
+            var aliased = new LinkedHashMap<>(capability);
             aliased.put("name", alias);
-            result.set(result.indexOf(officialByKey.get(optimizerKey)), immutableMap(aliased));
+            result.set(result.indexOf(capability), immutableMap(aliased));
         }
         Set<String> names = new HashSet<>();
         names.add("MCP:autowonder");
@@ -150,7 +158,7 @@ public final class ChiefEffectiveConfigResolver {
                             || (officialByKey.containsKey(key) && officialByKey.get(key).get("config").equals(config)))) {
                     continue;
                 }
-                if (!optimizerKey.equals(key)) {
+                if (!ALIASABLE_SKILL_KEYS.contains(key)) {
                     throw new IllegalArgumentException("Chief workspace skill uses an official key with a different definition");
                 }
             }

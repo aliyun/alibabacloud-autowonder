@@ -12,7 +12,7 @@ describe('MemoryTopicEditor', () => {
     render(<MemoryTopicEditor open owners={[squad]} initialOwner={squad} saving={false} onCancel={() => {}} onSave={save} />);
     await userEvent.type(screen.getByLabelText('标题'), '发布约定');
     await userEvent.type(screen.getByLabelText('适用说明'), '同步社区时');
-    await userEvent.type(screen.getByLabelText('正文'), '保留上游功能语义');
+    await userEvent.type(screen.getByLabelText('正文（Markdown）'), '保留上游功能语义');
     await userEvent.click(screen.getByRole('button', { name: '保 存' }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     const [owner, topic] = save.mock.calls[0];

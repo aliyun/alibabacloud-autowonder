@@ -22,6 +22,7 @@ import {
 vi.mock('./api');
 vi.mock('@/features/executor/api');
 vi.mock('@/shared/realtime/useRealtime', () => ({ useRealtime: vi.fn() }));
+vi.mock('copy-to-clipboard', () => ({ default: () => true }));
 const ready: api.SetupStatus = { agentId: 10, executorId: 20, agentConfigured: true, skillsConfigured: true, executorConfigured: true, launchConfigured: true, ready: true, missingSkills: [] };
 const conversation: api.Conversation = { id: 100, agentId: 10, agentName: 'Chief of Staff', channelConversationId: 'private', title: 'My conversation', archivedAt: null, status: 'ACTIVE', executorOnline: true, streamingSupported: true, cancelSupported: true, cliSessionRef: null, processingStatus: null, processingTurnId: null, lastTurnAt: null, gmtCreate: '', turns: [] };
 let clients: QueryClient[] = [];
@@ -359,6 +360,22 @@ describe('Chief of Staff', () => {
     }
     expect(screen.queryByRole('button', { name: '回复这条消息' })).not.toBeInTheDocument();
     await i18n.changeLanguage('zh-CN');
+  });
+  it('uses the paged copy button when a turn content is truncated', async () => {
+    server.use(http.get('/api/platform/conversations/100/turns/200/content', () => HttpResponse.json({
+      success: true, code: '0', message: '', traceId: null,
+      data: { content: 'Long answer', segmentIndex: 0, nextCursor: null, hasMore: false },
+    })));
+    localStorage.setItem('chief-of-staff:7:1', JSON.stringify({ conversationId: 100 }));
+    vi.mocked(api.getConversation).mockResolvedValue({ ...conversation, turns: [
+      { id: 200, direction: 'OUT', content: 'Long answer', contentHasMore: true, status: 'COMPLETED', error: null, gmtCreate: '' },
+    ] } as api.Conversation);
+    const user = userEvent.setup(); mount();
+    await user.click(screen.getByRole('button', { name: '打开 Chief of Staff' }));
+    await screen.findByText('Long answer');
+    const copies = screen.getAllByRole('button', { name: i18n.t('chiefOfStaff:copyMessage') });
+    expect(copies).toHaveLength(2);
+    for (const copy of copies) expect(copy).toHaveAttribute('data-testid', 'copy-message-button');
   });
   it('uploads a screenshot and sends its server image reference even without text', async () => {
     const image = { id: 'image-1', name: 'screenshot.png', url: 'https://example.test/image.png', contentType: 'image/png', size: 8 };
@@ -932,7 +949,7 @@ it('suppresses a stale Chief wizard after live-only resolution and resets identi
 });
 
 describe('Chief of Staff guided setup', () => {
-  it.each([false, true])('generates immediately after creating the executor without waiting for polling (older poll: %s)', async (olderPoll) => {
+  it.each([false, true])('completes setup, generates, and copies in one click without waiting for polling (older poll: %s)', async (olderPoll) => {
     const initial = { ...ready, executorId: null, executorConfigured: false, launchConfigured: false, ready: false };
     const configured = { ...ready, ready: false };
     vi.mocked(api.setupStatus).mockResolvedValue(initial);
@@ -942,10 +959,10 @@ describe('Chief of Staff guided setup', () => {
     const unsubscribe = subscribeGuideEvents(event => {
       if (event.type === 'substep-completed') completed();
     });
-    publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 1, capabilityReady: true });
+    publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 0, capabilityReady: true });
     mount();
     act(() => openChiefPanel({ expanded: false }));
-    await screen.findByRole('button', { name: '补齐配置' });
+    await screen.findByRole('button', { name: '生成并复制命令' });
     let resolveOlderPoll: ((value: api.SetupStatus) => void) | undefined;
     if (olderPoll) {
       const pendingPoll = new Promise<api.SetupStatus>(resolve => { resolveOlderPoll = resolve; });
@@ -954,38 +971,45 @@ describe('Chief of Staff guided setup', () => {
       await waitFor(() => expect(resolveOlderPoll).toBeDefined());
     }
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: '补齐配置' }));
+    await user.click(screen.getByRole('button', { name: '生成并复制命令' }));
     await waitFor(() => expect(completed).toHaveBeenCalledTimes(1));
     // An older setup GET must not erase the executor returned by the completed POST.
     await act(async () => { resolveOlderPoll?.(initial); });
-    act(() => publishGuideRuntime({ substep: 2 }));
-    await user.click(screen.getByRole('button', { name: '确认选择' }));
-    expect(completed).toHaveBeenCalledTimes(2);
-    act(() => publishGuideRuntime({ substep: 3 }));
-    await user.click(screen.getByRole('button', { name: '生成启动命令' }));
-    await waitFor(() => expect(buildExecutorLaunchCommand).toHaveBeenCalledWith(20, { os: 'posix' }));
-    expect(completed).toHaveBeenCalledTimes(3);
-    act(() => publishGuideRuntime({ substep: 4 }));
+    expect(buildExecutorLaunchCommand).toHaveBeenCalledWith(20, { os: 'posix' });
     expect(await screen.findByText('cmd-x')).toBeInTheDocument();
     expect(screen.queryByText('操作未成功，请重试；仍停留在当前步骤。')).not.toBeInTheDocument();
     unsubscribe();
   });
 
-  it('renders only the current guided substep and hides the composer during phase 1', async () => {
+  it('renders only the guided preparation panel and hides the composer during phase 1', async () => {
     vi.mocked(api.setupStatus).mockResolvedValue({ ...ready, executorConfigured: false, launchConfigured: false, ready: false });
+    vi.mocked(api.completeSetup).mockResolvedValue({ ...ready, ready: false });
+    vi.mocked(buildExecutorLaunchCommand).mockResolvedValue(launchCommand);
     const events: unknown[] = [];
     const unsubscribe = subscribeGuideEvents(event => events.push(event));
     publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 0, capabilityReady: true });
     mount();
     openChiefPanel({ expanded: false });
-    expect(await screen.findByText('选择执行客户端')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '执行客户端' })).toBeInTheDocument();
+    expect(await screen.findByText('准备启动命令')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Qoder' })).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: '输入消息' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '历史会话' })).not.toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: '确认选择' }));
-    expect(events).toContainEqual({ type: 'substep-completed' });
+    await user.click(screen.getByRole('button', { name: '生成并复制命令' }));
+    await waitFor(() => expect(events).toContainEqual({ type: 'substep-completed' }));
     unsubscribe();
+  });
+
+  it('keeps the composer visible in the initialization phase while the conversation is processing', async () => {
+    vi.mocked(api.getConversation).mockResolvedValue({ ...conversation, processingStatus: 'PROCESSING', processingTurnId: 201,
+      turns: [{ id: 201, direction: 'IN', content: '请初始化当前工作空间', status: 'PROCESSING', gmtCreate: '' }] } as api.Conversation);
+    publishGuideRuntime({ active: true, workspaceId: 1, stage: 3, substep: 0, capabilityReady: true });
+    mount();
+    openChiefPanel({ expanded: false, conversationId: 100 });
+    expect(await screen.findByText(/初始化请求已预填到输入框/)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '输入消息' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '停止回复' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发送' })).not.toBeInTheDocument();
   });
 
   it('prefills the initialization prompt and sends it with the reserved identity', async () => {
@@ -1049,6 +1073,59 @@ describe('Chief of Staff guided setup', () => {
     expect(existing.conversationId).toBe(55);
     expect(api.createConversation).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the user window geometry during the guide and ignores user entry opens', async () => {
+    publishGuideRuntime({ active: true, workspaceId: 1, stage: 3, substep: 0, capabilityReady: true });
+    mount();
+    act(() => openChiefPanel({ source: 'guide', expanded: true, conversationId: 100, clientMessageId: 'message-1' }));
+    const panel = await screen.findByRole('dialog');
+    expect(panel).toHaveClass('aw-chief-guide-panel');
+    expect(panel).not.toHaveClass('aw-chief-expanded');
+    expect(panel).toHaveStyle({ width: '440px', height: '620px' });
+
+    act(() => openChiefPanel({ source: 'user', expanded: false }));
+
+    expect(screen.getByRole('dialog')).toBe(panel);
+    expect(await screen.findByTestId('guide-strip')).toBeInTheDocument();
+  });
+
+  it('lets the user expand and restore the guided panel from the header', async () => {
+    publishGuideRuntime({ active: true, workspaceId: 1, stage: 3, substep: 0, capabilityReady: true });
+    mount();
+    act(() => openChiefPanel({ source: 'guide', conversationId: 100, clientMessageId: 'message-1' }));
+    const panel = await screen.findByRole('dialog');
+    expect(panel).not.toHaveClass('aw-chief-expanded');
+    fireEvent.click(screen.getByRole('button', { name: '宽屏模式' }));
+    expect(panel).toHaveClass('aw-chief-expanded');
+    fireEvent.click(screen.getByRole('button', { name: '退出宽屏' }));
+    expect(panel).not.toHaveClass('aw-chief-expanded');
+    expect(panel).toHaveStyle({ width: '440px', height: '620px' });
+  });
+
+  it('clears a stale conversation when the guide opens phase 1', async () => {
+    localStorage.setItem('chief-of-staff:7:1', JSON.stringify({ conversationId: 999 }));
+    publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 1, capabilityReady: true });
+    mount();
+    act(() => openChiefPanel({ source: 'guide' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('chief-of-staff:7:1') || '{}')).toMatchObject({ conversationId: null }));
+    expect(api.getConversation).not.toHaveBeenCalledWith(999);
+  });
+
+  it('replaces the panel badge with the strip and never lifts a pending guide over the mask', async () => {
+    mount();
+    const root = () => document.querySelector('.aw-chief') as HTMLElement;
+    act(() => publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 0, capabilityReady: true, pending: true }));
+    act(() => openChiefPanel({ source: 'guide', expanded: false, conversationId: null }));
+    expect(await screen.findByRole('dialog')).toHaveClass('aw-chief-guide-panel');
+    expect(root()).not.toHaveClass('aw-chief-guide-focus');
+    expect(screen.queryByTestId('guide-strip')).not.toBeInTheDocument();
+    expect(document.querySelector('.aw-chief-panel[data-guide-spot]')).not.toBeInTheDocument();
+
+    act(() => publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 0, capabilityReady: true, pending: false }));
+    expect(await screen.findByTestId('guide-strip')).toBeInTheDocument();
+    await waitFor(() => expect(root()).toHaveClass('aw-chief-guide-focus'));
+  });
 });
 
 const PROMPT_ZH = '请初始化当前工作空间，并引导我完成软件研发交付所需的配置。';
@@ -1092,18 +1169,18 @@ describe('Chief of Staff guided prompt and setup states', () => {
     publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 0, capabilityReady: true });
     mount();
     openChiefPanel({ expanded: false });
-    await screen.findByText('选择执行客户端');
+    await screen.findByRole('button', { name: '生成并复制命令' });
     vi.useFakeTimers();
     act(() => {
-      publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 5, capabilityReady: true });
+      publishGuideRuntime({ active: true, workspaceId: 1, stage: 1, substep: 1, capabilityReady: true });
     });
-    expect(screen.getByRole('heading', { name: '等待 Chief 执行器上线' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('正在探测执行器');
 
     act(() => { vi.advanceTimersByTime(125000); });
-    expect(screen.getByText(/暂未检测到执行器在线可用/)).toBeInTheDocument();
+    expect(screen.getByText(/暂未检测到执行器在线/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /重\s*试/ }));
-    expect(screen.queryByText(/暂未检测到执行器在线可用/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/暂未检测到执行器在线/)).not.toBeInTheDocument();
   });
 
   it('closes the panel when the guide requests it', async () => {
@@ -1149,7 +1226,7 @@ describe('Chief of Staff guided prompt and setup states', () => {
     mount();
     openChiefPanel({ expanded: false });
 
-    await screen.findByText('选择执行客户端');
+    await screen.findByRole('button', { name: '生成并复制命令' });
     await waitFor(() => expect(events.some(event => event.type === 'setup-ready')).toBe(true));
     unsubscribe();
   });

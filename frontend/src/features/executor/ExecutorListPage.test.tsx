@@ -1,6 +1,6 @@
 import { i18n } from '@/shared/i18n';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider, MemoryRouter, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -23,6 +23,47 @@ import { useAuthStore } from '@/shared/auth/store';
 
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
 const originalExecCommand = Object.getOwnPropertyDescriptor(document, 'execCommand');
+const ownedQueryClients = new Set<QueryClient>();
+const pendingResponses = new Set<() => void>();
+const pendingNotifications = new Set<() => Promise<void>>();
+
+beforeEach(async () => {
+  await act(async () => { await i18n.changeLanguage('zh-CN'); });
+});
+
+async function cleanupExecutorListPage() {
+  try {
+    await act(async () => { pendingResponses.forEach((release) => release()); });
+    pendingResponses.clear();
+    const notifications = Array.from(pendingNotifications);
+    pendingNotifications.clear();
+    await act(async () => {
+      await Promise.all(notifications.map((close) => close()));
+    });
+    await waitFor(() => {
+      for (const client of ownedQueryClients) expect(client.isMutating()).toBe(0);
+    });
+    await waitFor(() => {
+      for (const client of ownedQueryClients) expect(client.isFetching()).toBe(0);
+    });
+  } finally {
+    cleanup();
+    for (const client of ownedQueryClients) client.clear();
+    ownedQueryClients.clear();
+    await act(async () => { message.destroy(); });
+    await act(async () => { await i18n.changeLanguage('zh-CN'); });
+    if (originalClipboard) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboard);
+    } else {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+    if (originalExecCommand) {
+      Object.defineProperty(document, 'execCommand', originalExecCommand);
+    } else {
+      Reflect.deleteProperty(document, 'execCommand');
+    }
+  }
+}
 
 function decodePowerShellCommand(command: string): string {
   const encoded = command.replace(/^powershell -NoProfile -EncodedCommand /, '');
@@ -49,6 +90,7 @@ function unexpectedLocalStorageKeys(): string[] {
 
 function renderPage(queryRetry: boolean | number = false, staleTime = 0, entry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: queryRetry, retryDelay: 0, staleTime } } });
+  ownedQueryClients.add(queryClient);
   return {
     queryClient,
     ...render(
@@ -60,6 +102,8 @@ function renderPage(queryRetry: boolean | number = false, staleTime = 0, entry =
 }
 
 describe('ExecutorListPage', () => {
+  afterEach(cleanupExecutorListPage);
+
   beforeEach(() => {
     localStorage.setItem('aw-auth', JSON.stringify({
       state: {
@@ -80,23 +124,6 @@ describe('ExecutorListPage', () => {
     vi.restoreAllMocks();
   });
 
-  afterEach(async () => {
-    await act(async () => { await i18n.changeLanguage('zh-CN'); });
-    // antd message 渲染在 document 级 .ant-message 容器，RTL 的自动 cleanup 不会卸载它，
-    // 否则「启动配置已保存」toast 会残留到后续用例，导致 findByText 命中多个元素
-    await act(async () => { message.destroy(); });
-    if (originalClipboard) {
-      Object.defineProperty(navigator, 'clipboard', originalClipboard);
-    } else {
-      Reflect.deleteProperty(navigator, 'clipboard');
-    }
-    if (originalExecCommand) {
-      Object.defineProperty(document, 'execCommand', originalExecCommand);
-    } else {
-      Reflect.deleteProperty(document, 'execCommand');
-    }
-  });
-
   it('switches a routed create draft and its visible validation without changing values', async () => {
     await i18n.changeLanguage('zh-CN');
     const user = userEvent.setup();
@@ -111,10 +138,12 @@ describe('ExecutorListPage', () => {
     );
     const router = createMemoryRouter([{ path: '/', element: <ExecutorListPage /> }]);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
-    const create = await screen.findByRole('button', { name: '新建执行器' });
+    ownedQueryClients.add(client);
+    const { container } = render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
+    const page = within(container);
+    const create = await page.findByRole('button', { name: '新建执行器' });
     await act(async () => { await user.click(create); });
-    const dialog = screen.getByRole('dialog');
+    const dialog = await findModalByTitle('新建执行器');
     await act(async () => { await user.type(within(dialog).getByLabelText('执行器名称'), '<b>我的机器</b>'); });
     await act(async () => { await user.click(within(dialog).getByRole('button', { name: 'OK' })); });
     expect(await within(dialog).findByText('请选择归属 Agent')).toBeInTheDocument();
@@ -128,7 +157,7 @@ describe('ExecutorListPage', () => {
     expect(within(dialog).getByText('Platform memory (recommended)')).toBeInTheDocument();
     expect(within(dialog).getByText('Auto (default)')).toBeInTheDocument();
     expect(within(dialog).getByText('Medium')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create executor' })).toBeInTheDocument();
+    expect(page.getByRole('button', { name: 'Create executor' })).toBeInTheDocument();
     const concurrent = within(dialog).getByLabelText('Maximum concurrent tasks');
     await act(async () => { await user.clear(concurrent); });
     await act(async () => { await user.type(concurrent, '5'); });
@@ -177,10 +206,10 @@ describe('ExecutorListPage', () => {
         success: true, data: { id: 20000, agentId: 40170, name: 'token-test', token: 'unchanged-token', configVersion: 1 },
       })),
     );
-    renderPage();
-    const create = await screen.findByRole('button', { name: 'Create executor' });
+    const { container } = renderPage();
+    const create = await within(container).findByRole('button', { name: 'Create executor' });
     await act(async () => { await user.click(create); });
-    const dialog = screen.getByRole('dialog');
+    const dialog = await findModalByTitle('Create executor');
     await act(async () => { await user.type(within(dialog).getByLabelText('Executor name'), 'token-test'); });
     await act(async () => { await user.click(within(dialog).getByRole('combobox', { name: 'Owning Agent' })); });
     const agent = await screen.findByText('全栈开发 (开发+评审双人组)');
@@ -207,12 +236,13 @@ describe('ExecutorListPage', () => {
     serveExecutor({ clientKind: 'QODER_CLI', name: '<b>我的机器</b>', agentName: '<b>我的 Agent</b>' });
     const router = createMemoryRouter([{ path: '/', element: <ExecutorListPage /> }]);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
-    await expandAgentGroup(user, '<b>我的 Agent</b>（未编队）');
-    const header = screen.getByText('<b>我的 Agent</b>（未编队）');
-    const row = screen.getByRole('button', { name: '<b>我的机器</b>' });
-    await user.click(screen.getByRole('button', { name: '启动命令' }));
-    const dialog = screen.getByRole('dialog');
+    ownedQueryClients.add(client);
+    const { container } = render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
+    const page = within(container);
+    const row = await page.findByRole('button', { name: '<b>我的机器</b>' });
+    const header = page.getByText('<b>我的 Agent</b>（未编队）');
+    await user.click(page.getByRole('button', { name: '启动命令' }));
+    const dialog = await findModalByTitle('启动命令 · <b>我的机器</b>');
     await within(dialog).findByText(/--model auto/);
     const concurrency = within(dialog).getByLabelText('最大并发任务数');
     await user.clear(concurrency);
@@ -220,10 +250,12 @@ describe('ExecutorListPage', () => {
     await waitFor(() => expect(previewedCommand(dialog)).toContain('--max-tasks 7'));
     const command = within(dialog).getByLabelText('命令预览').textContent;
     await act(async () => { await i18n.changeLanguage('en-US'); });
-    expect(screen.getByText('<b>我的 Agent</b> (Unassigned)')).toBe(header);
-    expect(screen.getByRole('button', { name: '<b>我的机器</b>' })).toBe(row);
-    expect(screen.getByText('1 Executor')).toBeInTheDocument();
-    expect(screen.getByText('Online 0')).toBeInTheDocument();
+    expect(page.getByText('<b>我的 Agent</b> (Unassigned)')).toBe(header);
+    expect(page.getByRole('button', { name: '<b>我的机器</b>' })).toBe(row);
+    expect(page.getByText('1 Executor')).toBeInTheDocument();
+    // 原型分组头条只显示非零状态徽标，默认 OFFLINE 的执行器只渲染 Offline 1
+    expect(page.getByText('Offline 1')).toBeInTheDocument();
+    expect(page.queryByText('Online 0')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('Select this option')).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('Maximum concurrent tasks')).toBe(concurrency);
     expect(concurrency).toHaveValue('7');
@@ -242,10 +274,12 @@ describe('ExecutorListPage', () => {
     server.use(http.get('/api/executors/10000/launch-config', () => HttpResponse.json({ success: false, code: '10000', message: 'Network Error' })));
     const router = createMemoryRouter([{ path: '/', element: <ExecutorListPage /> }]);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: /启动命令$/ }));
-    const dialog = screen.getByRole('dialog');
+    ownedQueryClients.add(client);
+    const { container } = render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
+    const page = within(container);
+    await expandAgentGroup(user, 'A（未编队）', container);
+    await user.click(page.getByRole('button', { name: /启动命令$/ }));
+    const dialog = await findModalByTitle('启动命令 · dev-machine-01');
     expect((await within(dialog).findAllByText('启动配置读取失败，无法生成命令')).length).toBe(2);
     await act(async () => { await i18n.changeLanguage('en-US'); });
     expect(within(dialog).getAllByText('Failed to read the startup configuration. A command cannot be generated.')).toHaveLength(2);
@@ -260,33 +294,42 @@ describe('ExecutorListPage', () => {
     await i18n.changeLanguage('zh-CN');
     const user = userEvent.setup();
     serveExecutor({ clientKind: 'QODER_CLI' });
-    let complete!: (response: HttpResponse) => void;
-    const response = new Promise<HttpResponse>((resolve) => { complete = resolve; });
+    let complete!: () => void;
+    const response = new Promise<void>((resolve) => { complete = resolve; });
+    pendingResponses.add(complete);
     let saved: Record<string, unknown> | undefined;
     server.use(http.put('/api/executors/10000/launch-config', async ({ request }) => {
       saved = await request.json() as Record<string, unknown>;
-      return response;
+      await response;
+      return HttpResponse.json({ success: true, data: { ...saved, version: 2 } });
     }));
     const router = createMemoryRouter([{ path: '/', element: <ExecutorListPage /> }]);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: /启动命令$/ }));
-    const dialog = screen.getByRole('dialog');
-    await within(dialog).findByText(/--model auto/);
-    const input = within(dialog).getByLabelText('最大并发任务数');
-    await user.clear(input);
-    await user.click(within(dialog).getByRole('button', { name: '保存配置' }));
-    expect(await within(dialog).findByText('请输入 1 到 10 的整数')).toBeInTheDocument();
-    await act(async () => { await i18n.changeLanguage('en-US'); });
-    expect(await within(dialog).findByText('Enter an integer from 1 to 10')).toBeInTheDocument();
-    expect(input).toHaveValue('');
-    await user.clear(input);
-    await user.type(input, '6');
-    await user.click(within(dialog).getByRole('button', { name: 'Save configuration' }));
-    await waitFor(() => expect(saved).toMatchObject({ model: 'auto', reasoningEffort: 'medium', contextWindow: '260000', memoryMode: 'platform', maxConcurrentDispatches: 6, version: 1 }));
-    await act(async () => { await i18n.changeLanguage('zh-CN'); });
-    await act(async () => { complete(HttpResponse.json({ success: true, data: { ...saved, version: 2 } })); });
+    ownedQueryClients.add(client);
+    const { container } = render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
+    const page = within(container);
+    try {
+      await expandAgentGroup(user, 'A（未编队）', container);
+      await user.click(page.getByRole('button', { name: /启动命令$/ }));
+      const dialog = await findModalByTitle('启动命令 · dev-machine-01');
+      await within(dialog).findByText(/--model auto/);
+      const input = within(dialog).getByLabelText('最大并发任务数');
+      await user.clear(input);
+      await user.click(within(dialog).getByRole('button', { name: '保存配置' }));
+      expect(await within(dialog).findByText('请输入 1 到 10 的整数')).toBeInTheDocument();
+      await act(async () => { await i18n.changeLanguage('en-US'); });
+      expect(await within(dialog).findByText('Enter an integer from 1 to 10')).toBeInTheDocument();
+      expect(input).toHaveValue('');
+      await user.clear(input);
+      await user.type(input, '6');
+      await user.click(within(dialog).getByRole('button', { name: 'Save configuration' }));
+      await waitFor(() => expect(saved).toMatchObject({ model: 'auto', reasoningEffort: 'medium', contextWindow: '260000', memoryMode: 'platform', maxConcurrentDispatches: 6, version: 1 }));
+      await act(async () => { await i18n.changeLanguage('zh-CN'); });
+    } finally {
+      await act(async () => { complete(); });
+    }
+    await waitFor(() => expect(client.isMutating()).toBe(0));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(await screen.findByText('启动配置已保存，请使用新启动命令重启执行器使配置生效')).toBeInTheDocument();
   });
 
@@ -300,30 +343,33 @@ describe('ExecutorListPage', () => {
     );
     const router = createMemoryRouter([{ path: '/', element: <ExecutorListPage /> }]);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
-    await expandAgentGroup(user, 'A（未编队）');
-    expect(screen.getByText('—')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '<b>保留机器</b>' }));
-    await screen.findByText('运行信息');
+    ownedQueryClients.add(client);
+    const { container } = render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
+    const page = within(container);
+    await expandAgentGroup(user, 'A（未编队）', container);
+    expect(page.getByText('—')).toBeInTheDocument();
+    await user.click(page.getByRole('button', { name: '<b>保留机器</b>' }));
+    const drawer = await screen.findByRole('dialog');
+    await within(drawer).findByText('运行信息');
     await act(async () => { await i18n.changeLanguage('en-US'); });
-    expect(screen.getByText('Runtime information')).toBeInTheDocument();
-    expect(screen.getByText('Current version')).toBeInTheDocument();
-    expect(screen.getByText('Connection credentials')).toBeInTheDocument();
-    expect(screen.getAllByText('目录原名')).toHaveLength(2);
-    expect(screen.getByText('<b>保留机器</b> · Executor details')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Close' }));
-    await user.click(screen.getByRole('button', { name: 'Update all' }));
+    expect(within(drawer).getByText('Runtime information')).toBeInTheDocument();
+    expect(within(drawer).getByText('Current version')).toBeInTheDocument();
+    expect(within(drawer).getByText('Connection credentials')).toBeInTheDocument();
+    expect([...page.getAllByText('目录原名'), ...within(drawer).getAllByText('目录原名')]).toHaveLength(2);
+    expect(within(drawer).getByText('<b>保留机器</b> · Executor details')).toBeInTheDocument();
+    await user.click(within(drawer).getByRole('button', { name: 'Close' }));
+    await user.click(page.getByRole('button', { name: 'Update all' }));
     const dialog = await findModalByTitle('Update all');
     expect(within(dialog).getByText('Target version 1.2.3. 1 Executor in the current selection can be updated.')).toBeInTheDocument();
     expect(within(dialog).getByText('Automatic updates are disabled. Skipped Executors will not retry automatically; handle each one in the results.')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Send update commands' }));
-    await screen.findByText('Bulk update commands sent');
-    expect(screen.getByText('Target version 1.2.3; Command sent to 1 Executor; 1 Executor already up to date; 1 Executor skipped')).toBeInTheDocument();
-    expect(screen.getByText('<em>保留名字</em>')).toBeInTheDocument();
-    expect(screen.getByText('· <b>原始原因</b>')).toBeInTheDocument();
+    const result = await findModalByTitle('Bulk update commands sent');
+    expect(within(result).getByText('Target version 1.2.3; Command sent to 1 Executor; 1 Executor already up to date; 1 Executor skipped')).toBeInTheDocument();
+    expect(within(result).getByText('<em>保留名字</em>')).toBeInTheDocument();
+    expect(within(result).getByText('· <b>原始原因</b>')).toBeInTheDocument();
     await act(async () => { await i18n.changeLanguage('zh-CN'); });
-    expect(screen.getByText('全量更新已下发')).toBeInTheDocument();
-    expect(screen.getByText('目标版本 1.2.3，已下发 1 个，1 个已是最新，1 个被跳过')).toBeInTheDocument();
+    expect(within(result).getByText('全量更新已下发')).toBeInTheDocument();
+    expect(within(result).getByText('目标版本 1.2.3，已下发 1 个，1 个已是最新，1 个被跳过')).toBeInTheDocument();
   });
 
   it.each([
@@ -336,17 +382,18 @@ describe('ExecutorListPage', () => {
     const executor = mockExecutor({ name: '<b>发送失败，请稍后重试</b>', restart: { requestId: 'r1', status, messageOrigin: 'SYSTEM', message: chinese, issuedAt: '2026-09-01T00:00:00Z', update: false } });
     let requests = 0;
     server.use(http.get('/api/executors', () => { requests += 1; return HttpResponse.json({ success: true, data: [executor] }); }));
-    const { queryClient } = renderPage();
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: executor.name }));
+    const { queryClient, container } = renderPage();
+    await expandAgentGroup(user, 'A（未编队）', container);
+    await user.click(within(container).getByRole('button', { name: executor.name }));
     const drawer = screen.getByRole('dialog');
+    const drawerRoot = drawer.closest('.ant-drawer') as HTMLElement;
     const rawCache = queryClient.getQueryData(['executors', undefined, []]);
     expect(within(drawer).getByText(chinese)).toBeInTheDocument();
     const before = requests;
     await act(async () => { await i18n.changeLanguage('en-US'); });
     expect(within(drawer).getByText(english)).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBe(drawer);
-    expect(screen.getByRole('button', { name: executor.name })).toBeInTheDocument();
+    expect(within(drawerRoot).getByRole('dialog')).toBe(drawer);
+    expect(within(container).getByRole('button', { name: executor.name })).toBeInTheDocument();
     expect(queryClient.getQueryData(['executors', undefined, []])).toBe(rawCache);
     expect(requests).toBe(before);
     await act(async () => { await i18n.changeLanguage('zh-CN'); });
@@ -386,9 +433,9 @@ describe('ExecutorListPage', () => {
   ])('keeps cached raw restart origin %s/status %s intact across language switches', async (messageOrigin, status, raw) => {
     const user = userEvent.setup();
     serveExecutor({ restart: { requestId: 'r1', status, messageOrigin, message: raw, issuedAt: '2026-09-01T00:00:00Z', update: false } });
-    renderPage();
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: 'dev-machine-01' }));
+    const { container } = renderPage();
+    await expandAgentGroup(user, 'A（未编队）', container);
+    await user.click(within(container).getByRole('button', { name: 'dev-machine-01' }));
     const drawer = screen.getByRole('dialog');
     for (const locale of ['en-US', 'zh-CN']) {
       await act(async () => { await i18n.changeLanguage(locale); });
@@ -401,16 +448,28 @@ describe('ExecutorListPage', () => {
   it('uses the completion locale for an in-flight SYSTEM restart failure', async () => {
     const user = userEvent.setup();
     serveExecutor({ status: 'ONLINE', restartSupported: true, updateRestartSupported: true });
-    let complete!: (response: HttpResponse) => void;
+    let complete!: () => void;
     let posted = false;
-    const pending = new Promise<HttpResponse>((resolve) => { complete = resolve; });
-    server.use(http.post('/api/executors/10000/restart', () => { posted = true; return pending; }));
-    renderPage(); await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: 'dev-machine-01' }));
-    await user.click(screen.getByRole('button', { name: '重启客户端' }));
-    await waitFor(() => expect(posted).toBe(true));
-    await act(async () => { await i18n.changeLanguage('en-US'); });
-    await act(async () => { complete(HttpResponse.json({ success: true, data: { requestId: 'r1', status: 'FAILED', messageOrigin: 'SYSTEM', message: '发送失败，请稍后重试' } })); });
+    const pending = new Promise<void>((resolve) => { complete = resolve; });
+    pendingResponses.add(complete);
+    server.use(http.post('/api/executors/10000/restart', async () => {
+      posted = true;
+      await pending;
+      return HttpResponse.json({ success: true, data: { requestId: 'r1', status: 'FAILED', messageOrigin: 'SYSTEM', message: '发送失败，请稍后重试' } });
+    }));
+    const { queryClient, container } = renderPage();
+    try {
+      await expandAgentGroup(user, 'A（未编队）', container);
+      await user.click(within(container).getByRole('button', { name: 'dev-machine-01' }));
+      const drawer = screen.getByRole('dialog');
+      await user.click(within(drawer).getByRole('button', { name: '重启客户端' }));
+      await waitFor(() => expect(posted).toBe(true));
+      await act(async () => { await i18n.changeLanguage('en-US'); });
+    } finally {
+      await act(async () => { complete(); });
+    }
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(await screen.findByText('Send failed. Try again later.')).toBeInTheDocument();
   });
 
@@ -427,9 +486,9 @@ describe('ExecutorListPage', () => {
         { executorId: 14, executorName: '<i>未知代码</i>', reasonCode: '__proto__', reason: '<b>未知原文</b>' },
       ] } });
     }));
-    const { queryClient } = renderPage();
-    await screen.findByText('A（未编队）');
-    await user.click(screen.getByRole('button', { name: '一键全量更新' }));
+    const { queryClient, container } = renderPage();
+    await within(container).findByText('A（未编队）');
+    await user.click(within(container).getByRole('button', { name: '一键全量更新' }));
     const confirm = await findModalByTitle('一键全量更新');
     await user.click(within(confirm).getByRole('button', { name: '下发升级指令' }));
     const result = await findModalByTitle('全量更新已下发');
@@ -872,29 +931,33 @@ describe('ExecutorListPage', () => {
   ])('falls back to static Qoder models after the %s query settles', async (_scenario, response, queryStatus) => {
     const user = userEvent.setup();
     const catalogRequestStarted = vi.fn();
-    let resolveCatalogResponse!: (value: HttpResponse) => void;
-    const catalogResponse = new Promise<HttpResponse>((resolve) => {
+    let resolveCatalogResponse!: () => void;
+    const catalogResponse = new Promise<void>((resolve) => {
       resolveCatalogResponse = resolve;
     });
+    pendingResponses.add(resolveCatalogResponse);
     server.use(http.get('/api/executor-model-catalogs/qoder', async () => {
       catalogRequestStarted();
-      return catalogResponse;
-    }));
-    const { queryClient } = renderPage(3);
-
-    await user.click(await screen.findByRole('button', { name: /新建执行器/ }));
-    const dialog = screen.getByRole('dialog', { name: '新建执行器' });
-    await waitFor(() => expect(catalogRequestStarted).toHaveBeenCalledTimes(1));
-    await act(async () => {
-      resolveCatalogResponse(response());
       await catalogResponse;
-    });
+      return response();
+    }));
+    const { queryClient, container } = renderPage(3);
+    let dialog!: HTMLElement;
+
+    try {
+      await user.click(await within(container).findByRole('button', { name: /新建执行器/ }));
+      dialog = await findModalByTitle('新建执行器');
+      await waitFor(() => expect(catalogRequestStarted).toHaveBeenCalledTimes(1));
+    } finally {
+      await act(async () => { resolveCatalogResponse(); });
+    }
     await waitFor(() => {
       const query = queryClient.getQueryState(['executor-model-catalog', 'qoder']);
       expect(query?.fetchStatus).toBe('idle');
       expect(query?.status).toBe(queryStatus);
       expect(catalogRequestStarted).toHaveBeenCalledTimes(1);
     });
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     await user.click(within(dialog).getByRole('combobox', { name: 'Qoder 模型' }));
     expect(await screen.findByText('Qwen3.7-Plus')).toBeInTheDocument();
@@ -1168,19 +1231,18 @@ describe('ExecutorListPage', () => {
     await waitFor(() => expect(previewedCommand(dialog)).toContain(`npx -y ${packageSpec} connect`));
     await user.click(within(dialog).getByRole('button', { name: '复制启动命令' }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining(`npx -y ${packageSpec} connect`));
-    await user.click(screen.getByRole('button', { name: '启动命令' }));
-    const reopened = await findModalByTitle('启动命令 · dev-machine-01');
-    fireEvent.click(within(reopened).getByRole('button', { name: '编辑完整命令' }));
-    const input = await within(reopened).findByRole('textbox', { name: '完整启动命令' });
+    // 复制不再关闭弹窗，直接在同一弹窗里继续编辑完整命令
+    fireEvent.click(within(dialog).getByRole('button', { name: '编辑完整命令' }));
+    const input = await within(dialog).findByRole('textbox', { name: '完整启动命令' });
     expect((input as HTMLTextAreaElement).value).toContain(`npx -y ${packageSpec} connect`);
   });
 
   it.each(['QODER_CLI', 'QODER_CN_CLI'])('preserves edited options across model changes in %s previews without saving and discards them on cancel', async (clientKind) => {
     const user = userEvent.setup();
     serveExecutor({ clientKind }, { runtimeVersion: '0.3.9', workspaceRoot: '/data/saved tasks' });
-    renderPage();
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: '启动命令' }));
+    const { container } = renderPage();
+    await expandAgentGroup(user, 'A（未编队）', container);
+    await user.click(within(container).getByRole('button', { name: '启动命令' }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
     await within(dialog).findByText(/--model auto/);
     await selectInForm(user, dialog, '推理强度', '低');
@@ -1209,8 +1271,8 @@ describe('ExecutorListPage', () => {
     expect(within(dialog).getByText('未保存')).toBeInTheDocument();
     expect(launchConfigUpdatesFor(10000)).toHaveLength(0);
     await user.click(within(dialog).getByRole('button', { name: /取\s*消/ }));
-    await user.click(screen.getByRole('button', { name: '启动命令' }));
-    const reopened = await findModalByTitle('启动命令 · dev-machine-01');
+    await user.click(within(container).getByRole('button', { name: '启动命令' }));
+    const reopened = await findModalByTitle('启动命令 · dev-machine-01', dialog);
     await waitFor(() => expect(previewedCommand(reopened)).toContain('--model auto'));
     expect(previewedCommand(reopened)).toContain('--context-window 260000');
     expect(within(reopened).queryByText('未保存')).not.toBeInTheDocument();
@@ -1332,7 +1394,7 @@ describe('ExecutorListPage', () => {
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
     const buttons = within(dialog).getAllByRole('button');
     expect(buttons.indexOf(within(dialog).getByRole('button', { name: '在线应用（重启）' })))
-      .toBeGreaterThan(buttons.indexOf(within(dialog).getByRole('button', { name: /复制 debug 模式命令/ })));
+      .toBeGreaterThan(buttons.indexOf(within(dialog).getByRole('button', { name: '复制启动命令' })));
     fireEvent.click(await within(dialog).findByRole('button', { name: '编辑完整命令' }));
     expect(within(dialog).queryByRole('button', { name: '在线应用（重启）' })).not.toBeInTheDocument();
     const input = await within(dialog).findByRole('textbox', { name: '完整启动命令' });
@@ -1424,9 +1486,9 @@ describe('ExecutorListPage', () => {
       applications += 1;
       return HttpResponse.json({ success: true, data: { requestId: 'posix-only', status: 'REQUESTED' } });
     }));
-    renderPage();
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: '启动命令' }));
+    const { container } = renderPage();
+    await expandAgentGroup(user, 'A（未编队）', container);
+    await user.click(within(container).getByRole('button', { name: '启动命令' }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
     const apply = await within(dialog).findByRole('button', { name: '在线应用（重启）' });
     await waitFor(() => expect(apply).toBeEnabled());
@@ -1446,7 +1508,8 @@ describe('ExecutorListPage', () => {
     expect(apply).toBeEnabled();
     expect(within(dialog).queryByText('在线应用仅支持 macOS / Linux。Windows 命令请复制后在本机启动。')).not.toBeInTheDocument();
     await user.click(apply);
-    await user.click(await screen.findByRole('button', { name: '空闲时重启' }));
+    const choice = await findModalByTitle('选择在线应用方式');
+    await user.click(within(choice).getByRole('button', { name: '空闲时重启' }));
     await waitFor(() => expect(applications).toBe(1));
     expect(launchConfigUpdatesFor(10000)).toHaveLength(1);
   });
@@ -1454,30 +1517,31 @@ describe('ExecutorListPage', () => {
   it('requires an explicit restart choice, supports cancel and force, and translates the choice dialog', async () => {
     const user = userEvent.setup();
     serveExecutor({ clientKind: 'QODER_CLI', status: 'ONLINE', launchCommandSupported: true });
-    let appliedMode: string | undefined;
+    let appliedBody: { version: number; restartMode: string } | undefined;
     server.use(http.post('/api/executors/10000/launch-command/apply', async ({ request }) => {
-      appliedMode = (await request.json() as { restartMode: string }).restartMode;
+      appliedBody = await request.json() as typeof appliedBody;
       return HttpResponse.json({ success: true, data: { requestId: 'force-request', status: 'RESTARTING' } });
     }));
-    renderPage();
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: '启动命令' }));
+    const { container } = renderPage();
+    await expandAgentGroup(user, 'A（未编队）', container);
+    await user.click(within(container).getByRole('button', { name: '启动命令' }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
     await user.click(await within(dialog).findByRole('button', { name: '在线应用（重启）' }));
-    let choice = await findModalByTitle('选择在线应用方式');
+    const choice = await findModalByTitle('选择在线应用方式');
     expect(within(choice).getByRole('button', { name: '强制重启' })).toBeEnabled();
     expect(within(choice).getByRole('button', { name: '空闲时重启' })).toBeEnabled();
-    expect(appliedMode).toBeUndefined();
+    expect(appliedBody).toBeUndefined();
     expect(launchConfigUpdatesFor(10000)).toHaveLength(0);
     await user.click(within(choice).getByRole('button', { name: /取\s*消/ }));
-    expect(appliedMode).toBeUndefined();
+    expect(appliedBody).toBeUndefined();
+    expect(launchConfigUpdatesFor(10000)).toHaveLength(0);
     await user.click(within(dialog).getByRole('button', { name: '在线应用（重启）' }));
-    choice = await findModalByTitle('选择在线应用方式');
+    await findModalByTitle('选择在线应用方式', choice);
     await act(async () => { await i18n.changeLanguage('en-US'); });
     expect(within(choice).getByRole('button', { name: 'Restart when idle' })).toBeEnabled();
     expect(within(choice).getByText(/Conversations may not resume/)).toBeInTheDocument();
     await user.click(within(choice).getByRole('button', { name: 'Force restart' }));
-    await waitFor(() => expect(appliedMode).toBe('FORCE'));
+    await waitFor(() => expect(appliedBody).toEqual({ version: 2, restartMode: 'FORCE' }));
     expect(launchConfigUpdatesFor(10000)).toHaveLength(1);
   });
 
@@ -1497,9 +1561,9 @@ describe('ExecutorListPage', () => {
     const user = userEvent.setup();
     serveExecutor({ clientKind: 'QODER_CLI', status: 'ONLINE', launchCommandSupported: true,
       restart: { requestId: 'queued', status: 'WAITING_IDLE', message: 'client diagnostic' } });
-    renderPage();
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: '启动命令' }));
+    const { container } = renderPage();
+    await expandAgentGroup(user, 'A（未编队）', container);
+    await user.click(within(container).getByRole('button', { name: '启动命令' }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
     expect(await within(dialog).findByRole('button', { name: '在线应用（重启）' })).toBeDisabled();
     expect(within(dialog).getByText('等待空闲')).toBeInTheDocument();
@@ -1555,9 +1619,9 @@ describe('ExecutorListPage', () => {
       }),
       http.post('/api/executors/10000/launch-command/apply', () => HttpResponse.json({ success: false, code: '10001', message: 'runtime is busy' })),
     );
-    renderPage();
-    await expandAgentGroup(user, 'A（未编队）');
-    await user.click(screen.getByRole('button', { name: '启动命令' }));
+    const { container } = renderPage();
+    await expandAgentGroup(user, 'A（未编队）', container);
+    await user.click(within(container).getByRole('button', { name: '启动命令' }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
     await user.click(await within(dialog).findByRole('button', { name: '编辑完整命令' }));
     const input = await within(dialog).findByRole('textbox', { name: '完整启动命令' });
@@ -1566,7 +1630,8 @@ describe('ExecutorListPage', () => {
     const preview = await within(dialog).findByRole('region', { name: '命令预览' });
     expect(preview).toHaveTextContent(draft);
     await user.click(within(dialog).getByRole('button', { name: '在线应用（重启）' }));
-    await user.click(await screen.findByRole('button', { name: '空闲时重启' }));
+    const choice = await findModalByTitle('选择在线应用方式');
+    await user.click(within(choice).getByRole('button', { name: '空闲时重启' }));
     expect(await screen.findByText('命令已保存，但在线应用失败：runtime is busy')).toBeInTheDocument();
     await act(async () => { await i18n.changeLanguage('en-US'); });
     expect(within(dialog).getByRole('region', { name: 'Command preview' })).toHaveTextContent(draft);
@@ -1832,7 +1897,7 @@ describe('ExecutorListPage', () => {
 
     await expandAgentGroup(user, 'A（未编队）');
     await user.click(await screen.findByRole('button', { name: /启动命令/ }));
-    const debug = await screen.findByRole('button', { name: /复制 debug 模式命令/ });
+    const debug = await screen.findByRole('button', { name: '更多复制方式' });
     await user.hover(debug);
     expect(await screen.findByRole('tooltip')).toHaveTextContent(i18n.t('executor:debugWarning'));
     debug.focus(); await user.keyboard('{Enter}');
@@ -1854,7 +1919,7 @@ describe('ExecutorListPage', () => {
 
     await expandAgentGroup(user, 'A（未编队）');
     await user.click(await screen.findByRole('button', { name: /启动命令/ }));
-    await user.click(await screen.findByRole('button', { name: /复制 debug 模式命令/ }));
+    await user.click(await screen.findByRole('button', { name: '更多复制方式' }));
     await user.click(await screen.findByText('Windows (PowerShell 7+)'));
 
     expect(writeText).toHaveBeenCalledTimes(1);
@@ -1943,8 +2008,8 @@ describe('ExecutorListPage', () => {
 
   // rc-util 在 NODE_ENV=test 下把所有弹层 id 固定成 test-id，多个弹窗同时挂载时 aria-labelledby
   // 全部指向 DOM 中第一个标题，按 accessible name 查弹窗会拿到错误节点，只能按标题文本定位。
-  async function findModalByTitle(title: string): Promise<HTMLElement> {
-    const titleNode = await screen.findByText(title, { selector: '.ant-modal-title' });
+  async function findModalByTitle(title: string, root: HTMLElement = document.body): Promise<HTMLElement> {
+    const titleNode = await within(root).findByText(title, { selector: '.ant-modal-title' });
     const modal = titleNode.closest('[role="dialog"]');
     expect(modal).not.toBeNull();
     const wrap = (modal as HTMLElement).closest('.ant-modal-wrap') as HTMLElement;
@@ -2160,9 +2225,12 @@ describe('ExecutorListPage', () => {
     // 复制只写服务端，浏览器存储里不留任何执行器偏好
     expect(unexpectedLocalStorageKeys()).toEqual([]);
 
+    // 复制后弹窗保持打开
     const wrap = dialog.closest('.ant-modal-wrap') as HTMLElement;
+    expect(wrap.style.display).not.toBe('none');
+    // 取消后重新打开：本地从未写入偏好，1M 只能来自服务端持久化的配置
+    await user.click(within(dialog).getByRole('button', { name: /取\s*消/ }));
     await waitFor(() => expect(wrap.style.display).toBe('none'));
-    // 重新打开：本地从未写入偏好，1M 只能来自服务端持久化的配置
     const row = screen.getByText('dev-machine-01').closest('tr') as HTMLElement;
     await user.click(within(row).getByRole('button', { name: /启动命令/ }));
     const reopened = await findModalByTitle('启动命令 · dev-machine-01');
@@ -2249,7 +2317,7 @@ describe('ExecutorListPage', () => {
     expect(wrap.style.display).not.toBe('none');
   });
 
-  it('wraps every startup-modal footer action in one Space so 保存配置 and 复制启动命令 are evenly spaced', async () => {
+  it('groups startup-modal footer actions by scope: exit/save left, command actions right with one primary', async () => {
     const user = userEvent.setup();
     serveExecutor({ clientKind: 'QODER_CLI' });
     renderPage();
@@ -2260,16 +2328,46 @@ describe('ExecutorListPage', () => {
 
     const footer = dialog.querySelector('.ant-modal-footer') as HTMLElement;
     expect(footer).not.toBeNull();
-    const saveBtn = within(footer).getByRole('button', { name: '保存配置' });
-    const copyBtn = within(footer).getByRole('button', { name: '复制启动命令' });
-    // 所有 footer 动作共处同一个 Space 容器 → 间距由该 Space 统一控制，不再贴合
-    const footerSpace = footer.querySelector('.ant-space') as HTMLElement;
-    expect(footerSpace).not.toBeNull();
-    expect(footerSpace.contains(saveBtn)).toBe(true);
-    expect(footerSpace.contains(copyBtn)).toBe(true);
-    // 保存配置作为独立 Space item 渲染，与相邻按钮等宽间隔，而非直接贴合复制按钮
-    expect(saveBtn.closest('.ant-space-item')).not.toBeNull();
-    expect(saveBtn.parentElement).not.toBe(copyBtn.parentElement);
+    const groups = footer.querySelectorAll('.executor-modal-foot-group');
+    expect(groups).toHaveLength(2);
+
+    const left = groups[0] as HTMLElement;
+    const right = groups[1] as HTMLElement;
+    // antd 会在两个汉字之间插入空格，取消的可见名称为「取 消」
+    expect(within(left).getByRole('button', { name: /取\s*消/ })).toBeInTheDocument();
+    expect(within(left).getByRole('button', { name: '保存配置' })).toBeInTheDocument();
+    expect(within(right).getByRole('button', { name: '复制启动命令' })).toBeInTheDocument();
+    expect(within(right).getByRole('button', { name: '更多复制方式' })).toBeInTheDocument();
+    // 保存配置是蓝色主按钮；在线应用（重启）也保留 primary
+    const leftPrimary = within(left).getAllByRole('button').filter((btn) => btn.classList.contains('ant-btn-primary'));
+    expect(leftPrimary).toHaveLength(1);
+    expect(leftPrimary[0]).toHaveAccessibleName('保存配置');
+    const rightPrimary = within(right).getAllByRole('button').filter((btn) => btn.classList.contains('ant-btn-primary'));
+    expect(rightPrimary).toHaveLength(1);
+    expect(rightPrimary[0]).toHaveAccessibleName('在线应用（重启）');
+
+    // 「编辑完整命令」与系统切换同排靠右，不再占用命令预览标题行
+    const osRow = dialog.querySelector('.executor-os-row') as HTMLElement;
+    expect(osRow).not.toBeNull();
+    expect(within(osRow).getByText('Windows')).toBeInTheDocument();
+    expect(within(osRow).getByRole('button', { name: '编辑完整命令' })).toBeInTheDocument();
+    expect(dialog.querySelector('.executor-preview-head')?.contains(within(osRow).getByRole('button', { name: '编辑完整命令' }))).toBe(false);
+  });
+
+  it('labels the caret dropdown as the debug command menu so the shell options are not mistaken for the normal command', async () => {
+    const user = userEvent.setup();
+    serveExecutor({ clientKind: 'QODER_CLI' });
+    renderPage();
+
+    await expandAgentGroup(user, 'A（未编队）');
+    await user.click(await screen.findByRole('button', { name: /启动命令/ }));
+    const dialog = await findModalByTitle('启动命令 · dev-machine-01');
+    await user.click(within(dialog).getByRole('button', { name: '更多复制方式' }));
+
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByText('复制 debug 模式命令')).toBeInTheDocument();
+    expect(within(menu).getByText('Mac / Linux (bash)')).toBeInTheDocument();
+    expect(within(menu).getByText('Windows (PowerShell 7+)')).toBeInTheDocument();
   });
 
   it('aborts the copy and keeps the dialog open when the server reports a version conflict', async () => {
@@ -2389,7 +2487,7 @@ describe('ExecutorListPage', () => {
     expect(await within(dialog).findByText('该执行器尚未配置启动参数，请先选择并保存')).toBeInTheDocument();
     expect(within(dialog).getByText('未配置：请先选择启动参数并保存后再生成命令')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: '复制启动命令' })).toBeDisabled();
-    expect(within(dialog).getByRole('button', { name: /复制 debug 模式命令/ })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: '更多复制方式' })).toBeDisabled();
     // 未配置时不向服务端索取命令，避免生成一条误导性的启动命令
     expect(commandCalls).toBe(0);
 
@@ -2657,7 +2755,7 @@ describe('ExecutorListPage', () => {
     const reason = '执行器不存在或已删除，无法生成启动命令';
     expect((await within(dialog).findAllByText(reason)).length).toBeGreaterThanOrEqual(2);
     expect(within(dialog).getByRole('button', { name: '复制启动命令' })).toBeDisabled();
-    expect(within(dialog).getByRole('button', { name: /复制 debug 模式命令/ })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: '更多复制方式' })).toBeDisabled();
     expect(commandCalls).toBe(0);
     expect(writeText).not.toHaveBeenCalled();
   });
@@ -2822,8 +2920,12 @@ describe('ExecutorListPage', () => {
     );
   }
 
-  function collapseItemOf(label: string | RegExp): HTMLElement {
-    const item = screen.getByText(label).closest('.ant-collapse-item');
+  // 行内的小队标签可能与分组名同名（例如「未分组」），只在折叠头里匹配分组标题。
+  function collapseItemOf(label: string | RegExp, root: HTMLElement = document.body): HTMLElement {
+    const item = Array.from(root.querySelectorAll('.ant-collapse-item')).find((candidate) => {
+      const text = candidate.querySelector('.ant-collapse-header')?.textContent ?? '';
+      return typeof label === 'string' ? text.includes(label) : label.test(text);
+    });
     if (!item) throw new Error(`找不到分组 ${String(label)} 对应的折叠面板`);
     return item as HTMLElement;
   }
@@ -2839,26 +2941,31 @@ describe('ExecutorListPage', () => {
   async function toggleGroup(
     user: ReturnType<typeof userEvent.setup>,
     label: string | RegExp,
+    root: HTMLElement = document.body,
   ): Promise<HTMLElement> {
-    const item = collapseItemOf(label);
+    const item = collapseItemOf(label, root);
     const header = item.querySelector('.ant-collapse-header');
     if (!header) throw new Error(`找不到分组 ${String(label)} 的折叠头`);
     await user.click(header as HTMLElement);
     return item;
   }
 
-  // 分组默认折叠，需要行内内容的用例先展开对应分组。
+  // 分组默认展开；若目标分组未展开则点击展开，已展开则不动，最后断言展开态。
   async function expandAgentGroup(
     user: ReturnType<typeof userEvent.setup>,
     label: string,
+    root: HTMLElement = document.body,
   ): Promise<HTMLElement> {
-    await screen.findByText(label);
-    const item = await toggleGroup(user, label);
+    await within(root).findByText(label);
+    const item = collapseItemOf(label, root);
+    if (!item.classList.contains('ant-collapse-item-active')) {
+      await toggleGroup(user, label, root);
+    }
     expectExpanded(item, true);
     return item;
   }
 
-  it('renders one panel per owning agent collapsed by default with count and status summary', async () => {
+  it('renders one panel per owning agent expanded by default with count and status summary', async () => {
     const user = userEvent.setup();
     mockGroupedExecutorApis([
       mockGroupedExecutor({ id: 10, agentId: 1, agentName: '全栈开发数字人', name: 'dev-machine-01', status: 'ONLINE' }),
@@ -2871,31 +2978,30 @@ describe('ExecutorListPage', () => {
     const devGroup = collapseItemOf('全栈开发数字人（未编队）');
     const crGroup = collapseItemOf('CR数字人（未编队）');
 
-    expectExpanded(devGroup, false);
-    expectExpanded(crGroup, false);
+    expectExpanded(devGroup, true);
+    expectExpanded(crGroup, true);
 
-    // 折叠态下组头的数量与状态汇总仍然可见，组内执行器行不渲染
+    // 展开态下组头的数量与状态汇总仍然可见（零计数徽标按原型隐藏），组内执行器行已渲染
     expect(within(devGroup).getByText('2 个执行器')).toBeInTheDocument();
     expect(within(devGroup).getByText('在线 1')).toBeInTheDocument();
-    expect(within(devGroup).getByText('忙碌 0')).toBeInTheDocument();
+    expect(within(devGroup).queryByText('忙碌 0')).not.toBeInTheDocument();
     expect(within(devGroup).getByText('离线 1')).toBeInTheDocument();
     expect(within(crGroup).getByText('1 个执行器')).toBeInTheDocument();
     expect(within(crGroup).getByText('忙碌 1')).toBeInTheDocument();
-    expect(screen.queryByText('dev-machine-01')).not.toBeInTheDocument();
-    expect(screen.queryByText('cr-machine-01')).not.toBeInTheDocument();
+    expect(screen.getByText('dev-machine-01')).toBeInTheDocument();
+    expect(screen.getByText('cr-machine-01')).toBeInTheDocument();
 
     await toggleGroup(user, '全栈开发数字人（未编队）');
 
-    const openedDev = collapseItemOf('全栈开发数字人（未编队）');
-    expectExpanded(openedDev, true);
-    expectExpanded(collapseItemOf('CR数字人（未编队）'), false);
-    expect(within(openedDev).getByText('dev-machine-01')).toBeInTheDocument();
-    expect(within(openedDev).getByText('dev-machine-02')).toBeInTheDocument();
-    expect(within(openedDev).queryByText('cr-machine-01')).not.toBeInTheDocument();
-    expect(screen.queryByText('cr-machine-01')).not.toBeInTheDocument();
+    const closedDev = collapseItemOf('全栈开发数字人（未编队）');
+    expectExpanded(closedDev, false);
+    expectExpanded(collapseItemOf('CR数字人（未编队）'), true);
+    expect(within(closedDev).queryByText('dev-machine-01')).not.toBeInTheDocument();
+    expect(within(closedDev).queryByText('dev-machine-02')).not.toBeInTheDocument();
+    expect(within(collapseItemOf('CR数字人（未编队）')).getByText('cr-machine-01')).toBeInTheDocument();
   });
 
-  it('expands one agent group without touching the others and collapses it again', async () => {
+  it('collapses one agent group without touching the others and expands it again', async () => {
     const user = userEvent.setup();
     mockGroupedExecutorApis([
       mockGroupedExecutor({ id: 10, agentId: 1, agentName: '全栈开发数字人', name: 'dev-machine-01' }),
@@ -2904,22 +3010,20 @@ describe('ExecutorListPage', () => {
     renderPage();
 
     await screen.findByText('全栈开发数字人（未编队）');
-    expectExpanded(collapseItemOf('全栈开发数字人（未编队）'), false);
-    expectExpanded(collapseItemOf('CR数字人（未编队）'), false);
+    expectExpanded(collapseItemOf('全栈开发数字人（未编队）'), true);
+    expectExpanded(collapseItemOf('CR数字人（未编队）'), true);
 
     await toggleGroup(user, '全栈开发数字人（未编队）');
-    const opened = collapseItemOf('全栈开发数字人（未编队）');
-    expectExpanded(opened, true);
-    expectExpanded(collapseItemOf('CR数字人（未编队）'), false);
-    expect(within(opened).getByText('dev-machine-01')).toBeInTheDocument();
-    expect(screen.queryByText('cr-machine-01')).not.toBeInTheDocument();
-
-    await toggleGroup(user, '全栈开发数字人（未编队）');
-    expectExpanded(collapseItemOf('全栈开发数字人（未编队）'), false);
+    const closed = collapseItemOf('全栈开发数字人（未编队）');
+    expectExpanded(closed, false);
+    expectExpanded(collapseItemOf('CR数字人（未编队）'), true);
+    expect(within(closed).queryByText('dev-machine-01')).not.toBeInTheDocument();
+    expect(screen.getByText('cr-machine-01')).toBeInTheDocument();
 
     await toggleGroup(user, '全栈开发数字人（未编队）');
     const reopened = collapseItemOf('全栈开发数字人（未编队）');
     expectExpanded(reopened, true);
+    expectExpanded(collapseItemOf('CR数字人（未编队）'), true);
     expect(within(reopened).getByText('dev-machine-01')).toBeInTheDocument();
   });
 
@@ -2945,8 +3049,8 @@ describe('ExecutorListPage', () => {
     renderPage();
 
     await screen.findByText('全栈开发（独立开发者小队）');
-    expectExpanded(collapseItemOf('全栈开发（独立开发者小队）'), false);
-    expectExpanded(collapseItemOf('全栈开发（开发+评审双人组）'), false);
+    expectExpanded(collapseItemOf('全栈开发（独立开发者小队）'), true);
+    expectExpanded(collapseItemOf('全栈开发（开发+评审双人组）'), true);
 
     const soloGroup = await expandAgentGroup(user, '全栈开发（独立开发者小队）');
     const duoGroup = await expandAgentGroup(user, '全栈开发（开发+评审双人组）');
@@ -2968,8 +3072,8 @@ describe('ExecutorListPage', () => {
 
     await screen.findByText('未知 Agent');
     const unknownGroup = collapseItemOf('未知 Agent');
-    expectExpanded(unknownGroup, false);
-    expectExpanded(collapseItemOf('Beta数字人（未编队）'), false);
+    expectExpanded(unknownGroup, true);
+    expectExpanded(collapseItemOf('Beta数字人（未编队）'), true);
     const items = Array.from(document.querySelectorAll('.ant-collapse-item'));
     expect(items[items.length - 1]).toBe(unknownGroup);
 
@@ -2981,7 +3085,7 @@ describe('ExecutorListPage', () => {
     expect(within(collapseItemOf('未知 Agent')).queryByText('beta-runner')).not.toBeInTheDocument();
   });
 
-  it('keeps a newly appearing agent group collapsed after another one was expanded', async () => {
+  it('keeps a manually collapsed group collapsed and leaves newly appearing groups collapsed', async () => {
     const user = userEvent.setup();
     mockGroupedExecutorApis([
       mockGroupedExecutor({ id: 10, agentId: 1, agentName: '全栈开发数字人', name: 'dev-machine-01' }),
@@ -2990,7 +3094,7 @@ describe('ExecutorListPage', () => {
     await screen.findByText('全栈开发数字人（未编队）');
 
     await toggleGroup(user, '全栈开发数字人（未编队）');
-    expectExpanded(collapseItemOf('全栈开发数字人（未编队）'), true);
+    expectExpanded(collapseItemOf('全栈开发数字人（未编队）'), false);
 
     await act(async () => {
       queryClient.setQueryData(['executors', undefined, []], [
@@ -3001,7 +3105,7 @@ describe('ExecutorListPage', () => {
 
     await screen.findByText('CR数字人（未编队）');
     expectExpanded(collapseItemOf('CR数字人（未编队）'), false);
-    expectExpanded(collapseItemOf('全栈开发数字人（未编队）'), true);
+    expectExpanded(collapseItemOf('全栈开发数字人（未编队）'), false);
     expect(screen.queryByText('cr-machine-01')).not.toBeInTheDocument();
   });
 
@@ -3032,7 +3136,7 @@ describe('ExecutorListPage', () => {
     await waitFor(() => {
       expect(document.querySelectorAll('.ant-collapse-item')).toHaveLength(1);
     });
-    expectExpanded(collapseItemOf('Alpha数字人（未编队）'), false);
+    expectExpanded(collapseItemOf('Alpha数字人（未编队）'), true);
     expect(screen.queryByText('Beta数字人（未编队）')).not.toBeInTheDocument();
 
     const alphaGroup = await expandAgentGroup(user, 'Alpha数字人（未编队）');
@@ -3089,33 +3193,37 @@ describe('ExecutorListPage', () => {
     renderPage();
 
     await screen.findByText('Gamma（未编队）');
-    expectExpanded(collapseItemOf('Alpha（Squad A）'), false);
-    // 默认是 Agent 分组视图，此时还没有未归属分组
-    expect(screen.queryByText('未分组')).not.toBeInTheDocument();
+    expectExpanded(collapseItemOf('Alpha（Squad A）'), true);
+    // 默认是 Agent 分组视图：行内的「未分组」标签仍会出现，但不能有小队分组的查看链接
+    expect(screen.queryByRole('link', { name: /查看小队/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByText('按小队分组'));
 
-    await screen.findByText('未分组');
+    // 「未分组」同时出现在分组头和行内小队标签中
+    await screen.findAllByText('未分组');
     expect(document.querySelectorAll('.ant-collapse-item')).toHaveLength(3);
     const items = Array.from(document.querySelectorAll('.ant-collapse-item'));
     const squadAGroup = collapseItemOf('Squad A');
     const looseGroup = collapseItemOf('未分组');
-    expectExpanded(squadAGroup, false);
-    expectExpanded(collapseItemOf('Squad B'), false);
+    expectExpanded(squadAGroup, true);
+    expectExpanded(collapseItemOf('Squad B'), true);
     expect(within(squadAGroup).getByText('1 个执行器')).toBeInTheDocument();
     expect(within(looseGroup).getByText('1 个执行器')).toBeInTheDocument();
-    expect(screen.queryByText('a-runner')).not.toBeInTheDocument();
+    expect(screen.getByText('a-runner')).toBeInTheDocument();
     // 未归属分组恒排最后，未编队的执行器不会被隐藏
     expect(items[items.length - 1]).toBe(looseGroup);
 
-    expect(within(squadAGroup).getByText('Squad A').closest('a')).toBeNull();
-    await user.click(within(squadAGroup).getByText('Squad A'));
+    // 小队名本身是查看小队的链接；点击链接只导航，不折叠/展开分组
+    const squadNameLink = within(squadAGroup).getByRole('link', { name: '查看小队：Squad A' });
+    expect(squadNameLink).toHaveAttribute('href', '/squads?squadId=7');
+    await user.click(squadNameLink);
+    expectExpanded(squadAGroup, true);
+
+    // 分组默认展开，点击分组头会收起，这里只验证链接点击不会改变展开态
     const opened = squadAGroup;
     expectExpanded(opened, true);
     expect(within(opened).getByText('a-runner')).toBeInTheDocument();
-    const squadLink = within(opened).getByRole('link', { name: '查看小队：Squad A' });
-    expect(squadLink).toHaveAttribute('href', '/agents?tab=squads&squadId=7');
-    await user.click(squadLink);
+    await user.click(within(opened).getByRole('link', { name: '查看小队：Squad A' }));
     expectExpanded(opened, true);
   });
 
@@ -3163,8 +3271,9 @@ describe('ExecutorListPage', () => {
       memberAgentIds, memberCount: memberAgentIds.length,
     });
     const seen: string[] = [];
-    let releaseSecond: (() => void) | null = null;
+    let releaseSecond!: () => void;
     const secondPending = new Promise<void>((resolve) => { releaseSecond = resolve; });
+    pendingResponses.add(releaseSecond);
     const response = (data: Record<string, unknown>[]) => HttpResponse.json({
       success: true, code: '0', message: '', traceId: null, data,
     });
@@ -3189,24 +3298,27 @@ describe('ExecutorListPage', () => {
         })]);
       }),
     );
-    renderPage();
+    const { queryClient, container } = renderPage();
+    const page = within(container);
 
-    const group = await expandAgentGroup(user, 'Alpha（Squad A）');
-    expect(within(group).getByText('a-runner')).toBeInTheDocument();
+    try {
+      const group = await expandAgentGroup(user, 'Alpha（Squad A）', container);
+      expect(within(group).getByText('a-runner')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('combobox', { name: '按小队筛选' }));
-    await user.click(await screen.findByText('Squad A', { selector: '.ant-select-item-option-content' }));
+      await user.click(page.getByRole('combobox', { name: '按小队筛选' }));
+      await user.click(await screen.findByText('Squad A', { selector: '.ant-select-item-option-content' }));
 
-    await waitFor(() => expect(seen.some((query) => query.includes('squadIds=7'))).toBe(true));
-    // keepPreviousData：筛选请求还没返回时，上一份列表继续挂在页面上，不会先闪回空表
-    expect(screen.getByText('Alpha（Squad A）')).toBeInTheDocument();
-    expect(within(collapseItemOf('Alpha（Squad A）')).getByText('a-runner')).toBeInTheDocument();
-    expect(screen.queryByText('b-runner')).not.toBeInTheDocument();
-
-    await act(async () => { releaseSecond!(); });
-
-    expect(await screen.findByText('b-runner')).toBeInTheDocument();
-    expect(screen.queryByText('a-runner')).not.toBeInTheDocument();
+      await waitFor(() => expect(seen.some((query) => query.includes('squadIds=7'))).toBe(true));
+      // keepPreviousData：筛选请求还没返回时，上一份列表继续挂在页面上，不会先闪回空表
+      expect(page.getByText('Alpha（Squad A）')).toBeInTheDocument();
+      expect(within(collapseItemOf('Alpha（Squad A）', container)).getByText('a-runner')).toBeInTheDocument();
+      expect(page.queryByText('b-runner')).not.toBeInTheDocument();
+    } finally {
+      await act(async () => { releaseSecond(); });
+    }
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(await page.findByText('b-runner')).toBeInTheDocument();
+    expect(page.queryByText('a-runner')).not.toBeInTheDocument();
   });
 
   it('narrows the per-agent executor endpoint client side because it takes no squad parameter', async () => {
@@ -3256,8 +3368,8 @@ describe('ExecutorListPage', () => {
 
     const panels = Array.from(document.querySelectorAll('.ant-collapse-item'));
     expect(panels).toHaveLength(1);
+    // 小队分组默认展开，直接断言行内容，再点分组头会把它收起
     const panel = panels[0] as HTMLElement;
-    await user.click(panel.querySelector('.ant-collapse-header') as HTMLElement);
     expect(within(panel).getByText('a-runner')).toBeInTheDocument();
     expect(within(panel).queryByText('b-runner')).not.toBeInTheDocument();
     expect(within(panel).queryByText('loose-runner')).not.toBeInTheDocument();
@@ -3273,7 +3385,8 @@ describe('ExecutorListPage', () => {
       ], [mockAgent(1, 'Alpha', ['Squad A'])]);
       renderPage();
 
-      await screen.findByText('Squad A');
+      // 行内的小队标签也写作 Squad A，按小队分组的查看链接才是分组头的唯一标识
+      await screen.findByRole('link', { name: '查看小队：Squad A' });
       expect(screen.queryByText('Alpha（Squad A）')).not.toBeInTheDocument();
 
       await user.click(screen.getByText('按 Agent 分组'));
@@ -3283,7 +3396,7 @@ describe('ExecutorListPage', () => {
 
       await user.click(screen.getByText('按小队分组'));
 
-      await screen.findByText('Squad A');
+      await screen.findByRole('link', { name: '查看小队：Squad A' });
       expect(localStorage.getItem('autowonder.executors.view')).toBe('squad');
     });
 
@@ -3306,7 +3419,7 @@ describe('ExecutorListPage', () => {
       ], [mockAgent(1, 'Alpha', ['Squad A'])]);
       renderPage();
 
-      await screen.findByText('Squad A');
+      await screen.findByRole('link', { name: '查看小队：Squad A' });
       expect(screen.queryByText('Alpha（Squad A）')).not.toBeInTheDocument();
     });
 
@@ -3607,6 +3720,15 @@ describe('ExecutorListPage', () => {
 
     it('shows the backend refusal instead of a generic failure', async () => {
       const user = userEvent.setup();
+      const errors = vi.spyOn(message, 'error');
+      pendingNotifications.add(async () => {
+        for (const result of errors.mock.results) {
+          if (result.type === 'return') {
+            result.value();
+            await result.value;
+          }
+        }
+      });
       mockGroupedExecutorApis([behindTarget()]);
       server.use(http.post('/api/executors/:id/update', () => HttpResponse.json({
         success: false, code: '10001', message: '已有升级任务进行中，请等待结果', data: null, traceId: null,
@@ -3744,6 +3866,15 @@ describe('ExecutorListPage', () => {
 
     it('reports a batch failure without opening the result modal', async () => {
       const user = userEvent.setup();
+      const errors = vi.spyOn(message, 'error');
+      pendingNotifications.add(async () => {
+        for (const result of errors.mock.results) {
+          if (result.type === 'return') {
+            result.value();
+            await result.value;
+          }
+        }
+      });
       mockGroupedExecutorApis([behindTarget()]);
       server.use(http.post('/api/executors/update-all', () => HttpResponse.json({
         success: false, code: '10001', message: '目标版本未配置', data: null, traceId: null,
@@ -3803,6 +3934,8 @@ describe('ExecutorListPage', () => {
 
 
 describe('routed squad grouping localization', () => {
+  afterEach(cleanupExecutorListPage);
+
   it('refreshes group fallbacks and preserves authored labels without rebuilding group identity', async () => {
     await i18n.changeLanguage('zh-CN');
     useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
@@ -3813,21 +3946,23 @@ describe('routed squad grouping localization', () => {
     );
     const router = createMemoryRouter([{ path: '/', element: <ExecutorListPage /> }]);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
-    await screen.findByRole('combobox', { name: '按小队筛选' });
-    await userEvent.click(screen.getByText('按小队分组'));
-    await screen.findAllByText('未分组');
-    const groupHeader = screen.getAllByText('未分组')[0];
-    await userEvent.click(groupHeader);
-    const rawExecutor = await screen.findByRole('button', { name: '<b>自定义资源</b>' });
+    ownedQueryClients.add(client);
+    const { container } = render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
+    const page = within(container);
+    await page.findByRole('combobox', { name: '按小队筛选' });
+    await userEvent.click(page.getByText('按小队分组'));
+    await page.findAllByText('未分组');
+    // 小组默认展开；行内的「未分组」标签也会命中文案，这里只取分组头文本，不能再点它（会收起分组）
+    const groupHeader = page.getAllByText('未分组')[0];
+    const rawExecutor = await page.findByRole('button', { name: '<b>自定义资源</b>' });
     await act(async () => { await i18n.changeLanguage('en-US'); });
-    await screen.findAllByText('Ungrouped');
-    expect(screen.getAllByText('Ungrouped')[0]).toBe(groupHeader);
-    expect(screen.getByRole('button', { name: '<b>自定义资源</b>' })).toBe(rawExecutor);
-    expect(screen.getAllByText('Squad #42').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('<b>自定义小队</b>').length).toBeGreaterThan(0);
+    await page.findAllByText('Ungrouped');
+    expect(page.getAllByText('Ungrouped')[0]).toBe(groupHeader);
+    expect(page.getByRole('button', { name: '<b>自定义资源</b>' })).toBe(rawExecutor);
+    expect(page.getAllByText('Squad #42').length).toBeGreaterThan(0);
+    expect(page.getAllByText('<b>自定义小队</b>').length).toBeGreaterThan(0);
 
-    expect(screen.getByRole('combobox', { name: 'Filter by squad' })).toBeInTheDocument();
+    expect(page.getByRole('combobox', { name: 'Filter by squad' })).toBeInTheDocument();
     await act(async () => { await i18n.changeLanguage('zh-CN'); });
   });
 });
@@ -3839,6 +3974,8 @@ function LocationProbe() {
 }
 
 describe('executor agent direct link', () => {
+  afterEach(cleanupExecutorListPage);
+
   const okJson = (data: unknown) => HttpResponse.json({ success: true, code: '0', message: '', traceId: null, data });
   const agentRow = (id: number, name: string) => ({
     id, name, avatarUrl: null, status: 'ONLINE', onlineVersionId: null,
@@ -3869,6 +4006,7 @@ describe('executor agent direct link', () => {
       { initialEntries: [entry] },
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } });
+    ownedQueryClients.add(queryClient);
     return {
       router,
       queryClient,

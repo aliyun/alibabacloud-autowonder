@@ -306,7 +306,7 @@ describe('WorkitemAdvancedFilter', () => {
     expect(applied.created.to?.format('YYYY-MM-DD')).toBe(adjustedEnd);
   });
 
-  it('warns and disables apply when the start day is later than the end day', async () => {
+  it('warns and keeps the panel open when the start day is later than the end day', async () => {
     const onApply = renderFilter();
     const dialog = await openPanel();
 
@@ -314,7 +314,10 @@ describe('WorkitemAdvancedFilter', () => {
     typeDate(dialog, '结束日期', '2026-10-01');
 
     expect(within(dialog).getByRole('alert')).toHaveTextContent('起始日期不能晚于结束日期');
-    expect(within(dialog).getByRole('button', { name: /应\s*用/ })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: /应\s*用/ }));
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('起始日期不能晚于结束日期');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(onApply).not.toHaveBeenCalled();
   });
 
@@ -529,14 +532,19 @@ describe('WorkitemAdvancedFilter', () => {
     expect(applied.creatorIds).toEqual([]);
   });
 
-  it('blocks apply while a tag condition has no tags', async () => {
+  it('shows the incomplete-condition error only after apply is attempted', async () => {
     const onApply = renderFilter();
     const dialog = await openPanel();
 
     await userEvent.click(within(dialog).getByRole('button', { name: /添加条件/ }));
 
+    // 新增空条件不预弹错误，等待用户输入
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /应\s*用/ }));
+
     expect(within(dialog).getByRole('alert')).toHaveTextContent('每条标签条件至少选择一个标签');
-    expect(within(dialog).getByRole('button', { name: /应\s*用/ })).toBeDisabled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(onApply).not.toHaveBeenCalled();
   });
 
@@ -566,7 +574,7 @@ describe('WorkitemAdvancedFilter', () => {
     expect(within(dialog).getByText('最多添加 30 条标签条件')).toBeInTheDocument();
   });
 
-  it('blocks apply when the serialized conditions exceed the URL budget', async () => {
+  it('blocks apply with an inline error when the serialized conditions exceed the URL budget', async () => {
     const conditions: WorkitemTagConditionDraft[] = Array.from(
       { length: TAG_CONDITION_LIMIT },
       (_, rowIndex) => ({
@@ -575,11 +583,14 @@ describe('WorkitemAdvancedFilter', () => {
         tags: Array.from({ length: 40 }, (_, tagIndex) => `tag-${rowIndex}-${tagIndex}`.padEnd(16, 'x')),
       }),
     );
-    renderFilter(withTagConditions(...conditions));
+    const onApply = renderFilter(withTagConditions(...conditions));
     const dialog = await openPanel();
 
     expect(within(dialog).getByRole('alert')).toHaveTextContent('标签条件过长，请减少标签数量');
-    expect(within(dialog).getByRole('button', { name: /应\s*用/ })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: /应\s*用/ }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(onApply).not.toHaveBeenCalled();
   });
 
   it('resets every applied condition including tag conditions', async () => {

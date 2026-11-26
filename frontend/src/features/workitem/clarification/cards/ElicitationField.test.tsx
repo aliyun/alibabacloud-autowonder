@@ -120,20 +120,29 @@ describe('ElicitationField', () => {
     expect(screen.getByTestId('elicitation-other-input-q0')).not.toHaveFocus();
   });
 
-  // 单选/多选「有其他想法」都必须是 1px 浅色细虚线框，而非只写 borderStyle 导致的默认 3px 黑框。
-  it('单选「有其他想法」是 1px 浅色细虚线框', () => {
+  // 「有其他想法」与真实选项同款选项块，只以 other 修饰类区分；虚线边框由 clarification.css 提供。
+  it('单选选项块：真实项 aw-cl-opt，「有其他想法」追加 other', () => {
     render(<ElicitationField field={selectField} value={undefined} otherText="" onValueChange={noop} onOtherTextChange={noop} />);
-    expect(screen.getByTestId('elicitation-option-q0-other').closest('label'))
-      .toHaveStyle({ borderWidth: '1px', borderStyle: 'dashed' });
+    expect(screen.getByTestId('elicitation-option-q0-0').closest('label')).toHaveClass('aw-cl-opt');
+    expect(screen.getByTestId('elicitation-option-q0-0').closest('label')).not.toHaveClass('other');
+    expect(screen.getByTestId('elicitation-option-q0-other').closest('label')).toHaveClass('aw-cl-opt', 'other');
+    expect(screen.getByTestId('elicitation-option-q0-other').closest('.aw-cl-opts')).not.toBeNull();
     const html = renderToStaticMarkup(<ElicitationField field={selectField} value={undefined} otherText="" onValueChange={noop} onOtherTextChange={noop} />);
-    expect(html).toContain('border-color:var(--aw-border)');
+    expect(html).not.toContain('border-style');
   });
 
-  it('多选「有其他想法」是 1px 浅色细虚线框', () => {
+  it('多选选项块：真实项 aw-cl-opt，「有其他想法」追加 other', () => {
     render(<ElicitationField field={multiField} value={[]} otherText="" onValueChange={noop} onOtherTextChange={noop} />);
-    expect(screen.getByTestId('elicitation-option-q1-other').closest('label'))
-      .toHaveStyle({ borderWidth: '1px', borderStyle: 'dashed' });
-    const html = renderToStaticMarkup(<ElicitationField field={selectField} value={undefined} otherText="" onValueChange={noop} onOtherTextChange={noop} />);
-    expect(html).toContain('border-color:var(--aw-border)');
+    expect(screen.getByTestId('elicitation-option-q1-0').closest('label')).toHaveClass('aw-cl-opt');
+    expect(screen.getByTestId('elicitation-option-q1-other').closest('label')).toHaveClass('aw-cl-opt', 'other');
+    expect(screen.getByTestId('elicitation-option-q1-other').closest('.aw-cl-opts')).not.toBeNull();
+  });
+
+  it('选项副标题、内联输入与错误提示使用原型结构类', () => {
+    const hinted: F = { ...selectField, options: [{ value: 'A', label: 'A', hint: '推荐' }] };
+    render(<ElicitationField field={hinted} value={OTHER_SENTINEL} otherText="" error="请填写" onValueChange={noop} onOtherTextChange={noop} />);
+    expect(screen.getByText('推荐')).toHaveClass('h');
+    expect(screen.getByTestId('elicitation-other-input-q0').closest('.aw-cl-other-input')).not.toBeNull();
+    expect(screen.getByTestId('elicitation-error-q0')).toHaveClass('aw-cl-q-err');
   });
 });

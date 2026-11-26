@@ -1,7 +1,7 @@
 import { Button, Dropdown } from 'antd';
-import { GlobalOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from './LocaleProvider';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 export function LanguageSwitch() {
   const { locale, setLocale } = useLocale();
   const { t } = useTranslation('common');
@@ -9,5 +9,5 @@ export function LanguageSwitch() {
     selectable: true, selectedKeys: [locale],
     items: [{ key: 'zh-CN', label: '中文' }, { key: 'en-US', label: 'English' }],
     onClick: ({ key }) => { if (key === 'zh-CN' || key === 'en-US') setLocale(key); },
-  }}><Button type="text" icon={<GlobalOutlined aria-hidden="true" />} aria-label={t('language.switch')} title={t('language.switch')} /></Dropdown>;
+  }}><Button type="text" icon={<AwStrokeIcon name="globe" size={16} />} aria-label={t('language.switch')} title={t('language.switch')} /></Dropdown>;
 }

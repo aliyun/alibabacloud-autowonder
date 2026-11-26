@@ -70,9 +70,8 @@ describe('BasicProfilePanel', () => {
   it('renders readonly username and editable profile fields from the server', async () => {
     renderPanel();
 
-    const usernameInput = await screen.findByLabelText('用户名');
-    await waitFor(() => expect(usernameInput).toHaveValue('alice'));
-    expect(usernameInput).toBeDisabled();
+    expect(await screen.findByText('alice · alice@example.com')).toBeInTheDocument();
+    expect(screen.getByText('用户名是登录标识，不可修改。')).toBeInTheDocument();
     expect(screen.getByLabelText('昵称')).toHaveValue('爱丽丝');
     expect(screen.getByLabelText('邮箱')).toHaveValue('alice@example.com');
     expect(screen.getByLabelText('联系方式')).toHaveValue('+86 138-0000-0000');

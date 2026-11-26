@@ -78,6 +78,9 @@
   "input": "输入消息",
   "placeholder": "输入消息，Enter 发送，Shift+Enter 换行…",
   "privateSaved": "仅你可见 · 自动保存",
+  "composerDisabledSetup": "完成配置后即可开始对话",
+  "composerDisabledArchived": "会话已归档 · 恢复后可继续提问",
+  "composerDisabledError": "对话加载失败 · 重试后可继续提问",
   "send": "发送",
   "posix": "macOS / Linux",
   "contextHeader": "关联当前页面 · {{page}}",
@@ -116,5 +119,7 @@
   "imageTypes": "支持 PNG、JPEG 和 WebP 图片。",
   "imageTooLarge": "单张图片不能超过 5 MB",
   "imageTooMany": "最多添加 {{max}} 张图片",
-  "imageTotalTooLarge": "图片总大小不能超过 20 MB"
+  "imageTotalTooLarge": "图片总大小不能超过 20 MB",
+  "statusNotConfigured": "未配置执行器",
+  "statusOffline": "执行器全部离线"
 }

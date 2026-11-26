@@ -1,36 +1,243 @@
-/* 加密方式：方形勾选卡片单选（对齐前端参考 v0.3 的 .mail-choice 布局）。 */
-.mail-choice-group {
+/* 邮箱验证 Tab：对齐原型 38-auth-email ⑥⑦⑧⑨（单选卡、认证胶囊、测试区、策略行）。 */
+
+html .aw-mail-settings .mail-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+}
+
+html .aw-mail-settings .mail-hint-tight {
+  margin: -6px 0 0;
+}
+
+html .aw-mail-settings .mail-form {
+  margin-top: 12px;
+}
+
+html .aw-mail-settings .mail-form .ant-form-item {
+  margin-bottom: 14px;
+}
+
+html .aw-mail-settings .mail-form .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+html .aw-mail-settings .mail-form .ant-form-item-label > label {
+  height: auto;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-text-2);
+}
+
+html .aw-mail-settings .mail-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+/* 加密方式：方形单选卡（原型 .radio-card）。 */
+html .aw-mail-settings .mail-choice-group {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
+  width: 100%;
 }
 
-.mail-choice-group .ant-radio-wrapper {
+html .aw-mail-settings .mail-choice-group .ant-radio-wrapper {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
-  padding: 14px;
-  border: 1px solid #d9d9d9;
-  border-radius: 8px;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  padding: 8px 10px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-panel);
+  white-space: normal;
 }
 
-.mail-choice-group .ant-radio-wrapper-checked {
-  border-color: #f97316;
-  background: rgba(249, 115, 22, 0.05);
+html .aw-mail-settings .mail-choice-group .ant-radio-wrapper:hover {
+  background: var(--aw-primary-faint);
 }
 
-.mail-choice-group small {
+html .aw-mail-settings .mail-choice-group .ant-radio-wrapper-checked {
+  border-color: var(--aw-primary);
+  background: var(--aw-primary-faint);
+}
+
+html .aw-mail-settings .mail-choice-group .ant-radio {
+  margin-top: 3px;
+}
+
+html .aw-mail-settings .mail-choice-group strong {
   display: block;
-  margin-top: 5px;
-  color: #8c8c8c;
   font-size: 12px;
-  line-height: 1.6;
+  font-weight: 600;
+  color: var(--aw-text);
+}
+
+html .aw-mail-settings .mail-choice-group small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--aw-text-3);
+}
+
+/* 认证方式：胶囊单选（原型 .radio-pill）。 */
+html .aw-mail-settings .mail-auth-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+html .aw-mail-settings .mail-auth-group .ant-radio-wrapper {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-panel);
+  font-size: 12px;
+  color: var(--aw-text-2);
+}
+
+html .aw-mail-settings .mail-auth-group .ant-radio-wrapper-checked {
+  border-color: var(--aw-primary);
+  background: var(--aw-primary-faint);
+  color: var(--aw-primary);
+  font-weight: 600;
+}
+
+/* 测试发送区（原型 .test-block）。 */
+html .aw-mail-settings .mail-test-block {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--aw-border);
+}
+
+html .aw-mail-settings .mail-test-block h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aw-text);
+}
+
+/* 输入框与按钮连体（原型 .combo）：平台卡片按钮圆角规则会盖掉 antd compact，需显式复原。 */
+html .aw-mail-settings .mail-test-combo .ant-input {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  border-inline-end-width: 0;
+}
+
+html .aw-mail-settings .mail-test-combo .ant-btn {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+html .aw-mail-settings .mail-test-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+}
+
+html .aw-mail-settings .mail-test-alert {
+  margin-top: 8px;
+}
+
+html .aw-mail-settings .mail-test-time {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+}
+
+/* 策略卡（原型 .row-between + .switch-wrap）。 */
+html .aw-mail-settings .mail-policy-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+html .aw-mail-settings .mail-policy-copy {
+  min-width: 0;
+}
+
+html .aw-mail-settings .mail-policy-copy h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--aw-text);
+}
+
+html .aw-mail-settings .mail-policy-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+}
+
+html .aw-mail-settings .mail-policy-danger {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-error);
+}
+
+html .aw-mail-settings .mail-switch-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+html .aw-mail-settings .mail-switch-state {
+  font-size: 12px;
+  color: var(--aw-text-3);
+  white-space: nowrap;
+}
+
+html .aw-mail-settings .mail-suffix-field {
+  margin-top: 16px;
+}
+
+html .aw-mail-settings .mail-field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--aw-text-2);
+}
+
+html .aw-mail-settings .mail-suffix-field .ant-select-multiple .ant-select-selector {
+  min-height: 40px;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+
+html .aw-mail-settings .mail-suffix-field .ant-select-selection-item {
+  height: 22px;
+  line-height: 20px;
+  border-radius: 4px;
+}
+
+html .aw-mail-settings .mail-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 
 @media (max-width: 680px) {
-  .mail-choice-group {
+  html .aw-mail-settings .mail-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  html .aw-mail-settings .mail-choice-group {
     grid-template-columns: 1fr;
   }
 }

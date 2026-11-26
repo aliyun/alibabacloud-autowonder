@@ -103,7 +103,7 @@ describe('SquadTemplateGallery', () => {
 
     await waitFor(() => {
       const locationEl = screen.getByTestId('location');
-      expect(locationEl.textContent).toBe('/agents?tab=squads');
+      expect(locationEl.textContent).toBe('/squads');
     });
   });
 
@@ -147,7 +147,7 @@ describe('SquadTemplateGallery', () => {
     // loading 恢复后可重试，第二次成功并跳转
     await userEvent.click(screen.getByText('确定创建'));
     await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/agents?tab=squads');
+      expect(screen.getByTestId('location').textContent).toBe('/squads');
     });
     expect(applyCalls).toBe(2);
   });

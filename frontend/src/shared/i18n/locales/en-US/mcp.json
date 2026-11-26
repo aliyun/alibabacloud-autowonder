@@ -1,4 +1,5 @@
 {
+  "title": "MCP tokens",
   "permissionHint": "MCP token permissions follow your access in the target Workspace. Pass workspaceId when calling Workspace tools.",
   "revokedNotice": "Token revoked",
   "copied": "Copied",
@@ -22,6 +23,8 @@
   "output": "Output",
   "noInput": "No input parameters",
   "result": "Returns the tool execution result",
+  "fieldCount_one": "{{count}} field",
+  "fieldCount_other": "{{count}} fields",
   "tools": "Tools",
   "endpointLoading": "Loading MCP endpoint",
   "endpointFailed": "Failed to load MCP endpoint",
@@ -90,5 +93,8 @@
   },
   "toolCount_one": "{{count}} tool",
   "expandRow": "Expand row",
-  "collapseRow": "Collapse row"
+  "collapseRow": "Collapse row",
+  "readOnly": "Read only",
+  "tokenSummary": "{{total}} total · {{active}} active",
+  "toolsSummary": "{{groups}} capability groups · {{tools}} tools"
 }

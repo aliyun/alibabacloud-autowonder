@@ -603,6 +603,8 @@ export interface TimelineItem {
   toValNameFallback?: ExternalPrincipalNameFallback | null;
   operatorDisplayName?: string | null;
   operatorNameFallback?: ExternalPrincipalNameFallback | null;
+  /** 人工状态流转备注原文；仅状态变更事件且备注非空时由后端透出。 */
+  note?: string | null;
   type: 'comment' | 'system';
   authorId: number | null;
   authorName: string | null;

@@ -33,6 +33,16 @@ candidate was proved, not assumed: `25371cb1` is an ancestor of the community ti
 
 ## History
 
+### 2026-11-25 Community 1.4.0 candidate
+
+- previousVerifiedMasterSha: `69710f67c1cc6c5be437df1c55df023151c573a1`.
+  Previous acceptance is bound to tree `86242c7f79501dd398875b2a5e13d53b2bb5553d` and merged in Community 1.3.0.
+- candidateMasterSha: `da3274e04a582a157331f3cb548e96000afe25b5`.
+- Community start: `86df7c208dc9c33775edeb79db73e456cdad150c`.
+- Scope: application layout, sharded stage duration and execution snapshots, runtime recovery, MCP member lookup, usage accounting, and bilingual IM troubleshooting.
+- The merge preserves the Community E2E tree and all published migrations. V123–V128 carry upstream DDL, and V129 supports paged member directory reads. The work-item detail keeps the PRD design entry hidden in the frontend.
+- Acceptance and independent reviews: PENDING. Internal MR and public PR: NOT_CREATED at candidate freeze. Results are recorded in the acceptance package against the tested commit and tree.
+
 ### 2026-11-23 Community 1.3.0 candidate
 
 - Previous verified master `e7b4c01c2cf3e06df28d75bc0a9a0bfc909f71d2` was accepted at `f69585da1463d3614666824acd7679fd069686bf` and merged via !1295. The accepted tree `18b6e13b567add4de62e2645afbc3b5f4864c2c9` equals the Community starting tree.

@@ -1,20 +1,21 @@
-.step-duration-chart { container:step-duration / inline-size; min-width:0; margin:12px 0; padding:16px; border:1px solid var(--aw-border); border-radius:8px; background:var(--aw-panel); }
-.step-duration-heading { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px 16px; }
-.step-duration-heading > div { display:flex; flex-wrap:wrap; gap:4px 10px; min-width:0; }
-.step-duration-scope { font-size:12px; overflow-wrap:anywhere; }
-.step-duration-note { display:block; margin-top:8px; font-size:12px; }
-.step-duration-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; margin:12px 0 8px; font-size:12px; }
-.step-duration-toolbar > .ant-typography { flex:1 1 180px; min-width:0; }
-.step-duration-rows { display:grid; min-width:0; gap:6px; list-style:none; margin:0; padding:0; }
-.step-duration-row { display:grid; grid-template-columns:minmax(0,1fr) fit-content(45%); align-items:center; gap:8px; min-width:0; padding:10px; border-radius:6px; }
-.step-duration-row.is-longest { background:rgba(var(--aw-accent-rgb),.07); }
-.step-duration-label { display:grid; min-width:0; gap:4px; overflow-wrap:anywhere; }
-.step-duration-label .ant-typography { font-size:12px; }
-.step-duration-label .ant-tag { margin:0; }
-.step-duration-meter { grid-row:2; grid-column:1 / -1; min-width:0; height:10px; border-radius:5px; overflow:hidden; background:var(--aw-raised); }
-.step-duration-meter > div { height:100%; border-radius:5px; background:var(--aw-accent-text); transition:width .25s ease; }
-.step-duration-row.is-longest .step-duration-meter > div { background:var(--aw-warning); }
-.step-duration-value { display:grid; grid-column:2; grid-row:1; min-width:0; gap:4px; text-align:right; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-.step-duration-value > :last-child { font-size:12px; }
-@container step-duration (min-width:520px) { .step-duration-row { grid-template-columns:minmax(0,1.2fr) minmax(0,2fr) minmax(90px,auto); gap:16px; } .step-duration-meter { grid-row:1; grid-column:2; } .step-duration-value { grid-column:3; } }
-@media(prefers-reduced-motion:reduce) { .step-duration-meter > div { transition:none; } }
+.step-duration-chart { min-width:0; margin:0; font-size:12px; color:var(--aw-text-2); }
+.step-duration-heading { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; }
+.step-duration-heading > div { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; min-width:0; }
+.step-duration-heading .ant-typography { font-size:12px; }
+.step-duration-heading > .ant-typography { margin-left:auto; font-size:11px; font-weight:400; color:var(--aw-text-3); }
+.step-duration-scope.ant-typography { font-size:11px; color:var(--aw-text-3); overflow-wrap:anywhere; }
+.step-duration-note.ant-typography { display:block; margin-top:4px; font-size:11px; color:var(--aw-text-3); }
+.step-duration-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; margin:8px 0 4px; }
+.step-duration-toolbar > .ant-typography { flex:1 1 180px; min-width:0; font-size:11px; color:var(--aw-text-3); }
+html .step-duration-toolbar .ant-btn { height:26px; padding:0 8px; border-radius:4px; font-size:12px; color:var(--aw-text-2); }
+html .step-duration-toolbar .ant-btn:not(:disabled):hover { background:var(--aw-gray-bg); color:var(--aw-text); }
+.step-duration-rows { display:flex; flex-direction:column; gap:6px; min-width:0; list-style:none; margin:4px 0 0; padding:0; }
+.step-duration-row { display:flex; align-items:center; gap:8px; min-width:0; padding:6px 0; font-size:12px; color:var(--aw-text); }
+.step-duration-label { flex:0 0 auto; width:160px; min-width:84px; max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.step-duration-meter { flex:1; min-width:40px; height:6px; border-radius:3px; overflow:hidden; background:var(--aw-gray-bg); }
+.step-duration-meter > div { height:100%; border-radius:3px; background:var(--aw-primary); }
+.step-duration-row.is-done .step-duration-meter > div, .step-duration-row.is-reused .step-duration-meter > div { background:var(--aw-success); }
+.step-duration-row.is-failed .step-duration-meter > div { background:var(--aw-error); }
+.step-duration-value { display:inline-flex; align-items:center; flex-shrink:0; min-width:56px; justify-content:flex-end; gap:0; font-size:11px; color:var(--aw-text-3); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.step-duration-value > span:not(.ant-tag) + span:not(.ant-tag)::before { content:' · '; white-space:pre; }
+html .step-duration-value .ant-tag { margin:0 0 0 6px; height:18px; line-height:16px; padding:0 6px; font-size:11px; }

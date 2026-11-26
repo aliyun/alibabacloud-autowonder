@@ -1,0 +1,208 @@
+/* 状态模版页 · 25-status-templates.html 原型令牌落地
+ * tpl-row / sec 标题 / 状态节点 chip / 分类图例 / 表格 op-link 图标尺寸。 */
+
+/* 当前模版行（原型 .tpl-row） */
+.aw-stpl-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  background: var(--aw-header-bg);
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.aw-stpl-cur {
+  font-size: 13px;
+  color: var(--aw-text-2);
+}
+
+.aw-stpl-ops {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* 分区头：标题+说明在左、主操作右置，避免单独一行操作条留下大块空白（原型 sec-t / sec-hint） */
+.aw-stpl-sec-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 20px 0 10px;
+}
+
+.aw-stpl-sec-t {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.aw-stpl-sec-hint {
+  font-size: 11px;
+  color: var(--aw-text-3);
+  margin-bottom: 0;
+}
+
+/* 状态节点 chip（原型 .st-node） */
+.aw-stpl-node-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.aw-st-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  border: 1px solid var(--aw-border);
+  background: var(--aw-panel);
+  color: var(--aw-text-2);
+}
+
+.aw-st-node .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--aw-text-3);
+}
+
+.aw-st-node b {
+  font-weight: 500;
+}
+
+.aw-st-node .nm {
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+/* 表格单元格内的只读 chip（无内联操作、非指针） */
+.aw-st-node--cell {
+  cursor: default;
+}
+
+.aw-st-node--INIT {
+  color: var(--aw-info);
+  background: color-mix(in srgb, var(--aw-info) 10%, var(--aw-panel));
+  border-color: color-mix(in srgb, var(--aw-info) 30%, var(--aw-border));
+}
+
+.aw-st-node--INIT .dot {
+  background: var(--aw-info);
+}
+
+.aw-st-node--IN_PROGRESS {
+  color: var(--aw-warning-deep);
+  background: color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel));
+  border-color: color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border));
+}
+
+.aw-st-node--IN_PROGRESS .dot {
+  background: var(--aw-warning);
+}
+
+.aw-st-node--DONE {
+  color: var(--aw-success-deep);
+  background: color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel));
+  border-color: color-mix(in srgb, var(--aw-success) 30%, var(--aw-border));
+}
+
+.aw-st-node--DONE .dot {
+  background: var(--aw-success);
+}
+
+.aw-st-node--CANCELED {
+  color: var(--aw-error-deep);
+  background: color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel));
+  border-color: color-mix(in srgb, var(--aw-error) 30%, var(--aw-border));
+}
+
+.aw-st-node--CANCELED .dot {
+  background: var(--aw-error);
+}
+
+/* chip 内 22px 编辑/删除操作按钮（原型 .n-ops / .n-btn） */
+.aw-st-node .n-ops {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.aw-st-node .n-ops .ant-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--aw-info);
+}
+
+.aw-st-node .n-ops .ant-btn:hover {
+  background: rgba(var(--aw-accent-rgb), 0.10);
+  color: var(--aw-info);
+}
+
+.aw-st-node .n-ops .ant-btn.ant-btn-dangerous {
+  color: var(--aw-error);
+}
+
+.aw-st-node .n-ops .ant-btn.ant-btn-dangerous:hover {
+  background: color-mix(in srgb, var(--aw-error) 10%, transparent);
+  color: var(--aw-error);
+}
+
+/* 分类图例（原型 .legend / .lg） */
+.aw-stpl-legend {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--aw-text-3);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.aw-stpl-legend .lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.aw-stpl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.aw-stpl-dot--INIT {
+  background: var(--aw-info);
+}
+
+.aw-stpl-dot--IN_PROGRESS {
+  background: var(--aw-warning);
+}
+
+.aw-stpl-dot--DONE {
+  background: var(--aw-success);
+}
+
+.aw-stpl-dot--CANCELED {
+  background: var(--aw-error);
+}
+
+/* 推荐流转表格 op-link 图标 12px（原型 .op-link svg 12） */
+.aw-stpl-table .ant-btn .aw-stroke-icon {
+  width: 12px;
+  height: 12px;
+}

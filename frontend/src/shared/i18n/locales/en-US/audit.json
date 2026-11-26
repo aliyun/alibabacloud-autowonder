@@ -35,6 +35,8 @@
   "title": "Audit logs",
   "description": "Human operations are shown by default. Switch to Agent or system events; open details for all fields.",
   "subtitle": "Audit trail of human and digital-worker operations in this workspace",
+  "headDescription": "{{subtitle}} · {{description}}",
+  "emptyValue": "-",
   "countChip_one": "{{count}} record in current filter",
   "countChip_other": "{{count}} records in current filter",
   "actorSource": "Actor source",

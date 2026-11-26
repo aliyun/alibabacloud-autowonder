@@ -3,15 +3,16 @@ import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
 import { useSystemLabel } from '@/shared/i18n/systemLabels';
-import { PageHeading } from '@/shared/ui/PageHeading';
+import { PageHead } from '@/shared/ui/PageHead';
+import { TableCard } from '@/shared/ui/TableCard';
+import { EmptyState } from '@/shared/ui/EmptyState';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Button,
-  Card,
   Checkbox,
-  Empty,
   Form,
   Input,
   Modal,
@@ -23,17 +24,11 @@ import {
   message} from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
 import {
-  CloseOutlined,
   CloseCircleOutlined,
-  InfoCircleOutlined,
-  ExclamationCircleOutlined,
-  DeleteOutlined,
-  EditOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
-  PlusOutlined,
-  ReloadOutlined,
 } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   createEnvironmentVariable,
@@ -46,12 +41,15 @@ import type { QoderPatPreset } from './presets';
 import type { CreateEnvironmentVariableInput, EnvironmentVariable } from './types';
 import { useAuthStore } from '@/shared/auth/store';
 import { ApiError } from '@/shared/types/common';
+import './EnvironmentVariablesPage.css';
 
 const { Text } = Typography;
 
 interface VariableFormValues extends CreateEnvironmentVariableInput {
   replaceValue?: boolean;
 }
+
+const EMPTY_FORM_VALUES: VariableFormValues = { name: '', value: '', description: '', replaceValue: false };
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError || error instanceof Error ? error.message : fallback;
@@ -115,7 +113,7 @@ export function EnvironmentVariablesPage() {
     setPresetKey(undefined);
     setDescriptionEdited(false);
     setEditing('create');
-    form.setFieldsValue({ name: '', value: '', description: '', replaceValue: false });
+    form.setFieldsValue(EMPTY_FORM_VALUES);
   };
 
   const selectPreset = (next: QoderPatPreset) => {
@@ -136,6 +134,11 @@ export function EnvironmentVariablesPage() {
     });
   };
 
+  // 弹窗内容按需挂载，首帧 setFieldsValue 会早于 Form 注册而丢失；改用 initialValues 回填。
+  const initialValues: VariableFormValues = editing && editing !== 'create'
+    ? { name: editing.name, description: editing.description ?? '', value: '', replaceValue: false }
+    : EMPTY_FORM_VALUES;
+
   const closeEditor = () => {
     setEditing(undefined);
     setPresetKey(undefined);
@@ -151,7 +154,7 @@ export function EnvironmentVariablesPage() {
     setPresetKey(undefined);
     setOperationError(undefined);
     setSaveError(undefined);
-    form.resetFields();
+    form.setFieldsValue(EMPTY_FORM_VALUES);
   }, [accessLevel, form, workspaceId]);
 
   const save = async () => {
@@ -267,19 +270,20 @@ export function EnvironmentVariablesPage() {
   };
 
   return (
-    <Space direction="vertical" size={20} style={{ width: '100%' }}>
-      <PageHeading title={t('title')} description={t('description')}
-        extra={isAdmin && <Button aria-label={t('add')} type="primary" icon={<PlusOutlined aria-hidden="true" />} onClick={showCreate}>{t('add')}</Button>} />
+    <>
+      <PageHead title={t('title')} description={t('description')} />
 
-      <Alert type="info" showIcon icon={<InfoCircleOutlined aria-hidden="true" />} message={t('pagePatHint')} />
+      <NoticeTip kind="info" title={t('pagePatHint')} style={{ marginBottom: 12 }} />
 
+      {operationError && <Alert closable={{ closeIcon: <AwStrokeIcon name="x" size={14} />, 'aria-label': t('dismissError') }} type="error" showIcon icon={<CloseCircleOutlined aria-hidden="true" />} message={t('operationFailed')} description={errorMessage(operationError.error, t('deleteFailed'))} style={{ marginBottom: 12 }} onClose={() => setOperationError(undefined)} />}
+      {query.isError && <Alert type="error" showIcon icon={<CloseCircleOutlined aria-hidden="true" />} message={t('loadFailed')} description={errorMessage(query.error, t('retryLater'))} style={{ marginBottom: 12 }} />}
 
-      {operationError && <Alert closable={{ closeIcon: <CloseOutlined aria-hidden="true" />, 'aria-label': t('dismissError') }} type="error" showIcon icon={<CloseCircleOutlined aria-hidden="true" />} message={t('operationFailed')} description={errorMessage(operationError.error, t('deleteFailed'))} onClose={() => setOperationError(undefined)} />}
-      {query.isError && <Alert type="error" showIcon icon={<CloseCircleOutlined aria-hidden="true" />} message={t('loadFailed')} description={errorMessage(query.error, t('retryLater'))} />}
-
-      <Card styles={{ body: { padding: 0 } }}>
-        <div style={{ padding: '16px 16px 8px', textAlign: 'right' }}>
-          <Button aria-label={t('refresh')} icon={<ReloadOutlined aria-hidden="true" />} loading={query.isFetching} onClick={refresh}>{t('refresh')}</Button>
+      <TableCard flush>
+        <div className="env-vars-toolbar">
+          <Space size={8}>
+            {isAdmin && <Button aria-label={t('add')} type="primary" icon={<AwStrokeIcon name="plus" />} onClick={showCreate}>{t('add')}</Button>}
+            <Button aria-label={t('refresh')} icon={<AwStrokeIcon name="refresh" />} loading={query.isFetching} onClick={refresh}>{t('refresh')}</Button>
+          </Space>
         </div>
         <Table<EnvironmentVariable>
           rowKey="id"
@@ -287,24 +291,24 @@ export function EnvironmentVariablesPage() {
           loading={{ spinning: query.isLoading, tip: t('loading') }}
           dataSource={query.data ?? []}
           pagination={false}
-          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('empty')} /> }}
+          locale={{ emptyText: <EmptyState icon={<AwStrokeIcon name="key" size={30} />} title={t('empty')} /> }}
           scroll={{ x: 920 }}
           columns={[
-            { title: t('name'), dataIndex: 'name', align: 'left', width: 190, render: (name: string) => <Text code>{name}</Text> },
+            { title: t('name'), dataIndex: 'name', align: 'left', width: 210, render: (name: string) => <Text code>{name}</Text> },
             {
               title: t('value'),
-              width: 280,
+              width: 88,
               render: (_, variable) => <Text code>{variable.value}</Text>,
             },
-            { title: t('notes'), dataIndex: 'description', align: 'left', render: (value: string | null, variable) => {
+            { title: t('notes'), dataIndex: 'description', align: 'left', ellipsis: true, render: (value: string | null, variable) => {
               const text = value ? systemLabel(variable.descriptionLabelKey, value) : '';
-              return text || <Text type="secondary">—</Text>;
+              return text ? <span title={text}>{text}</span> : <Text type="secondary">—</Text>;
             } },
             {
               title: <Tooltip title={t('mountStatusHelp')}><span>{t('mountStatus')}</span></Tooltip>,
               key: 'mountStatus',
               align: 'left',
-              width: 170,
+              width: 150,
               render: (_, variable) => {
                 const online = variable.onlineMountCount;
                 const draft = variable.draftMountCount;
@@ -314,15 +318,15 @@ export function EnvironmentVariablesPage() {
                 return <Text type="secondary">{t('mountNone')}</Text>;
               },
             },
-            { title: t('updatedAt'), dataIndex: 'gmtModified', width: 180, render: formatDate },
+            { title: t('updatedAt'), dataIndex: 'gmtModified', width: 170, render: (value: string) => <span className="env-vars-time">{formatDate(value)}</span> },
             ...(isAdmin ? [{
               title: t('actions'),
               key: 'actions',
-              width: 130,
+              width: 100,
               render: (_: unknown, variable: EnvironmentVariable) => <Space size={4}>
-                <Button type="text" size="small" icon={<EditOutlined aria-hidden="true" />} aria-label={t('editNamed', { name: variable.name })} onClick={() => showEdit(variable)} />
+                <Button type="text" size="small" className="aw-op-btn" icon={<AwStrokeIcon name="edit" />} aria-label={t('editNamed', { name: variable.name })} onClick={() => showEdit(variable)} />
                 <Popconfirm
-                  icon={<ExclamationCircleOutlined aria-hidden="true" />}
+                  icon={<AwStrokeIcon name="alert-c" />}
                   title={t('confirmDeleteNamed', { name: variable.name })}
                   description={t('irreversible')}
                   okText={t('confirmDelete')}
@@ -334,18 +338,20 @@ export function EnvironmentVariablesPage() {
                   }}
                   onConfirm={() => remove(variable)}
                 >
-                  <Button danger type="text" size="small" icon={<DeleteOutlined aria-hidden="true" />} aria-label={t('deleteNamed', { name: variable.name })} />
+                  <Button danger type="text" size="small" className="aw-op-btn aw-op-btn--del" icon={<AwStrokeIcon name="trash" />} aria-label={t('deleteNamed', { name: variable.name })} />
                 </Popconfirm>
               </Space>,
             }] : []),
           ]}
         />
-      </Card>
+      </TableCard>
 
       <Modal
-        closable={{ closeIcon: <CloseOutlined aria-hidden="true" />, 'aria-label': t('close') }}
+        closable={{ closeIcon: <AwStrokeIcon name="x" size={14} />, 'aria-label': t('close') }}
         title={isCreating ? t('add') : t('edit')}
         open={Boolean(editing)}
+        width={460}
+        rootClassName="env-vars-editor"
         okText={isCreating ? t('create') : t('save')}
         cancelText={t('cancel')}
         confirmLoading={savingGeneration === boundaryGeneration.current}
@@ -354,22 +360,23 @@ export function EnvironmentVariablesPage() {
         onCancel={closeEditor}
         destroyOnHidden
       >
-        {saveError && <Alert type="error" showIcon icon={<CloseCircleOutlined aria-hidden="true" />} message={t('saveFailedTitle')} description={errorMessage(saveError.error, t('saveFailed'))} style={{ marginTop: 20 }} />}
-        {isCreating && <Card size="small" title={t('quickCreate')} style={{ marginTop: 20 }}>
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <Space wrap>
-              {QODER_PAT_PRESETS.map((item) => <Button key={item.key} type={presetKey === item.key ? 'primary' : 'default'}
-                aria-pressed={presetKey === item.key} onClick={() => selectPreset(item)}>{t(item.labelKey)}</Button>)}
-            </Space>
-            {preset && <Text type="secondary">{t(preset.hintKey)}</Text>}
-            {preset && <Button type="link" style={{ padding: 0, alignSelf: 'flex-start' }} onClick={() => setPresetKey(undefined)}>{t('presetResetToCustom')}</Button>}
-          </Space>
-        </Card>}
-        <Form form={form} layout="vertical" preserve={false} style={{ marginTop: 20 }}>
-          <Form.Item label={t('name')} name="name" extra={preset ? t('presetNameLocked') : undefined} rules={[{ required: true, whitespace: true, message: t('nameRequired') }, { pattern: /^[A-Za-z_][A-Za-z0-9_]*$/, message: t('namePattern') }]}>
+        {saveError && <NoticeTip kind="error" title={t('saveFailedTitle')} detail={errorMessage(saveError.error, t('saveFailed'))} style={{ marginBottom: 12 }} />}
+        {isCreating && <div className="env-quick-create">
+          <div className="env-quick-head">
+            <span className="env-quick-title">{t('quickCreate')}</span>
+            {preset && <Button type="link" size="small" className="env-quick-reset" onClick={() => setPresetKey(undefined)}>{t('presetResetToCustom')}</Button>}
+          </div>
+          <div className="env-quick-btns">
+            {QODER_PAT_PRESETS.map((item) => <Button key={item.key} size="small" type={presetKey === item.key ? 'primary' : 'default'}
+              aria-pressed={presetKey === item.key} onClick={() => selectPreset(item)}>{t(item.labelKey)}</Button>)}
+          </div>
+          <div className="env-quick-hint">{preset ? t(preset.hintKey) : t('quickCreateHint')}</div>
+        </div>}
+        <Form key={editing === 'create' ? 'create' : `edit-${editing?.id ?? 'none'}`} form={form} layout="vertical" preserve={false} clearOnDestroy initialValues={initialValues} className="env-vars-form">
+          <Form.Item label={t('name')} name="name" extra={preset ? t('presetNameLocked') : t('nameHelp')} rules={[{ required: true, whitespace: true, message: t('nameRequired') }, { pattern: /^[A-Za-z_][A-Za-z0-9_]*$/, message: t('namePattern') }]}>
             <Input autoComplete="off" placeholder={t('namePlaceholder')} maxLength={128} disabled={Boolean(preset)} />
           </Form.Item>
-          {preset && presetNameExists && <Alert type="warning" showIcon icon={<ExclamationCircleOutlined aria-hidden="true" />} message={t('presetExistsWarning', { name: preset.name })} style={{ marginBottom: 20 }} />}
+          {preset && presetNameExists && <NoticeTip kind="warning" title={t('presetExistsWarning', { name: preset.name })} style={{ marginBottom: 14 }} />}
           {!isCreating && <Form.Item name="replaceValue" valuePropName="checked">
             <Checkbox>{t('replaceValue')}</Checkbox>
           </Form.Item>}
@@ -378,18 +385,15 @@ export function EnvironmentVariablesPage() {
               icon={visible ? <EyeOutlined aria-hidden="true" /> : <EyeInvisibleOutlined aria-hidden="true" />}
               style={{ padding: 0, width: 16, height: 16 }} />} autoComplete="new-password" placeholder={t('valuePlaceholder')} />
           </Form.Item>}
-          {!isCreating && !replaceValue && <Alert type="info" showIcon icon={<InfoCircleOutlined aria-hidden="true" />} message={t('unchangedValue')} style={{ marginBottom: 20 }} />}
+          {!isCreating && !replaceValue && <NoticeTip className="env-vars-value-alert" kind="info" title={t('unchangedValue')} />}
           <Form.Item label={t('notes')} name="description" rules={[{ max: 512, message: t('descriptionLimit') }]}>
             <Input.TextArea rows={3} placeholder={t('descriptionPlaceholder')} onChange={() => setDescriptionEdited(true)} />
           </Form.Item>
         </Form>
-        {preset && <Alert
-          type="info"
-          showIcon
-          icon={<InfoCircleOutlined aria-hidden="true" />}
-          style={{ marginTop: 20 }}
-          message={t('patGuideTitle')}
-          description={<Space direction="vertical" size={8}>
+        {preset && <NoticeTip
+          kind="info"
+          title={t('patGuideTitle')}
+          detail={<Space direction="vertical" size={8}>
             <Text>{t('patGuideValue')}</Text>
             <a href={preset.tokenUrl} target="_blank" rel="noopener noreferrer">{t('patGuideOpenLink')}</a>
             <ol style={{ margin: 0, paddingInlineStart: 20 }}>
@@ -402,6 +406,6 @@ export function EnvironmentVariablesPage() {
           </Space>}
         />}
       </Modal>
-    </Space>
+    </>
   );
 }

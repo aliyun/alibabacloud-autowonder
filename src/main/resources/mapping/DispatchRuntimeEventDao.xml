@@ -89,9 +89,9 @@
 
     <select id="streamForProgress" resultSetType="FORWARD_ONLY" useCache="false" databaseId="autowonder-source-aware" resultMap="runtimeEventMap">
         SELECT id, dispatch_id, agent_id, event_type, step_id, step_key, step_order, step_name, message, error,
-            CASE WHEN event_type = 'workflow.plan_applied' THEN detail_json ELSE NULL END AS detail_json,
+            CASE WHEN event_type IN ('workflow.plan_applied', 'step.timing', 'step.started') THEN detail_json ELSE NULL END AS detail_json,
             event_time, gmt_create FROM dispatch_runtime_event e
-        WHERE e.tenant_id = #{tenantId} AND e.workitem_id = #{workitemId}
+        WHERE e.tenant_id = #{tenantId} AND e.workitem_id = #{workitemId} AND e.event_type &lt;&gt; 'operation.timing'
           AND EXISTS (
               SELECT 1 FROM dispatch d
               WHERE d.id = e.dispatch_id
@@ -105,9 +105,9 @@
 
     <select id="streamForProgress" resultSetType="FORWARD_ONLY" useCache="false" databaseId="autowonder-legacy" resultMap="runtimeEventMap">
         SELECT id, dispatch_id, agent_id, event_type, step_id, step_key, step_order, step_name, message, error,
-            CASE WHEN event_type = 'workflow.plan_applied' THEN detail_json ELSE NULL END AS detail_json,
+            CASE WHEN event_type IN ('workflow.plan_applied', 'step.timing', 'step.started') THEN detail_json ELSE NULL END AS detail_json,
             event_time, gmt_create FROM dispatch_runtime_event e
-        WHERE e.tenant_id = #{tenantId} AND e.workitem_id = #{workitemId}
+        WHERE e.tenant_id = #{tenantId} AND e.workitem_id = #{workitemId} AND e.event_type &lt;&gt; 'operation.timing'
           AND EXISTS (
               SELECT 1 FROM dispatch d
               WHERE d.id = e.dispatch_id

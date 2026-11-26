@@ -3,17 +3,15 @@ import { useSystemLabel } from '@/shared/i18n/systemLabels';
 import { useState } from 'react';
 import { Button, Popconfirm, Alert, Space } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { StatusNode, StatusTransition, NodeCategory } from '../types';
 import { TransitionFormModal } from './TransitionFormModal';
 import { useAccessCommand } from '@/shared/auth/useAccessCommand';
 
-const categoryBorder: Record<string, string> = {
-  INIT: 'color-mix(in srgb, var(--aw-info) 30%, var(--aw-border))', IN_PROGRESS: 'color-mix(in srgb, var(--aw-warning) 30%, var(--aw-border))', DONE: 'color-mix(in srgb, var(--aw-success) 30%, var(--aw-border))', CANCELED: 'color-mix(in srgb, var(--aw-error) 30%, var(--aw-border))',
-};
-const categoryBg: Record<string, string> = {
-  INIT: 'color-mix(in srgb, var(--aw-info) 10%, var(--aw-panel))', IN_PROGRESS: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))', DONE: 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))', CANCELED: 'color-mix(in srgb, var(--aw-error) 10%, var(--aw-panel))',
-};
+const CATEGORY_KEYS: NodeCategory[] = ['INIT', 'IN_PROGRESS', 'DONE', 'CANCELED'];
+
+const categoryOf = (category: string): NodeCategory =>
+  CATEGORY_KEYS.includes(category as NodeCategory) ? (category as NodeCategory) : 'IN_PROGRESS';
 
 interface Props {
   transitions: StatusTransition[];
@@ -54,36 +52,39 @@ export function TransitionEditor({ transitions, nodes, onCreate, onUpdate, onDel
 
   const renderNodeTag = (nodeId: number) => {
     const node = nodeMap[nodeId];
-    if (!node) return <span style={{ padding: '2px 8px', background: 'var(--aw-raised)', border: '1px solid var(--aw-border)', borderRadius: 4, fontSize: 11 }}>?</span>;
-    const cat = node.category as NodeCategory;
+    if (!node) return <span className="aw-st-node aw-st-node--cell">?</span>;
     return (
-      <span style={{ padding: '2px 8px', background: categoryBg[cat] || 'var(--aw-raised)', border: `1px solid ${categoryBorder[cat] || 'var(--aw-border)'}`, borderRadius: 4, fontSize: 11 }}>
-        {node.code}
+      <span className={`aw-st-node aw-st-node--cell aw-st-node--${categoryOf(node.category)}`}>
+        <span className="dot" />
+        <b>{node.code}</b>
       </span>
     );
   };
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontWeight: 600, fontSize: 14 }}>{t('transitions.title')}</span>
-        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--aw-muted)' }}>{t('transitions.help')}</span>
-        <Button icon={<PlusOutlined aria-hidden="true" />} onClick={openCreate} style={{ marginLeft: 'auto' }}>{t('transitions.add')}</Button>
+      <div className="aw-stpl-sec-head">
+        <div>
+          <div className="aw-stpl-sec-t">{t('transitions.title')}</div>
+          <div className="aw-stpl-sec-hint">{t('transitions.help')}</div>
+        </div>
+        <Button icon={<AwStrokeIcon name="plus" />} onClick={openCreate}>{t('transitions.add')}</Button>
       </div>
       <Table<StatusTransition>
+        className="aw-stpl-table"
         rowKey="id"
         dataSource={transitions}
         pagination={false}
         scroll={{ x: 'max-content' }}
         columns={[
-          { title: t('transitions.fromColumn'), dataIndex: 'fromNodeId', render: renderNodeTag },
-          { title: t('transitions.toColumn'), dataIndex: 'toNodeId', render: renderNodeTag },
-          { title: t('transitions.name'), dataIndex: 'name', align: 'left', render: (value: string | null, tr) => labelOf(tr.systemLabelKey, value ?? '') },
-          { title: t('transitions.actions'), width: 180, render: (_, tr) => (
+          { title: t('transitions.fromColumn'), dataIndex: 'fromNodeId', width: 160, render: renderNodeTag },
+          { title: t('transitions.toColumn'), dataIndex: 'toNodeId', width: 160, render: renderNodeTag },
+          { title: t('transitions.name'), dataIndex: 'name', width: 320, align: 'left', render: (value: string | null, tr) => labelOf(tr.systemLabelKey, value ?? '') },
+          { title: t('transitions.actions'), align: 'right', render: (_, tr) => (
             <Space>
-              <Button type="link" size="small" icon={<EditOutlined aria-hidden="true" />} onClick={() => openEdit(tr)}>{t('common.edit')}</Button>
+              <Button type="link" size="small" icon={<AwStrokeIcon name="edit" />} onClick={() => openEdit(tr)}>{t('common.edit')}</Button>
               <Popconfirm title={t('transitions.confirmDelete')} onConfirm={() => onDelete(tr.id)} okText={t('common.delete')} cancelText={t('common.cancel')}>
-                <Button type="link" size="small" danger icon={<DeleteOutlined aria-hidden="true" />}>{t('common.delete')}</Button>
+                <Button type="link" size="small" danger icon={<AwStrokeIcon name="trash" />}>{t('common.delete')}</Button>
               </Popconfirm>
             </Space>
           ) },

@@ -22,6 +22,11 @@ class ObjectStorageDefaultsTest {
             }
 
             @Override
+            public byte[] get(String ossRef, int maxBytes) {
+                return null;
+            }
+
+            @Override
             public String presignGet(String ossRef, int ttlSeconds) {
                 return "";
             }

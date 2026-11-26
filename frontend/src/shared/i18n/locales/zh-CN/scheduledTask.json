@@ -31,7 +31,10 @@
     "workitem": "工单",
     "phase": "当前所处阶段",
     "workitemStatus": "工单状态",
-    "plannedAt": "计划执行时间"
+    "plannedAt": "计划执行时间",
+    "startedAt": "开始时间",
+    "duration": "耗时",
+    "result": "结果"
   },
   "labels": {
     "agent": "数字员工",
@@ -42,6 +45,7 @@
   "list": {
     "awaitingResult": "执行中/待回传",
     "tasksTitle": "定时任务",
+    "tasksTab": "调度任务",
     "workitemsTitle": "定时工单",
     "summaryAria": "任务汇总",
     "summaryScope": "当前条件汇总（含所有创建人）",
@@ -51,8 +55,6 @@
     "squadFilter": "小队筛选",
     "statusFilter": "状态筛选",
     "successRate": "近30天成功率 <rate>{{rate}}</rate>%（<success>{{success}}</success>/<completed>{{completed}}</completed>）",
-    "totalTasks_other": "共 <number>{{total}}</number> 个",
-    "totalWorkitems_other": "共 <number>{{total}}</number> 个",
     "totalRows_other": "共 {{total}} 条",
     "runningCount_other": "运行中 <number>{{total}}</number>",
     "todayCount_other": "今日执行 <number>{{total}}</number>",
@@ -71,7 +73,7 @@
     "cancel": "取消",
     "confirmDelete": "确认删除",
     "delete": "删除",
-    "newTask": "新建任务",
+    "newTask": "新建调度任务",
     "backToList": "返回定时任务列表",
     "createEnable": "创建并启用",
     "savePaused": "保存为暂停",
@@ -92,7 +94,11 @@
     "preview": "预览",
     "search": "搜索",
     "clearTaskSearch": "清空任务搜索",
-    "clearWorkitemSearch": "清空定时工单搜索"
+    "clearWorkitemSearch": "清空定时工单搜索",
+    "more": "更多操作",
+    "deleteTask": "删除任务",
+    "expandAll": "展开全部",
+    "collapse": "收起"
   },
   "commands": {
     "runNow": "立即运行定时任务",
@@ -102,9 +108,19 @@
     "deleteDocument": "删除定时任务附件"
   },
   "create": {
-    "title": "新建定时任务",
+    "title": "新建调度任务",
+    "sections": {
+      "content": "任务内容",
+      "executor": "执行者",
+      "schedule": "调度计划",
+      "policy": "运行策略"
+    },
+    "optional": "可选",
+    "flowLine": "<k>将按</k><b>{{workflow}}</b><k>执行</k>",
+    "stepChip": "{{order}}. {{name}}",
+    "policySummary": "{{session}} · 重叠{{overlap}} · 错过{{misfire}} · 启动超时 {{seconds}} 秒",
+    "docPauseNote": "带文档的任务先以「暂停」创建，文档上传成功后自动转为「启用」；上传失败保持暂停并提示。",
     "noWorkflow": "未绑定 SDLC（直接接受调度指令）",
-    "agentWorkflow": "{{agent}} 将按 {{workflow}} 执行",
     "uploadFailed": "任务已保存为暂停，需求文档上传失败；请在任务详情重试上传后再启用。",
     "uploadFailedReason": "任务已保存为暂停，需求文档上传失败：{{reason}}；请在任务详情重试上传后再启用。",
     "enableFailed": "需求文档已上传，但启用失败；任务仍为暂停状态，请在任务详情重试启用。",
@@ -120,21 +136,19 @@
     "name": "任务名称",
     "namePlaceholder": "例如：主干夜间回归",
     "instruction": "任务指令",
-    "instructionPlaceholder": "支持 Markdown。说明任务目标、输入、完成标准与注意事项。",
+    "instructionHelp": "支持 Markdown。说明任务目标、输入、完成标准与注意事项。",
     "squad": "小队",
     "squadPlaceholder": "选择执行小队",
     "initialAgent": "首个数字员工",
     "agentPlaceholder": "选择该小队中的首个数字员工",
     "timezone": "时区",
-    "policySection": "运行策略与连续会话设置",
     "documents": "需求文档",
     "documentsHelp": "任务创建成功后自动上传，并随每次运行冻结。",
     "documentsAria": "需求文档上传区（支持点击、拖拽或粘贴）",
     "documentsPrompt": "点击或拖拽上传需求文档，也可 Ctrl/Cmd+V 粘贴截图",
+    "removeDocument": "移除 {{name}}",
     "cron": "Cron 表达式",
     "sessionMode": "会话模式",
-    "overlap": "重叠策略",
-    "misfire": "补偿策略",
     "overlapExecution": "重叠执行策略",
     "missedTrigger": "错过触发策略",
     "startDeadline": "启动超时（秒）",
@@ -152,7 +166,9 @@
     "numberRequired": "请填写{{field}}"
   },
   "edit": {
-    "title": "编辑定时任务"
+    "title": "编辑调度任务",
+    "scheduleValue": "{{type}} · {{tz}}",
+    "readonlyNote": "以上字段创建后不可修改"
   },
   "session": {
     "isolated": "隔离会话",
@@ -164,13 +180,36 @@
     "loadFailed": "任务不存在或加载失败",
     "initialAgent": "初始数字员工",
     "schedule": "调度",
-    "sessionOverlap": "会话 / 并发",
-    "health": "近 30 天健康度",
     "instruction": "任务说明",
     "history": "运行历史",
     "noCompletedRuns": "暂无已完成运行",
-    "nextExecution": "下次执行：{{time}}",
-    "healthResult": "成功 {{success}}/{{completed}}（{{rate}}%）"
+    "taskId": "task #{{id}}",
+    "metaCron": "调度 <kw>{{cron}}</kw> · {{tz}}",
+    "metaOnce": "单次 <v>{{time}}</v> · {{tz}}",
+    "metaNext": "下次执行 <v>{{time}}</v>（{{rel}}）",
+    "metaNextNone": "下次执行 —",
+    "metaLast": "上次触发 <v>{{time}}</v>",
+    "metaUpdated": "更新于 {{time}}",
+    "successRate": "近 30 天成功率",
+    "healthFoot": "成功 <n>{{success}}</n> / 已完成 <n>{{completed}}</n>",
+    "latestRun": "最近一次运行",
+    "latestRunFoot": "{{time}} · 耗时 <n>{{duration}}</n>",
+    "noRuns": "暂无运行",
+    "streak": "最近 {{n}} 次运行均失败，原因 <kw>{{reason}}</kw>。<link>查看 Run #{{id}}</link>",
+    "streakNoReason": "最近 {{n}} 次运行均失败。<link>查看 Run #{{id}}</link>",
+    "historySub": "最新在前",
+    "historyEmpty": "暂无运行记录",
+    "documentsSub": "随每次运行冻结",
+    "documentsEmpty": "暂无需求文档，可在编辑页上传",
+    "execution": "执行配置",
+    "upcoming": "未来 5 次触发",
+    "nextBadge": "下次",
+    "startDeadline": "启动超时",
+    "affinityTimeout": "亲和超时",
+    "deadlineNote": "{{seconds}} 秒内未启动则跳过",
+    "affinityNote": "仅连续会话生效",
+    "nextFoot": "{{weekday}} · {{tz}}",
+    "documentMeta": "{{size}} · {{date}}"
   },
   "run": {
     "invalidId": "无效的运行 ID",
@@ -180,9 +219,13 @@
     "finishedAt": "结束",
     "executor": "执行器",
     "resumedFrom": "恢复自",
+    "members": "小队成员",
+    "rid": "run #{{id}}",
+    "realtimeChannel": "实时通道：<value/>",
+    "degradedResume": "降级恢复运行：上一 {{run}} 因中断，本次按快照恢复（degradedReason：{{reason}}）。",
     "result": "执行结果",
-    "triggerSchedule": "触发：{{trigger}} · 调度：{{time}}",
-    "duration": " · 耗时：{{duration}}"
+    "triggerSchedule": "触发：<value/> · 调度：{{time}}",
+    "duration": "耗时：<value/>"
   },
   "comment": {
     "label": "评论本次运行",
@@ -205,7 +248,8 @@
     "scopeAria": "定时工单范围",
     "keywordAria": "工单标题筛选",
     "searchPlaceholder": "搜索工单标题",
-    "actionAria": "{{action}} #{{id}}"
+    "actionAria": "{{action}} #{{id}}",
+    "empty": "暂无定时工单 · 可在工单详情的「开始交付」中设置定时开始"
   },
   "phase": {
     "pending": "待触发",
@@ -224,7 +268,11 @@
     "monthly": "每月",
     "custom": "自定义",
     "cronPlaceholder": "秒 分 时 日 月 星期，例如 0 0 2 * * *",
-    "previewHelp": "下方为服务端 Cron 计算的未来五次执行时间。",
+    "cronHelp": "秒 分 时 日 月 星期 · 时区 {{tz}}（固定）",
+    "upcoming": "未来 5 次执行",
+    "serverComputed": "服务端计算",
+    "fireTime": "{{date}} {{weekday}} {{time}}",
+    "previewInvalid": "输入合法表达式后显示未来 5 次执行时间",
     "previewAria": "未来执行时间",
     "previewLoading": "正在计算未来执行时间…",
     "runDate": "执行日期",
@@ -257,10 +305,6 @@
     "title": "派生工单",
     "empty": "暂无派生工单"
   },
-  "artifacts": {
-    "title": "运行产物",
-    "empty": "暂无产物"
-  },
   "messages": {
     "runCreated": "已创建运行实例",
     "taskDeleted": "定时任务已删除",
@@ -271,5 +315,22 @@
     "scheduled": "定时触发",
     "manual": "手动触发",
     "misfire": "补偿触发"
+  },
+  "skipReason": {
+    "overlap": "上一轮未结束，跳过本次",
+    "misfirePolicy": "按错过触发策略跳过",
+    "startDeadline": "超过启动超时",
+    "ownerInactive": "负责人已失效",
+    "sourceExecutorTimeout": "源执行器超时"
+  },
+  "policyNote": {
+    "isolated": "每次运行使用全新会话",
+    "continuous": "延续上一次运行的会话上下文",
+    "skip": "上一轮未结束时不再触发",
+    "queue": "上一轮结束后再执行",
+    "allow": "允许多轮同时运行",
+    "skipAll": "停机期间错过的触发全部跳过",
+    "fireLatest": "停机期间错过多次，只补最近一次",
+    "fireAll": "停机期间错过的触发逐次补跑"
   }
 }

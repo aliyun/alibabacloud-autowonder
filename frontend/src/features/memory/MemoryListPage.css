@@ -1,0 +1,715 @@
+/* 22-memories.html 页面级样式：左侧归属者卡 + 右侧主区（修订号行 / Tabs / 索引卡 / 主题列表 / 历史流水 / 面板）。
+ * 仅使用 crystal.css 真实令牌（--aw-border/--aw-header-bg/--aw-panel/--aw-text/--aw-text-2/--aw-text-3/--aw-primary/--aw-accent-text）。
+ * 弱主色底/描边由 --aw-primary 经 color-mix 派生（不引用不存在令牌）。
+ * 全局骨架（PageHead/aw-card/Tabs/op 按钮密度/分页）由 crystal.css 与 shared/ui 承担。 */
+
+.memory-page {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 原型 .aw-alert：12px 文案 + 10px 14px 内边距，比 antd 默认 20px 24px 紧凑一档。 */
+.memory-page .ant-alert {
+  padding: 10px 14px;
+}
+
+.memory-page .ant-alert-message {
+  font-size: 12px;
+}
+
+.memory-page .ant-alert-description {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* Modal 渲染在 body 门户下，单独给弹窗内提示条同样的紧凑密度。 */
+.mem-dialog-alert.ant-alert {
+  padding: 10px 14px;
+}
+
+.mem-dialog-alert .ant-alert-message {
+  font-size: 12px;
+}
+
+/* 03b ④ 加载态：正文区居中旋转图标 + 文案，不用 Skeleton。 */
+.mem-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 0;
+  color: var(--aw-text-3);
+  font-size: 12px;
+}
+
+/* 原型 .mem-note：迁移提示改为无边框内联说明，避免页面顶部再叠一层告警框。 */
+.mem-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--aw-text-3);
+}
+
+.mem-note.is-warning {
+  color: var(--aw-warning);
+}
+
+.mem-note-icon {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+/* 内容框不整体滚动：页头固定，左右两栏各自撑满高度，右栏独立滚动。 */
+.memory-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* 原型 .mem-layout：左 30% 归属者 + 右主区，两栏都拉到布局底部，窄屏纵向堆叠。 */
+.mem-layout {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
+}
+
+/* 左栏不再吸顶：卡片随两栏布局撑满，滚动只发生在右栏，卡片下方不会出现空白。 */
+.mem-owners {
+  display: flex;
+  flex-direction: column;
+  width: 30%;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+.mem-owners > .aw-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.mem-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  .memory-page {
+    height: auto;
+  }
+
+  .mem-layout {
+    flex: none;
+    flex-direction: column;
+  }
+
+  .mem-owners {
+    width: auto;
+    flex-shrink: 1;
+  }
+
+  .mem-owners-body {
+    max-height: calc(100vh - 320px);
+  }
+
+  .mem-main {
+    overflow-y: visible;
+  }
+}
+
+/* 归属者卡不画卡头分割线，筛选框直接顶到原分割线的位置。 */
+.mem-owners > .aw-card-head {
+  border-bottom: none;
+}
+
+/* 原型 .owners-filter：筛选框左右留 8px，上沿与卡头齐平。 */
+.mem-owners-filter {
+  position: relative;
+  padding: 0 8px 8px;
+}
+
+.mem-owners-filter-icon {
+  position: absolute;
+  left: 18px;
+  top: 8px;
+  color: var(--aw-text-3);
+  pointer-events: none;
+}
+
+.mem-owners-filter input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px 0 28px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-panel);
+  color: var(--aw-text);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+/* 全局 html :is(input...):focus-visible 的权重为 (0,2,2)，这里用 html 前缀提高一级覆盖外部焦点框。 */
+html .mem-owners-filter input:focus,
+html .mem-owners-filter input:focus-visible {
+  outline: none;
+  border-color: var(--aw-primary);
+}
+
+.mem-owners-filter input::placeholder {
+  color: var(--aw-text-3);
+}
+
+/* 原型 .owner-item：头像标识 + 名称 + 副行；hover 灰底、选中弱主色底。
+ * 归属者很多时名单在卡内滚动；高度由两栏布局撑满，不再按视口估算。 */
+.mem-owners-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+/* 原型 owner-group：按 项目 / 小队 / 数字员工 三级分层，组间细线分隔。 */
+.mem-owner-group + .mem-owner-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--aw-border);
+}
+
+.mem-owner-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--aw-text-3);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mem-owner-group-head:hover {
+  color: var(--aw-text-2);
+}
+
+.mem-owner-group-head:focus-visible {
+  outline: 2px solid var(--aw-primary);
+  outline-offset: -2px;
+}
+
+.mem-owner-group-chevron {
+  flex: none;
+  transition: transform .15s ease;
+}
+
+.mem-owner-group-head.is-collapsed {
+  padding-bottom: 8px;
+}
+
+.mem-owner-group-head.is-collapsed .mem-owner-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.mem-owner-group-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-3);
+  font-size: 10px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mem-owners-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--aw-text-3);
+}
+
+.mem-owner-item.ant-list-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mem-owner-item.ant-list-item:hover {
+  background: var(--aw-gray-bg);
+}
+
+.mem-owner-item.ant-list-item.is-active {
+  background: var(--aw-primary-weak);
+}
+
+.mem-owner-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mem-owner-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.mem-owner-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aw-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mem-owner-sub {
+  font-size: 11px;
+  color: var(--aw-text-3);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 原型 .mem-tabs-row：Tabs 占满宽度，修订号贴近 Tab 下边框右端。
+ * Tabs 根节点包含整个内容面板，不能靠 flex 底对齐，否则修订号会被推到列表分页旁。 */
+.mem-tabs-row {
+  position: relative;
+}
+
+.mem-tabs-row .mem-tabs {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 原型 mem-main 顶部的「当前修订版」：11px text-3，与 Tab 栏同一水平线。 */
+.mem-revision {
+  position: absolute;
+  top: 14px;
+  right: 0;
+  font-size: 11px;
+  color: var(--aw-text-3);
+  white-space: nowrap;
+}
+
+/* 原型 Tab 上的主题计数徽标。 */
+.mem-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mem-tab-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-3);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* 原型 .index-strip：索引不是记忆，用浅灰底条与主题行区分，不占独立卡片。 */
+.mem-index-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--aw-gray-bg);
+}
+
+.mem-index-strip-icon {
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: var(--aw-text-3);
+}
+
+.mem-index-strip-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.mem-index-strip-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mem-index-strip-title .ant-btn-link {
+  height: auto;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--aw-text);
+}
+
+.mem-index-strip-title .ant-btn-link:hover,
+.mem-index-strip-title .ant-btn-link:focus-visible {
+  color: var(--aw-primary);
+}
+
+.mem-index-strip-tag.ant-tag {
+  height: 18px;
+  margin-inline-end: 0;
+  padding: 0 6px;
+  border-color: var(--aw-border);
+  background: transparent;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.mem-index-strip-hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.mem-index-strip .mem-op-link.ant-btn {
+  flex-shrink: 0;
+}
+
+/* 原型 .doc-item：主题行 = 标题/副行在左、操作在右，浅色行分隔。 */
+.mem-topic-list .ant-list-item {
+  align-items: flex-start;
+  padding: 10px 2px;
+  border-block-end: 1px solid var(--aw-border);
+}
+
+.mem-topic-list .ant-list-item:last-child {
+  border-block-end: none;
+}
+
+.mem-topic-list .ant-list-item-meta-title {
+  margin: 0;
+}
+
+.mem-topic-list .ant-list-item-meta-description {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.mem-topic-title.ant-btn-link {
+  padding: 0;
+  height: auto;
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.mem-topic-title.ant-btn-link:hover,
+.mem-topic-title.ant-btn-link:focus-visible {
+  color: var(--aw-primary);
+}
+
+.mem-topic-list .ant-list-item-action {
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+  display: flex;
+  align-self: flex-start;
+  gap: 2px;
+}
+
+.mem-topic-list .ant-list-item-action > li {
+  display: inline-flex;
+}
+
+/* 原型 .doc-ops 只有文本链接，没有操作分隔竖线。 */
+.mem-topic-list .ant-list-item-action-split {
+  display: none;
+}
+
+/* 原型 .op-link：行内文本操作，无图标、无按钮盒。 */
+.mem-op-link.ant-btn {
+  height: auto;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: var(--aw-primary);
+}
+
+.mem-op-link.ant-btn.ant-btn-dangerous {
+  color: var(--aw-error);
+}
+
+.mem-op-link.ant-btn.ant-btn-dangerous:hover {
+  color: var(--aw-error-deep);
+}
+
+/* 主题/历史列表分页收成原型 aw-table-footer 形态：共 N 条在左、分页器在右。 */
+.memory-page .ant-list-pagination {
+  display: flex;
+  margin-top: 10px;
+}
+
+.memory-page .ant-list-pagination .ant-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  width: 100%;
+}
+
+.memory-page .ant-list-pagination .ant-pagination-total-text {
+  margin-inline-end: auto;
+  font-size: 12px;
+  color: var(--aw-text-3);
+  align-self: center;
+}
+
+/* 原型 .hist-item：操作 tag + mono 路径 + 右侧修订号。 */
+.mem-history-list .ant-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+  border-block-end: 1px solid var(--aw-border);
+  font-size: 12px;
+}
+
+/* 原型 .tag.sm：行内小标签 18px 高 / 11px 字（历史流水、访问控制、导入来源共用）。 */
+.mem-history-list .ant-tag,
+.mem-acl-item .ant-tag,
+.mem-import-title .ant-tag {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+  margin-inline-end: 0;
+}
+
+.mem-history-list .ant-list-item:last-child {
+  border-block-end: none;
+}
+
+.mem-hist-path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--aw-font-mono, ui-monospace, SF Mono, Menlo, monospace);
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.mem-hist-rev {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--aw-text-3);
+  font-family: var(--aw-font-mono, ui-monospace, SF Mono, Menlo, monospace);
+}
+
+/* 原型 .acl-item / 导入来源 .doc-item：面板内行 12px、浅色行分隔、操作右置。 */
+.mem-panel .ant-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+  border-block-end: 1px solid var(--aw-border);
+  font-size: 12px;
+}
+
+.mem-panel .ant-list-item:last-child {
+  border-block-end: none;
+}
+
+.mem-panel .ant-list-item-action {
+  margin-inline-start: auto;
+}
+
+.mem-panel .ant-list-item-meta-description {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+/* 原型访问控制：说明 + 右侧添加按钮；行 = 主体标签 + 对象编号 + 权限标签 + 删除。 */
+.mem-acl-panel {
+  width: 100%;
+}
+
+.mem-panel-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.mem-panel-hint.ant-typography {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--aw-text-3);
+}
+
+.mem-acl-item.ant-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 2px;
+  border-block-end: 1px solid var(--aw-border);
+  font-size: 12px;
+}
+
+.mem-acl-item.ant-list-item:last-child {
+  border-block-end: none;
+}
+
+.mem-acl-type.ant-tag {
+  margin-inline-end: 0;
+}
+
+/* 原型主体标签：平台用户/小队/角色用描边样式，数字员工用 violet 实底。 */
+.mem-acl-type.ant-tag:not(.ant-tag-purple) {
+  background: transparent;
+  border-color: var(--aw-border);
+  color: var(--aw-text-2);
+}
+
+.mem-acl-subject {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* antd 的 .ant-list .ant-list-item .ant-list-item-action 权重更高，这里加深选择器才能右置删除操作。 */
+.mem-acl-panel .mem-acl-item.ant-list-item .ant-list-item-action {
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+}
+
+/* 原型 .acl-item 删除操作前没有分隔竖线。 */
+.mem-acl-item .ant-list-item-action-split {
+  display: none;
+}
+
+/* 原型导入来源行：标题 + 状态标签，副行为数字员工与导入次数。 */
+.mem-import-title.ant-space {
+  align-items: center;
+}
+
+/* 原型 .doc-ops：导入来源操作同样是纯文本链接，无分隔竖线。 */
+.mem-import-item .ant-list-item-action {
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+  display: flex;
+  gap: 2px;
+}
+
+.mem-import-item .ant-list-item-action > li {
+  display: inline-flex;
+}
+
+.mem-import-item .ant-list-item-action-split {
+  display: none;
+}
+
+.mem-import-name.ant-typography {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aw-text);
+}
+
+/* 主题编辑 Modal（720px）：scope / 归属者 / 类型三字段一行（原型 .f-row）。
+ * Modal 渲染在 body 门户下，选择器不能依赖页面祖先。 */
+.mem-topic-form-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mem-topic-form-row .ant-form-item {
+  flex: 1 1 180px;
+  min-width: 180px;
+}
+
+/* 正文按原型使用等宽字体，便于阅读 Markdown 结构。 */
+textarea.mem-topic-body.ant-input {
+  font-family: var(--aw-font-mono, ui-monospace, SF Mono, Menlo, monospace);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* 查看 Modal（760px）：标题 + meta 微字同处头部，头部下方内缩分割线隔开正文（原型 .md-body）。 */
+.mem-viewer-modal .ant-modal-header {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--aw-border);
+}
+
+.mem-viewer-title {
+  display: block;
+}
+
+.mem-viewer-meta.ant-typography {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.mem-viewer-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--aw-warning-bg);
+  color: var(--aw-warning-deep);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.mem-viewer-body {
+  max-height: min(540px, 60vh);
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.mem-viewer-body .aw-markdown > :first-child {
+  margin-top: 0;
+}
+
+.mem-viewer-body .aw-markdown h1,
+.mem-viewer-body .aw-markdown h2,
+.mem-viewer-body .aw-markdown h3,
+.mem-viewer-body .aw-markdown h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}

@@ -308,12 +308,14 @@ describe('EnvironmentVariablesPage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     act(() => useAuthStore.getState().setAccessLevel('ADMIN'));
     await userEvent.click(screen.getByRole('button', { name: '新增环境变量' }));
-    await userEvent.type(screen.getByLabelText('名称'), 'NEW_ADMIN_KEY');
+    // 关闭中的编辑弹窗在动画期仍留在 DOM 里，只在新弹窗内输入并断言。
+    const createDialog = await screen.findByRole('dialog', { name: '新增环境变量' });
+    await userEvent.type(within(createDialog).getByLabelText('名称'), 'NEW_ADMIN_KEY');
     expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
     finish?.(HttpResponse.json({ success: false, code: '33006', message: '旧请求版本冲突', data: null }));
 
     await waitFor(() => expect(screen.getByRole('dialog', { name: '新增环境变量' })).toBeInTheDocument());
-    expect(screen.getByLabelText('名称')).toHaveValue('NEW_ADMIN_KEY');
+    expect(within(createDialog).getByLabelText('名称')).toHaveValue('NEW_ADMIN_KEY');
     expect(screen.queryByText('旧请求版本冲突')).not.toBeInTheDocument();
   }, 15_000);
 

@@ -8,6 +8,7 @@ import com.aliyun.autowonder.common.web.GlobalExceptionHandler;
 import com.aliyun.autowonder.context.AutoWonderContext;
 import com.aliyun.autowonder.guidance.GuidanceService;
 import com.aliyun.autowonder.workitem.dto.CommentVO;
+import com.aliyun.autowonder.workitem.dto.TransitionRequest;
 import com.aliyun.autowonder.workitem.dto.TimelineItemVO;
 import com.aliyun.autowonder.workitem.dto.WorkitemOwningWorkspaceVO;
 import com.aliyun.autowonder.workitem.dto.WorkitemVO;
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.mock.web.MockHttpServletResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
@@ -35,6 +38,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -145,12 +149,53 @@ class WorkitemControllerTest {
         WorkitemController controller = new WorkitemController(service, mock(GuidanceService.class),
                 mock(WorkitemWatcherService.class), mock(WorkitemOwningWorkspaceResolver.class));
         setContext(WorkspaceAccessLevel.READ_WRITE);
-        var request = new com.aliyun.autowonder.workitem.dto.TransitionRequest();
+        var request = new TransitionRequest();
         request.setToNodeId(21L);
         request.setFromNodeId(20L);
         request.setExpectedVersion(3);
         controller.transition(1L, request);
-        verify(service).transition(1L, 21L, 100L, 7L, 20L, 3);
+        verify(service).transition(1L, 21L, 100L, 7L, 20L, 3, null);
+    }
+
+    @Test
+    void transitionBindsOptionalReasonAndForwardsRawText() throws Exception {
+        WorkitemService service = mock(WorkitemService.class);
+        WorkitemController controller = new WorkitemController(service, mock(GuidanceService.class),
+                mock(WorkitemWatcherService.class), mock(WorkitemOwningWorkspaceResolver.class));
+        setContext(WorkspaceAccessLevel.READ_WRITE);
+        var http = MockMvcBuilders.standaloneSetup(controller).build();
+        String reason = "  人工验收通过 \"approved\"\n保留原文  ";
+        var request = new TransitionRequest();
+        request.setToNodeId(21L);
+        request.setFromNodeId(20L);
+        request.setExpectedVersion(3);
+        request.setReason(reason);
+
+        http.perform(post("/api/workitems/1/transition")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(new ObjectMapper().writeValueAsString(request)))
+                .andExpect(status().isOk());
+        verify(service).transition(1L, 21L, 100L, 7L, 20L, 3, reason);
+
+        http.perform(post("/api/workitems/2/transition")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"toNodeId\":21}"))
+                .andExpect(status().isOk());
+        verify(service).transition(2L, 21L, 100L, 7L, null, null, null);
+    }
+
+    @Test
+    void transitionWithoutTargetDoesNotCallService() {
+        WorkitemService service = mock(WorkitemService.class);
+        WorkitemController controller = new WorkitemController(service, mock(GuidanceService.class),
+                mock(WorkitemWatcherService.class), mock(WorkitemOwningWorkspaceResolver.class));
+        setContext(WorkspaceAccessLevel.READ_WRITE);
+        var request = new TransitionRequest();
+        request.setReason("不能单独记录备注");
+
+        BizException ex = assertThrows(BizException.class, () -> controller.transition(1L, request));
+        assertEquals(ErrorCode.ILLEGAL_TRANSITION.getCode(), ex.getCode());
+        verifyNoInteractions(service);
     }
 
     @Test

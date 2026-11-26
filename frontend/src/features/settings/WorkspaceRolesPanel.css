@@ -1,0 +1,321 @@
+.aw-roles-hint {
+  color: var(--aw-text-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.aw-role-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.aw-role-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+}
+
+.aw-role-mark.is-admin {
+  background: var(--aw-warning-bg);
+  color: var(--aw-warning-deep);
+}
+
+.aw-role-mark.is-custom {
+  background: var(--aw-primary-weak);
+  color: var(--aw-primary);
+}
+
+.aw-role-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.aw-role-name {
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.aw-role-source {
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.aw-role-perm-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.aw-role-chip-more {
+  color: var(--aw-text-3);
+  font-size: 11px;
+  cursor: default;
+}
+
+.aw-role-members {
+  color: var(--aw-text-2);
+  font-size: 12px;
+}
+
+.aw-role-ops {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.aw-role-ops .ant-btn-link {
+  padding-inline: 4px;
+}
+
+.aw-roles-footer {
+  margin-top: 10px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* ---- 角色弹窗 ---- */
+
+.aw-role-modal .aw-role-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.aw-role-modal .aw-role-form-row > .ant-form-item {
+  min-width: 0;
+}
+
+.aw-role-modal .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.aw-role-modal .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+.aw-role-modal .ant-form-item-extra {
+  min-height: 0;
+  margin-top: 4px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-role-notice {
+  margin-bottom: 12px;
+}
+
+.aw-role-summary {
+  margin-top: 12px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* ---- 权限矩阵（左侧分类导航） ---- */
+
+.aw-perm {
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+  background: var(--aw-panel);
+}
+
+.aw-perm-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 6px;
+  border-right: 1px solid var(--aw-border);
+  background: var(--aw-header-bg);
+}
+
+.aw-perm-nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  min-height: 40px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--aw-r-ctrl);
+  background: transparent;
+  color: var(--aw-text-2);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.aw-perm-nav button:hover {
+  color: var(--aw-text);
+  background: var(--aw-gray-bg);
+}
+
+.aw-perm-nav button.is-active {
+  background: var(--aw-panel);
+  color: var(--aw-primary);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--aw-border);
+}
+
+.aw-perm-nav-count {
+  color: var(--aw-text-3);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.aw-perm-nav button.is-active .aw-perm-nav-count {
+  color: var(--aw-primary);
+}
+
+.aw-perm-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.aw-perm-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--aw-border);
+}
+
+.aw-perm-panel-title {
+  color: var(--aw-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.aw-perm-panel-head .ant-checkbox-wrapper {
+  font-size: 11px;
+  color: var(--aw-text-2);
+}
+
+.aw-perm-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px;
+}
+
+.aw-perm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--aw-border);
+}
+
+.aw-perm-row:last-child {
+  border-bottom: 0;
+}
+
+.aw-perm-info {
+  min-width: 0;
+}
+
+.aw-perm-name {
+  color: var(--aw-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.aw-perm-desc {
+  margin-top: 1px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.aw-perm-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aw-perm-seg {
+  flex-shrink: 0;
+  background: var(--aw-gray-bg);
+}
+
+.aw-perm-seg .ant-segmented-item-label {
+  min-width: 40px;
+  padding: 0 10px;
+}
+
+.aw-perm .aw-perm-seg .ant-segmented-item-selected .ant-segmented-item-label {
+  color: var(--aw-primary);
+  font-weight: 600;
+}
+
+.aw-perm-hint {
+  margin: 0;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.aw-perm-panel > .aw-perm-hint:first-of-type {
+  padding: 8px 14px 0;
+}
+
+.aw-perm-panel > .aw-perm-hint:last-child {
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--aw-border);
+}
+
+@media (max-width: 640px) {
+  .aw-role-modal .aw-role-form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aw-perm {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .aw-perm-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--aw-border);
+  }
+
+  .aw-perm-nav button {
+    flex-shrink: 0;
+  }
+
+  .aw-perm-rows {
+    max-height: 280px;
+  }
+}

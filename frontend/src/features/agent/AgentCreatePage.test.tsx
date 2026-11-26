@@ -78,7 +78,7 @@ describe('AgentCreatePage', () => {
     await user.type(screen.getByLabelText('角色名称'), '测试工程师');
     await user.clear(screen.getByLabelText('角色码'));
     await user.type(screen.getByLabelText('角色码'), 'QA');
-    await user.click(screen.getByRole('button', { name: /创建/ }));
+    await user.click(screen.getByRole('button', { name: /创\s*建/ }));
 
     expect(await screen.findByText('Agent Detail')).toBeInTheDocument();
   });
@@ -110,7 +110,7 @@ describe('AgentCreatePage', () => {
     await user.type(screen.getByLabelText('名称'), 'Beta');
     await user.type(screen.getByLabelText('角色名称'), '测试工程师');
     await user.type(screen.getByLabelText('角色码'), 'QA');
-    await user.click(screen.getByRole('button', { name: /创建/ }));
+    await user.click(screen.getByRole('button', { name: /创\s*建/ }));
 
     expect(error).toHaveBeenCalledWith('当前为只读权限，创建数字员工需要读写权限');
     expect(createCalls).toBe(0);
@@ -139,7 +139,7 @@ describe('AgentCreatePage', () => {
     await fillRequiredFields(user);
     await user.click(screen.getAllByLabelText('SDLC流程')[0]);
     await user.click(await screen.findByText('标准需求开发流程 (启用)'));
-    await user.click(screen.getByRole('button', { name: /创建/ }));
+    await user.click(screen.getByRole('button', { name: /创\s*建/ }));
 
     expect(await screen.findByText('Agent Detail')).toBeInTheDocument();
     expect(payload?.sdlcId).toBe(7);
@@ -158,7 +158,7 @@ describe('AgentCreatePage', () => {
 
     renderPage();
     await fillRequiredFields(user);
-    await user.click(screen.getByRole('button', { name: /创建/ }));
+    await user.click(screen.getByRole('button', { name: /创\s*建/ }));
 
     expect(await screen.findByText('Agent Detail')).toBeInTheDocument();
     expect(payload?.sdlcId).toBeNull();
@@ -186,7 +186,7 @@ describe('AgentCreatePage', () => {
     fireEvent.mouseDown(clear as Element);
     fireEvent.click(clear as Element);
     await waitFor(() => expect(sdlcItem.querySelector('.ant-select-selection-item')).toBeNull());
-    await user.click(screen.getByRole('button', { name: /创建/ }));
+    await user.click(screen.getByRole('button', { name: /创\s*建/ }));
 
     expect(await screen.findByText('Agent Detail')).toBeInTheDocument();
     expect(payload?.sdlcId).toBeNull();
@@ -218,7 +218,7 @@ describe('AgentCreatePage', () => {
 
     await user.keyboard('{Escape}');
     await fillRequiredFields(user);
-    await user.click(screen.getByRole('button', { name: /创建/ }));
+    await user.click(screen.getByRole('button', { name: /创\s*建/ }));
 
     expect(await screen.findByText('Agent Detail')).toBeInTheDocument();
     expect(payload?.sdlcId).toBeNull();
@@ -239,7 +239,7 @@ describe('AgentCreatePage', () => {
 
     renderPage();
     await fillRequiredFields(user);
-    const createButton = screen.getByRole('button', { name: /创建/ });
+    const createButton = screen.getByRole('button', { name: /创\s*建/ });
     await user.click(createButton);
     await waitFor(() => expect(calls).toBe(1));
     await user.click(createButton);

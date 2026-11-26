@@ -115,6 +115,7 @@ export const GROUP_CHAT_PUBLIC_QUERY_KEY = ['im-group-config-public'] as const;
 export const groupChatQueryKey = (provider: string) => ['platform-im-group-chat', provider] as const;
 
 export const THEME_PRESETS = [
+  { key: 'alicloud-blue', name: 'Default', primaryColor: '#0064C8' },
   { key: 'aliyun-orange', name: '阿里橙', primaryColor: '#f97316' },
   { key: 'ocean-blue', name: '海洋蓝', primaryColor: '#2563eb' },
   { key: 'jade-green', name: '翡翠绿', primaryColor: '#059669' },

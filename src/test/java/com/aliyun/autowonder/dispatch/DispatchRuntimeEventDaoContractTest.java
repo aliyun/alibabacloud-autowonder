@@ -21,13 +21,29 @@ class DispatchRuntimeEventDaoContractTest {
             assertTrue(config.hasStatement(DispatchRuntimeEventDao.class.getName() + ".streamForProgress"));
             String sql = config.getMappedStatement(DispatchRuntimeEventDao.class.getName() + ".streamForProgress")
                     .getBoundSql(java.util.Map.of("tenantId", 7L, "workitemId", 100L)).getSql();
-            assertTrue(sql.contains("CASE WHEN event_type = 'workflow.plan_applied' THEN detail_json ELSE NULL END"));
+            assertTrue(sql.contains("CASE WHEN event_type IN ('workflow.plan_applied', 'step.timing', 'step.started') THEN detail_json ELSE NULL END"));
             assertTrue(sql.contains("e.tenant_id = ? AND e.workitem_id = ?"));
             assertTrue(sql.contains("d.id = e.dispatch_id"));
             assertTrue(sql.contains("d.is_deleted = 0"));
             assertTrue(sql.contains("ORDER BY id ASC"));
             assertFalse(sql.contains("LIMIT"));
             assertTrue(sql.contains("d.source_type = 'WORKITEM'") == databaseId.equals("autowonder-source-aware"));
+            try (var db = java.sql.DriverManager.getConnection("jdbc:h2:mem:progress-" + databaseId);
+                 var schema = db.createStatement()) {
+                schema.execute("CREATE TABLE dispatch(id BIGINT, tenant_id BIGINT, workitem_id BIGINT, source_type VARCHAR, is_deleted INT)");
+                schema.execute("INSERT INTO dispatch VALUES(10,7,100,'WORKITEM',0)");
+                schema.execute("CREATE TABLE dispatch_runtime_event(id BIGINT, tenant_id BIGINT, workitem_id BIGINT, dispatch_id BIGINT, agent_id BIGINT, event_id VARCHAR, seq BIGINT, event_type VARCHAR, step_id BIGINT, step_key VARCHAR, step_order INT, step_name VARCHAR, message VARCHAR, error VARCHAR, detail_json VARCHAR, event_time TIMESTAMP, gmt_create TIMESTAMP)");
+                schema.execute("INSERT INTO dispatch_runtime_event(id,tenant_id,workitem_id,dispatch_id,event_type,detail_json) VALUES(1,7,100,10,'step.timing','timing'),(2,7,100,10,'workflow.plan_applied','plan'),(3,7,100,10,'agent.message','private'),(4,7,100,10,'step.started','{\"stepAttempt\":2}')");
+                try (var query = db.prepareStatement(sql)) {
+                    query.setLong(1, 7); query.setLong(2, 100); query.setLong(3, 7); query.setLong(4, 100);
+                    try (var rows = query.executeQuery()) {
+                        assertTrue(rows.next()); org.junit.jupiter.api.Assertions.assertEquals("timing", rows.getString("detail_json"));
+                        assertTrue(rows.next()); org.junit.jupiter.api.Assertions.assertEquals("plan", rows.getString("detail_json"));
+                        assertTrue(rows.next()); org.junit.jupiter.api.Assertions.assertNull(rows.getString("detail_json"));
+                        assertTrue(rows.next()); org.junit.jupiter.api.Assertions.assertEquals("{\"stepAttempt\":2}", rows.getString("detail_json"));
+                    }
+                }
+            }
             String fullSql = config.getMappedStatement(DispatchRuntimeEventDao.class.getName() + ".listByWorkitem")
                     .getBoundSql(java.util.Map.of("tenantId", 7L, "workitemId", 100L)).getSql();
             assertFalse(fullSql.contains("CASE WHEN"));

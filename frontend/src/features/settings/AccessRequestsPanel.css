@@ -1,0 +1,151 @@
+.aw-requests-hint {
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-request-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aw-request-name {
+  overflow: hidden;
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-request-uid {
+  color: var(--aw-text-2);
+  font-family: var(--aw-mono);
+  font-size: 12px;
+}
+
+.aw-request-time {
+  display: flex;
+  flex-direction: column;
+  line-height: 18px;
+}
+
+.aw-request-date {
+  color: var(--aw-text);
+  font-size: 13px;
+}
+
+.aw-request-clock {
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.aw-request-reason {
+  display: block;
+  max-width: 360px;
+  overflow: hidden;
+  color: var(--aw-text-2);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-request-reason.is-none {
+  color: var(--aw-text-3);
+}
+
+.aw-request-ops {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.aw-request-ops .ant-btn-link {
+  padding-inline: 6px;
+}
+
+.aw-requests-empty {
+  padding: 14px 0 6px;
+  text-align: center;
+}
+
+.aw-requests-empty .ant-empty {
+  margin: 0;
+}
+
+.aw-requests-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-3);
+}
+
+.aw-requests-empty.is-error .aw-requests-empty-icon {
+  background: var(--aw-error-bg);
+  color: var(--aw-error);
+}
+
+.aw-requests-empty-text {
+  margin-top: 10px;
+}
+
+.aw-requests-empty-title {
+  color: var(--aw-text-2);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.aw-requests-empty-sub {
+  margin-top: 4px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-requests-empty .ant-btn {
+  margin-top: 12px;
+}
+
+.aw-requests-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.aw-request-reject-desc {
+  margin: 0 0 12px;
+  color: var(--aw-text-2);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.aw-request-reject-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* showCount 的计数绝对定位在输入框下方 21px，预留空间避免压住 footer 按钮 */
+  padding-bottom: 22px;
+}
+
+.aw-request-reject-field .ant-input-data-count {
+  line-height: 18px;
+}
+
+.aw-request-reject-label {
+  color: var(--aw-text);
+  font-size: 12px;
+  line-height: 18px;
+}

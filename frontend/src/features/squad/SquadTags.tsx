@@ -19,7 +19,7 @@ export function SquadTags({ squadIds, squadNames }: SquadTagsProps) {
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 4px' }}>
       {ids.map((squadId, index) => (
         <Tag key={squadId} color="blue" style={{ marginInlineEnd: 0 }}>
-          <Link to={`/agents?tab=squads&squadId=${squadId}`}>{squadNames?.[index] ?? t('squadFallback', { id: squadId })}</Link>
+          <Link to={`/squads?squadId=${squadId}`}>{squadNames?.[index] ?? t('squadFallback', { id: squadId })}</Link>
         </Tag>
       ))}
     </div>

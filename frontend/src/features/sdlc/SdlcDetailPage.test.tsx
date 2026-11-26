@@ -30,6 +30,28 @@ describe('SdlcDetailPage', () => {
     useAuthStore.getState().setCurrentWorkspace({ id: 1, name: 'O', description: '' }, 'READ_WRITE');
   });
 
+  it('updates only stage timing on an enabled flow', async () => {
+    const flow = { id: '1', name: 'Delivery', status: 'ENABLED', steps: [], stageTimingEnabled: false };
+    const updates: unknown[] = [];
+    server.use(
+      http.get('/api/sdlcs/1', () => HttpResponse.json({ success: true, data: flow })),
+      http.put('/api/sdlcs/1', async ({ request }) => {
+        const update = await request.json() as { stageTimingEnabled: boolean };
+        updates.push(update);
+        flow.stageTimingEnabled = update.stageTimingEnabled;
+        return HttpResponse.json({ success: true, data: flow });
+      }),
+    );
+    renderPage();
+    const toggle = await screen.findByRole('switch', { name: '记录交付阶段耗时' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    expect(updates).toEqual([{ stageTimingEnabled: true }, { stageTimingEnabled: false }]);
+  });
+
   it('defaults approvers to the creator and saves multiple members and identity tags', async () => {
     let saved: Record<string, unknown> | undefined;
     server.use(
@@ -47,7 +69,7 @@ describe('SdlcDetailPage', () => {
     );
     const { container } = renderPage();
     await screen.findByText('审批人配置');
-    fireEvent.click(container.querySelector('.ant-table-row .anticon-edit')!.closest('button')!);
+    fireEvent.click(container.querySelector('.ant-table-row button[aria-label="编辑步骤"]')!);
     expect(await screen.findByText('工单创建人（建单后确定）')).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '审批人' }));
     fireEvent.click(await screen.findByText('审批成员甲'));
@@ -94,7 +116,7 @@ describe('SdlcDetailPage', () => {
     expect(await screen.findByText('标准流程')).toBeInTheDocument();
     expect(screen.getAllByText('需求分析').length).toBeGreaterThan(0);
     expect(screen.getAllByText('代码实现').length).toBeGreaterThan(0);
-    expect(screen.getByText('步骤概览')).toBeInTheDocument();
+    expect(screen.getByText('步骤总览')).toBeInTheDocument();
     expect(screen.getByLabelText('步骤 1: 需求分析')).toBeInTheDocument();
     expect(screen.getByLabelText('步骤 2: 代码实现')).toBeInTheDocument();
     expect(screen.getByLabelText('步骤 3: 测试验证')).toBeInTheDocument();
@@ -102,12 +124,11 @@ describe('SdlcDetailPage', () => {
       flexWrap: 'wrap',
       overflowX: 'visible',
     });
-    expect(screen.getByTestId('sdlc-step-overview-card')).toHaveStyle({
-      boxShadow: 'none',
-    });
+    // 原型 14：步骤总览卡与其他 panel 同一卡片层级（SectionCard/aw-card 契约）
+    expect(screen.getByTestId('sdlc-step-overview-card').className).toContain('aw-card');
     expect(screen.getAllByLabelText('下一步骤').length).toBe(2);
     expect(screen.getByText('添加步骤')).toBeInTheDocument();
-    expect(screen.getByText('步骤链编辑器')).toBeInTheDocument();
+    expect(screen.getByText('步骤编辑')).toBeInTheDocument();
     expect(screen.getAllByText('执行说明').length).toBeGreaterThan(0);
     expect(screen.queryByText('角色码')).not.toBeInTheDocument();
   });
@@ -156,7 +177,8 @@ describe('SdlcDetailPage', () => {
     renderPage();
     expect(await screen.findByText('已上线流程')).toBeInTheDocument();
     expect(screen.getByText(/流程已启用/)).toBeInTheDocument();
-    expect(screen.getByText('已启用')).toBeInTheDocument();
+    // 原型 14：状态 tag 同时出现在页头与「信息」面板，出现两处
+    expect(screen.getAllByText('已启用')).toHaveLength(2);
     expect(screen.queryByText('ENABLED')).not.toBeInTheDocument();
   });
 
@@ -179,7 +201,8 @@ describe('SdlcDetailPage', () => {
     );
     renderPage();
     expect(await screen.findByText('状态测试流程')).toBeInTheDocument();
-    expect(screen.getByText(label)).toBeInTheDocument();
+    // 原型 14：状态 tag 在页头与「信息」面板各出现一次
+    expect(screen.getAllByText(label)).toHaveLength(2);
     expect(screen.queryByText(status)).not.toBeInTheDocument();
   });
 
@@ -252,7 +275,7 @@ describe('SdlcDetailPage', () => {
     const { container } = renderPage();
     expect(await screen.findByText('错误提示流程')).toBeInTheDocument();
 
-    const editButton = container.querySelector('.ant-table-row .anticon-edit')?.closest('button');
+    const editButton = container.querySelector('.ant-table-row button[aria-label="编辑步骤"]');
     expect(editButton).toBeTruthy();
     fireEvent.click(editButton!);
 
@@ -302,7 +325,7 @@ describe('SdlcDetailPage', () => {
     const { container } = renderPage();
     expect(await screen.findByText('流转字段流程')).toBeInTheDocument();
 
-    const editButton = container.querySelector('.ant-table-row .anticon-edit')?.closest('button');
+    const editButton = container.querySelector('.ant-table-row button[aria-label="编辑步骤"]');
     expect(editButton).toBeTruthy();
     fireEvent.click(editButton!);
 
@@ -350,7 +373,7 @@ describe('SdlcDetailPage', () => {
     );
     const { container } = renderPage();
     await screen.findByText('提问配置流程');
-    const edit = () => fireEvent.click(container.querySelector('.ant-table-row .anticon-edit')!.closest('button')!);
+    const edit = () => fireEvent.click(container.querySelector('.ant-table-row button[aria-label="编辑步骤"]')!);
     edit();
     const label = '该步骤事实不清时询问用户';
     const questionLabel = '需要询问的问题（可选）';
@@ -464,13 +487,13 @@ describe('SdlcDetailPage', () => {
     const { container } = renderPage();
     expect(await screen.findByText('提示流程')).toBeInTheDocument();
 
-    const editButton = container.querySelector('.ant-table-row .anticon-edit')?.closest('button');
+    const editButton = container.querySelector('.ant-table-row button[aria-label="编辑步骤"]');
     fireEvent.click(editButton!);
 
     const label = await screen.findByText('建议重试预算');
     const helpSpan = label.closest('span');
     expect(helpSpan).toBeTruthy();
-    expect(helpSpan!.querySelector('.anticon-question-circle')).toBeTruthy();
+    expect(helpSpan!.querySelector('.aw-stroke-icon')).toBeTruthy();
   });
 
   it('shows help explanations for checklist, policy and retry budget fields in the step modal', async () => {
@@ -495,7 +518,7 @@ describe('SdlcDetailPage', () => {
 
     const helpIconOf = (labelText: string) => {
       const icon = screen.getAllByText(labelText)
-        .map((el) => el.querySelector('.anticon-question-circle'))
+        .map((el) => el.querySelector('.aw-stroke-icon'))
         .find(Boolean);
       expect(icon).toBeTruthy();
       return icon!;
@@ -618,7 +641,7 @@ it('uses the completion locale for a pending SDLC save', async () => {
 afterEach(async () => { await i18n.changeLanguage('zh-CN'); });
 
 it.each([
-  ['zh-CN', '草稿', '需求', ['分析', '实现', '测试', '审查', '产物', '交接', '清理'], '8 步'],
+  ['zh-CN', '草稿', '需求', ['分析', '实现', '测试', '审查', '产物', '交接', '清理'], '共 8 个步骤'],
   ['en-US', 'Draft', 'Requirement', ['Analysis', 'Implementation', 'Test', 'Review', 'Artifact', 'Handoff', 'Cleanup'], '8 steps'],
 ])('renders every known kind and prototype-like unknown values in %s', async (locale, status, workType, kinds, count) => {
   await i18n.changeLanguage(locale);
@@ -626,7 +649,8 @@ it.each([
   server.use(http.get('/api/sdlcs/1', () => HttpResponse.json({ success: true, data: { id: '1', name: '原流程', workType: 'REQ', status: 'DRAFT', steps: codes.map((kind, i) => ({ id: String(i), stepOrder: i + 1, name: `raw-${i}`, kind, required: i !== 0, instructionMd: '原执行说明', timeoutSeconds: null, retryBudget: null })) } })));
   renderPage();
   await screen.findByText('原流程');
-  expect(screen.getByText(status)).toBeInTheDocument();
+  // 状态 tag 在页头与「信息」面板各出现一次
+  expect(screen.getAllByText(status)).toHaveLength(2);
   expect(screen.getByText(workType)).toBeInTheDocument();
   for (const kind of kinds) expect(screen.getByText(kind)).toBeInTheDocument();
   expect(screen.getByText('constructor')).toBeInTheDocument();
@@ -643,7 +667,8 @@ it.each([[0, '0 steps'], [1, '1 step'], [3, '3 steps']])('renders a numeric over
   renderPage();
   await screen.findByText('Raw');
   expect(screen.getByText(expected)).toBeInTheDocument();
-  expect(screen.getAllByText('constructor')).toHaveLength(2);
+  // constructor：页头状态 tag（未知值原样）+「信息」面板状态 + 表格类型列
+  expect(screen.getAllByText('constructor')).toHaveLength(3);
 });
 
 it('refreshes open checklist help and retry prose while retaining exact JSON examples', async () => {

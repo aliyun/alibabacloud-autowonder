@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Card, Button, Space } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useNavigate } from 'react-router-dom';
 import { AiSessionPanel } from '@/shared/ui/AiSessionPanel';
 
@@ -10,7 +10,7 @@ export function MemoryImportPage() {
   return (
     <div style={{ padding: 24 }}>
       <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={() => navigate('/memories')}>{t('actions.back')}</Button>
+        <Button icon={<AwStrokeIcon name="chev-l" />} onClick={() => navigate('/memories')}>{t('actions.back')}</Button>
       </Space>
       <Card title={t('import.title')} styles={{ body: { height: '70vh', padding: 0 } }}>
         <AiSessionPanel

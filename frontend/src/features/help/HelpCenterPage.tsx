@@ -3,7 +3,7 @@ import { useLocale } from '@/shared/i18n/LocaleProvider';
 import { useAppearance } from '@/shared/theme/AppearanceProvider';
 import { useEffect, useRef, useState, type CSSProperties, type ComponentPropsWithoutRef } from 'react';
 import { Button, theme } from 'antd';
-import { ArrowLeftOutlined, ArrowRightOutlined, CheckOutlined, CopyOutlined, DownloadOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import ReactMarkdown, { type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -54,6 +54,18 @@ function remarkChapterLayout(chapterId: string) {
         if (groups.length > 0) groups[groups.length - 1].children.push(node as Blockquote['children'][number]);
       }
       tree.children = groups;
+    }
+    if (chapterId === 'im-integration') {
+      for (const node of tree.children) {
+        if (node.type !== 'paragraph') continue;
+        const first = node.children[0];
+        if (first?.type !== 'text' || !/^[QA][:：]/.test(first.value)) continue;
+        node.children = [
+          { type: 'strong', children: [{ type: 'text', value: first.value.slice(0, 2) }] },
+          { ...first, value: first.value.slice(2) },
+          ...node.children.slice(1),
+        ];
+      }
     }
     if (chapterId === 'project-onboarding' || chapterId === 'im-integration') {
       for (let index = 0; index < tree.children.length - 1; index++) {
@@ -109,7 +121,7 @@ function CodeBlock({ children, node, ...props }: ComponentPropsWithoutRef<'pre'>
       <div className="help-code-toolbar">
         <span>{language || t('code.label')}</span>
         <Button size="small" type="text" aria-label={t('code.copyLabel')} onClick={() => void copyCode()}
-          icon={status === 'copied' ? <CheckOutlined aria-hidden="true" /> : <CopyOutlined aria-hidden="true" />}>
+          icon={status === 'copied' ? <AwStrokeIcon name="check" size={14} /> : <AwStrokeIcon name="copy" size={14} />}>
           {status === 'copied' ? t('code.copied') : t('code.copy')}
         </Button>
       </div>
@@ -220,7 +232,7 @@ export function HelpCenterPage() {
               img: ({ node: _node, src, ...props }) => <img {...props} src={src?.replace(/^(\/help\/assets\/\d{2}-(?:zh-CN|en-US))\.png$/, `$1-${appearance}.png`)} />,
               a: ({ node: _node, href, children, ...props }) => {
                 if (href === '/help/assets/auto-wonder.zip') {
-                  return <Button className="help-download" href={href} download="auto-wonder.zip" icon={<DownloadOutlined aria-hidden="true" />}>{t('download')} {children}</Button>;
+                  return <Button className="help-download" href={href} download="auto-wonder.zip" icon={<AwStrokeIcon name="dl" />}>{t('download')} {children}</Button>;
                 }
                 const external = /^(?:https?:)?\/\//i.test(href || '') || /^(?:mailto|tel):/i.test(href || '');
                 return <a {...props} href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined}>{children}</a>;
@@ -228,8 +240,8 @@ export function HelpCenterPage() {
             }}>{chapter.markdown}</ReactMarkdown>
           </div>
           <footer className="help-pagination">
-            {chapterIndex > 0 ? <Link to={`/help?chapter=${chapters[chapterIndex - 1].id}`}><ArrowLeftOutlined aria-hidden="true" /><span><small>{t('previous')}</small>{chapters[chapterIndex - 1].title}</span></Link> : <span />}
-            {chapterIndex < chapters.length - 1 && <Link to={`/help?chapter=${chapters[chapterIndex + 1].id}`}><span><small>{t('next')}</small>{chapters[chapterIndex + 1].title}</span><ArrowRightOutlined aria-hidden="true" /></Link>}
+            {chapterIndex > 0 ? <Link to={`/help?chapter=${chapters[chapterIndex - 1].id}`}><AwStrokeIcon name="chev-l" /><span><small>{t('previous')}</small>{chapters[chapterIndex - 1].title}</span></Link> : <span />}
+            {chapterIndex < chapters.length - 1 && <Link to={`/help?chapter=${chapters[chapterIndex + 1].id}`}><span><small>{t('next')}</small>{chapters[chapterIndex + 1].title}</span><AwStrokeIcon name="chev-r" /></Link>}
           </footer>
         </div>
       </article>

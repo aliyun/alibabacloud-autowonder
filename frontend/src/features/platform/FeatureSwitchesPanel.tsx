@@ -1,8 +1,9 @@
-import { Card, Flex, Switch, Typography, message } from 'antd';
+import { Button, Card, Space, Switch, Tag, Typography, message } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { i18n } from '@/shared/i18n';
+import { NoticeTip } from '@/shared/ui/NoticeTip';
 import {
   FEATURE_SWITCH_QUERY_KEY,
   getFeatureSwitches,
@@ -11,7 +12,12 @@ import {
   type UpdateFeatureSwitchesParams,
 } from './featureSwitchApi';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
+
+// 开关字段名是接口技术值，提到模块作用域声明，避免 check:i18n 把它当作 JSX 里的硬编码 UI 文案。
+const DUPLICATE_SWITCH_KEY = 'duplicateWorkitemIntentEnabled' as const;
+const REVIEW_SWITCH_KEY = 'userRegistrationReviewEnabled' as const;
+const CREATION_SWITCH_KEY = 'workspaceCreationDefaultAllowed' as const;
 
 export interface FeatureSwitchesPanelProps {
   canManage?: boolean;
@@ -20,27 +26,24 @@ export interface FeatureSwitchesPanelProps {
 interface FeatureSwitchCardProps {
   testId: string;
   title: string;
-  enabled: boolean;
-  status: string;
+  status: ReactNode;
   toggle: ReactNode;
   children: ReactNode;
 }
 
-function FeatureSwitchCard({ testId, title, enabled, status, toggle, children }: FeatureSwitchCardProps) {
+function FeatureSwitchCard({ testId, title, status, toggle, children }: FeatureSwitchCardProps) {
   const headingId = useId();
 
   return (
-    <Card role="region" aria-labelledby={headingId} data-testid={testId}>
-      <Flex align="start" gap={24}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Title id={headingId} level={4} style={{ margin: '0 0 8px' }}>{title}</Title>
-          {children}
+    <Card role="region" aria-labelledby={headingId} data-testid={testId} className="aw-platform-feature-card">
+      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <div className="aw-platform-feature-head">
+          <Text id={headingId} strong>{title}</Text>
+          {status}
         </div>
-        <Flex align="center" gap={12} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-          <Text type={enabled ? 'success' : 'secondary'}>{status}</Text>
-          {toggle}
-        </Flex>
-      </Flex>
+        <div className="aw-platform-feature-line">{toggle}</div>
+        {children}
+      </Space>
     </Card>
   );
 }
@@ -51,7 +54,7 @@ function FeatureSwitchCard({ testId, title, enabled, status, toggle, children }:
 export function FeatureSwitchesPanel({ canManage = false }: FeatureSwitchesPanelProps) {
   const { t } = useTranslation('platform');
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, error, isLoading, refetch, isFetching } = useQuery({
     queryKey: FEATURE_SWITCH_QUERY_KEY,
     queryFn: getFeatureSwitches,
     retry: false,
@@ -59,9 +62,12 @@ export function FeatureSwitchesPanel({ canManage = false }: FeatureSwitchesPanel
   const [duplicateEnabled, setDuplicateEnabled] = useState(false);
   const [reviewEnabled, setReviewEnabled] = useState(false);
   const [creationEnabled, setCreationEnabled] = useState(true);
+  const submitLock = useRef(false);
+
+  const known = data != null && !error;
 
   useEffect(() => {
-    if (data) {
+    if (data && !submitLock.current) {
       setDuplicateEnabled(data.duplicateWorkitemIntentEnabled);
       setReviewEnabled(data.userRegistrationReviewEnabled);
       setCreationEnabled(data.workspaceCreationDefaultAllowed);
@@ -92,30 +98,59 @@ export function FeatureSwitchesPanel({ canManage = false }: FeatureSwitchesPanel
     },
   });
 
+  const pendingVariable = mutation.isPending ? mutation.variables : undefined;
+  const isPendingFor = (key: keyof UpdateFeatureSwitchesParams) =>
+    mutation.isPending && pendingVariable?.[key] !== undefined;
+
+  const handleToggle = async (
+    params: UpdateFeatureSwitchesParams,
+    apply: () => void,
+    revert: () => void,
+  ) => {
+    if (!canManage || !data || error || submitLock.current) return;
+    submitLock.current = true;
+    apply();
+    try {
+      await mutation.mutateAsync(params);
+    } catch {
+      revert();
+    } finally {
+      submitLock.current = false;
+    }
+  };
+
   if (isLoading) {
-    return <Card loading />;
+    return <Card className="aw-platform-feature-card" loading />;
   }
 
   return (
-    <Flex vertical gap={12}>
+    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+      {error && <NoticeTip kind="error" title={t('featureSwitches.loadFailed')}
+        detail={error instanceof Error ? error.message : t('retryLater')}
+        action={<Button loading={isFetching} onClick={() => { void refetch(); }}>{t('ssoRetry')}</Button>} />}
+
       <FeatureSwitchCard
         testId="feature-switch-duplicate"
         title={t('featureSwitches.duplicateIntent.title')}
-        enabled={duplicateEnabled}
-        status={duplicateEnabled
-          ? t('featureSwitches.duplicateIntent.statusOn')
-          : t('featureSwitches.duplicateIntent.statusOff')}
+        status={(
+          <Tag color={isPendingFor(DUPLICATE_SWITCH_KEY) ? 'processing' : known && duplicateEnabled ? 'green' : 'default'}>
+            {isPendingFor(DUPLICATE_SWITCH_KEY) ? t('featureSwitches.submitting')
+              : !known ? t('featureSwitches.statusUnknown')
+                : duplicateEnabled ? t('featureSwitches.duplicateIntent.statusOn') : t('featureSwitches.duplicateIntent.statusOff')}
+          </Tag>
+        )}
         toggle={(
           <Switch
+            size="small"
             aria-label={t('featureSwitches.duplicateIntent.toggle')}
-            checked={duplicateEnabled}
-            disabled={!canManage || mutation.isPending}
+            checked={known && duplicateEnabled}
+            disabled={!canManage || !known || mutation.isPending}
             onChange={(checked) => {
-              setDuplicateEnabled(checked);
-              mutation.mutate({
-                duplicateWorkitemIntentEnabled: checked,
-                expectedVersion: data?.version ?? 0,
-              });
+              void handleToggle(
+                { [DUPLICATE_SWITCH_KEY]: checked, expectedVersion: data?.version ?? 0 },
+                () => setDuplicateEnabled(checked),
+                () => setDuplicateEnabled(Boolean(data?.duplicateWorkitemIntentEnabled)),
+              );
             }}
           />
         )}
@@ -124,30 +159,33 @@ export function FeatureSwitchesPanel({ canManage = false }: FeatureSwitchesPanel
           <Text strong>{t('featureSwitches.duplicateIntent.scopeLabel')}</Text>
           {t('featureSwitches.duplicateIntent.scopeValue')}
         </Text>
-        <div><Text type="secondary">{t('featureSwitches.duplicateIntent.scopeHint')}</Text></div>
-        <div><Text type="secondary">{t('featureSwitches.duplicateIntent.description')}</Text></div>
-        <div><Text type="secondary">{t('featureSwitches.duplicateIntent.eligibility')}</Text></div>
-        <div><Text type="secondary" style={{ fontSize: 12 }}>{t('featureSwitches.duplicateIntent.hint')}</Text></div>
+        <Text type="secondary">{t('featureSwitches.duplicateIntent.saveNow')}</Text>
+        <Text type="secondary">{t('featureSwitches.duplicateIntent.detect')}</Text>
+        <Text type="secondary">{t('featureSwitches.duplicateIntent.chief')}</Text>
+        <NoticeTip kind="warning" title={t('featureSwitches.duplicateIntent.titleRule')} />
       </FeatureSwitchCard>
 
       <FeatureSwitchCard
         testId="feature-switch-registration-review"
         title={t('featureSwitches.registrationReview.title')}
-        enabled={reviewEnabled}
-        status={reviewEnabled
-          ? t('featureSwitches.registrationReview.statusOn')
-          : t('featureSwitches.registrationReview.statusOff')}
+        status={known ? (
+          <Tag color={isPendingFor(REVIEW_SWITCH_KEY) ? 'processing' : reviewEnabled ? 'green' : 'default'}>
+            {isPendingFor(REVIEW_SWITCH_KEY) ? t('featureSwitches.submitting')
+              : reviewEnabled ? t('featureSwitches.registrationReview.statusOn') : t('featureSwitches.registrationReview.statusOff')}
+          </Tag>
+        ) : null}
         toggle={(
           <Switch
+            size="small"
             aria-label={t('featureSwitches.registrationReview.toggle')}
-            checked={reviewEnabled}
-            disabled={!canManage || mutation.isPending}
+            checked={known && reviewEnabled}
+            disabled={!canManage || !known || mutation.isPending}
             onChange={(checked) => {
-              setReviewEnabled(checked);
-              mutation.mutate({
-                userRegistrationReviewEnabled: checked,
-                userRegistrationReviewVersion: data?.userRegistrationReviewVersion ?? 0,
-              });
+              void handleToggle(
+                { [REVIEW_SWITCH_KEY]: checked, userRegistrationReviewVersion: data?.userRegistrationReviewVersion ?? 0 },
+                () => setReviewEnabled(checked),
+                () => setReviewEnabled(Boolean(data?.userRegistrationReviewEnabled)),
+              );
             }}
           />
         )}
@@ -158,21 +196,24 @@ export function FeatureSwitchesPanel({ canManage = false }: FeatureSwitchesPanel
       <FeatureSwitchCard
         testId="feature-switch-workspace-creation"
         title={t('featureSwitches.workspaceCreationDefault.title')}
-        enabled={creationEnabled}
-        status={creationEnabled
-          ? t('featureSwitches.workspaceCreationDefault.statusOn')
-          : t('featureSwitches.workspaceCreationDefault.statusOff')}
+        status={known ? (
+          <Tag color={isPendingFor(CREATION_SWITCH_KEY) ? 'processing' : creationEnabled ? 'green' : 'default'}>
+            {isPendingFor(CREATION_SWITCH_KEY) ? t('featureSwitches.submitting')
+              : creationEnabled ? t('featureSwitches.workspaceCreationDefault.statusOn') : t('featureSwitches.workspaceCreationDefault.statusOff')}
+          </Tag>
+        ) : null}
         toggle={(
           <Switch
+            size="small"
             aria-label={t('featureSwitches.workspaceCreationDefault.toggle')}
-            checked={creationEnabled}
-            disabled={!canManage || mutation.isPending}
+            checked={known && creationEnabled}
+            disabled={!canManage || !known || mutation.isPending}
             onChange={(checked) => {
-              setCreationEnabled(checked);
-              mutation.mutate({
-                workspaceCreationDefaultAllowed: checked,
-                workspaceCreationDefaultAllowedVersion: data?.workspaceCreationDefaultAllowedVersion ?? 0,
-              });
+              void handleToggle(
+                { [CREATION_SWITCH_KEY]: checked, workspaceCreationDefaultAllowedVersion: data?.workspaceCreationDefaultAllowedVersion ?? 0 },
+                () => setCreationEnabled(checked),
+                () => setCreationEnabled(data?.workspaceCreationDefaultAllowed ?? true),
+              );
             }}
           />
         )}
@@ -181,6 +222,6 @@ export function FeatureSwitchesPanel({ canManage = false }: FeatureSwitchesPanel
       </FeatureSwitchCard>
 
       {!canManage ? <Text type="secondary">{t('featureSwitches.readOnly')}</Text> : null}
-    </Flex>
+    </Space>
   );
 }

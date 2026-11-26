@@ -5,6 +5,8 @@ import { formatDateTime } from '@/shared/i18n/format';
 import type { TimelineItem } from '@/shared/types/workitem';
 import { executionControlSummary } from '../runtimeLabels';
 
+const RECORD_TIME_SEPARATOR = ' · ';
+
 export function ExecutionControlTimeline({ dispatchId, items, compact = false }: { dispatchId: number; items: TimelineItem[]; compact?: boolean }) {
   const { t } = useTranslation('workitem');
   const [visibleCount, setVisibleCount] = useState(compact ? 1 : 10);
@@ -20,21 +22,36 @@ export function ExecutionControlTimeline({ dispatchId, items, compact = false }:
     const action = executionControlSummary(item, dispatchId);
     return name ? t('executionControl.record', { name, action }) : action;
   };
+  const reasonText = (item: TimelineItem) => item.executionControl?.reason
+    ? t('executionControl.reason', { reason: item.executionControl.reason })
+    : null;
   if (!events.length) return null;
   return <section aria-label={t('executionControl.timeline')} data-testid={`execution-control-timeline-${dispatchId}`}
     className={`execution-control-records ${compact ? 'is-compact' : ''}`}>
     {compact && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('executionControl.timeline')}</Typography.Text>}
-    <ol style={{ listStyle: 'none', padding: 0, margin: '6px 0' }}>
-      {events.slice(0, visibleCount).map(item => <li key={item.id}
-        className="execution-control-record">
-        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-          <time dateTime={item.gmtCreate} title={formatDateTime(item.gmtCreate)}>{formatDateTime(item.gmtCreate, timeOptions)}</time>
-        </Typography.Text>
-        <div>
-          <div>{record(item)}</div>
-          {item.executionControl?.reason && <Typography.Text type="secondary">{t('executionControl.reason', { reason: item.executionControl.reason })}</Typography.Text>}
-        </div>
-      </li>)}
+    <ol style={{ listStyle: 'none', padding: 0, margin: compact ? 0 : '6px 0' }}>
+      {events.slice(0, visibleCount).map(item => {
+        const reason = reasonText(item);
+        return <li key={item.id} className="execution-control-record">
+          {compact ? <>
+            <span className="execution-control-record-line">
+              <span className="execution-control-record-text" title={record(item)}>{record(item)}</span>
+              <span className="execution-control-record-time" title={formatDateTime(item.gmtCreate)}>
+                {RECORD_TIME_SEPARATOR}<time dateTime={item.gmtCreate}>{formatDateTime(item.gmtCreate, timeOptions)}</time>
+              </span>
+            </span>
+            {reason && <span className="execution-control-record-line is-reason">{reason}</span>}
+          </> : <>
+            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+              <time dateTime={item.gmtCreate} title={formatDateTime(item.gmtCreate)}>{formatDateTime(item.gmtCreate, timeOptions)}</time>
+            </Typography.Text>
+            <div>
+              <div>{record(item)}</div>
+              {reason && <Typography.Text type="secondary">{reason}</Typography.Text>}
+            </div>
+          </>}
+        </li>;
+      })}
     </ol>
     {events.length > visibleCount && <Button type="link" size="small" onClick={() => setVisibleCount(count => count + 10)}>
       {t('executionControl.loadEarlier', { count: Math.min(10, events.length - visibleCount) })}

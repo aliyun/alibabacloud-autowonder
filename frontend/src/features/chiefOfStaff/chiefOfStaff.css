@@ -1,4 +1,10 @@
 .aw-chief { position: fixed; z-index: 999; color: var(--aw-text); }
+/* 顶栏入口与普通图标钮一致：平时无底色，hover 走 text 按钮的中性浅底；引导阶段由 workspaceGuide.css 覆盖。 */
+html .aw-chief-entry.ant-btn { width: 36px; height: 36px; color: var(--aw-text-2); }
+html .aw-chief-entry.ant-btn:focus-visible { outline: 2px solid var(--aw-accent); outline-offset: 2px; }
+/* 执行器未就绪时只在入口右上挂状态点，点开面板才看具体原因；不再全站压横条。 */
+.aw-chief-entry-wrap { position: relative; display: inline-flex; }
+.aw-chief-entry-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--aw-warning); box-shadow: 0 0 0 2px var(--aw-header-bg, var(--aw-panel)); pointer-events: none; }
 /* Inactive launcher yields to fullscreen/modal surfaces; an opened assistant remains an overlay. */
 .aw-chief.aw-chief-open { z-index: 1050; }
 .aw-chief-launch { display: flex; align-items: center; justify-content: flex-end; gap: 4px; transition: transform .24s ease; }
@@ -6,7 +12,9 @@
 .aw-chief-launch.aw-chief-tucked:hover, .aw-chief-launch.aw-chief-tucked:focus-within { transform: none; }
 .aw-chief-grip { cursor: grab; touch-action: none; user-select: none; padding: 8px 5px; color: var(--aw-muted); border-radius: 6px; opacity: .5; transition: opacity .18s ease, color .18s ease, background .18s ease; }
 .aw-chief-grip:hover { background: var(--aw-glass); color: var(--aw-text); opacity: 1; }
-.aw-chief-puck { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 1px solid rgba(var(--aw-accent-rgb), .45); border-radius: 50%; background: var(--aw-panel); color: var(--aw-text); cursor: grab; touch-action: none; user-select: none; box-shadow: 0 2px 8px #0002; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+.aw-chief-puck { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 1px solid rgba(var(--aw-accent-rgb), .45); border-radius: 50%; background: var(--aw-panel); color: var(--aw-text); cursor: grab; touch-action: none; user-select: none; box-shadow: 0 2px 8px #0002; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+/* 浮标与顶栏入口共用同一状态点，位置贴合圆形边缘。 */
+.aw-chief-status-dot { position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--aw-warning); box-shadow: 0 0 0 2px var(--aw-panel); pointer-events: none; }
 .aw-chief-puck:active { cursor: grabbing; }
 .aw-chief-puck:hover { border-color: var(--aw-accent); transform: translateY(-1px); box-shadow: 0 3px 12px #0003; }
 .aw-chief-icon { display: block; flex: none; }
@@ -28,7 +36,11 @@
 .aw-chief-body { overflow: auto; padding: 12px 16px; flex: 1; min-height: 0; }
 .aw-chief-body pre { font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .aw-chief-message { margin: 12px 0; overflow-wrap: anywhere; }
-.aw-chief-user > p { background: rgba(var(--aw-accent-rgb), .09); padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; }
+/* 用户消息气泡：MarkdownView 多包了一层 .aw-markdown，样式挂在内容容器上；留白只由气泡 padding 控制。
+   圆角取 8 与站内卡片/计划卡一致，原型 35 的 14 过圆。 */
+.aw-chief-user .aw-markdown { background: rgba(var(--aw-accent-rgb), .09); border-radius: 8px; padding: 10px 14px; }
+.aw-chief-user .aw-markdown > :first-child { margin-top: 0; }
+.aw-chief-user .aw-markdown > :last-child { margin-bottom: 0; }
 .aw-chief-plan { padding: 12px; border: 1px solid var(--aw-border); border-radius: 8px; margin-top: 12px; }
 .aw-chief-plan-anchor { min-width: 0; }
 .aw-chief-plan-orphans { display: flex; flex-direction: column; min-width: 0; }
@@ -79,12 +91,24 @@
 .aw-chief-message-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .aw-chief-message-actions { display: flex; align-items: center; margin-top: 4px; }
 .aw-chief-message-heading .aw-chief-message-actions { margin-top: 0; margin-left: auto; }
-.aw-chief-user > p { border-radius: 14px; padding: 10px 14px; }
 .aw-chief-composer { padding: 10px 12px 12px; border-top: 0; }
-.aw-chief-input-shell { border: 1px solid var(--aw-border); border-radius: 16px; background: var(--aw-raised); overflow: hidden; padding: 8px; }
-.aw-chief-input-shell textarea.ant-input { border: 0; box-shadow: none; background: transparent; padding: 4px 6px; resize: none; }
+/* 壳形对齐工单详情评论输入框（.aw-cm-input）：6px 圆角、面板底、聚焦主色描边 + 2px 弱环。 */
+.aw-chief-input-shell { border: 1px solid var(--aw-border); border-radius: 6px; background: var(--aw-panel); overflow: hidden; padding: 10px 12px; transition: border-color .2s, box-shadow .2s; }
+.aw-chief-input-shell:focus-within { border-color: var(--aw-primary); box-shadow: 0 0 0 2px rgba(0, 100, 200, .12); }
+.aw-chief-input-shell textarea.ant-input { border: 0; box-shadow: none; background: transparent; padding: 0; resize: none; font-size: 13px; line-height: 20px; }
 .aw-chief-input-shell textarea.ant-input:focus { box-shadow: none; }
-.aw-chief-input-tools { display: flex; align-items: center; gap: 8px; padding: 4px 2px 0; }
+/* 可输入态：占位文字用 text-3，比全局 disabled 色更清晰（原型 35 ⑧）。 */
+.aw-chief-input-shell textarea.ant-input::placeholder { color: var(--aw-text-3); }
+/* 不可输入态：下沉为灰底并保留描边，文字/占位降为 disabled 色并给出锁定原因。 */
+.aw-chief-input-shell.aw-chief-input-disabled { background: var(--aw-gray-bg); cursor: not-allowed; }
+.aw-chief-input-shell.aw-chief-input-disabled textarea.ant-input:disabled { background: transparent; color: var(--aw-text-disabled); -webkit-text-fill-color: var(--aw-text-disabled); cursor: not-allowed; }
+.aw-chief-input-shell.aw-chief-input-disabled textarea.ant-input:disabled::placeholder { color: var(--aw-text-disabled); }
+.aw-chief-input-shell.aw-chief-input-disabled .aw-chief-send.ant-btn:disabled { background: var(--aw-border); border-color: var(--aw-border); color: var(--aw-text-disabled); }
+.aw-chief-composer-note { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--aw-text-3); font-size: 11px; }
+.aw-chief-composer-note svg { flex: none; }
+/* 工具行与 .aw-cm-input-row 对齐：与正文留 8px，去掉内边距；说明文字 11px。 */
+.aw-chief-input-tools { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 0; }
+.aw-chief-input-tools .aw-chief-secondary { font-size: 11px; color: var(--aw-text-3); }
 .aw-chief-input-tools .aw-chief-send { margin-left: auto; }
 .aw-chief-images { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px; }
 .aw-chief-images img { width: 72px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--aw-border); }

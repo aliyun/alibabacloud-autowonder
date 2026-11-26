@@ -1,155 +1,1030 @@
+/* 独立页没有 Hub Tab 栏，用页头下分割线替代 Tab 底线收口。 */
+.squad-page-head {
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--aw-border);
+}
+
+.squad-page-head .aw-page-head {
+  margin-bottom: 0;
+}
+
+.squad-page-head + .squad-card-page .aw-toolbar {
+  padding-top: 0;
+}
+
 .squad-card-page {
   min-width: 0;
 }
 
-.squad-list-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
+.squad-card-page .aw-toolbar {
+  border-bottom: none;
 }
 
+/* 原型 33 汇总徽标条：位于工具栏左侧并占满剩余宽度，徽标在条内换行，刷新/新建始终同排。 */
 .squad-summary-strip {
   display: flex;
+  flex: 1 1 0;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 20px;
-  margin-right: auto;
+  gap: 8px;
+  min-width: 0;
 }
 
-.squad-summary-pill {
+.squad-summary-strip + .aw-toolbar-gap {
+  display: none;
+}
+
+.squad-toolbar-actions {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 
-.squad-summary-pill span {
-  color: var(--aw-muted);
-  font-size: 12px;
+.squad-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  font-size: 11px;
+  line-height: 16px;
 }
 
-.squad-summary-pill strong {
-  color: var(--aw-accent-text);
-  font-size: 14px;
+.squad-summary-badge b {
+  margin-left: 2px;
+  font-weight: 600;
+}
+
+.squad-summary-badge--green {
+  background: var(--aw-success-bg);
+  color: var(--aw-success-deep);
 }
 
 .squad-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
+/* 整卡是详情入口：透明覆盖按钮在底层，内容层让点击穿透，仅底栏操作按钮接回指针。 */
 .squad-summary-card {
+  position: relative;
+  min-width: 0;
   overflow: hidden;
-  min-height: 206px;
   border: 1px solid var(--aw-border);
   border-radius: 8px;
   background: var(--aw-panel);
-  box-shadow: none;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
-.squad-summary-card:hover {
-  border-color: var(--aw-border);
-  box-shadow: none;
-  transform: translateY(-1px);
+.squad-summary-card:hover,
+.squad-summary-card:focus-within {
+  border-color: var(--aw-muted);
 }
 
-.squad-card-topline {
-  height: 4px;
-  background: var(--aw-raised);
+.squad-card-open {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
-.squad-card-main {
-  display: grid;
+.squad-card-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 8px;
+  pointer-events: none;
+}
+
+.squad-card-head {
+  display: flex;
   align-items: center;
-  grid-template-columns: 54px minmax(0, 1fr);
-  gap: 12px;
-  padding: 14px;
-}
-
-.squad-team-avatar {
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--aw-accent) 20%, var(--aw-raised));
-  color: var(--aw-accent-text);
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.squad-card-title-area {
+  gap: 10px;
   min-width: 0;
 }
 
-.squad-card-title {
-  color: var(--aw-text);
-  font-size: 15px;
+.squad-card-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: var(--aw-primary);
+  color: #fff;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.35;
+}
+
+.squad-card-title {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
+  color: var(--aw-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.squad-card-head .ant-tag,
+.squad-detail-title .ant-tag,
+.squad-member-name .ant-tag {
+  flex-shrink: 0;
+  margin: 0;
 }
 
 .squad-card-description {
   display: -webkit-box;
   min-height: 36px;
-  margin-top: 5px;
   overflow: hidden;
   color: var(--aw-muted);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 18px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
+/* 执行器健康是状态而非计数：卡片单独一行，指标只留三个计数。 */
+.squad-card-exec {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--aw-text-2);
+  font-size: 12px;
+}
+
+.squad-card-exec.is-muted {
+  color: var(--aw-text-3);
+}
+
 .squad-metric-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 0 14px 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--aw-border);
 }
 
 .squad-metric {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  min-width: 0;
   text-align: center;
-  gap: 7px;
-  min-height: 36px;
-  border: 1px solid var(--aw-border);
-  border-radius: 8px;
-  padding: 8px;
-  background: var(--aw-raised);
+}
+
+.squad-metric-k {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-metric-v {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
   color: var(--aw-text);
-  font-size: 12px;
-}
-
-.squad-metric-dot {
-  flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--aw-muted);
-}
-
-.squad-metric-dot.is-active {
-  background: var(--aw-success);
-  box-shadow: none;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .squad-card-footer {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-right: -8px;
+}
+
+.squad-card-footer .ant-btn {
+  pointer-events: auto;
+}
+
+.squad-card-when {
+  margin-right: auto;
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.squad-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #aaa;
+}
+
+.squad-dot.is-on {
+  background: var(--aw-success);
+}
+
+.squad-dot.is-part {
+  background: var(--aw-warning);
+}
+
+/* 详情 Modal：自绘头部与底栏，内容区撑满到 Modal 边缘。
+   高度封顶到视口（antd top 100 + margin-top 8 + padding-bottom 24），只让中间 body 滚动，外层 wrap 不出滚动条。 */
+.squad-detail-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 132px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.squad-detail-modal .ant-modal-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.squad-detail-modal .ant-modal-footer {
+  flex: none;
+  margin: 0;
+  padding: 0;
+}
+
+.squad-detail-head {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--aw-border);
+}
+
+.squad-detail-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+.squad-detail-title-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.squad-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--aw-text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.squad-detail-title > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-detail-desc {
+  margin-top: 2px;
+  color: var(--aw-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.squad-detail-x.ant-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  color: var(--aw-text-3);
+}
+
+.squad-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 620px;
+  overflow: auto;
+  padding: 4px 20px 18px;
+}
+
+.squad-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
+  padding: 10px 0;
+  border-radius: 6px;
+  background: var(--aw-header-bg);
+}
+
+.squad-detail-stat {
+  min-width: 0;
+  padding: 0 16px;
+}
+
+.squad-detail-stat-k {
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.squad-detail-stat-v {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  color: var(--aw-text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.squad-detail-sec {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 18px 0 8px;
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.squad-detail-sec-c {
+  color: var(--aw-text-3);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.squad-detail-loading {
+  display: grid;
+  place-items: center;
+  padding: 32px 0;
+}
+
+.squad-detail-empty {
+  padding: 18px 0;
+  border-radius: 6px;
+  background: var(--aw-header-bg);
+  color: var(--aw-text-3);
+  font-size: 12px;
+  text-align: center;
+}
+
+.squad-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.squad-detail-table th {
+  padding: 7px 10px;
+  background: var(--aw-header-bg);
+  color: var(--aw-text-3);
+  font-weight: 400;
+  text-align: left;
+}
+
+.squad-detail-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  color: var(--aw-text-2);
+  vertical-align: top;
+}
+
+.squad-detail-table tbody tr:last-child td,
+.squad-detail-table tbody tr.is-open td {
+  border-bottom: none;
+}
+
+.squad-detail-table tbody tr:hover td {
+  background: var(--aw-primary-faint);
+}
+
+.squad-detail-table td.squad-exp-td {
+  padding: 8px 0 8px 6px;
+}
+
+.squad-exp-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--aw-text-3);
+  cursor: pointer;
+}
+
+.squad-exp-btn svg {
+  transform: rotate(-90deg);
+}
+
+.squad-exp-btn[aria-expanded='true'] svg {
+  transform: none;
+}
+
+.squad-exp-btn:hover {
+  background: var(--aw-gray-bg);
+  color: var(--aw-text);
+}
+
+/* 展开行：完整职责 Markdown，左缘对齐成员名称文字，浅灰底、无内框。 */
+.squad-detail-table tr.squad-resp-row td,
+.squad-detail-table tbody tr.squad-resp-row:hover td {
+  padding: 10px 16px 12px 70px;
+  background: var(--aw-header-bg);
+}
+
+.squad-resp-md.aw-markdown {
+  max-width: 760px;
+  color: var(--aw-text-2);
+  font-size: 12px;
+  line-height: 20px !important;
+}
+
+.squad-resp-md.aw-markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin: 10px 0 2px;
+  padding: 0;
+  border: none;
+  color: var(--aw-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.squad-resp-md.aw-markdown > :first-child {
+  margin-top: 0;
+}
+
+.squad-resp-md.aw-markdown p {
+  margin: 0;
+}
+
+.squad-resp-md.aw-markdown :is(ul, ol) {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
+.squad-member-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.squad-member-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--aw-ai);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.squad-member-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.squad-member-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* 两行截断由 EllipsisText 负责，溢出时悬停展示全文。 */
+.squad-member-resp {
+  margin-top: 2px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: normal;
+}
+
+.squad-exec-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.squad-ex-cell {
+  min-width: 0;
+}
+
+.squad-ex-l1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--aw-text);
+  font-size: 12px;
+}
+
+.squad-ex-l2 {
+  margin-top: 1px;
+  padding-left: 13px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.squad-ex-more {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+/* 成员 / 复制 / 确认小 Modal：标题 14px，副标题紧贴标题下方。 */
+.squad-sm-modal .ant-modal-content {
+  padding: 16px 20px;
+}
+
+.squad-sm-modal .ant-modal-header {
+  margin-bottom: 12px;
+}
+
+.squad-sm-modal .ant-modal-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.squad-sm-sub {
+  margin: -10px 0 12px;
+  color: var(--aw-text-3);
+  font-size: 12px;
+}
+
+.squad-add-row {
+  display: flex;
+  gap: 8px;
+}
+
+.squad-add-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.squad-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.squad-opt-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-opt-name mark {
+  padding: 0;
+  background: none;
+  color: var(--aw-primary);
+  font-weight: 600;
+}
+
+.squad-opt-role {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.squad-ml-sec {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 14px 0 2px;
+  color: var(--aw-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.squad-ml-empty {
+  margin-top: 6px;
+}
+
+.squad-ml-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.squad-ml-row:last-child {
+  border-bottom: none;
+}
+
+.squad-ml-row .ant-tag {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.squad-ml-name {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-ml-role {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--aw-text-3);
+  font-size: 12px;
+}
+
+.squad-cp-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.squad-cp-search .ant-input-affix-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.squad-cp-cnt {
+  flex-shrink: 0;
+  color: var(--aw-text-3);
+  font-size: 12px;
+}
+
+.squad-cp-list {
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+}
+
+.squad-cp-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+}
+
+.squad-cp-row:last-child {
+  border-bottom: none;
+}
+
+.squad-cp-row:hover {
+  background: var(--aw-header-bg);
+}
+
+.squad-cp-row.is-sel {
+  background: var(--aw-primary-faint);
+}
+
+.squad-cp-row .ant-checkbox-wrapper {
+  margin-top: 1px;
+}
+
+.squad-cp-tx {
+  flex: 1;
+  min-width: 0;
+}
+
+.squad-cp-nm {
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.squad-cp-ds {
+  margin-top: 1px;
+  overflow: hidden;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-cp-err {
+  margin-top: 2px;
+  color: var(--aw-error-deep);
+  font-size: 11px;
+}
+
+.squad-cp-end {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.squad-cp-end .ant-tag {
+  margin: 0;
+}
+
+.squad-cp-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.squad-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.squad-chips .ant-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  margin: 0;
+  padding: 0 4px 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text);
+  font-size: 12px;
+}
+
+.squad-chips .ant-tag.squad-chip-plain {
+  padding: 0 8px;
+}
+
+.squad-chips .ant-tag-close-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border-radius: 3px;
+  color: var(--aw-text-3);
+}
+
+.squad-chips .ant-tag-close-icon:hover {
+  background: #e0e0e0;
+  color: var(--aw-text);
+}
+
+.squad-cp-list--flush {
+  margin-top: 0;
+}
+
+.squad-cp-row.is-static {
+  cursor: default;
+}
+
+.squad-cp-row.is-static:not(.is-sel):hover {
+  background: transparent;
+}
+
+.squad-blk-group + .squad-blk-group {
+  margin-top: 14px;
+}
+
+.squad-cf-status {
+  margin-top: 12px;
+}
+
+.squad-blk-list {
+  margin-top: 8px;
+  border: 1px solid var(--aw-border);
+  border-radius: 6px;
+}
+
+.squad-blk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 12px;
+}
+
+.squad-blk-row:last-child {
+  border-bottom: none;
+}
+
+.squad-blk-hint {
+  margin-top: 6px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.squad-cf-kv {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px 12px;
+  font-size: 12px;
+}
+
+.squad-cf-k {
+  color: var(--aw-text-3);
+  line-height: 22px;
+}
+
+.squad-cf-v {
+  min-width: 0;
+  line-height: 22px;
+}
+
+.squad-cf-v .squad-chips {
+  margin-top: 0;
+}
+
+.squad-cf-kv ul {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--aw-text-2);
+  line-height: 22px;
+}
+
+.squad-sm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.squad-sm-foot-left {
+  margin-right: auto;
+  color: var(--aw-text-3);
+  font-size: 12px;
+}
+
+.squad-sm-foot-left b {
+  color: var(--aw-text);
+  font-weight: 600;
+}
+
+.squad-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.squad-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+}
+
+.squad-flow-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.squad-flow-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-flow-count {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.squad-steps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 4px;
+}
+
+.squad-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 8px 2px 3px;
+  border-radius: 11px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.squad-step-i {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--aw-panel);
+  color: var(--aw-text-2);
+  font-family: var(--aw-font-mono);
+  font-size: 10px;
+}
+
+.squad-step-h {
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+.squad-step-sep {
+  color: var(--aw-text-disabled);
+}
+
+.squad-step-sep::before {
+  content: '›';
+}
+
+.squad-flow-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--aw-text-2);
+  font-size: 12px;
+}
+
+.squad-flow-foot-k {
+  flex-shrink: 0;
+  color: var(--aw-text-3);
+}
+
+.squad-detail-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
   border-top: 1px solid var(--aw-border);
-  padding: 8px 10px;
+}
+
+.squad-text-link {
+  color: var(--aw-primary);
+}
+
+.squad-text-link:hover {
+  color: var(--aw-primary);
+  text-decoration: underline;
+}
+
+.squad-ellip {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squad-muted {
+  color: var(--aw-text-3);
+}
+
+.squad-mono {
+  font-family: var(--aw-font-mono);
+}
+
+/* 深色：浅色分隔线与标签关闭钮 hover 底改为主题色 */
+html[data-appearance=dark] :is(.squad-detail-table td, .squad-ml-row, .squad-cp-row, .squad-blk-row) {
+  border-bottom-color: var(--aw-border);
+}
+
+html[data-appearance=dark] .squad-chips .ant-tag-close-icon:hover {
   background: var(--aw-raised);
 }

@@ -21,10 +21,13 @@ public class RuntimeTraceService {
 
     private final DispatchDao dispatchDao;
     private final DispatchRuntimeEventDao eventDao;
+    private final RuntimeTraceUsageFallback usageFallback;
 
-    public RuntimeTraceService(DispatchDao dispatchDao, DispatchRuntimeEventDao eventDao) {
+    public RuntimeTraceService(DispatchDao dispatchDao, DispatchRuntimeEventDao eventDao,
+                               RuntimeTraceUsageFallback usageFallback) {
         this.dispatchDao = dispatchDao;
         this.eventDao = eventDao;
+        this.usageFallback = usageFallback;
     }
 
     public RuntimeTraceVO get(long tenantId, long dispatchId) {
@@ -163,6 +166,7 @@ public class RuntimeTraceService {
             }
             addUsage(trace.getTokenUsage(), session.getTokenUsage());
         }
+        usageFallback.apply(tenantId, dispatchId, trace);
         return trace;
     }
 

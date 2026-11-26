@@ -942,6 +942,7 @@ class SquadCopyServiceTest {
         sdlc21.setId(21L);
         sdlc21.setName("标准流程");
         sdlc21.setWorkType("REQ");
+        sdlc21.setStageTimingEnabled(true);
         sdlc21.setStatus("ENABLED");
         sdlc21.setIsDefault(1);
         sdlc21.setEntryStepId(501L);
@@ -995,6 +996,7 @@ class SquadCopyServiceTest {
         assertEquals("kc:env-41", snapshot.envVars().get(0).credentialRef());
         assertEquals(1, snapshot.sdlcs().size());
         assertEquals(501L, snapshot.sdlcs().get(0).entryStepId());
+        assertTrue(snapshot.sdlcs().get(0).stageTimingEnabled());
         assertEquals(1, snapshot.sdlcs().get(0).steps().size());
         assertEquals("ANALYZE", snapshot.sdlcs().get(0).steps().get(0).code());
         assertEquals(1, snapshot.executors().size());

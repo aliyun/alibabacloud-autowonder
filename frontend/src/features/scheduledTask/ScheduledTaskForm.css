@@ -1,0 +1,44 @@
+/* 原型 31 新建/编辑调度任务：600px 表单列，分区只靠留白区隔 */
+.aw-sched-form { max-width: 600px; }
+html .aw-sched-form .ant-form-item-margin-offset { display: none; }
+.aw-sched-sec + .aw-sched-sec { margin-top: 24px; }
+.aw-sched-sec-title { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--aw-text); margin: 0 0 12px; line-height: 22px; }
+.aw-sched-opt { font-size: 12px; font-weight: 400; color: var(--aw-text-disabled); margin-left: 4px; }
+.aw-sched-sec-title .aw-sched-opt { margin-left: 0; }
+button.aw-sched-sec-title { width: 100%; border: none; background: transparent; padding: 0; font-family: inherit; cursor: pointer; text-align: left; }
+button.aw-sched-sec-title[aria-expanded="false"] { margin-bottom: 16px; }
+button.aw-sched-sec-title .aw-stroke-icon { color: var(--aw-text-3); flex-shrink: 0; }
+button.aw-sched-sec-title[aria-expanded="false"] .aw-stroke-icon { transform: rotate(-90deg); }
+button.aw-sched-sec-title:hover .aw-stroke-icon { color: var(--aw-text); }
+.aw-sched-sec-sum { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--aw-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.aw-sched-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; }
+.aw-sched-grid[hidden] { display: none; }
+.aw-sched-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; line-height: 20px; color: var(--aw-text); margin: -6px 0 16px; }
+.aw-sched-flow .fl-k { color: var(--aw-text-3); }
+.aw-sched-flow b { font-weight: 600; }
+.aw-sched-flow .fl-steps { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.aw-sched-flow .cs { font-size: 11px; color: var(--aw-text-2); background: var(--aw-gray-bg); border-radius: 4px; padding: 0 6px; line-height: 18px; }
+.aw-sched-form .aw-sched-cron input, .aw-sched-form input.aw-sched-cron { font-family: var(--aw-font-mono); font-size: 12px; }
+.aw-sched-hint { font-size: 11px; line-height: 18px; color: var(--aw-text-3); }
+.aw-sched-ro { display: flex; gap: 12px; font-size: 12px; line-height: 20px; padding: 4px 0; color: var(--aw-text); }
+.aw-sched-ro .k { width: 96px; color: var(--aw-text-3); flex-shrink: 0; }
+.aw-sched-ro-note { font-size: 11px; line-height: 18px; color: var(--aw-text-3); margin: 4px 0 16px; }
+.aw-sched-doc-note { margin-top: 8px; }
+html .aw-sched-doc-note.ant-alert { align-items: flex-start; gap: 8px; padding: 8px 12px; border: none; border-radius: 6px; background: var(--aw-warning-bg); color: var(--aw-warning-deep); font-size: 12px; line-height: 18px; }
+html .aw-sched-doc-note.ant-alert .ant-alert-icon { margin: 2px 0 0; font-size: 13px; color: var(--aw-warning-deep); }
+html .aw-sched-doc-note.ant-alert .ant-alert-message { color: inherit; font-size: inherit; line-height: inherit; }
+html .aw-sched-dragger.ant-upload-wrapper .ant-upload-drag { border: 1.5px dashed color-mix(in srgb, var(--aw-text-disabled) 50%, var(--aw-border)); border-radius: 6px; background: var(--aw-panel); }
+html .aw-sched-dragger.ant-upload-wrapper .ant-upload-drag .ant-upload-btn { padding: 18px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; line-height: 18px; color: var(--aw-text-3); }
+html .aw-sched-dragger.ant-upload-wrapper .ant-upload-drag:not(.ant-upload-disabled):hover,
+html .aw-sched-dragger.ant-upload-wrapper .ant-upload-drag.ant-upload-drag-hover { border-color: var(--aw-primary); background: var(--aw-primary-faint); }
+html .aw-sched-dragger.ant-upload-wrapper .ant-upload-drag:not(.ant-upload-disabled):hover .ant-upload-btn,
+html .aw-sched-dragger.ant-upload-wrapper .ant-upload-drag.ant-upload-drag-hover .ant-upload-btn { color: var(--aw-primary); }
+html .aw-sched-dragger.ant-upload-wrapper .ant-upload-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+html .aw-sched-dragger.ant-upload-wrapper .ant-upload-list::before, html .aw-sched-dragger.ant-upload-wrapper .ant-upload-list::after { display: none; }
+.aw-sched-file { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 18px; color: var(--aw-text); border: 1px solid var(--aw-border); border-radius: 6px; padding: 6px 10px; }
+.aw-sched-file > .aw-stroke-icon { color: var(--aw-text-3); flex-shrink: 0; }
+.aw-sched-file .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-sched-file .fs { margin-left: auto; color: var(--aw-text-3); font-size: 11px; flex-shrink: 0; }
+.aw-sched-file .fx { display: inline-flex; padding: 0; border: none; background: transparent; color: var(--aw-text-disabled); cursor: pointer; flex-shrink: 0; }
+.aw-sched-file .fx:hover { color: var(--aw-error); }
+.aw-sched-file .fx:focus-visible { outline: 2px solid var(--aw-primary); outline-offset: 1px; border-radius: 3px; }

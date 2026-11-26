@@ -1,3 +1,6 @@
+/* 个人工作台（原型 43 · 概览 C 定稿）：页头 + 概览徽标 + 行动收件箱双栏。
+   只使用 crystal.css 真实存在的 --aw-* 令牌；几何契约见 translation-spec §5.29。 */
+
 .aw-workbench {
   display: flex;
   flex-direction: column;
@@ -5,100 +8,400 @@
   min-width: 0;
 }
 
-.aw-workbench-grid {
+/* 页头 + 概览合为顶部白块（frameless 灰画布上分块，参考 05 工单详情）。 */
+.aw-wb-head {
+  padding: 16px 20px;
+}
+
+.aw-wb-head .aw-page-head {
+  margin-bottom: 0;
+}
+
+.aw-wb-head .aw-wb-overview {
+  padding: 12px 0 0;
+}
+
+/* ---------- 概览行：C · 轻量数量徽标 ---------- */
+.aw-wb-overview {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0 16px;
+  flex-wrap: wrap;
+}
+
+.aw-wb-kpis {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.aw-wb-kpi {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--aw-gray-bg);
+  border-radius: 6px;
+}
+
+.aw-wb-k-label {
+  color: var(--aw-text-2);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.aw-wb-kpi b {
+  color: var(--aw-text);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.aw-wb-kpi.warn b { color: var(--aw-warning-deep); }
+.aw-wb-kpi.info b { color: var(--aw-primary); }
+.aw-wb-kpi.review b { color: var(--aw-ai); }
+
+.aw-wb-ph-acts {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 原型 .btn.sm：26px 高紧凑按钮（刷新 ghost / 新建工单 primary）。 */
+html .aw-workbench .aw-wb-btn-sm.ant-btn {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+html .aw-workbench .aw-wb-btn-sm.ant-btn .aw-stroke-icon {
+  width: 13px;
+  height: 13px;
+}
+
+/* ---------- 网格与卡壳 ---------- */
+.aw-wb-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 12px;
   align-items: start;
 }
 
-.aw-workbench-main,
-.aw-workbench-side {
+.aw-wb-col {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
 
-.aw-workbench-card .ant-card-body {
-  padding: 10px 12px;
-}
-
-.aw-workbench-error {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-}
-
-.aw-workbench-todo {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.aw-workbench-todo-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 2px 0;
-  border-bottom: 1px solid var(--aw-border-color, rgba(0, 0, 0, 0.06));
-  font-size: 13px;
+.aw-wb-card {
+  background: var(--aw-panel);
+  border: 1px solid var(--aw-border);
+  border-radius: 8px;
+  overflow: hidden;
   min-width: 0;
 }
 
-.aw-workbench-todo-row:last-child {
-  border-bottom: none;
-}
-
-.aw-workbench-todo-status {
-  margin: 0;
-  flex: 0 0 auto;
-}
-
-.aw-workbench-todo-handle {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-.aw-workbench-todo-id,
-.aw-workbench-todo-reason,
-.aw-workbench-todo-updated {
-  flex: 0 0 auto;
-  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.aw-workbench-todo-updated {
-  min-width: 78px;
-  text-align: right;
-}
-
-.aw-workbench-pagination {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.aw-workbench-filters {
+/* 卡头无下边框；上下留白对称（标题到下方内容与到卡顶一致）；计数为 11px 灰底胶囊。 */
+.aw-wb-card-h {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 12px 16px;
 }
 
-.aw-workbench-search {
-  width: 240px;
-  /* 搜索框紧邻关系 Tab，用固定间距而不是两端对齐。 */
-  margin-right: 0;
+.aw-wb-card-h h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--aw-text);
 }
 
-.aw-workbench-filter-select {
-  min-width: 130px;
+.aw-wb-cnt {
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  font-variant-numeric: tabular-nums;
 }
+
+.aw-wb-sp { flex: 1; }
+
+.aw-wb-hint {
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+.aw-wb-link {
+  font-size: 12px;
+  color: var(--aw-link);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.aw-wb-link:hover { color: var(--aw-primary-hover); }
+
+.aw-wb-card-f {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--aw-text-3);
+}
+
+.aw-wb-card-f .ant-pagination {
+  margin-left: auto;
+}
+
+/* 紧凑分页：24px，当前页弱底 + 主色字（覆盖全局实心主色样式）。 */
+html .aw-wb-card-f .ant-pagination.ant-pagination .ant-pagination-item,
+html .aw-wb-card-f .ant-pagination.ant-pagination .ant-pagination-prev,
+html .aw-wb-card-f .ant-pagination.ant-pagination .ant-pagination-next {
+  min-width: 24px;
+  height: 24px;
+  line-height: 22px;
+  font-size: 11px;
+}
+
+html .aw-wb-card-f .ant-pagination.ant-pagination .ant-pagination-item a {
+  padding: 0 6px;
+}
+
+html .aw-wb-card-f .ant-pagination.ant-pagination .ant-pagination-item-active {
+  background: var(--aw-primary-weak);
+  border-color: var(--aw-primary);
+}
+
+html .aw-wb-card-f .ant-pagination.ant-pagination .ant-pagination-item-active a,
+html .aw-wb-card-f .ant-pagination.ant-pagination .ant-pagination-item-active:hover a {
+  color: var(--aw-primary);
+}
+
+html .aw-wb-card-f .ant-pagination.ant-pagination .ant-pagination-item-active:hover {
+  background: var(--aw-primary-weak);
+  border-color: var(--aw-primary-hover);
+}
+
+/* ---------- 需要你处理：统一行动队列 ---------- */
+.aw-wb-qbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 16px 10px;
+}
+
+/* ---------- 筛选：antd Segmented（队列与「我在跟进」同一控件形态） ---------- */
+.aw-wb-seg-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 筛选计数去盒化：纯数字副文本（tabular-nums），不套底色小盒；未选 text-3 / 选中 text-2，零值降色，三位数不截断。 */
+.aw-wb-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+html .ant-segmented .ant-segmented-item-selected .aw-wb-filter-count {
+  color: var(--aw-text-2);
+}
+
+.aw-wb-filter-count.zero { color: var(--aw-text-disabled); }
+
+.aw-wb-acts {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px;
+}
+
+/* 单行行动行：类别标签 → 标题+meta → 行尾动作。两层内缩：容器 16px 使 hover 不贯通卡边，
+   行自身横向 10px 使内容与 hover 背景边缘有间隔（与表格单元格 padding 一致）。 */
+.aw-wb-act {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  min-height: 52px;
+  box-sizing: border-box;
+}
+
+/* 行分隔线相对内缩后的行铺满（距卡边 16px）；首可见行不画顶线。 */
+.aw-wb-act + .aw-wb-act::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--aw-border);
+}
+
+html[data-appearance=light] .aw-wb-act + .aw-wb-act::before { background: #F0F0F0; }
+
+.aw-wb-act.first-visible::before { display: none; }
+
+.aw-wb-act:hover { background: var(--aw-gray-bg); }
+
+.aw-wb-kind {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.aw-wb-kind.decision { background: var(--aw-warning-bg); color: var(--aw-warning-deep); }
+.aw-wb-kind.assigned { background: var(--aw-primary-weak); color: var(--aw-primary); }
+.aw-wb-kind.review { background: var(--aw-ai-bg); color: var(--aw-ai); }
+.aw-wb-kind.alert { background: var(--aw-error-bg); color: var(--aw-error-deep); }
+
+.aw-wb-kind .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.aw-wb-act-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aw-wb-act-title {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--aw-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-wb-act-title a {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.aw-wb-act:hover .aw-wb-act-title a { color: var(--aw-primary); }
+
+.aw-wb-act-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--aw-text-3);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.aw-wb-act-meta .mono { font-family: var(--aw-font-mono); }
+.aw-wb-act-meta .why { color: var(--aw-text-2); }
+
+.aw-wb-act-go {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--aw-primary);
+  text-decoration: none;
+  padding: 0 2px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.aw-wb-act-go:hover { color: var(--aw-primary-hover); }
+
+/* ---------- 我在跟进 ---------- */
+.aw-wb-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 16px 10px;
+}
+
+.aw-wb-bar .aw-wb-search {
+  width: 220px;
+}
+
+.aw-wb-bar .aw-wb-search.ant-input-affix-wrapper {
+  height: 28px;
+  font-size: 12px;
+}
+
+.aw-wb-bar .aw-wb-filter-select {
+  width: 118px;
+  font-size: 12px;
+}
+
+.aw-wb-bar .aw-wb-filter-select .ant-select-selector {
+  height: 28px;
+  font-size: 12px;
+}
+
+.aw-wb-bar .aw-wb-filter-select .ant-select-selection-item {
+  line-height: 26px;
+}
+
+/* 表格容器左右留 16px，行线随容器内缩；min-width 700 横向滚动。 */
+.aw-wb-tbl {
+  padding: 0 16px;
+  overflow-x: auto;
+}
+
+html .aw-wb-tbl .ant-table-wrapper .ant-table.ant-table-small .ant-table-thead > tr > th {
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--aw-text-3);
+  white-space: nowrap;
+}
+
+html .aw-wb-tbl .ant-table-wrapper .ant-table.ant-table-small .ant-table-tbody > tr > td {
+  padding: 9px 10px;
+  font-size: 12px;
+}
+
+.aw-wb-tbl .ant-table-tbody > tr:hover > td {
+  background: var(--aw-gray-bg);
+}
+
+.aw-wb-tbl .ant-table-tbody tr:hover .aw-workbench-workitem a {
+  color: var(--aw-primary);
+}
+
+.aw-wb-dim { color: var(--aw-text-3); }
 
 .aw-workbench-workitem {
   display: flex;
@@ -108,22 +411,14 @@
 }
 
 .aw-workbench-workitem-meta {
-  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
-  font-size: 12px;
+  color: var(--aw-text-3);
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .aw-workbench-assignee {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-start;
-  min-width: 0;
-}
-
-.aw-workbench-assignee-line {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -131,109 +426,370 @@
   max-width: 100%;
 }
 
-.aw-workbench-assignee-squad {
-  font-size: 11px;
-  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* 当前负责人：18px 首字头像 + 姓名单行（原型 43 .who） */
+.aw-workbench-assignee .aw-workbench-assignee-avatar {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+  font-weight: 600;
+  background: var(--aw-primary);
 }
 
-.aw-workbench-table-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+.aw-workbench-assignee .aw-workbench-assignee-avatar.is-ai {
+  background: var(--aw-ai);
 }
 
 .aw-workbench-status-cell {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
 }
 
-.aw-workbench-status-change {
-  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
+/* 状态标签即按钮（原型 48 方案 B）：整颗标签可点，右侧箭头常驻提示可切换 */
+html .aw-workbench-status-btn.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 4px;
+  line-height: 22px;
 }
 
-.aw-workbench-status-change:hover {
+html .aw-workbench-status-btn.ant-btn:hover {
+  background: var(--aw-gray-bg);
+}
+
+.aw-workbench-status-icon {
+  flex: none;
+  font-size: 12px;
+  color: var(--aw-text-3);
+}
+
+html .aw-workbench-status-btn.ant-btn:hover .aw-workbench-status-icon,
+html .aw-workbench-status-btn.ant-btn:focus-visible .aw-workbench-status-icon {
   color: var(--aw-accent-text);
 }
 
-.aw-workbench-activity-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* 工作台改状态弹窗（原型 48 ②）：上下文 → 当前/目标 → 分组选项 → 备注 */
+.aw-wb-transition-context {
+  margin-bottom: 10px;
 }
 
-.aw-workbench-activity-row {
+.aw-wb-transition-context-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--aw-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.aw-wb-transition-context-meta {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--aw-border-color, rgba(0, 0, 0, 0.06));
-  cursor: pointer;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--aw-text-3);
+  font-size: 12px;
+}
+
+.aw-wb-transition-alert {
+  margin: 0 0 10px;
+}
+
+.aw-wb-transition-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-3);
+  font-size: 12px;
+}
+
+.aw-wb-transition-strip-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  color: var(--aw-text);
   font-size: 13px;
 }
 
-.aw-workbench-activity-row:last-child {
-  border-bottom: none;
+.aw-wb-transition-strip-placeholder {
+  margin-left: 6px;
+  border-bottom: 1px dashed var(--aw-border);
+  color: var(--aw-text-disabled);
+  font-size: 13px;
 }
 
-.aw-workbench-activity-title {
+.aw-wb-transition-arrow {
+  color: var(--aw-text-3);
+}
+
+.aw-wb-transition-arrow::before {
+  content: '→';
+}
+
+.aw-wb-transition-options.is-scroll {
+  max-height: 212px;
+  overflow: auto;
+  padding-right: 2px;
+  mask-image: linear-gradient(#000 calc(100% - 16px), transparent);
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 16px), transparent);
+}
+
+.aw-state-group + .aw-state-group {
+  margin-top: 12px;
+}
+
+.aw-state-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--aw-text-3);
+  font-size: 11px;
+}
+
+/* ---------- 运行中的交付 ---------- */
+.aw-wb-runs {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px;
+}
+
+.aw-wb-run {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+}
+
+.aw-wb-run + .aw-wb-run::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--aw-border);
+}
+
+html[data-appearance=light] .aw-wb-run + .aw-wb-run::before { background: #F0F0F0; }
+
+.aw-wb-run:hover { background: var(--aw-gray-bg); }
+
+.aw-wb-run-avatar {
+  flex-shrink: 0;
+  margin-top: 1px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+}
+
+.aw-wb-run-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.aw-wb-run-top {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.aw-workbench-unread-dot {
+.aw-wb-run-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--aw-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-wb-run-step {
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--aw-gray-bg);
+  color: var(--aw-text-2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.aw-wb-run-title {
+  font-size: 12px;
+  color: var(--aw-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-wb-run-title a {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.aw-wb-run:hover .aw-wb-run-title a { color: var(--aw-primary); }
+
+.aw-wb-run-time {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--aw-text-3);
+}
+
+/* 呼吸绿点：6px，1.8s 外扩阴影。 */
+.aw-wb-live {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--aw-accent-text);
-  flex: 0 0 auto;
+  background: var(--aw-success);
+  flex-shrink: 0;
 }
 
-.aw-workbench-activity-content {
-  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.55));
+.aw-wb-live.pulse {
+  animation: aw-wb-pulse 1.8s ease-out infinite;
+}
+
+@keyframes aw-wb-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--aw-success) 45%, transparent); }
+  70% { box-shadow: 0 0 0 5px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ---------- 最近动态 ---------- */
+.aw-wb-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px;
+}
+
+.aw-wb-feed-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
   font-size: 12px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+  line-height: 18px;
+  color: var(--aw-text-2);
+  cursor: pointer;
 }
 
-.aw-workbench-activity-time {
-  color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.45));
+.aw-wb-feed-row + .aw-wb-feed-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--aw-border);
+}
+
+html[data-appearance=light] .aw-wb-feed-row + .aw-wb-feed-row::before { background: #F0F0F0; }
+
+.aw-wb-feed-row:hover { background: var(--aw-gray-bg); }
+
+/* 未读点 6px 主色；已读透明占位保持对齐。点落在行左 padding 区（left:2px 居中于 10px），不贴 hover 边缘。 */
+.aw-wb-unread {
+  position: absolute;
+  left: 2px;
+  top: 15px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aw-primary);
+}
+
+.aw-wb-unread.read { background: transparent; }
+
+.aw-wb-feed-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+/* 时间右对齐、与标题同一行；不与正文争宽，超长正文由 EllipsisText 截断。 */
+.aw-wb-feed-time {
+  flex: 0 0 auto;
   font-size: 11px;
+  line-height: 18px;
+  color: var(--aw-text-3);
+  white-space: nowrap;
 }
 
-.aw-workbench-smart {
+/* ---------- 空态 / 骨架 / 错误 ---------- */
+.aw-wb-empty {
+  padding: 26px 16px;
+  text-align: center;
+}
+
+.aw-wb-empty b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aw-text);
+}
+
+.aw-wb-empty p {
+  font-size: 12px;
+  color: var(--aw-text-3);
+  margin: 4px 0 10px;
+}
+
+.aw-wb-skeleton {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 14px 16px;
 }
 
-.aw-workbench-timezone {
-  margin-left: 8px;
+.aw-wb-sk {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--aw-gray-bg);
+}
+
+.aw-wb-sk.w1 { width: 62%; }
+.aw-wb-sk.w2 { width: 88%; }
+.aw-wb-sk.w3 { width: 47%; }
+
+.aw-wb-errline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
   font-size: 12px;
+  color: var(--aw-error-deep);
 }
 
+.aw-wb-errline-retry { margin-left: auto; }
+
+/* ---------- 响应式 ---------- */
 @media (max-width: 1100px) {
-  .aw-workbench-grid {
+  .aw-wb-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 720px) {
-  .aw-workbench-todo-row {
-    flex-wrap: wrap;
-  }
-
-  .aw-workbench-search {
-    width: 100%;
-  }
+  .aw-wb-overview { flex-wrap: wrap; }
+  .aw-wb-act { flex-wrap: wrap; }
+  .aw-wb-bar .aw-wb-search { width: 100%; }
 }

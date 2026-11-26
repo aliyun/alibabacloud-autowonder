@@ -203,8 +203,10 @@ describe('ConversationEventView', () => {
       />,
     );
 
+    // 代码面交给 .aw-cl-pre / .aw-cl-step-body 样式；行内若再出现底色，只能是主题令牌。
+    expect(view).toContain('aw-cl-step-body');
+    expect(view).toContain('aw-cl-pre');
     const surfaces = [...view.matchAll(/background-color:([^;"]+)/g)].map(match => match[1]);
-    expect(surfaces.length).toBeGreaterThan(0);
     expect(surfaces.every(color => color === 'var(--aw-raised)')).toBe(true);
   });
 
@@ -232,8 +234,9 @@ describe('ConversationEventView', () => {
       />,
     );
 
+    expect(view).toContain('aw-cl-plan');
+    expect(view).toContain('aw-cl-pre');
     const surfaces = [...view.matchAll(/background-color:([^;"]+)/g)].map(match => match[1]);
-    expect(surfaces.length).toBeGreaterThan(0);
     expect(surfaces.every(color => color === 'var(--aw-raised)')).toBe(true);
   });
 });

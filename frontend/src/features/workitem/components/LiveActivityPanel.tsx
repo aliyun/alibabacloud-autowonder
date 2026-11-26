@@ -3,13 +3,17 @@ import { i18n } from '@/shared/i18n';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { Typography, Space, Tag, Collapse, Spin, Button } from 'antd';
-import { ClockCircleOutlined, LoadingOutlined, ExpandOutlined, CodeOutlined } from '@ant-design/icons';
+import { LoadingOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { LiveActivityAction } from '@/shared/types/workitem';
 import { useLiveActivity } from '../useLiveActivity';
+import { formatDateTime } from '@/shared/i18n/format';
 
 import { RuntimeLogDrawer } from './RuntimeLogDrawer';
 
 const RELATIVE_TIME_TICK_MS = 30_000;
+const EMDASH = '—';
+const FEED_TIME_OPTIONS = { timeStyle: 'medium' } as const;
 
 const { Text } = Typography;
 
@@ -74,7 +78,20 @@ function ActionItem({ action }: { action: LiveActivityAction }) {
   );
 }
 
-export function LiveActivityPanel({ dispatchId, enabled = true, summaryOnly = false }: { dispatchId: number | null; enabled?: boolean; summaryOnly?: boolean }) {
+function FeedItem({ action }: { action: LiveActivityAction }) {
+  useTranslation('workitem');
+  const label = ACTION_TYPE_LABELS[action.actionType] ?? action.actionType;
+  const summary = liveActivitySummary(action);
+  return (
+    <div className="live-activity-feed-row">
+      <time className="live-activity-feed-time" dateTime={action.eventTime ?? undefined}>{action.eventTime ? formatDateTime(action.eventTime, FEED_TIME_OPTIONS) : EMDASH}</time>
+      <Tag color={STATUS_COLOR[action.status] ?? 'default'}>{label}</Tag>
+      <Text className="live-activity-feed-text" ellipsis={{ tooltip: summary }}>{summary ?? label}</Text>
+    </div>
+  );
+}
+
+export function LiveActivityPanel({ dispatchId, enabled = true, summaryOnly = false, feed = false }: { dispatchId: number | null; enabled?: boolean; summaryOnly?: boolean; feed?: boolean }) {
   const { t } = useTranslation('workitem');
   const [logOpen, setLogOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -95,7 +112,7 @@ export function LiveActivityPanel({ dispatchId, enabled = true, summaryOnly = fa
     ? t('live.runtimeRecovering')
     : enabled && runtimeState === 'UNKNOWN' ? t('live.runtimeUnknown') : null;
   const healthNotice = healthMessage ? (
-    <Text type="warning" role="status" data-testid="live-activity-health" style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+    <Text type="warning" role="status" data-testid="live-activity-health" style={{ display: 'block', fontSize: summaryOnly ? 11 : 12, marginBottom: 4 }}>
       {healthMessage}
     </Text>
   ) : null;
@@ -117,7 +134,7 @@ export function LiveActivityPanel({ dispatchId, enabled = true, summaryOnly = fa
       <div style={{ padding: '6px 0' }} data-testid={waiting ? 'live-activity-awaiting' : 'live-activity-empty'}>
         {healthNotice}
         {!healthMessage && <Text type="secondary" style={{ fontSize: 12 }}>
-          <ClockCircleOutlined aria-hidden="true" style={{ marginRight: 4 }} />
+          <span style={{ display: 'inline-flex', verticalAlign: '-2px', marginRight: 4 }}><AwStrokeIcon name="clock" /></span>
           {waiting ? t('live.awaiting') : t('live.empty')}
         </Text>}
       </div>
@@ -133,11 +150,36 @@ export function LiveActivityPanel({ dispatchId, enabled = true, summaryOnly = fa
       {healthNotice}
       {action && <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         {enabled && currentAction && <LoadingOutlined aria-hidden="true" style={{ color: 'var(--aw-accent-text)', flexShrink: 0 }} />}
-        <Text data-testid="live-activity-current" style={{ display: 'block', flex: 1, minWidth: 0 }} ellipsis={{ tooltip: liveActivitySummary(action) }}>{headline ?? ACTION_TYPE_LABELS[action.actionType] ?? action.actionType}</Text>
+        <Text data-testid="live-activity-current" style={{ display: 'block', flex: 1, minWidth: 0, fontSize: 11 }} ellipsis={{ tooltip: liveActivitySummary(action) }}>{headline ?? ACTION_TYPE_LABELS[action.actionType] ?? action.actionType}</Text>
         {failed && <Tag color="error">{t('delivery.failed')}</Tag>}
       </div>}
-      {lastUpdatedAt && <Text type="secondary" data-testid="live-activity-updated" style={{ display: 'block', fontSize: 12 }}>{t('live.updated', { time: formatRelativeTime(lastUpdatedAt) })}</Text>}
+      {lastUpdatedAt && <Text type="secondary" data-testid="live-activity-updated" style={{ display: 'block', fontSize: 10 }}>{t('live.updated', { time: formatRelativeTime(lastUpdatedAt) })}</Text>}
     </div>;
+  }
+
+  if (feed) {
+    return (
+      <div data-testid="live-activity-panel" className="live-activity-feed">
+        {healthNotice}
+        {enabled && !healthMessage && currentAction && (
+          <div className="live-activity-feed-current">
+            <LoadingOutlined aria-hidden="true" />
+            <Text strong data-testid="live-activity-current">
+              {liveActivitySummary(currentAction) ?? ACTION_TYPE_LABELS[currentAction.actionType] ?? currentAction.actionType}
+            </Text>
+          </div>
+        )}
+        <div className="live-activity-feed-head">
+          <span>{t('live.recentActions', { count: actions.length, trimmed: truncated ? t('live.trimmed') : '' })}</span>
+          {lastUpdatedAt && <span data-testid="live-activity-updated">{t('live.updated', { time: formatRelativeTime(lastUpdatedAt) })}</span>}
+        </div>
+        <div data-testid="live-activity-timeline">
+          {[...actions].reverse().map((action, i) => (
+            <FeedItem key={action.eventId ?? `${action.seq}-${i}`} action={action} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   // actions are seq-ascending (oldest first); collapsed shows the most recent 5, newest first.
@@ -170,7 +212,7 @@ export function LiveActivityPanel({ dispatchId, enabled = true, summaryOnly = fa
         onChange={(keys) => setExpanded(Array.isArray(keys) ? keys.includes('timeline') : keys === 'timeline')}
         items={[{
           key: 'timeline',
-          extra: <Space size={0}><Button size="small" type="text" icon={<ExpandOutlined aria-hidden="true" />} onClick={e => { e.stopPropagation(); setLogOpen(true); }}>{t('live.expand')}</Button><Button size="small" type="text" icon={<CodeOutlined aria-hidden="true" />} onClick={e => { e.stopPropagation(); setTerminalOpen(true); }}>{t('runtimeLog.terminal')}</Button></Space>,
+          extra: <Space size={0}><Button size="small" type="text" icon={<AwStrokeIcon name="fullscreen" />} onClick={e => { e.stopPropagation(); setLogOpen(true); }}>{t('live.expand')}</Button><Button size="small" type="text" icon={<AwStrokeIcon name="code" />} onClick={e => { e.stopPropagation(); setTerminalOpen(true); }}>{t('runtimeLog.terminal')}</Button></Space>,
           forceRender: true,
           label: (
             <Text style={{ fontSize: 12 }}>

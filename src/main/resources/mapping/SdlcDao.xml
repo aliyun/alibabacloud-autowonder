@@ -5,9 +5,9 @@
     <insert id="insert" parameterType="com.aliyun.autowonder.sdlc.SdlcDO"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO sdlc (tenant_id, name, description, work_type, status, is_default,
-            entry_step_id, creator_id, is_deleted, version)
+            entry_step_id, creator_id, is_deleted, version<if test="stageTimingEnabled">, stage_timing_enabled</if>)
         VALUES (#{tenantId}, #{name}, #{description}, #{workType}, #{status}, #{isDefault},
-            #{entryStepId}, #{creatorId}, 0, 0)
+            #{entryStepId}, #{creatorId}, 0, 0<if test="stageTimingEnabled">, #{stageTimingEnabled}</if>)
     </insert>
     <select id="findById" resultType="com.aliyun.autowonder.sdlc.SdlcDO">
         SELECT * FROM sdlc WHERE id = #{id} AND is_deleted = 0 LIMIT 1
@@ -55,6 +55,7 @@
     </select>
     <update id="update">
         UPDATE sdlc SET name = #{name}, description = #{description}, work_type = #{workType},
+            <if test="stageTimingEnabled != null">stage_timing_enabled = #{stageTimingEnabled},</if>
             version = version + 1, modifier_id = #{modifierId}
         WHERE id = #{id} AND tenant_id = #{tenantId} AND version = #{version} AND is_deleted = 0
     </update>

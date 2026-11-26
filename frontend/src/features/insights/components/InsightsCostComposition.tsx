@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { LockOutlined } from '@ant-design/icons';
 import { Tooltip } from 'antd';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { formatCredits } from '@/shared/lib/tokenFormat';
 import type { CostComposition, CostCompositionSource } from '../realtime/api';
 import FlashValue from '../realtime/FlashValue';
@@ -16,11 +16,11 @@ const SOURCE_LABEL_KEYS = {
 } as const;
 
 const SOURCE_COLORS: Record<keyof typeof SOURCE_LABEL_KEYS, string> = {
-  WORKITEM_EXECUTION: 'var(--aw-info, #5b9cf6)',
-  REQUIREMENT_CLARIFY: 'var(--aw-warning, #f5b83d)',
-  CHIEF_OF_STAFF: 'var(--aw-success, #57c98b)',
-  IM: 'var(--insight-human, #6bc7bb)',
-  OTHER_CONVERSATION: 'var(--aw-muted, #a3adb9)',
+  WORKITEM_EXECUTION: 'var(--aw-primary)',
+  REQUIREMENT_CLARIFY: '#E8920C',
+  CHIEF_OF_STAFF: '#4FA3E3',
+  IM: '#8BD0A9',
+  OTHER_CONVERSATION: '#AAB8C8',
 };
 
 function sourceLabel(t: TFunction<'insights'>, source: CostCompositionSource): string {
@@ -29,7 +29,7 @@ function sourceLabel(t: TFunction<'insights'>, source: CostCompositionSource): s
 }
 
 function sourceColor(source: CostCompositionSource): string {
-  return SOURCE_COLORS[source.key as keyof typeof SOURCE_COLORS] ?? 'var(--aw-muted, #a3adb9)';
+  return SOURCE_COLORS[source.key as keyof typeof SOURCE_COLORS] ?? 'var(--aw-muted)';
 }
 
 function formatShare(share: number): string {
@@ -52,7 +52,7 @@ export function InsightsCostComposition({ composition, rangeLabel, locked }: Ins
   const empty = sources.length === 0;
   const chip = (
     <span className={`cost-composition-chip${locked ? ' is-locked' : ''}`} data-testid="cost-composition-chip">
-      {locked && <LockOutlined aria-hidden="true" />}
+      {locked && <AwStrokeIcon name="lock" />}
       <span>{locked ? t('cost.compositionLockedChip') : t('cost.compositionAllChip', { range: rangeLabel })}</span>
     </span>
   );

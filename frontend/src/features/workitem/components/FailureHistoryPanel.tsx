@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CopyOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { i18n } from '@/shared/i18n';
 import { copyTextToClipboard } from '@/shared/lib/clipboard';
 import { formatDuration } from '../duration';
@@ -143,7 +143,7 @@ export function FailureHistoryPanel({ history, summary, testId }: {
             <span style={{ flex: 1 }} />
             <button type="button" onClick={() => copyRound(round, index)}
               aria-label={t('failureHistory.copyRound', { index: roundLabel(round, index) })} style={headerButton}>
-              <CopyOutlined aria-hidden="true" />
+              <AwStrokeIcon name="copy" />
             </button>
           </div>
           {round.error && <p data-testid={`failure-history-round-error-${roundLabel(round, index)}`}

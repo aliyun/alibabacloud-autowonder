@@ -35,6 +35,7 @@ export function TransitionFormModal({ open, editing, nodes, onSubmit, onCancel, 
       onOk={() => form.validateFields().then(onSubmit, () => {})}
       onCancel={onCancel}
       confirmLoading={loading}
+      width={440}
       afterOpenChange={(visible) => { if (visible) handleOpen(); }}
       destroyOnHidden
     >
@@ -46,7 +47,7 @@ export function TransitionFormModal({ open, editing, nodes, onSubmit, onCancel, 
           <Select options={nodeOptions} placeholder={t('transitions.toPlaceholder')} />
         </Form.Item>
         <Form.Item name="name" label={t('transitions.name')} rules={[{ required: true, message: t('transitions.nameRequired') }]}
-          tooltip={t('transitions.nameHelp')}>
+          extra={t('transitions.nameHelp')}>
           <Input placeholder={t('transitions.namePlaceholder')} />
         </Form.Item>
       </Form>

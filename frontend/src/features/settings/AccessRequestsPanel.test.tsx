@@ -78,8 +78,12 @@ describe('AccessRequestsPanel', () => {
     expect(screen.getByText('读写者')).toBeInTheDocument();
     expect(screen.getByText('管理员')).toBeInTheDocument();
     expect(screen.getByText('2026/8/20')).toBeInTheDocument();
+    expect(screen.getByText('10:30')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '通过' }).length).toBe(2);
     expect(screen.getAllByRole('button', { name: '拒绝' }).length).toBe(2);
+    expect(screen.getByText('共 2 条申请')).toBeInTheDocument();
+    expect(screen.getByText('按提交时间从新到旧')).toBeInTheDocument();
+    expect(screen.getByText('通过后立即生效；拒绝可说明原因，申请人保留当前角色。')).toBeInTheDocument();
   });
 
   it('falls back to the numeric id when requesterName is null', async () => {
@@ -98,6 +102,7 @@ describe('AccessRequestsPanel', () => {
     renderPanel();
 
     expect(await screen.findByText('暂无待审批的申请')).toBeInTheDocument();
+    expect(screen.getByText('有新的加入或权限提升申请时会出现在这里。')).toBeInTheDocument();
   });
 
   it('approves a request after the admin gate passes', async () => {
@@ -113,6 +118,10 @@ describe('AccessRequestsPanel', () => {
 
     const row = (await screen.findByText('张三')).closest('tr');
     await user.click(within(row!).getByRole('button', { name: '通过' }));
+
+    expect(await screen.findByText('通过 张三 的「读写者」申请？')).toBeInTheDocument();
+    expect(screen.getByText('确认后申请人立即获得该角色。')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '确认通过' }));
 
     await waitFor(() => expect(approveHandler).toHaveBeenCalledTimes(1));
   });
@@ -132,7 +141,8 @@ describe('AccessRequestsPanel', () => {
     await user.click(within(row!).getByRole('button', { name: '拒绝' }));
 
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText(/3 的申请/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/3 的「管理员」申请/)).toBeInTheDocument();
+    expect(within(dialog).getByText('拒绝原因（选填）', { selector: 'span' })).toBeInTheDocument();
   });
 
   it('rejects with the typed reason', async () => {
@@ -178,7 +188,7 @@ describe('AccessRequestsPanel', () => {
     await waitFor(() => expect(rejectHandler).toHaveBeenCalledWith({}));
   });
 
-  it('does not call the API and shows an error toast for non-admin members', async () => {
+  it('keeps review actions visible and lets the access command gate non-admin clicks', async () => {
     const user = userEvent.setup();
     useAuthStore.getState().setCurrentWorkspace(
       { id: 7, name: '测试工作空间', description: '' },
@@ -191,37 +201,44 @@ describe('AccessRequestsPanel', () => {
     );
     renderPanel();
 
-    const row = (await screen.findByText('张三')).closest('tr');
-    await user.click(within(row!).getByRole('button', { name: '通过' }));
-    await user.click(within(row!).getByRole('button', { name: '拒绝' }));
+    expect(await screen.findByText('张三')).toBeInTheDocument();
+    const row = screen.getByText('张三').closest('tr')!;
+    expect(within(row).getByRole('button', { name: '通过' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: '拒绝' })).toBeInTheDocument();
 
-    expect(
-      await screen.findAllByText('当前为读写权限，通过权限申请需要管理员权限'),
-    ).toHaveLength(1);
+    await user.click(within(row).getByRole('button', { name: '拒绝' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(approveHandler).not.toHaveBeenCalled();
-    expect(listRequests).toBeGreaterThan(0);
   });
 
-  it('shows a load-failure empty state when the list request is rejected', async () => {
+  it('shows a load-failure empty state and retries the list request', async () => {
+    const user = userEvent.setup();
     useAuthStore.getState().setCurrentWorkspace(
       { id: 7, name: '测试工作空间', description: '' },
       'READ_WRITE',
     );
     server.use(
-      http.get('/api/workspaces/current/access-requests', () => HttpResponse.json(
-        {
-          success: false,
-          code: '12008',
-          message: '工作空间访问级别不足',
-          data: null,
-          traceId: null,
-        },
-        { status: 403 },
-      )),
+      http.get('/api/workspaces/current/access-requests', () => {
+        listRequests += 1;
+        return HttpResponse.json(
+          {
+            success: false,
+            code: '12008',
+            message: '工作空间访问级别不足',
+            data: null,
+            traceId: null,
+          },
+          { status: 403 },
+        );
+      }),
     );
     renderPanel();
 
     expect(await screen.findByText('权限申请加载失败，请稍后重试')).toBeInTheDocument();
+    expect(screen.getByText('检查网络后重试；持续失败请联系管理员。')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(listRequests).toBe(2));
   });
 
   it('switches the status filter and refetches', async () => {

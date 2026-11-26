@@ -10,6 +10,7 @@ export interface SdlcTemplate {
   description: string;
   workType: string | null;
   status: 'DRAFT' | 'ENABLED' | 'DISABLED';
+  stageTimingEnabled?: boolean;
   isDefault: number;
   entryStepId: SdlcId | null;
   version: number;
@@ -110,12 +111,12 @@ export async function getSdlcTemplate(id: SdlcId): Promise<SdlcTemplate> {
   return resp.data;
 }
 
-export async function createSdlcTemplate(data: { name: string; description?: string; workType?: string }): Promise<SdlcTemplate> {
+export async function createSdlcTemplate(data: { name: string; description?: string; workType?: string; stageTimingEnabled?: boolean }): Promise<SdlcTemplate> {
   const resp = await apiClient.post<SdlcTemplate>('/api/sdlcs', data);
   return resp.data;
 }
 
-export async function updateSdlcTemplate(id: SdlcId, data: { name?: string; description?: string; workType?: string }): Promise<SdlcTemplate> {
+export async function updateSdlcTemplate(id: SdlcId, data: { name?: string; description?: string; workType?: string; stageTimingEnabled?: boolean }): Promise<SdlcTemplate> {
   const resp = await apiClient.put<SdlcTemplate>(`/api/sdlcs/${id}`, data);
   return resp.data;
 }

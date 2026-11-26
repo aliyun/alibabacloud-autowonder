@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { formatDateTime } from '@/shared/i18n/format';
-import { CloseOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { CloseCircleOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { PageHeading } from '@/shared/ui/PageHeading';
 import { AuditJsonBlock } from './AuditJsonBlock';
 import { usePageSizePreference } from '@/shared/lib/usePageSizePreference';
@@ -224,7 +225,7 @@ export function LegacyAuditLogPage() {
           showTotal: (count) => t('total', { count }),
         }}
       />
-      <Drawer closable={{ closeIcon: <CloseOutlined aria-hidden="true" />, 'aria-label': t('close') }} title={t('detailTitle')} width="min(760px, 95vw)" open={selected !== null} onClose={() => setSelected(null)}>
+      <Drawer closable={{ closeIcon: <AwStrokeIcon name="x" />, 'aria-label': t('close') }} title={t('detailTitle')} width="min(760px, 95vw)" open={selected !== null} onClose={() => setSelected(null)}>
         {selected && <>
           <Descriptions column={1} bordered size="small" items={[
             { key: 'id', label: t('logId'), children: selected.id },

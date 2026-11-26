@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Input, Select, Button, Space, Typography, Tag, Switch, InputNumber } from 'antd';
-import { ArrowUpOutlined, ArrowDownOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { AiResultRendererProps } from './types';
 import type { SdlcGenResult, SdlcGenStep, SdlcStepKind } from '@/shared/types/ai';
 
@@ -118,9 +119,9 @@ export function SdlcGenRenderer({ value, onChange, disabled }: AiResultRendererP
               </Space>
               {!disabled && (
                 <Space size={4}>
-                  <Button size="small" type="text" icon={<ArrowUpOutlined />} aria-label={t('sdlc.moveUp', { index: i + 1 })} disabled={i === 0} onClick={() => move(i, -1)} />
-                  <Button size="small" type="text" icon={<ArrowDownOutlined />} aria-label={t('sdlc.moveDown', { index: i + 1 })} disabled={i === steps.length - 1} onClick={() => move(i, 1)} />
-                  <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={t('sdlc.delete', { index: i + 1 })} onClick={() => remove(i)} />
+                  <Button size="small" type="text" icon={<AwStrokeIcon name="up" />} aria-label={t('sdlc.moveUp', { index: i + 1 })} disabled={i === 0} onClick={() => move(i, -1)} />
+                  <Button size="small" type="text" icon={<AwStrokeIcon name="down" />} aria-label={t('sdlc.moveDown', { index: i + 1 })} disabled={i === steps.length - 1} onClick={() => move(i, 1)} />
+                  <Button size="small" type="text" danger icon={<AwStrokeIcon name="trash" />} aria-label={t('sdlc.delete', { index: i + 1 })} onClick={() => remove(i)} />
                 </Space>
               )}
             </div>
@@ -209,7 +210,7 @@ export function SdlcGenRenderer({ value, onChange, disabled }: AiResultRendererP
       </Space>
 
       {!disabled && (
-        <Button block type="dashed" icon={<PlusOutlined />} style={{ marginTop: 12 }} onClick={add}>{t('sdlc.add')}</Button>
+        <Button block type="dashed" icon={<AwStrokeIcon name="plus" />} style={{ marginTop: 12 }} onClick={add}>{t('sdlc.add')}</Button>
       )}
     </div>
   );

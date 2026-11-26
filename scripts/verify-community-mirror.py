@@ -86,16 +86,20 @@ def verify(args):
     git(args.github_repo, 'merge-base', '--is-ancestor', base, public)
     a, ae = tree(args.internal_repo, accepted)
     c, ce = tree(args.internal_repo, community)
-    g, ge = tree(args.github_repo, public, SUBTREE)
+    root = args.github_root
+    g, ge = tree(args.github_repo, public, None if root == '.' else root)
     comparisons = {'acceptedToCommunity': compare(ae, ce),
                    'communityToGithub': compare(ce, ge)}
-    outside = [display(p) for p in git(args.github_repo, 'diff-tree',
-               '--no-commit-id', '--name-only', '--no-renames', '-r', '-z',
-               base, public).split(b'\0') if p and not p.startswith((SUBTREE + '/').encode())]
+    outside = []
+    if root != '.':
+        changed = git(args.github_repo, 'diff-tree', '--no-commit-id', '--name-only',
+                      '--no-renames', '-r', '-z', base, public)
+        outside = [display(path) for path in changed.split(b'\0')
+                   if path and not path.startswith((root + '/').encode())]
     match = a['tree'] == c['tree'] == g['tree'] and not outside
     return {'schemaVersion': 1, 'verdict': 'MATCH' if match else 'MISMATCH',
             'scope': 'committed Git objects only; no test execution',
-            'githubBase': base, 'githubSubtree': SUBTREE,
+            'githubBase': base, 'githubSubtree': root,
             'trees': {'accepted': a, 'community': c, 'github': g},
             'comparisons': comparisons, 'outsideChanges': outside}, 0 if match else 1
 
@@ -108,6 +112,8 @@ def main():
     parser.add_argument('--community-commit', required=True)
     parser.add_argument('--github-commit', required=True)
     parser.add_argument('--github-base', required=True)
+    parser.add_argument('--github-root', choices=('.', SUBTREE), default=SUBTREE,
+                        help='Use . for the standalone repository; defaults to the historical subtree')
     parser.add_argument('--output', type=Path, help='Also atomically write the JSON report here')
     args = parser.parse_args()
     try:

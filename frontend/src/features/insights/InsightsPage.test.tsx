@@ -56,7 +56,7 @@ describe('InsightsPage', () => {
     );
     const { container } = renderPage();
     expect(await screen.findByText('正在计算交付数据…')).toBeInTheDocument();
-    expect(container.querySelector('.ant-segmented-item-selected')?.textContent).toBe('交付数据分析');
+    expect(container.querySelector('.ant-tabs-tab-active')?.textContent).toBe('交付数据分析');
     await waitPastTooltipDelay();
     expect(unrelated).toEqual([]);
   });
@@ -84,12 +84,12 @@ describe('InsightsPage', () => {
     // 首帧即按「工单交付」渲染，旧偏好在一次 effect 后写回 members
     expect(await screen.findByText('所选周期统计')).toBeInTheDocument();
     expect(await screen.findByText('成员甲')).toBeInTheDocument();
-    const tabBar = container.querySelector('.insights-page .ant-segmented') as HTMLElement;
-    expect(tabBar.querySelector('.ant-segmented-item-selected')?.textContent).toBe('工单交付');
-    expect(screen.queryByRole('radio', { name: '需求交付' })).toBeNull();
+    const tabBar = container.querySelector('.insights-page .ant-tabs') as HTMLElement;
+    expect(tabBar.querySelector('.ant-tabs-tab-active')?.textContent).toBe('工单交付');
+    expect(screen.queryByRole('tab', { name: '需求交付' })).toBeNull();
     await waitFor(() => expect(window.localStorage.getItem('aw:insights:v1:anonymous:none:tab')).toBe('"members"'));
 
-    // antd Segmented 的隐藏 input 带 pointer-events:none，点击可见的标签文本切换
+    // 点击可见的标签文本切换 tab
     await user.click(screen.getByText('实时看板'));
     expect(await screen.findByText('正在运行')).toBeInTheDocument();
     expect(legacyRequests).toHaveLength(0);

@@ -1,6 +1,7 @@
 import { Dropdown } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { LogoutOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/shared/auth/store';
@@ -24,19 +25,22 @@ export function UserMenu() {
   };
 
   const userMenuItems = [
-    { key: 'profile-settings', label: t('account.settings'), icon: <UserOutlined />, onClick: () => navigate('/profile/settings') },
+    { key: 'profile-settings', label: t('account.settings'), icon: <AwStrokeIcon name="user" size={14} />, onClick: () => navigate('/profile/settings') },
     { type: 'divider' as const },
     { key: 'logout', label: t('account.logout'), icon: <LogoutOutlined />, onClick: handleLogout },
   ];
 
   return (
     <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>
-      <button type="button" aria-label={t('account.menu')} className="aw-user-avatar aw-initial-mark" style={{
-        width: 36, height: 36, borderRadius: '50%', padding: 0, flexShrink: 0,
-        display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 600,
-        border: '1px solid var(--aw-border)', cursor: 'pointer',
+      <button type="button" aria-label={t('account.menu')} className="aw-user-avatar" style={{
+        width: 36, height: 36, padding: 0, flexShrink: 0,
+        display: 'grid', placeItems: 'center', background: 'transparent',
+        border: 'none', cursor: 'pointer',
       }}>
-        <span aria-hidden="true">{avatarText}</span>
+        <span className="aw-initial-mark" aria-hidden="true" style={{
+          width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center',
+          fontSize: 12, fontWeight: 600,
+        }}>{avatarText}</span>
       </button>
     </Dropdown>
   );

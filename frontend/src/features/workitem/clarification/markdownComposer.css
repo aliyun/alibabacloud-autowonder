@@ -1,30 +1,24 @@
 /* 钉钉文档式 Markdown 即输即渲染编辑器（需求澄清输入框）。
    样式对齐 .aw-clarify-md 的渲染观感，编辑态与发送后的气泡保持一致。 */
 
+/* 边框与聚焦环由外层 .aw-cl-input 承担，编辑区本身无框。 */
 .aw-markdown-composer {
-  border: 1px solid var(--aw-border);
-  border-radius: 8px;
-  background: var(--aw-field);
-  padding: 12px 14px;
-  font-size: 16px;
-  line-height: 1.7;
+  background: transparent;
+  padding: 8px 12px 0;
+  font-size: 13px;
+  line-height: 22px;
   color: var(--aw-text);
   cursor: text;
 }
 
-.aw-markdown-composer:focus-within {
-  border-color: var(--aw-accent-text);
-}
-
 .aw-markdown-composer.is-disabled {
-  background: var(--aw-raised);
   color: var(--aw-muted);
   cursor: not-allowed;
 }
 
 .aw-markdown-composer .ProseMirror {
   outline: none;
-  min-height: 1.7em;
+  min-height: 22px;
 }
 
 .aw-markdown-composer .ProseMirror p {
@@ -79,10 +73,11 @@
 }
 
 .aw-markdown-composer .ProseMirror code {
-  background: var(--aw-raised);
+  background: var(--aw-gray-bg);
   border-radius: 4px;
-  padding: 1px 4px;
-  font-size: 0.9em;
+  padding: 0 4px;
+  font-family: var(--aw-font-mono);
+  font-size: 12px;
 }
 
 .aw-markdown-composer .ProseMirror pre {
@@ -134,7 +129,7 @@
 /* Placeholder（tiptap Placeholder 扩展在空段落上打 data-placeholder） */
 .aw-markdown-composer .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: var(--aw-muted);
+  color: var(--aw-text-disabled);
   float: left;
   height: 0;
   pointer-events: none;

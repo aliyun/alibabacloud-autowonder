@@ -17,7 +17,6 @@ function renderRedirect(
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/squads" element={redirect} />
         <Route path="/agents/reviews" element={redirect} />
         <Route path="/repos/map" element={redirect} />
         <Route path={targetPath} element={<LocationProbe />} />
@@ -27,9 +26,9 @@ function renderRedirect(
 }
 
 describe('RedirectWithQuery', () => {
-  it('keeps the incoming query while forcing the hub tab, e.g. /squads?squadId=7 deep links', () => {
-    renderRedirect('/squads?squadId=7', <RedirectWithQuery to="/agents" tab="squads" />);
-    expect(screen.getByTestId('redirect-target')).toHaveTextContent('/agents?tab=squads&squadId=7');
+  it('keeps the incoming query while forcing the hub tab', () => {
+    renderRedirect('/agents/reviews?foo=1', <RedirectWithQuery to="/agents" tab="reviews" />);
+    expect(screen.getByTestId('redirect-target')).toHaveTextContent('/agents?tab=reviews&foo=1');
   });
 
   it('targets the bare hub route when the legacy route has no query', () => {

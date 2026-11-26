@@ -140,7 +140,7 @@ public class WorkitemController {
             throw new BizException(ErrorCode.ILLEGAL_TRANSITION);
         }
         return Result.ok(workitemService.transition(id, req.getToNodeId(), currentWorkspaceId(), currentUserId(),
-                req.getFromNodeId(), req.getExpectedVersion()));
+                req.getFromNodeId(), req.getExpectedVersion(), req.getReason()));
     }
 
     @PutMapping("/{id}/assignee")

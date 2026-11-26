@@ -1,25 +1,41 @@
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card, Avatar, Space, Typography, Spin, Tag, Tabs, Empty } from 'antd';
-import { UserOutlined } from '@ant-design/icons';
+import { Spin, Tooltip } from 'antd';
 import { RobotHeadIcon } from '@/shared/ui/RobotHeadIcon';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import type { Participant } from '@/shared/types/workitem';
-
-const { Text } = Typography;
 
 interface SquadMembersProps {
   participants: Participant[];
   loading?: boolean;
 }
 
+type MemberTab = 'agents' | 'humans';
+const TABS: MemberTab[] = ['agents', 'humans'];
+const TAB_LABEL_KEYS = { agents: 'members.agents', humans: 'members.humans' } as const;
+
+export function HumanInitial({ name }: { name?: string | null }) {
+  return name ? <>{Array.from(name)[0]}</> : <AwStrokeIcon name="user" size={14} />;
+}
+
+// 数字员工名常带「AW」等英文前缀，优先取首个汉字才有区分度
+export function AgentInitial({ name }: { name?: string | null }) {
+  if (!name) return <RobotHeadIcon aria-hidden="true" />;
+  const han = name.match(/\p{Script=Han}/u);
+  return <>{han ? han[0] : Array.from(name.trim())[0]?.toUpperCase()}</>;
+}
+
 export function SquadMembers({ participants, loading }: SquadMembersProps) {
   const { t } = useTranslation('workitem');
+  const [tab, setTab] = useState<MemberTab>('agents');
+  const tabRefs = useRef<Record<MemberTab, HTMLButtonElement | null>>({ agents: null, humans: null });
+  const idPrefix = useId();
+
   if (loading) {
     return (
-      <Card size="small" title={t('members.title')}>
-        <div style={{ textAlign: 'center', padding: 16 }}>
-          <Spin size="small" />
-        </div>
-      </Card>
+      <div className="aw-task-group">
+        <Spin size="small" />
+      </div>
     );
   }
 
@@ -44,116 +60,92 @@ export function SquadMembers({ participants, loading }: SquadMembersProps) {
   const humanParticipants = participants.filter((item) => participantType(item) === 'HUMAN');
 
   const statusLabel = (p: Participant) => {
-    if (p.executorStatus === 'BUSY') return { text: t('members.busy'), color: 'processing' };
-    if (p.executorStatus) return { text: executorStatusLabels.get(p.executorStatus) || p.executorStatus, color: p.executorStatus === 'ONLINE' ? 'success' : 'default' };
-    if (p.online) return { text: t('members.online'), color: 'success' };
-    return { text: t('members.offline'), color: 'default' };
+    if (p.executorStatus === 'BUSY') return { text: t('members.busy'), tone: 'active' };
+    if (p.executorStatus) return { text: executorStatusLabels.get(p.executorStatus) || p.executorStatus, tone: p.executorStatus === 'ONLINE' ? 'success' : '' };
+    if (p.online) return { text: t('members.online'), tone: 'success' };
+    return { text: t('members.offline'), tone: '' };
   };
 
-  const emptyBlock = (description: string) => (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={description} style={{ margin: '12px 0' }} />
-  );
+  const selectTab = (next: MemberTab) => {
+    setTab(next);
+    tabRefs.current[next]?.focus();
+  };
+  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    selectTab(tab === 'agents' ? 'humans' : 'agents');
+  };
 
   const renderAgentList = () => {
-    if (agentParticipants.length === 0) {
-      return emptyBlock(t('members.noAgents'));
-    }
+    if (agentParticipants.length === 0) return <p className="aw-task-empty">{t('members.noAgents')}</p>;
     return (
-      <Space direction="vertical" style={{ width: '100%' }} size={8}>
+      <ul className="aw-task-list">
         {agentParticipants.map((p) => {
           const status = statusLabel(p);
+          const runtime = p.status
+            ? t('members.runtime', { agent: agentStatusLabels.get(p.status) || p.status, executor: executorStatusLabels.get(p.executorStatus ?? 'OFFLINE') || p.executorStatus })
+            : undefined;
           return (
-            <div
-              key={String(p.userId)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '8px',
-                borderRadius: 10,
-                background: p.online ? 'color-mix(in srgb, var(--aw-success) 10%, var(--aw-panel))' : 'var(--aw-panel)',
-                border: p.online ? '1px solid color-mix(in srgb, var(--aw-success) 35%, var(--aw-border))' : '1px solid var(--aw-border)',
-              }}
-            >
-              <Avatar
-                size={32}
-                icon={<RobotHeadIcon />}
-                style={{ backgroundColor: 'var(--aw-raised)', color: p.online ? 'var(--aw-success)' : 'var(--aw-muted)', flexShrink: 0 }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Text ellipsis style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</Text>
-                  <Tag color={status.color} style={{ marginInlineEnd: 0, fontSize: 11 }}>{status.text}</Tag>
-                </div>
-                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
-                  {t('members.identity', { id: p.displayId ?? p.userId, role: identityLabel(p) })}
-                </Text>
-                {p.status && (
-                  <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
-                    {t('members.runtime', { agent: agentStatusLabels.get(p.status) || p.status, executor: executorStatusLabels.get(p.executorStatus ?? 'OFFLINE') || p.executorStatus })}
-                  </Text>
-                )}
+            <li key={String(p.userId)}>
+              <span className="aw-task-avatar ai" role="img" aria-label={t('members.agentAvatar')}><AgentInitial name={p.name} /></span>
+              <div>
+                <div className="aw-task-name">{p.name}</div>
+                <div className="aw-task-secondary">{t('members.identity', { id: p.displayId ?? p.userId, role: identityLabel(p) })}</div>
               </div>
-            </div>
+              <Tooltip title={runtime} trigger={['hover', 'focus']}>
+                <span className={status.tone ? `aw-task-status ${status.tone}` : 'aw-task-status'} tabIndex={runtime ? 0 : undefined}>
+                  <span className="dot" />{status.text}
+                </span>
+              </Tooltip>
+            </li>
           );
         })}
-      </Space>
+      </ul>
     );
   };
 
   const renderHumanList = () => {
-    if (humanParticipants.length === 0) {
-      return emptyBlock(t('members.noHumans'));
-    }
+    if (humanParticipants.length === 0) return <p className="aw-task-empty">{t('members.noHumans')}</p>;
     return (
-      <Space direction="vertical" style={{ width: '100%' }} size={8}>
+      <ul className="aw-task-list">
         {humanParticipants.map((p) => (
-          <div
-            key={String(p.userId)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '8px',
-              borderRadius: 10,
-              background: 'var(--aw-panel)',
-              border: '1px solid var(--aw-border)',
-            }}
-          >
-            <Avatar
-              aria-label={t('members.humanAvatar')}
-              size={32}
-              icon={<UserOutlined />}
-              style={{
-                backgroundColor: 'color-mix(in srgb, var(--aw-warning) 10%, var(--aw-panel))',
-                color: 'var(--aw-warning)',
-                border: '1px solid color-mix(in srgb, var(--aw-warning) 35%, var(--aw-border))',
-                flexShrink: 0,
-              }}
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <Text ellipsis style={{ fontSize: 13, fontWeight: 600, display: 'block' }}>{p.name}</Text>
-              <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 2 }}>
-                {t('members.identity', { id: p.displayId ?? p.userId, role: identityLabel(p) })}
-              </Text>
+          <li key={String(p.userId)}>
+            <span className="aw-task-avatar" role="img" aria-label={t('members.humanAvatar')}><HumanInitial name={p.name} /></span>
+            <div>
+              <div className="aw-task-name">{p.name}</div>
+              <div className="aw-task-secondary">{t('members.identity', { id: p.displayId ?? p.userId, role: identityLabel(p) })}</div>
             </div>
-          </div>
+          </li>
         ))}
-      </Space>
+      </ul>
     );
   };
 
+  const listRenderers: Record<MemberTab, () => JSX.Element> = { agents: renderAgentList, humans: renderHumanList };
+
   return (
-    <Card size="small" title={t('members.title')} styles={{ body: { padding: '8px 12px' } }}>
-      <Tabs
-        size="small"
-        animated={false}
-        destroyOnHidden
-        items={[
-          { key: 'agents', label: t('members.agents'), children: renderAgentList() },
-          { key: 'humans', label: t('members.humans'), children: renderHumanList() },
-        ]}
-      />
-    </Card>
+    <div className="aw-task-group">
+      <div className="aw-task-tabs" role="tablist" aria-label={t('members.title')}>
+        {TABS.map((key) => (
+          <button
+            key={key}
+            ref={(el) => { tabRefs.current[key] = el; }}
+            type="button"
+            role="tab"
+            id={`${idPrefix}-${key}-tab`}
+            aria-selected={tab === key}
+            aria-controls={`${idPrefix}-${key}-panel`}
+            tabIndex={tab === key ? 0 : -1}
+            onClick={() => setTab(key)}
+            onKeyDown={onTabKeyDown}
+          >
+            {t(TAB_LABEL_KEYS[key])}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`${idPrefix}-${tab}-panel`} aria-labelledby={`${idPrefix}-${tab}-tab`}>
+        {listRenderers[tab]()}
+      </div>
+    </div>
   );
 }

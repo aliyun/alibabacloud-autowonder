@@ -1,28 +1,78 @@
 .workitem-design-entry {
   display: flex;
   border: 1px solid var(--aw-border);
-  border-radius: 10px;
-  overflow: hidden;
+  border-radius: 12px;
   background: var(--aw-panel);
+  box-shadow: var(--aw-shadow-card);
+  overflow: hidden;
 }
 .workitem-design-entry__item {
+  --tone: var(--aw-primary);
+  --tone-bg: var(--aw-primary-weak);
+  position: relative;
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 12px 10px;
+  padding: 12px 14px;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: start;
+  text-decoration: none;
   cursor: pointer;
 }
-.workitem-design-entry__item + .workitem-design-entry__item {
-  border-inline-start: 1px solid var(--aw-border);
+.workitem-design-entry__item--design {
+  --tone: var(--aw-ai);
+  --tone-bg: var(--aw-ai-bg);
 }
-.workitem-design-entry__item strong { display: block; font-size: 13px; font-weight: 600; }
-.workitem-design-entry__item small { display: block; margin-top: 3px; color: var(--aw-muted); font-size: 12px; }
-.workitem-design-entry__item:hover { background: var(--aw-raised); color: var(--aw-accent-text); }
-.workitem-design-entry__item:focus-visible { outline: 2px solid var(--aw-accent-text); outline-offset: -3px; }
+.workitem-design-entry__item + .workitem-design-entry__item::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  background: var(--aw-border);
+}
+/* 图标格高度与右侧「标题 18 + 间距 2 + 说明 16」对齐，上下齐平 */
+.workitem-design-entry__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--tone-bg);
+  color: var(--tone);
+}
+.workitem-design-entry__icon .anticon { font-size: 17px; }
+.workitem-design-entry__text { min-width: 0; }
+.workitem-design-entry__text strong {
+  display: block;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--aw-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workitem-design-entry__text small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--aw-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workitem-design-entry__item:hover { background: var(--aw-primary-faint); }
+.workitem-design-entry__item:hover .workitem-design-entry__icon { box-shadow: inset 0 0 0 1px var(--tone); }
+.workitem-design-entry__item:hover strong { color: var(--tone); }
+.workitem-design-entry__item:hover small { color: var(--aw-text-2); }
+.workitem-design-entry__item:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--aw-primary); }

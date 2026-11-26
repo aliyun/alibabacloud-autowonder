@@ -54,6 +54,7 @@
     "reorder": "Reorder SDLC steps"
   },
   "fields": {
+    "stageTiming": "Record delivery stage timing",
     "id": "ID",
     "name": "Name",
     "templateName": "Workflow name",
@@ -75,7 +76,8 @@
     "checklistJson": "Checklist JSON",
     "policyJson": "Entry/exit policy JSON",
     "timeout": "Suggested timeout in seconds",
-    "retry": "Suggested retry budget"
+    "retry": "Suggested retry budget",
+    "versionValue": "v{{version}}"
   },
   "workType": {
     "general": "General",
@@ -93,6 +95,7 @@
     "cleanup": "Cleanup"
   },
   "messages": {
+    "saveFailed": "Could not save workflow settings",
     "created": "Created successfully",
     "deleted": "Deleted",
     "deleteFailed": "Could not delete",
@@ -116,10 +119,12 @@
     "delete": "Delete this workflow?",
     "deleteStep": "Delete this step?",
     "enableLock": "Steps cannot be edited while enabled. Enable this workflow?",
+    "enableLockHint": "Steps cannot be edited once enabled.",
     "disableDetail": "Disable this workflow?"
   },
   "list": {
     "title": "SDLC workflows",
+    "description": "Stage workflow templates for work items. Steps lock once a workflow is enabled; creating and enabling or disabling require read-write access (SDLC domain).",
     "templates": "Workflows",
     "gallery": "Template gallery",
     "empty": "No SDLC workflows",
@@ -145,20 +150,27 @@
     "instruction": "Describe the work, inputs and outputs, precautions, completion criteria, and how to call platform APIs for handoffs."
   },
   "overview": {
+    "subtitle": "SDLC workflow · Created {{date}}",
     "title": "Step overview",
     "empty": "No steps yet. Add steps to see the workflow overview.",
     "next": "Next step",
-    "editor": "Step chain editor",
+    "editor": "Step editing",
     "locked": "This workflow is enabled. Disable it before editing steps.",
     "count_other": "{{count}} steps",
     "step": "Step {{index}}: {{name}}",
     "kind": "Kind: {{kind}}",
     "required": "Required: {{required}}",
+    "approval": "Human approval: {{approval}}",
+    "approvalNeeded": "Required",
+    "approvalNeededWith": "Required ({{names}})",
+    "approvalNotNeeded": "Not required",
     "timeout": "Timeout: {{timeout}}",
     "retry": "Retries: {{retry}}",
     "seconds_other": "{{count}} seconds",
     "count_one": "{{count}} step",
-    "seconds_one": "{{count}} second"
+    "hoverHint": "Hover a step for details",
+    "seconds_one": "{{count}} second",
+    "info": "Information"
   },
   "ai": {
     "generateWarning": "AI-generated workflows are saved as drafts (DRAFT). Enable them explicitly in the SDLC list before use.",
@@ -190,7 +202,8 @@
     "evidenceRequiredLabel": "evidenceRequired: ",
     "requiredArtifactsLabel": "requiredArtifacts: ",
     "checklistRequiredLabel": "checklistRequired: ",
-    "field": "Help for {{field}}"
+    "field": "Help for {{field}}",
+    "infoEditingNote": "While editing, the header button is hidden. Saving only updates the information fields and leaves the steps unchanged."
   },
   "gallery": {
     "create": "Create from this template",
@@ -224,10 +237,8 @@
     "generatingHint": "The Chief is reading member configuration and building the graph. This may take a moment.",
     "repairing": "Validation failed; the Chief is repairing the result…",
     "failed": "Generation failed",
-    "graphTitle": "Squad workflow overview",
     "graphHint": "Select a node or edge to inspect its condition and verbatim evidence.",
     "graphEmpty": "The graph has no node to display",
-    "graphError": "The graph could not be rendered. Refresh and try again.",
     "fitView": "Fit to view",
     "viewMode": "View",
     "mainPath": "Main path",
@@ -236,12 +247,12 @@
     "node": "Node",
     "edge": "Edge",
     "responsibility": "Responsibility",
-    "steps": "Bound SDLC steps",
+    "sdlcBinding": "Bound SDLC",
+    "typeLabel": "Type",
     "condition": "Condition",
     "evidence": "Verbatim evidence",
     "references": "Referenced elements",
     "referenceSeparator": " · ",
-    "sourceWithField": "{{sourceId}} · {{fieldPath}}",
     "findings": "Findings",
     "noFindings": "This analysis reported no findings.",
     "noSelection": "Select a node or edge to inspect it. All analysis findings are listed below.",
@@ -263,16 +274,15 @@
     },
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
-    "panorama": "Overview",
     "canvasLabel": "DELIVERY WORKFLOW",
     "legend": "Connection legend",
     "humanIntervention": "Human intervention",
-    "details": "Workflow details",
+    "humanNode": "Human node",
     "nodeDetail": "MEMBER DETAIL",
     "edgeDetail": "HANDOFF DETAIL",
     "handoffRules": "Handoff rules",
-    "squadLabel": "Squad",
-    "currentSnapshot": "Current configuration snapshot",
+    "backToNode": "Back to node",
+    "viewNode": "View node: {{name}}",
     "staticNote": "This graph reflects the squad’s published configuration, not a workitem’s live execution status.",
     "nodeSteps_other": "SDLC · {{count}} steps",
     "memberCount_other": "{{count}} members",

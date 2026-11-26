@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { Card, Col, Row, Statistic } from 'antd';
 import { statusCategoryOf } from '@/features/workitem/constants';
 import type { Workitem } from '@/shared/types/workitem';
 
@@ -13,23 +12,22 @@ export function AgentStatCards({ workitems, memoryCount }: AgentStatCardsProps) 
   const inProgress = workitems.filter(w => statusCategoryOf(w) === 'IN_PROGRESS').length;
   const pending = workitems.filter(w => statusCategoryOf(w) === 'PENDING_DECISION').length;
   const done = workitems.filter(w => statusCategoryOf(w) === 'DONE').length;
-
-  const cards = [
-    { title: t('display.inProgress'), value: inProgress, color: 'var(--aw-accent-text)' },
-    { title: t('display.pendingDecision'), value: pending, color: 'var(--aw-warning)' },
-    { title: t('display.done'), value: done, color: 'var(--aw-success)' },
-    { title: t('display.memoryCount'), value: memoryCount, color: 'var(--aw-text)' },
+  const stats = [
+    { key: 'inProgress', label: t('display.inProgress'), value: inProgress },
+    { key: 'pending', label: t('display.pendingDecision'), value: pending, warn: true },
+    { key: 'done', label: t('display.done'), value: done },
+    { key: 'memory', label: t('display.memoryCount'), value: memoryCount },
   ];
 
   return (
-    <Row gutter={16} style={{ marginBottom: 16 }}>
-      {cards.map(c => (
-        <Col span={6} key={c.title}>
-          <Card>
-            <Statistic className="aw-statistic" title={c.title} value={c.value} valueStyle={{ color: c.color }} />
-          </Card>
-        </Col>
+    // 原型 13 stat-strip：浅灰无框指标条，标签在上、数值在下（同小队详情）。
+    <div className="aw-agent-stats">
+      {stats.map(stat => (
+        <div key={stat.key} className="aw-agent-stat">
+          <div className="aw-agent-stat-k">{stat.label}</div>
+          <div className={stat.warn ? 'aw-agent-stat-v aw-agent-stat-v--warn' : 'aw-agent-stat-v'}>{stat.value}</div>
+        </div>
       ))}
-    </Row>
+    </div>
   );
 }

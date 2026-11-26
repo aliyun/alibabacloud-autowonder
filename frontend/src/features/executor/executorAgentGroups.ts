@@ -24,6 +24,19 @@ const STATUS_SUMMARY_FIELD: Record<string, keyof ExecutorGroupStatusSummary> = {
   OFFLINE: 'offline',
 };
 
+export function summarizeExecutorStatus(executors: readonly ExecutorVO[]): ExecutorGroupStatusSummary {
+  const summary: ExecutorGroupStatusSummary = { online: 0, busy: 0, offline: 0 };
+  for (const executor of executors) {
+    const field = Object.prototype.hasOwnProperty.call(STATUS_SUMMARY_FIELD, executor.status)
+      ? STATUS_SUMMARY_FIELD[executor.status]
+      : undefined;
+    if (field) {
+      summary[field] += 1;
+    }
+  }
+  return summary;
+}
+
 // 返回 null/空白表示该执行器无法归属到任何具名 Agent，统一落到「未知 Agent」分组。
 export function buildExecutorAgentGroups(
   executors: readonly ExecutorVO[],
@@ -49,10 +62,10 @@ export function buildExecutorAgentGroups(
     }
 
     group.executors.push(executor);
-    const field = Object.prototype.hasOwnProperty.call(STATUS_SUMMARY_FIELD, executor.status) ? STATUS_SUMMARY_FIELD[executor.status] : undefined;
-    if (field) {
-      group.statusSummary[field] += 1;
-    }
+  }
+
+  for (const group of groups.values()) {
+    group.statusSummary = summarizeExecutorStatus(group.executors);
   }
 
   return [...groups.values()].sort((left, right) => {

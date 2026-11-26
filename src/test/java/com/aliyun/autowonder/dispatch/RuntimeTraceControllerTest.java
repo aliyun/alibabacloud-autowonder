@@ -51,7 +51,8 @@ class RuntimeTraceControllerTest {
     void contextValidationKeepsHttp200CodeAndRawDiagnosticWithEnglishBoundary() throws Exception {
         AutoWonderContext.get().setCurrentWorkspaceId(73L);
         var artifacts = new RuntimeTraceArtifactService(mock(com.aliyun.autowonder.artifact.ArtifactDao.class),
-                mock(com.aliyun.autowonder.storage.ObjectStorage.class), mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class));
+                mock(com.aliyun.autowonder.storage.ObjectStorage.class), mock(DispatchDao.class), mock(DispatchRuntimeEventDao.class),
+                new RuntimeTraceUsageFallback(mock(com.aliyun.autowonder.aiusage.DispatchAiUsageDao.class)));
         var controller = new RuntimeTraceController(mock(RuntimeTraceService.class), artifacts, mock(DispatchLiveActivityService.class));
         var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(controller)
             .setControllerAdvice(new com.aliyun.autowonder.common.web.GlobalExceptionHandler()).build();

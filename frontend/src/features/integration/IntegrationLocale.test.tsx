@@ -13,7 +13,7 @@ import { IntegrationsHubPage } from './IntegrationsHubPage';
 import { WorkitemIntegrationPage } from './WorkitemIntegrationPage';
 import { ChannelIntegrationPage } from './channels/ChannelIntegrationPage';
 import { CHANNEL_REGISTRY } from './channels/channelRegistry';
-import { DingTalkBindingDrawer } from './channels/dingtalk/DingTalkBindingDrawer';
+import { DingTalkBindingModal } from './channels/dingtalk/DingTalkBindingDrawer';
 import type { DingTalkBinding, DingTalkBindingRequest } from './channels/dingtalk/dingtalkApi';
 import { DingTalkBindingPanel } from './channels/dingtalk/DingTalkBindingPanel';
 import type { FeishuBindingRequest } from './channels/feishu/feishuApi';
@@ -154,7 +154,7 @@ const ding = { id: 3, appKey: 'dingraw', robotCode: 'robot_raw', agentId: 7, tra
 it('keeps an independently mounted DingTalk edit drawer, errors and advanced/secret drafts across switching and sends canonical values', async () => {
   const user = localeUser(); const save = deferred<unknown>(); const success = vi.spyOn(message, 'success'); let body: unknown;
   server.use(http.put('/api/integrations/dingtalk/bindings/3', async ({ request }) => { body = await request.json(); return HttpResponse.json(ok(await save.promise)); }));
-  mount(<DingTalkBindingDrawer open mode="edit" record={ding} onClose={() => {}} onSaved={() => {}} />);
+  mount(<DingTalkBindingModal open mode="edit" record={ding} onClose={() => {}} onSaved={() => {}} />);
   const key = await screen.findByLabelText('appKey'); const secret = screen.getByLabelText('appSecret（留空=不修改）');
   await user.clear(key); await user.click(screen.getByRole('button', { name: /保\s*存/ })); await screen.findByText('请填写 appKey');
   await user.type(secret, 'replacement'); await user.click(screen.getByText('高级设置（传输方式 / 网关地址 / regionId）'));

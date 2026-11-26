@@ -4,7 +4,7 @@ import { LanguageSwitch } from '@/shared/i18n/LanguageSwitch';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Alert, Button, Spin, Tag } from 'antd';
-import { DownloadOutlined, FileTextOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { AwStrokeIcon } from '@/shared/ui/AwStrokeIcon';
 import { FilePreview } from '@/shared/ui/FilePreview';
 import { PageHeader } from '@/shared/ui/PageHeader';
 import { AppearanceSwitch } from '@/shared/theme/AppearanceProvider';
@@ -72,15 +72,15 @@ export function SharedArtifactPage() {
   const errorText = error && ('key' in error ? t(`public.${error.key}`) : error.message);
 
   return <>
-    <PageHeader actions={<><span style={{ color: 'var(--aw-muted)', fontSize: 13 }}><SafetyCertificateOutlined /> {t('public.readonly')}</span><LanguageSwitch /><AppearanceSwitch /></>} />
+    <PageHeader actions={<><span style={{ color: 'var(--aw-muted)', fontSize: 13 }}><AwStrokeIcon name="shield" /> {t('public.readonly')}</span><LanguageSwitch /><AppearanceSwitch /></>} />
     <main className="shared-artifact-page">
     <article className="shared-artifact-card">
       <div className="shared-artifact-heading">
-        <div className="shared-artifact-title"><FileTextOutlined className="shared-artifact-icon" />
+        <div className="shared-artifact-title"><AwStrokeIcon name="file" size={24} className="shared-artifact-icon" />
           <div><h1>{name}</h1><p>{file?.name || t('public.safePreview')}{file?.size != null && ` · ${file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`}`}</p></div>
         </div>
         <div className="shared-artifact-actions">
-          {ready && <><Tag color="success">{t('public.ready')}</Tag><Button icon={<DownloadOutlined />} href={`${endpoint}?download=true`} target="_blank" rel="noreferrer">{t('public.download')}</Button></>}
+          {ready && <><Tag color="success">{t('public.ready')}</Tag><Button icon={<AwStrokeIcon name="dl" />} href={`${endpoint}?download=true`} target="_blank" rel="noreferrer">{t('public.download')}</Button></>}
         </div>
       </div>
       <div className="shared-artifact-body">
