@@ -4,9 +4,12 @@
 
 The supported deployment target is Linux x86_64 with Java 21. The server image
 contains the AutoWonder service only; agent CLIs run in separately deployed
-client runtimes. SIGAR metrics are enabled on Linux x86_64 and degrade to an
-empty optional capability when unavailable. Set `AUTOWONDER_SIGAR_ENABLED=false`
-to disable them explicitly.
+client runtimes. To connect an executor, follow the
+[client Runtime guide (Chinese)](../runtime-usage.md).
+
+SIGAR metrics are enabled on Linux x86_64 and degrade to an empty optional
+capability when unavailable. Set `AUTOWONDER_SIGAR_ENABLED=false` to disable
+them explicitly.
 
 Required services are MySQL 8, Redis, and an OSS-compatible Alibaba Cloud OSS
 bucket. OSS does not fall back to local memory. SLS is a supported public cloud

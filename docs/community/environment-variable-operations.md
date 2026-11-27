@@ -15,11 +15,12 @@ This release does not implement online key rotation.
 
 ## Upgrade order
 
-Upgrade executors to the runtime version resolved from the release's
-`application.yml` before enabling environment-bound workers on the new Platform.
-The recommended runtime is resolved from this release, currently 0.3.30. The runtime must advertise
-`AGENT_ENVIRONMENT_VARIABLES_V1`. An incompatible runtime must reject a bound
-task or conversation; unbound work remains compatible.
+Upgrade executors to the recommended runtime version for the target release
+before enabling environment-bound workers on the new platform. The deployment
+and upgrade tooling reads `autowonder.runtime.recommended-version` from that
+release's [application.yml](../../src/main/resources/application.yml). The runtime
+must advertise `AGENT_ENVIRONMENT_VARIABLES_V1`. An incompatible runtime must
+reject a bound task or conversation. Unbound work remains compatible.
 
 Use the upgrade Skill plan, backup, runtime-config, stage, database-migrate,
 rolling-upgrade and acceptance workflow. Import the full schema only for a new
@@ -73,8 +74,6 @@ rollback safety mechanism.
 
 ## Other configuration changes
 
-The exact release's `application.yml` remains the sole source for the recommended
-runtime. Deploy/upgrade tooling resolves it rather than maintaining a second pin.
 `AUTOWONDER_RUNTIME_EXECUTOR_AUTO_UPDATE_ENABLED` defaults to true.
 `OSS_BACKUP_BUCKET` optionally selects a private backup bucket; when empty, the
 product falls back to the artifact bucket and then the shared bucket. These keys
